@@ -14,7 +14,7 @@
 	};
 
 	chosen {
-		stdout-path = &uart4;
+		stdout-path = &uart0;
 	};
 
 	memory {
@@ -120,6 +120,13 @@
 			gpios = <&gpc 3 0>;
 			linux,default-trigger = "none";
 		};
+	};
+
+	xdma_test {
+		compatible = "freebsd,xdma-test";
+
+		dmas = <&dma 0 0 0xffffffff>;
+		dma-names = "test";
 	};
 };
 
