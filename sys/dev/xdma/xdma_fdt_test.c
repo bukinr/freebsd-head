@@ -293,7 +293,6 @@ xdmatest_worker(void *arg)
 
 	while (1) {
 		sc->done = 0;
-		err = -1;
 
 		mtx_lock(&sc->mtx);
 
@@ -347,7 +346,7 @@ xdmatest_probe(device_t dev)
 	if (!ofw_bus_is_compatible(dev, "freebsd,xdma-test"))
 		return (ENXIO);
 
-	device_set_desc(dev, "FreeBSD Project xDMA test driver");
+	device_set_desc(dev, "xDMA test driver");
 
 	return (BUS_PROBE_DEFAULT);
 }
