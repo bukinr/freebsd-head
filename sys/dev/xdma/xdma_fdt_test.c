@@ -28,7 +28,7 @@
  * SUCH DAMAGE.
  */
 
-/* xDMA test driver. */
+/* xDMA memcpy test driver. */
 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
@@ -52,6 +52,17 @@ __FBSDID("$FreeBSD$");
 #include <dev/fdt/fdt_common.h>
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
+
+/*
+ * To use this test add a compatible node to your dts, e.g.
+ *
+ * 	xdma_test {
+ *		compatible = "freebsd,xdma-test";
+ *
+ * 		dmas = <&dma 0 0 0xffffffff>;
+ * 		dma-names = "test";
+ *	};
+ */
 
 struct xdmatest_softc {
 	device_t		dev;
@@ -86,7 +97,9 @@ xdmatest_intr(void *arg)
 
 	sc->done = 1;
 
+	mtx_lock(&sc->mtx);
 	wakeup(sc);
+	mtx_unlock(&sc->mtx);
 
 	return (0);
 }
@@ -239,7 +252,7 @@ xdmatest_verify(struct xdmatest_softc *sc)
 	int i;
 
 	/* We have memory updated by DMA controller. */
-	bus_dmamap_sync(sc->src_dma_tag, sc->src_dma_map, BUS_DMASYNC_POSTWRITE);
+	bus_dmamap_sync(sc->src_dma_tag, sc->src_dma_map, BUS_DMASYNC_POSTREAD);
 	bus_dmamap_sync(sc->dst_dma_tag, sc->dst_dma_map, BUS_DMASYNC_POSTWRITE);
 
 	for (i = 0; i < sc->len; i++) {
@@ -263,9 +276,6 @@ xdmatest_verify(struct xdmatest_softc *sc)
 		return (-1);
 	}
 
-	//device_printf(sc->dev, "Test succeded.\n");
-	printf(".");
-
 	return (0);
 }
 
@@ -277,6 +287,9 @@ xdmatest_worker(void *arg)
 	int err;
 
 	sc = arg;
+
+	device_printf(sc->dev, "Worker %d started.\n",
+	    device_get_unit(sc->dev));
 
 	while (1) {
 		sc->done = 0;
@@ -294,9 +307,17 @@ xdmatest_worker(void *arg)
 
 		if (timeout != 0) {
 			err = xdmatest_verify(sc);
+			if (err == 0) {
+				/* Test succeded. */
+				mtx_unlock(&sc->mtx);
+				continue;
+			}
 		}
 
 		mtx_unlock(&sc->mtx);
+		device_printf(sc->dev,
+		    "%s: Test failed.\n", __func__);
+		break;
 	}
 }
 
@@ -340,7 +361,7 @@ xdmatest_attach(device_t dev)
 	sc = device_get_softc(dev);
 	sc->dev = dev;
 
-	mtx_init(&sc->mtx, device_get_nameunit(dev), "xdmatet", MTX_DEF);
+	mtx_init(&sc->mtx, device_get_nameunit(dev), "xdmatest", MTX_DEF);
 
 	/* Allocate test memory */
 	err = xdmatest_alloc_test_memory(sc);
@@ -367,9 +388,11 @@ xdmatest_detach(device_t dev)
 
 	bus_dmamap_unload(sc->src_dma_tag, sc->src_dma_map);
 	bus_dmamem_free(sc->src_dma_tag, sc->src, sc->src_dma_map);
+	bus_dma_tag_destroy(sc->src_dma_tag);
 
 	bus_dmamap_unload(sc->dst_dma_tag, sc->dst_dma_map);
 	bus_dmamem_free(sc->dst_dma_tag, sc->dst, sc->dst_dma_map);
+	bus_dma_tag_destroy(sc->dst_dma_tag);
 
 	return (0);
 }
