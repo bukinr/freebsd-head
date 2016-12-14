@@ -621,7 +621,6 @@ xdma_ofw_get(device_t dev, const char *prop)
 	TAILQ_INIT(&xdma->channels);
 
 	xdma_ofw_md_data(xdma, cells, ncells);
-
 	free(cells, M_OFWPROP);
 
 	return (xdma);
