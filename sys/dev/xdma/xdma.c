@@ -172,7 +172,9 @@ xdma_setup_intr(xdma_channel_t *xchan, int (*cb)(void *), void *arg,
 
 	TAILQ_INSERT_TAIL(&xchan->ie_handlers, ih, ih_next);
 
-	*ihandler = ih;
+	if (ihandler != NULL) {
+		*ihandler = ih;
+	}
 
 	return (0);
 }
@@ -249,10 +251,8 @@ xdma_desc_alloc_bus_dma(xdma_channel_t *xchan, uint32_t desc_size,
 	xdma = xchan->xdma;
 	conf = &xchan->conf;
 
-	XDMA_ASSERT_LOCKED();
-
 	nsegments = conf->block_num;
-	all_desc_sz = (conf->block_num * desc_size);
+	all_desc_sz = (nsegments * desc_size);
 
 	err = bus_dma_tag_create(
 	    bus_get_dma_tag(xdma->dev),
@@ -322,7 +322,9 @@ xdma_desc_alloc(xdma_channel_t *xchan, uint32_t desc_size, uint32_t align)
 
 	conf = &xchan->conf;
 
+	XDMA_UNLOCK();
 	ret = xdma_desc_alloc_bus_dma(xchan, desc_size, align);
+	XDMA_LOCK();
 	if (ret != 0) {
 		device_printf(xdma->dev,
 		    "%s: Can't allocate memory for descriptors.\n",
@@ -351,6 +353,7 @@ xdma_desc_free(xdma_channel_t *xchan)
 	bus_dmamem_free(xchan->dma_tag, xchan->descs, xchan->dma_map);
 	bus_dma_tag_destroy(xchan->dma_tag);
 	free(xchan->descs_phys, M_XDMA);
+
 	xchan->flags &= ~(XCHAN_FLAG_DESC_ALLOCATED);
 
 	return (0);
@@ -382,7 +385,7 @@ xdma_prep_memcpy(xdma_channel_t *xchan, uintptr_t src_addr,
 	conf->block_len = len;
 	conf->block_num = 1;
 
-	xchan->flags |= XCHAN_FLAG_CONFIGURED | XCHAN_FLAG_MEMCPY;
+	xchan->flags |= (XCHAN_FLAG_CONFIGURED | XCHAN_FLAG_MEMCPY);
 
 	XDMA_LOCK();
 
@@ -454,7 +457,7 @@ xdma_prep_cyclic(xdma_channel_t *xchan, enum xdma_direction dir,
 	}
 
 	if (xchan->flags & XCHAN_FLAG_DESC_ALLOCATED) {
-		/* Driver created xDMA decsriptors. */
+		/* Driver has created xDMA decsriptors. */
 		bus_dmamap_sync(xchan->dma_tag, xchan->dma_map,
 		    BUS_DMASYNC_POSTWRITE);
 	}
@@ -606,8 +609,6 @@ xdma_ofw_get(device_t dev, const char *prop)
 		return (NULL);
 	}
 
-	XDMA_LOCK();
-
 	xdma = malloc(sizeof(struct xdma_controller), M_XDMA, M_WAITOK | M_ZERO);
 	if (xdma == NULL) {
 		device_printf(dev,
@@ -621,7 +622,7 @@ xdma_ofw_get(device_t dev, const char *prop)
 
 	xdma_ofw_md_data(xdma, cells, ncells);
 
-	XDMA_UNLOCK();
+	free(cells, M_OFWPROP);
 
 	return (xdma);
 }
