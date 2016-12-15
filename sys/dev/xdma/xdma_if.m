@@ -42,25 +42,13 @@
 
 INTERFACE xdma;
 
-CODE {
-	#include <sys/systm.h>
-	#include <sys/bus.h>
-
-	static int
-	xdma_channel_prep_cyclic(device_t dev, struct xdma_channel *xchan)
-	{
-
-		return (-1);
-	}
-}
-
 #
 # Prepare a channel for cyclic transfer.
 #
 METHOD int channel_prep_cyclic {
 	device_t		dev;
 	struct xdma_channel	*xchan;
-} DEFAULT xdma_channel_prep_cyclic;
+};
 
 #
 # Prepare a channel for memcpy transfer.
