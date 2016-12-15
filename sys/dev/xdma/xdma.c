@@ -332,13 +332,13 @@ xdma_desc_alloc(xdma_channel_t *xchan, uint32_t desc_size, uint32_t align)
 		return (-1);
 	}
 
-	if (xchan->flags & XCHAN_FLAG_DESC_ALLOCATED) {
+	if (xchan->flags & XCHAN_DESC_ALLOCATED) {
 		device_printf(xdma->dev,
 		    "%s: Descriptors already allocated.\n", __func__);
 		return (-1);
 	}
 
-	if ((xchan->flags & XCHAN_FLAG_CONFIGURED) == 0) {
+	if ((xchan->flags & XCHAN_CONFIGURED) == 0) {
 		device_printf(xdma->dev,
 		    "%s: Channel has no configuration.\n", __func__);
 		return (-1);
@@ -356,7 +356,7 @@ xdma_desc_alloc(xdma_channel_t *xchan, uint32_t desc_size, uint32_t align)
 		return (-1);
 	}
 
-	xchan->flags |= XCHAN_FLAG_DESC_ALLOCATED;
+	xchan->flags |= XCHAN_DESC_ALLOCATED;
 
 	/* We are going to write to descriptors. */
 	bus_dmamap_sync(xchan->dma_tag, xchan->dma_map, BUS_DMASYNC_PREWRITE);
@@ -368,7 +368,7 @@ int
 xdma_desc_free(xdma_channel_t *xchan)
 {
 
-	if ((xchan->flags & XCHAN_FLAG_DESC_ALLOCATED) == 0) {
+	if ((xchan->flags & XCHAN_DESC_ALLOCATED) == 0) {
 		/* No descriptors allocated. */
 		return (-1);
 	}
@@ -378,7 +378,7 @@ xdma_desc_free(xdma_channel_t *xchan)
 	bus_dma_tag_destroy(xchan->dma_tag);
 	free(xchan->descs_phys, M_XDMA);
 
-	xchan->flags &= ~(XCHAN_FLAG_DESC_ALLOCATED);
+	xchan->flags &= ~(XCHAN_DESC_ALLOCATED);
 
 	return (0);
 }
@@ -401,7 +401,7 @@ xdma_prep_memcpy(xdma_channel_t *xchan, uintptr_t src_addr,
 	conf->block_len = len;
 	conf->block_num = 1;
 
-	xchan->flags |= (XCHAN_FLAG_CONFIGURED | XCHAN_FLAG_MEMCPY);
+	xchan->flags |= (XCHAN_CONFIGURED | XCHAN_TYPE_MEMCPY);
 
 	XCHAN_LOCK(xchan);
 
@@ -417,7 +417,7 @@ xdma_prep_memcpy(xdma_channel_t *xchan, uintptr_t src_addr,
 		return (-1);
 	}
 
-	if (xchan->flags & XCHAN_FLAG_DESC_ALLOCATED) {
+	if (xchan->flags & XCHAN_DESC_ALLOCATED) {
 		/* Driver created xDMA decsriptors. */
 		bus_dmamap_sync(xchan->dma_tag, xchan->dma_map,
 		    BUS_DMASYNC_POSTWRITE);
@@ -449,7 +449,7 @@ xdma_prep_cyclic(xdma_channel_t *xchan, enum xdma_direction dir,
 	conf->src_width = src_width;
 	conf->dst_width = dst_width;
 
-	xchan->flags |= XCHAN_FLAG_CONFIGURED | XCHAN_FLAG_CYCLIC;
+	xchan->flags |= XCHAN_CONFIGURED | XCHAN_TYPE_CYCLIC;
 
 	XCHAN_LOCK(xchan);
 
@@ -464,7 +464,7 @@ xdma_prep_cyclic(xdma_channel_t *xchan, enum xdma_direction dir,
 		return (-1);
 	}
 
-	if (xchan->flags & XCHAN_FLAG_DESC_ALLOCATED) {
+	if (xchan->flags & XCHAN_DESC_ALLOCATED) {
 		/* Driver has created xDMA decsriptors. */
 		bus_dmamap_sync(xchan->dma_tag, xchan->dma_map,
 		    BUS_DMASYNC_POSTWRITE);

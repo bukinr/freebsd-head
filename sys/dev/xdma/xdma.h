@@ -88,10 +88,10 @@ struct xdma_channel {
 	xdma_config_t			conf;
 
 	uint8_t				flags;
-#define	XCHAN_FLAG_DESC_ALLOCATED	(1 << 0)
-#define	XCHAN_FLAG_CONFIGURED		(1 << 1)
-#define	XCHAN_FLAG_CYCLIC		(1 << 2)
-#define	XCHAN_FLAG_MEMCPY		(1 << 3)
+#define	XCHAN_DESC_ALLOCATED		(1 << 0)
+#define	XCHAN_CONFIGURED		(1 << 1)
+#define	XCHAN_TYPE_CYCLIC		(1 << 2)
+#define	XCHAN_TYPE_MEMCPY		(1 << 3)
 
 	/* A real hardware driver channel. */
 	void				*chan;
