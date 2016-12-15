@@ -160,7 +160,7 @@ xdma_setup_intr(xdma_channel_t *xchan, int (*cb)(void *), void *arg,
 	xdma_controller_t *xdma;
 
 	xdma = xchan->xdma;
-	KASSERT(xdma != NULL, ("Panic."));
+	KASSERT(xdma != NULL, ("xdma is NULL"));
 
 	/* Sanity check. */
 	if (cb == NULL) {
@@ -199,7 +199,7 @@ xdma_teardown_intr(xdma_channel_t *xchan, struct xdma_intr_handler *ih)
 	xdma_controller_t *xdma;
 
 	xdma = xchan->xdma;
-	KASSERT(xdma != NULL, ("Panic."));
+	KASSERT(xdma != NULL, ("xdma is NULL"));
 
 	/* Sanity check. */
 	if (ih == NULL) {
@@ -222,7 +222,7 @@ xdma_teardown_all_intr(xdma_channel_t *xchan)
 	xdma_controller_t *xdma;
 
 	xdma = xchan->xdma;
-	KASSERT(xdma != NULL, ("Panic."));
+	KASSERT(xdma != NULL, ("xdma is NULL"));
 
 	TAILQ_FOREACH_SAFE(ih, &xchan->ie_handlers, ih_next, ih_tmp) {
 		TAILQ_REMOVE(&xchan->ie_handlers, ih, ih_next);
@@ -239,7 +239,7 @@ xdma_dmamap_cb(void *arg, bus_dma_segment_t *segs, int nseg, int err)
 	int i;
 
 	xchan = (xdma_channel_t *)arg;
-	KASSERT(xchan != NULL, ("Panic."));
+	KASSERT(xchan != NULL, ("xchan is NULL"));
 
 	if (err) {
 		xchan->map_err = 1;
@@ -247,7 +247,6 @@ xdma_dmamap_cb(void *arg, bus_dma_segment_t *segs, int nseg, int err)
 	}
 
 	for (i = 0; i < nseg; i++) {
-		//printf("seg %d: %x (%d bytes)\n", i, segs[i].ds_addr, segs[i].ds_len);
 		xchan->descs_phys[i].ds_addr = segs[i].ds_addr;
 		xchan->descs_phys[i].ds_len = segs[i].ds_len;
 	}
@@ -392,16 +391,8 @@ xdma_prep_memcpy(xdma_channel_t *xchan, uintptr_t src_addr,
 	xdma_config_t *conf;
 	int ret;
 
-#if 0
-	if (xchan->flags & XCHAN_FLAG_CONFIGURED) {
-		device_printf(xdma->dev,
-		    "%s: Channel is already configured.\n", __func__);
-		return (-1);
-	}
-#endif
-
 	xdma = xchan->xdma;
-	KASSERT(xdma != NULL, ("Panic."));
+	KASSERT(xdma != NULL, ("xdma is NULL"));
 
 	conf = &xchan->conf;
 	conf->direction = XDMA_MEM_TO_MEM;
@@ -447,15 +438,7 @@ xdma_prep_cyclic(xdma_channel_t *xchan, enum xdma_direction dir,
 	int ret;
 
 	xdma = xchan->xdma;
-	KASSERT(xdma != NULL, ("Panic."));
-
-#if 0
-	if (xchan->flags & XCHAN_FLAG_CONFIGURED) {
-		device_printf(xdma->dev,
-		    "%s: Channel is already configured.\n", __func__);
-		return (-1);
-	}
-#endif
+	KASSERT(xdma != NULL, ("xdma is NULL"));
 
 	conf = &xchan->conf;
 	conf->direction = dir;
