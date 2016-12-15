@@ -231,7 +231,7 @@ chan_start(struct pdma_softc *sc, struct pdma_channel *chan)
 
 	/* 8 byte descriptor. */
 	WRITE4(sc, PDMA_DCS(chan->index), DCS_DES8);
-	WRITE4(sc, PDMA_DDA(chan->index), xchan->descs_phys[chan->cur_desc]);
+	WRITE4(sc, PDMA_DDA(chan->index), xchan->descs_phys[chan->cur_desc].ds_addr);
 	WRITE4(sc, PDMA_DDS, (1 << chan->index));
 
 	/* Channel transfer enable. */

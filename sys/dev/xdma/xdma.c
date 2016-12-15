@@ -89,7 +89,7 @@ xdma_channel_alloc(xdma_controller_t *xdma)
 	ret = XDMA_CHANNEL_ALLOC(xdma->dma_dev, xchan);
 	if (ret != 0) {
 		device_printf(xdma->dev,
-		    "%s: Can't request real hardware channel.\n", __func__);
+		    "%s: Can't request hardware channel.\n", __func__);
 		XDMA_UNLOCK();
 		free(xchan, M_XDMA);
 
@@ -97,6 +97,7 @@ xdma_channel_alloc(xdma_controller_t *xdma)
 	}
 
 	TAILQ_INIT(&xchan->ie_handlers);
+	mtx_init(&xchan->mtx_lock, "xDMA", NULL, MTX_DEF);
 
 	TAILQ_INSERT_TAIL(&xdma->channels, xchan, xchan_next);
 
@@ -128,6 +129,8 @@ xdma_channel_free(xdma_channel_t *xchan)
 
 	/* Deallocate descriptors, if any. */
 	xdma_desc_free(xchan);
+
+	mtx_destroy(&xchan->mtx_lock);
 
 	TAILQ_REMOVE(&xdma->channels, xchan, xchan_next);
 
@@ -234,7 +237,8 @@ xdma_dmamap_cb(void *arg, bus_dma_segment_t *segs, int nseg, int err)
 
 	for (i = 0; i < nseg; i++) {
 		//printf("seg %d: %x (%d bytes)\n", i, segs[i].ds_addr, segs[i].ds_len);
-		xchan->descs_phys[i] = segs[i].ds_addr;
+		xchan->descs_phys[i].ds_addr = segs[i].ds_addr;
+		xchan->descs_phys[i].ds_len = segs[i].ds_len;
 	}
 }
 
@@ -278,7 +282,7 @@ xdma_desc_alloc_bus_dma(xdma_channel_t *xchan, uint32_t desc_size,
 		return (-1);
 	}
 
-	xchan->descs_phys = malloc(nsegments * sizeof(uintptr_t), M_XDMA,
+	xchan->descs_phys = malloc(nsegments * sizeof(xdma_descriptor_t), M_XDMA,
 	    (M_WAITOK | M_ZERO));
 
 	err = bus_dmamap_load(xchan->dma_tag, xchan->dma_map, xchan->descs,
