@@ -61,10 +61,21 @@ __FBSDID("$FreeBSD$");
 
 MALLOC_DEFINE(M_XDMA, "xdma", "xDMA framework");
 
+/*
+ * Multiple xDMA controllers may work with single DMA device,
+ * so we have global lock for physical channel management.
+ */
 static struct mtx xdma_mtx;
 #define	XDMA_LOCK()		mtx_lock(&xdma_mtx)
 #define	XDMA_UNLOCK()		mtx_unlock(&xdma_mtx)
 #define	XDMA_ASSERT_LOCKED()	mtx_assert(&xdma_mtx, MA_OWNED)
+
+/*
+ * Per channel locks.
+ */
+#define	XCHAN_LOCK(xchan)		mtx_lock(&xchan->mtx_lock)
+#define	XCHAN_UNLOCK(xchan)		mtx_unlock(&xchan->mtx_lock)
+#define	XCHAN_ASSERT_LOCKED(xchan)	mtx_assert(&xchan->mtx_lock, MA_OWNED)
 
 /*
  * Allocate virtual xDMA channel.
@@ -296,6 +307,9 @@ xdma_desc_alloc_bus_dma(xdma_channel_t *xchan, uint32_t desc_size,
 	return (0);
 }
 
+/*
+ * This function called by DMA controller driver.
+ */
 int
 xdma_desc_alloc(xdma_channel_t *xchan, uint32_t desc_size, uint32_t align)
 {
@@ -303,7 +317,7 @@ xdma_desc_alloc(xdma_channel_t *xchan, uint32_t desc_size, uint32_t align)
 	xdma_config_t *conf;
 	int ret;
 
-	XDMA_ASSERT_LOCKED();
+	XCHAN_ASSERT_LOCKED(xchan);
 
 	xdma = xchan->xdma;
 	if (xdma == NULL) {
@@ -326,9 +340,9 @@ xdma_desc_alloc(xdma_channel_t *xchan, uint32_t desc_size, uint32_t align)
 
 	conf = &xchan->conf;
 
-	XDMA_UNLOCK();
+	XCHAN_UNLOCK(xchan);
 	ret = xdma_desc_alloc_bus_dma(xchan, desc_size, align);
-	XDMA_LOCK();
+	XCHAN_LOCK(xchan);
 	if (ret != 0) {
 		device_printf(xdma->dev,
 		    "%s: Can't allocate memory for descriptors.\n",
@@ -391,7 +405,7 @@ xdma_prep_memcpy(xdma_channel_t *xchan, uintptr_t src_addr,
 
 	xchan->flags |= (XCHAN_FLAG_CONFIGURED | XCHAN_FLAG_MEMCPY);
 
-	XDMA_LOCK();
+	XCHAN_LOCK(xchan);
 
 	/* Deallocate old descriptors, if any. */
 	xdma_desc_free(xchan);
@@ -411,7 +425,7 @@ xdma_prep_memcpy(xdma_channel_t *xchan, uintptr_t src_addr,
 		    BUS_DMASYNC_POSTWRITE);
 	}
 
-	XDMA_UNLOCK();
+	XCHAN_UNLOCK(xchan);
 
 	return (0);
 }
@@ -447,7 +461,7 @@ xdma_prep_cyclic(xdma_channel_t *xchan, enum xdma_direction dir,
 
 	xchan->flags |= XCHAN_FLAG_CONFIGURED | XCHAN_FLAG_CYCLIC;
 
-	XDMA_LOCK();
+	XCHAN_LOCK(xchan);
 
 	/* Deallocate old descriptors, if any. */
 	xdma_desc_free(xchan);
@@ -466,7 +480,7 @@ xdma_prep_cyclic(xdma_channel_t *xchan, enum xdma_direction dir,
 		    BUS_DMASYNC_POSTWRITE);
 	}
 
-	XDMA_UNLOCK();
+	XCHAN_UNLOCK(xchan);
 
 	return (0);
 }
