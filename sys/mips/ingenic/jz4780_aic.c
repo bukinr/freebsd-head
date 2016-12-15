@@ -669,7 +669,7 @@ aic_attach(device_t dev)
 	struct aic_softc *sc;
 	int err;
 
-	sc = malloc(sizeof(*sc), M_DEVBUF, M_WAITOK | M_ZERO);  
+	sc = malloc(sizeof(*sc), M_DEVBUF, M_WAITOK | M_ZERO);
 	sc->dev = dev;
 	sc->pos = 0;
 
