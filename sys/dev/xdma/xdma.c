@@ -239,10 +239,10 @@ xdma_dmamap_cb(void *arg, bus_dma_segment_t *segs, int nseg, int err)
 	int i;
 
 	xchan = (xdma_channel_t *)arg;
+	KASSERT(xchan != NULL, ("Panic."));
 
-	/* TODO: handle error. */
 	if (err) {
-		panic("error %d\n", err);
+		xchan->map_err = 1;
 		return;
 	}
 
@@ -296,9 +296,16 @@ xdma_desc_alloc_bus_dma(xdma_channel_t *xchan, uint32_t desc_size,
 	xchan->descs_phys = malloc(nsegments * sizeof(xdma_descriptor_t), M_XDMA,
 	    (M_WAITOK | M_ZERO));
 
+	xchan->map_err = 0;
 	err = bus_dmamap_load(xchan->dma_tag, xchan->dma_map, xchan->descs,
 	    all_desc_sz, xdma_dmamap_cb, xchan, BUS_DMA_WAITOK);
 	if (err) {
+		device_printf(xdma->dev,
+		    "%s: Can't load DMA map.\n", __func__);
+		return (-1);
+	}
+
+	if (xchan->map_err != 0) {
 		device_printf(xdma->dev,
 		    "%s: Can't load DMA map.\n", __func__);
 		return (-1);
@@ -542,14 +549,12 @@ xdma_pause(xdma_channel_t *xchan)
 int
 xdma_callback(xdma_channel_t *xchan)
 {
-	struct xdma_intr_handler *entry;
+	struct xdma_intr_handler *ih_tmp;
+	struct xdma_intr_handler *ih;
 
-	TAILQ_FOREACH(entry, &xchan->ie_handlers, ih_next) {
-		if (entry->cb != NULL) {
-			entry->cb(entry->cb_user);
-
-			/* TODO: At this point xchan can be destroyed by user already. */
-			return (0);
+	TAILQ_FOREACH_SAFE(ih, &xchan->ie_handlers, ih_next, ih_tmp) {
+		if (ih->cb != NULL) {
+			ih->cb(ih->cb_user);
 		}
 	}
 

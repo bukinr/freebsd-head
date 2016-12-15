@@ -104,6 +104,7 @@ struct xdma_channel {
 	bus_dmamap_t			dma_map;
 	void				*descs;
 	xdma_descriptor_t		*descs_phys;
+	uint8_t				map_err;
 
 	struct mtx			mtx_lock;
 
