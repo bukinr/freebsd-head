@@ -668,17 +668,11 @@ xdma_put(xdma_controller_t *xdma)
 	return (0);
 }
 
-#if 0
 static void
 xdma_init(void)
 {
-
-	printf("%s\n", __func__);
 
 	mtx_init(&xdma_mtx, "xDMA", NULL, MTX_DEF);
 }
 
 SYSINIT(xdma, SI_SUB_DRIVERS, SI_ORDER_FIRST, xdma_init, NULL);
-#endif
-
-MTX_SYSINIT(xdma_lock, &xdma_mtx, "xDMA", MTX_DEF);
