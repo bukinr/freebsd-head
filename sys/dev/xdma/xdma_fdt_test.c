@@ -307,7 +307,7 @@ xdmatest_worker(void *arg)
 		if (timeout != 0) {
 			err = xdmatest_verify(sc);
 			if (err == 0) {
-				/* Test succeded. */
+				/* Test succeeded. */
 				mtx_unlock(&sc->mtx);
 				continue;
 			}

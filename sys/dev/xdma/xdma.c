@@ -418,7 +418,7 @@ xdma_prep_memcpy(xdma_channel_t *xchan, uintptr_t src_addr,
 	}
 
 	if (xchan->flags & XCHAN_DESC_ALLOCATED) {
-		/* Driver created xDMA decsriptors. */
+		/* Driver created xDMA descriptors. */
 		bus_dmamap_sync(xchan->dma_tag, xchan->dma_map,
 		    BUS_DMASYNC_POSTWRITE);
 	}
@@ -465,7 +465,7 @@ xdma_prep_cyclic(xdma_channel_t *xchan, enum xdma_direction dir,
 	}
 
 	if (xchan->flags & XCHAN_DESC_ALLOCATED) {
-		/* Driver has created xDMA decsriptors. */
+		/* Driver has created xDMA descriptors. */
 		bus_dmamap_sync(xchan->dma_tag, xchan->dma_map,
 		    BUS_DMASYNC_POSTWRITE);
 	}
