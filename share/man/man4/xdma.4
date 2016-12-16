@@ -41,11 +41,9 @@ in your kernel configuration file:
 .Cd "device xdma"
 .Ed
 .Pp
-Alternatively, to load xDMA support as modules at boot time, place the
-following lines in
-.Xr loader.conf 5 :
+To compile xDMA FDT-based test driver, place the following line as well:
 .Bd -literal -offset indent
-xdma_load="YES"
+.Cd "device xdma_test"
 .Ed
 .Sh DESCRIPTION
 xDMA is a DMA framework designed to abstract the interaction between device
@@ -56,9 +54,9 @@ and DMA controller.
 The
 .Nm
 module provides a virtual DMA controller and virtual channels called xchans.
-The controller provides virtual channels allocation, configuration, and
-interrupt notifications esteblishment needed to receive events from the DMA
-controller.
+The controller provides virtual channels management (allocation, deallocation,
+configuration) and interrupt notification esteblishment needed to receive
+events from the DMA controller.
 .Nm
 supports the following transfer types:
 .Bl -hang -offset indent -width xxxxxxxx
