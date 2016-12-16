@@ -388,6 +388,7 @@ pdma_channel_prep_cyclic(device_t dev, struct xdma_channel *xchan)
 	struct pdma_softc *sc;
 	xdma_config_t *conf;
 	int max_width;
+	uint32_t reg;
 	uint32_t dcm;
 	int ret;
 	int i;
@@ -447,13 +448,13 @@ pdma_channel_prep_cyclic(device_t dev, struct xdma_channel *xchan)
 		 * consists of single descriptor only. And then we reconfigure channel
 		 * on each interrupt again.
 		 */
-
-#if 0
-		if (i != (conf->block_num - 1)) {
-			desc[i].dcm |= DCM_LINK;
-			desc[i].dtc |= (((i + 1) * sizeof(struct pdma_hwdesc)) >> 4) << 24;
+		if ((chan->flags & CHAN_DESCR_RELINK) == 0) {
+			if (i != (conf->block_num - 1)) {
+				desc[i].dcm |= DCM_LINK;
+				reg = ((i + 1) * sizeof(struct pdma_hwdesc));
+				desc[i].dtc |= (reg >> 4) << 24;
+			}
 		}
-#endif
 	}
 
 	return (0);
