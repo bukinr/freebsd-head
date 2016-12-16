@@ -190,6 +190,7 @@ pdma_attach(device_t dev)
 	reg &= ~(DMAC_HLT | DMAC_AR);
 	reg |= (DMAC_DMAE);
 	WRITE4(sc, PDMA_DMAC, reg);
+
 	WRITE4(sc, PDMA_DMACP, 0);
 
 	return (0);
@@ -244,11 +245,6 @@ static int
 chan_stop(struct pdma_softc *sc, struct pdma_channel *chan)
 {
 	int timeout;
-	int reg;
-
-#if 0
-	printf("%s: Stopping chan %d\n", __func__, chan->index);
-#endif
 
 	WRITE4(sc, PDMA_DCS(chan->index), 0);
 
@@ -265,10 +261,6 @@ chan_stop(struct pdma_softc *sc, struct pdma_channel *chan)
 		    __func__, chan->index);
 	}
 
-	reg = READ4(sc, PDMA_DMAC);
-	reg &= ~(DMAC_HLT | DMAC_AR);
-	WRITE4(sc, PDMA_DMAC, reg);
-
 	return (0);
 }
 
@@ -281,7 +273,6 @@ pdma_channel_free(device_t dev, struct xdma_channel *xchan)
 	sc = device_get_softc(dev);
 
 	chan = (struct pdma_channel *)xchan->chan;
-	//pdma_channel_reset(sc, chan->index);
 	chan->used = 0;
 
 	return (0);
@@ -443,11 +434,6 @@ pdma_channel_prep_cyclic(device_t dev, struct xdma_channel *xchan)
 	pdma_channel_reset(sc, chan->index);
 	desc = (struct pdma_hwdesc *)xchan->descs;
 
-#if 0
-	printf("xchan->descs is %x, block_num %d, data->tx %d\n",
-	    vtophys(xchan->descs), conf->block_num, data->tx);
-#endif
-
 	for (i = 0; i < conf->block_num; i++) {
 		if (conf->direction == XDMA_MEM_TO_DEV) {
 			desc[i].dsa = conf->src_addr + (i * conf->block_len);
@@ -476,6 +462,8 @@ pdma_channel_prep_cyclic(device_t dev, struct xdma_channel *xchan)
 		desc[i].dtc = (conf->block_len / max_width);
 
 #if 0
+		/* TODO: add comment */
+
 		if (i != (conf->block_num - 1)) {
 			desc[i].dcm |= DCM_LINK;
 			desc[i].dtc |= (((i + 1) * sizeof(struct pdma_hwdesc)) >> 4) << 24;
