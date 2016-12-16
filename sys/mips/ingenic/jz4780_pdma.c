@@ -113,7 +113,7 @@ pdma_intr(void *arg)
 
 	pending = READ4(sc, PDMA_DIRQP);
 
-	/* Ack all the channels */
+	/* Ack all the channels. */
 	WRITE4(sc, PDMA_DIRQP, 0);
 
 	for (i = 0; i < PDMA_NCHANNELS; i++) {
@@ -121,6 +121,8 @@ pdma_intr(void *arg)
 			chan = &pdma_channels[i];
 			xchan = chan->xchan;
 			conf = &xchan->conf;
+
+			/* TODO: check for AR, HLT error bits here. */
 
 			/* Disable channel */
 			WRITE4(sc, PDMA_DCS(chan->index), 0);
@@ -135,6 +137,14 @@ pdma_intr(void *arg)
 			xdma_callback(chan->xchan);
 		}
 	}
+
+#if 0
+	/* Clear errors on all the channels */
+	reg = READ4(sc, PDMA_DMAC);
+	reg &= ~(DMAC_HLT | DMAC_AR);
+	WRITE4(sc, PDMA_DMAC, reg);
+#endif
+
 }
 
 static int

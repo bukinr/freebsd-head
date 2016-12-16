@@ -449,7 +449,7 @@ xdma_prep_cyclic(xdma_channel_t *xchan, enum xdma_direction dir,
 	conf->src_width = src_width;
 	conf->dst_width = dst_width;
 
-	xchan->flags |= XCHAN_CONFIGURED | XCHAN_TYPE_CYCLIC;
+	xchan->flags |= (XCHAN_CONFIGURED | XCHAN_TYPE_CYCLIC);
 
 	XCHAN_LOCK(xchan);
 

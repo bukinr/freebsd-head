@@ -257,7 +257,8 @@ xdmatest_verify(struct xdmatest_softc *sc)
 
 	for (i = 0; i < sc->len; i++) {
 		if (sc->dst[i] != sc->src[i]) {
-			device_printf(sc->dev, "%s: Test failed.\n", __func__);
+			device_printf(sc->dev,
+			    "%s: Test failed: iter %d\n", __func__, i);
 			return (-1);
 		}
 	}
