@@ -207,21 +207,6 @@ pdma_detach(device_t dev)
 }
 
 static int
-pdma_channel_reset(struct pdma_softc *sc, uint32_t idx)
-{
-
-	WRITE4(sc, PDMA_DCS(idx), 0);
-	WRITE4(sc, PDMA_DTC(idx), 0);
-	WRITE4(sc, PDMA_DRT(idx), 0);
-	WRITE4(sc, PDMA_DSA(idx), 0);
-	WRITE4(sc, PDMA_DTA(idx), 0);
-	WRITE4(sc, PDMA_DSD(idx), 0);
-	WRITE4(sc, PDMA_DCM(idx), 0);
-
-	return (0);
-}
-
-static int
 chan_start(struct pdma_softc *sc, struct pdma_channel *chan)
 {
 	struct xdma_channel *xchan;
@@ -316,7 +301,8 @@ pdma_channel_prep_memcpy(device_t dev, struct xdma_channel *xchan)
 	sc = device_get_softc(dev);
 
 	chan = (struct pdma_channel *)xchan->chan;
-	pdma_channel_reset(sc, chan->index);
+	/* Ensure we are not in operation */
+	chan_stop(sc, chan);
 
 	ret = xdma_desc_alloc(xchan, sizeof(struct pdma_hwdesc), 8);
 	if (ret != 0) {
@@ -420,10 +406,11 @@ pdma_channel_prep_cyclic(device_t dev, struct xdma_channel *xchan)
 	}
 
 	chan = (struct pdma_channel *)xchan->chan;
+	/* Ensure we are not in operation */
+	chan_stop(sc, chan);
 	chan->flags = CHAN_DESCR_RELINK;
 	chan->cur_desc = 0;
 
-	pdma_channel_reset(sc, chan->index);
 	desc = (struct pdma_hwdesc *)xchan->descs;
 
 	for (i = 0; i < conf->block_num; i++) {
