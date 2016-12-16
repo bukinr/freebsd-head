@@ -33,6 +33,7 @@
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
+#include "opt_platform.h"
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/conf.h>
@@ -44,17 +45,14 @@ __FBSDID("$FreeBSD$");
 #include <sys/resource.h>
 #include <sys/rman.h>
 
-#include <vm/vm.h>
-#include <vm/vm_extern.h>
-#include <vm/vm_kern.h>
-#include <vm/pmap.h>
-
 #include <machine/bus.h>
 #include <machine/cache.h>
 
+#ifdef FDT
 #include <dev/fdt/fdt_common.h>
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
+#endif
 
 #include <dev/xdma/xdma.h>
 
@@ -84,7 +82,7 @@ struct pdma_channel {
 	int			used;
 	int			index;
 	int			flags;
-#define	TRANFER_TYPE_CYCLIC	(1 << 0)
+#define	CHAN_DESCR_RELINK	(1 << 0)
 };
 
 #define	PDMA_NCHANNELS	32
@@ -127,7 +125,7 @@ pdma_intr(void *arg)
 			/* Disable channel */
 			WRITE4(sc, PDMA_DCS(chan->index), 0);
 
-			if (chan->flags & TRANFER_TYPE_CYCLIC) {
+			if (chan->flags & CHAN_DESCR_RELINK) {
 				/* Enable again */
 				chan->cur_desc = (chan->cur_desc + 1) % \
 				    conf->block_num;
@@ -265,20 +263,6 @@ chan_stop(struct pdma_softc *sc, struct pdma_channel *chan)
 }
 
 static int
-pdma_channel_free(device_t dev, struct xdma_channel *xchan)
-{
-	struct pdma_channel *chan;
-	struct pdma_softc *sc;
-
-	sc = device_get_softc(dev);
-
-	chan = (struct pdma_channel *)xchan->chan;
-	chan->used = 0;
-
-	return (0);
-}
-
-static int
 pdma_channel_alloc(device_t dev, struct xdma_channel *xchan)
 {
 	struct pdma_channel *chan;
@@ -286,6 +270,8 @@ pdma_channel_alloc(device_t dev, struct xdma_channel *xchan)
 	int i;
 
 	sc = device_get_softc(dev);
+
+	xdma_assert_locked();
 
 	for (i = 0; i < PDMA_NCHANNELS; i++) {
 		chan = &pdma_channels[i];
@@ -300,6 +286,22 @@ pdma_channel_alloc(device_t dev, struct xdma_channel *xchan)
 	}
 
 	return (-1);
+}
+
+static int
+pdma_channel_free(device_t dev, struct xdma_channel *xchan)
+{
+	struct pdma_channel *chan;
+	struct pdma_softc *sc;
+
+	sc = device_get_softc(dev);
+
+	xdma_assert_locked();
+
+	chan = (struct pdma_channel *)xchan->chan;
+	chan->used = 0;
+
+	return (0);
 }
 
 static int
@@ -334,10 +336,6 @@ pdma_channel_prep_memcpy(device_t dev, struct xdma_channel *xchan)
 	desc[0].dtc = (conf->block_len / 4);
 	desc[0].dcm |= DCM_SP_4 | DCM_DP_4 | DCM_TSZ_4;
 	desc[0].dcm |= DCM_TIE;
-
-#if 0
-	printf("src %x dst %x dtc %d\n", conf->src_addr, conf->dst_addr, desc[0].dtc);
-#endif
 
 	return (0);
 }
@@ -410,15 +408,9 @@ pdma_channel_prep_cyclic(device_t dev, struct xdma_channel *xchan)
 
 	sc = device_get_softc(dev);
 
+	conf = &xchan->conf;
 	xdma = xchan->xdma;
 	data = (struct pdma_fdt_data *)xdma->data;
-
-	conf = &xchan->conf;
-
-#if 0
-	printf("%s: block len %d, block num %d\n", __func__,
-	    conf->block_len, conf->block_num);
-#endif
 
 	ret = xdma_desc_alloc(xchan, sizeof(struct pdma_hwdesc), 8);
 	if (ret != 0) {
@@ -428,7 +420,7 @@ pdma_channel_prep_cyclic(device_t dev, struct xdma_channel *xchan)
 	}
 
 	chan = (struct pdma_channel *)xchan->chan;
-	chan->flags = TRANFER_TYPE_CYCLIC;
+	chan->flags = CHAN_DESCR_RELINK;
 	chan->cur_desc = 0;
 
 	pdma_channel_reset(sc, chan->index);
@@ -461,9 +453,15 @@ pdma_channel_prep_cyclic(device_t dev, struct xdma_channel *xchan)
 		desc[i].dcm |= dcm | DCM_TIE;
 		desc[i].dtc = (conf->block_len / max_width);
 
-#if 0
-		/* TODO: add comment */
+		/*
+		 * PDMA does not provide interrupt after processing each descriptor,
+		 * but after processing all the chain only.
+		 * As a workaround we do unlink descriptors here, so our chain will
+		 * consists of single descriptor only. And then we reconfigure channel
+		 * on each interrupt again.
+		 */
 
+#if 0
 		if (i != (conf->block_num - 1)) {
 			desc[i].dcm |= DCM_LINK;
 			desc[i].dtc |= (((i + 1) * sizeof(struct pdma_hwdesc)) >> 4) << 24;
@@ -499,6 +497,7 @@ pdma_channel_control(device_t dev, xdma_channel_t *xchan, int cmd)
 	return (0);
 }
 
+#ifdef FDT
 static int
 pdma_ofw_md_data(device_t dev, phandle_t *cells, int ncells, void **ptr)
 {
@@ -522,6 +521,7 @@ pdma_ofw_md_data(device_t dev, phandle_t *cells, int ncells, void **ptr)
 
 	return (0);
 }
+#endif
 
 static device_method_t pdma_methods[] = {
 	/* Device interface */
@@ -535,7 +535,9 @@ static device_method_t pdma_methods[] = {
 	DEVMETHOD(xdma_channel_prep_cyclic,	pdma_channel_prep_cyclic),
 	DEVMETHOD(xdma_channel_prep_memcpy,	pdma_channel_prep_memcpy),
 	DEVMETHOD(xdma_channel_control,		pdma_channel_control),
+#ifdef FDT
 	DEVMETHOD(xdma_ofw_md_data,		pdma_ofw_md_data),
+#endif
 
 	DEVMETHOD_END
 };

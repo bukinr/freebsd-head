@@ -544,6 +544,13 @@ xdma_callback(xdma_channel_t *xchan)
 	return (0);
 }
 
+void
+xdma_assert_locked(void)
+{
+
+	XDMA_ASSERT_LOCKED();
+}
+
 #ifdef FDT
 /*
  * Notify the DMA driver we have machine-dependent data in FDT.
