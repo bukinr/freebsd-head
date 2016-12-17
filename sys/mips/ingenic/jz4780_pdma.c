@@ -137,14 +137,6 @@ pdma_intr(void *arg)
 			xdma_callback(chan->xchan);
 		}
 	}
-
-#if 0
-	/* Clear errors on all the channels */
-	reg = READ4(sc, PDMA_DMAC);
-	reg &= ~(DMAC_HLT | DMAC_AR);
-	WRITE4(sc, PDMA_DMAC, reg);
-#endif
-
 }
 
 static int
