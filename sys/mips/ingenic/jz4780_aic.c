@@ -549,14 +549,14 @@ aic_dma_setup(struct aic_softc *sc)
 	}
 
 	err = bus_dmamem_alloc(sc->dma_tag, (void **)&sc->buf_base,
-	    BUS_DMA_NOWAIT | BUS_DMA_COHERENT, &sc->dma_map);
+	    BUS_DMA_WAITOK | BUS_DMA_COHERENT, &sc->dma_map);
 	if (err) {
 		device_printf(dev, "cannot allocate memory\n");
 		return (-1);
 	}
 
 	err = bus_dmamap_load(sc->dma_tag, sc->dma_map, sc->buf_base,
-	    sc->dma_size, aic_dmamap_cb, &sc->buf_base_phys, BUS_DMA_NOWAIT);
+	    sc->dma_size, aic_dmamap_cb, &sc->buf_base_phys, BUS_DMA_WAITOK);
 	if (err) {
 		device_printf(dev, "cannot load DMA map\n");
 		return (-1);
@@ -705,7 +705,7 @@ aic_attach(device_t dev)
 	sc->aic_fifo_paddr = rman_get_start(sc->res[0]) + AICDR;
 
 	/* Setup PCM. */
-	scp = malloc(sizeof(struct sc_pcminfo), M_DEVBUF, M_NOWAIT | M_ZERO);
+	scp = malloc(sizeof(struct sc_pcminfo), M_DEVBUF, M_WAITOK | M_ZERO);
 	scp->sc = sc;
 	scp->dev = dev;
 
@@ -748,7 +748,7 @@ aic_attach(device_t dev)
 	pcm_addchan(dev, PCMDIR_PLAY, &aicchan_class, scp);
 	scp->chnum++;
 
-	snprintf(status, SND_STATUSLEN, "at simplebus");
+	snprintf(status, SND_STATUSLEN, "at %s", ofw_bus_get_name(dev));
 	pcm_setstatus(dev, status);
 
 	mixer_init(dev, &aicmixer_class, scp);
