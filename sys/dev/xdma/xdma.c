@@ -556,7 +556,7 @@ xdma_assert_locked(void)
  * Notify the DMA driver we have machine-dependent data in FDT.
  */
 static int
-xdma_ofw_md_data(xdma_controller_t *xdma, phandle_t *cells, int ncells)
+xdma_ofw_md_data(xdma_controller_t *xdma, pcell_t *cells, int ncells)
 {
 	uint32_t ret;
 
@@ -571,10 +571,10 @@ xdma_ofw_md_data(xdma_controller_t *xdma, phandle_t *cells, int ncells)
 xdma_controller_t *
 xdma_ofw_get(device_t dev, const char *prop)
 {
-	phandle_t parent, *cells;
+	phandle_t node, parent;
 	xdma_controller_t *xdma;
 	device_t dma_dev;
-	phandle_t node;
+	pcell_t *cells;
 	int ncells;
 	int error;
 	int ndmas;

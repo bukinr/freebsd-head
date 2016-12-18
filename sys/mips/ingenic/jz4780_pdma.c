@@ -489,7 +489,7 @@ pdma_channel_control(device_t dev, xdma_channel_t *xchan, int cmd)
 
 #ifdef FDT
 static int
-pdma_ofw_md_data(device_t dev, phandle_t *cells, int ncells, void **ptr)
+pdma_ofw_md_data(device_t dev, pcell_t *cells, int ncells, void **ptr)
 {
 	struct pdma_fdt_data *data;
 

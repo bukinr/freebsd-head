@@ -63,7 +63,7 @@ METHOD int channel_prep_memcpy {
 #
 METHOD int ofw_md_data {
 	device_t dev;
-	phandle_t *cells;
+	pcell_t *cells;
 	int ncells;
 	void **data;
 };
