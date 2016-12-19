@@ -253,7 +253,7 @@ const static struct scsi_control_page control_page_changeable = {
 	/*page_code*/SMS_CONTROL_MODE_PAGE,
 	/*page_length*/sizeof(struct scsi_control_page) - 2,
 	/*rlec*/SCP_DSENSE,
-	/*queue_flags*/SCP_QUEUE_ALG_MASK,
+	/*queue_flags*/SCP_QUEUE_ALG_MASK | SCP_NUAR,
 	/*eca_and_aen*/SCP_SWP,
 	/*flags4*/0,
 	/*aen_holdoff_period*/{0, 0},
@@ -5362,7 +5362,8 @@ ctl_sync_cache(struct ctl_scsiio *ctsio)
 	 * to see an error for an out of range LBA.
 	 */
 	if ((starting_lba + block_count) > (lun->be_lun->maxlba + 1)) {
-		ctl_set_lba_out_of_range(ctsio);
+		ctl_set_lba_out_of_range(ctsio,
+		    MAX(starting_lba, lun->be_lun->maxlba + 1));
 		ctl_done((union ctl_io *)ctsio);
 		goto bailout;
 	}
@@ -5678,7 +5679,8 @@ ctl_write_same(struct ctl_scsiio *ctsio)
 	 */
 	if (((lba + num_blocks) > (lun->be_lun->maxlba + 1))
 	 || ((lba + num_blocks) < lba)) {
-		ctl_set_lba_out_of_range(ctsio);
+		ctl_set_lba_out_of_range(ctsio,
+		    MAX(lba, lun->be_lun->maxlba + 1));
 		ctl_done((union ctl_io *)ctsio);
 		return (CTL_RETVAL_COMPLETE);
 	}
@@ -5791,7 +5793,8 @@ ctl_unmap(struct ctl_scsiio *ctsio)
 		num_blocks = scsi_4btoul(range->length);
 		if (((lba + num_blocks) > (lun->be_lun->maxlba + 1))
 		 || ((lba + num_blocks) < lba)) {
-			ctl_set_lba_out_of_range(ctsio);
+			ctl_set_lba_out_of_range(ctsio,
+			    MAX(lba, lun->be_lun->maxlba + 1));
 			ctl_done((union ctl_io *)ctsio);
 			return (CTL_RETVAL_COMPLETE);
 		}
@@ -6995,7 +6998,7 @@ ctl_get_lba_status(struct ctl_scsiio *ctsio)
 	alloc_len = scsi_4btoul(cdb->alloc_len);
 
 	if (lba > lun->be_lun->maxlba) {
-		ctl_set_lba_out_of_range(ctsio);
+		ctl_set_lba_out_of_range(ctsio, lba);
 		ctl_done((union ctl_io *)ctsio);
 		return (CTL_RETVAL_COMPLETE);
 	}
@@ -8440,12 +8443,11 @@ ctl_persistent_reserve_out(struct ctl_scsiio *ctsio)
 		lun->pr_res_type = 0;
 
 		/*
-		 * if this isn't an exclusive access
-		 * res generate UA for all other
-		 * registrants.
+		 * If this isn't an exclusive access reservation and NUAR
+		 * is not set, generate UA for all other registrants.
 		 */
-		if (type != SPR_TYPE_EX_AC
-		 && type != SPR_TYPE_WR_EX) {
+		if (type != SPR_TYPE_EX_AC && type != SPR_TYPE_WR_EX &&
+		    (lun->MODE_CTRL.queue_flags & SCP_NUAR) == 0) {
 			for (i = softc->init_min; i < softc->init_max; i++) {
 				if (i == residx || ctl_get_prkey(lun, i) == 0)
 					continue;
@@ -8595,11 +8597,12 @@ ctl_hndl_per_res_out_on_other_sc(union ctl_ha_msg *msg)
 
 	case CTL_PR_RELEASE:
 		/*
-		 * if this isn't an exclusive access res generate UA for all
-		 * other registrants.
+		 * If this isn't an exclusive access reservation and NUAR
+		 * is not set, generate UA for all other registrants.
 		 */
 		if (lun->pr_res_type != SPR_TYPE_EX_AC &&
-		    lun->pr_res_type != SPR_TYPE_WR_EX) {
+		    lun->pr_res_type != SPR_TYPE_WR_EX &&
+		    (lun->MODE_CTRL.queue_flags & SCP_NUAR) == 0) {
 			for (i = softc->init_min; i < softc->init_max; i++)
 				if (i == residx || ctl_get_prkey(lun, i) == 0)
 					continue;
@@ -8785,7 +8788,8 @@ ctl_read_write(struct ctl_scsiio *ctsio)
 	 */
 	if (((lba + num_blocks) > (lun->be_lun->maxlba + 1))
 	 || ((lba + num_blocks) < lba)) {
-		ctl_set_lba_out_of_range(ctsio);
+		ctl_set_lba_out_of_range(ctsio,
+		    MAX(lba, lun->be_lun->maxlba + 1));
 		ctl_done((union ctl_io *)ctsio);
 		return (CTL_RETVAL_COMPLETE);
 	}
@@ -8894,7 +8898,8 @@ ctl_cnw(struct ctl_scsiio *ctsio)
 	 */
 	if (((lba + num_blocks) > (lun->be_lun->maxlba + 1))
 	 || ((lba + num_blocks) < lba)) {
-		ctl_set_lba_out_of_range(ctsio);
+		ctl_set_lba_out_of_range(ctsio,
+		    MAX(lba, lun->be_lun->maxlba + 1));
 		ctl_done((union ctl_io *)ctsio);
 		return (CTL_RETVAL_COMPLETE);
 	}
@@ -9005,7 +9010,8 @@ ctl_verify(struct ctl_scsiio *ctsio)
 	 */
 	if (((lba + num_blocks) > (lun->be_lun->maxlba + 1))
 	 || ((lba + num_blocks) < lba)) {
-		ctl_set_lba_out_of_range(ctsio);
+		ctl_set_lba_out_of_range(ctsio,
+		    MAX(lba, lun->be_lun->maxlba + 1));
 		ctl_done((union ctl_io *)ctsio);
 		return (CTL_RETVAL_COMPLETE);
 	}
@@ -9542,7 +9548,7 @@ ctl_inquiry_evpd_eid(struct ctl_scsiio *ctsio, int alloc_len)
 	 * attention for a particular IT nexus on all LUNs once we report
 	 * it to that nexus once.  This bit is required as of SPC-4.
 	 */
-	eid_ptr->flags4 = SVPD_EID_LUICLT;
+	eid_ptr->flags4 = SVPD_EID_LUICLR;
 
 	/*
 	 * XXX KDM in order to correctly answer this, we would need
