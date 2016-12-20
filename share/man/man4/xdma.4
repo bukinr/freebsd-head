@@ -53,10 +53,10 @@ xDMA defines an interface for efficient interaction between the device driver
 and DMA controller.
 The
 .Nm
-module provides a virtual DMA controller and virtual channels called xchans.
+device provides a virtual DMA controller and virtual channels called xchans.
 The controller provides virtual channels management (allocation, deallocation,
 configuration) and interrupt notification esteblishment needed to receive
-events from the DMA controller.
+events from the hardware DMA controller.
 .Nm
 supports the following transfer types:
 .Bl -hang -offset indent -width xxxxxxxx
