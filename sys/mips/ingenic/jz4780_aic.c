@@ -160,10 +160,6 @@ aicmixer_set(struct snd_mixer *m, unsigned dev,
 	scp = mix_getdevinfo(m);
 
 	/* Here we can configure hardware volume on our DAC */
-#if 0
-	device_printf(scp->dev, "aicmixer_set() %d %d\n",
-	    left, right);
-#endif
 
 	return (0);
 }
@@ -213,10 +209,6 @@ aicchan_free(kobj_t obj, void *data)
 	struct sc_pcminfo *scp = ch->parent;
 	struct aic_softc *sc = scp->sc;
 
-#if 0
-	device_printf(scp->dev, "aicchan_free()\n");
-#endif
-
 	snd_mtxlock(sc->lock);
 	/* TODO: free channel buffer */
 	snd_mtxunlock(sc->lock);
@@ -232,10 +224,6 @@ aicchan_setformat(kobj_t obj, void *data, uint32_t format)
 
 	ch = data;
 	scp = ch->parent;
-
-#if 0
-	device_printf(scp->dev, "%s\n", __func__);
-#endif
 
 	ch->format = format;
 
@@ -255,10 +243,6 @@ aicchan_setspeed(kobj_t obj, void *data, uint32_t speed)
 	ch = data;
 	scp = ch->parent;
 	sc = scp->sc;
-
-#if 0
-	device_printf(scp->dev, "%s\n", __func__);
-#endif
 
 	sr = NULL;
 
@@ -281,9 +265,7 @@ aicchan_setspeed(kobj_t obj, void *data, uint32_t speed)
 
 	sc->sr = sr;
 
-#if 0
 	/* Clocks can be reconfigured here. */
-#endif
 
 	return (sr->speed);
 }
@@ -298,10 +280,6 @@ aicchan_setblocksize(kobj_t obj, void *data, uint32_t blocksize)
 	ch = data;
 	scp = ch->parent;
 	sc = scp->sc;
-
-#if 0
-	device_printf(scp->dev, "%s\n", __func__);
-#endif
 
 	sndbuf_resize(ch->buffer, sc->dma_size / blocksize, blocksize);
 
@@ -379,10 +357,6 @@ aic_start(struct sc_pcminfo *scp)
 	sc = scp->sc;
 	sc->pos = 0;
 
-#if 0
-	device_printf(scp->dev, "%s\n", __func__);
-#endif
-
 	/* Ensure clock enabled. */
 	reg = READ4(sc, I2SCR);
 	reg |= (I2SCR_ESCLK);
@@ -406,10 +380,6 @@ aic_stop(struct sc_pcminfo *scp)
 	int reg;
 
 	sc = scp->sc;
-
-#if 0
-	device_printf(scp->dev, "%s\n", __func__);
-#endif
 
 	reg = READ4(sc, AICCR);
 	reg &= ~(AICCR_TDMS | AICCR_ERPL);
@@ -439,9 +409,6 @@ aicchan_trigger(kobj_t obj, void *data, int go)
 
 	switch (go) {
 	case PCMTRIG_START:
-#if 0
-		device_printf(scp->dev, "trigger start\n");
-#endif
 		ch->run = 1;
 
 		aic_start(scp);
@@ -450,9 +417,6 @@ aicchan_trigger(kobj_t obj, void *data, int go)
 
 	case PCMTRIG_STOP:
 	case PCMTRIG_ABORT:
-#if 0
-		device_printf(scp->dev, "trigger stop or abort\n");
-#endif
 		ch->run = 0;
 
 		aic_stop(scp);
@@ -629,12 +593,11 @@ aic_configure(struct aic_softc *sc)
 	/* Configure AIC */
 	reg = 0;
 	if (internal_codec) {
-		reg |= (AICFR_ICDC);	/* Internal CODEC. */
+		reg |= (AICFR_ICDC);
 	} else {
-		reg |= (AICFR_SYNCD);	/* SYNC is generated internally and driven out to the CODEC. */
-		reg |= (AICFR_BCKD);	/* BIT_CLK is generated internally and driven out to the CODEC. */
+		reg |= (AICFR_SYNCD | AICFR_BCKD);
 	}
-	reg |= (AICFR_AUSEL);	/* Select I2S/MSB-justified format. */
+	reg |= (AICFR_AUSEL);	/* I2S/MSB-justified format. */
 	reg |= (AICFR_TFTH(8));	/* Transmit FIFO threshold */
 	reg |= (AICFR_RFTH(7));	/* Receive FIFO threshold */
 	WRITE4(sc, AICFR, reg);
@@ -656,7 +619,7 @@ aic_probe(device_t dev)
 	if (!ofw_bus_is_compatible(dev, "ingenic,jz4780-i2s"))
 		return (ENXIO);
 
-	device_set_desc(dev, "Ingenic JZ4780 Audio Interface Controller");
+	device_set_desc(dev, "Audio Interface Controller");
 
 	return (BUS_PROBE_DEFAULT);
 }
@@ -695,7 +658,8 @@ aic_attach(device_t dev)
 	}
 
 	if (bus_alloc_resources(dev, aic_spec, sc->res)) {
-		device_printf(dev, "could not allocate resources for device\n");
+		device_printf(dev,
+		    "could not allocate resources for device\n");
 		return (ENXIO);
 	}
 
@@ -734,7 +698,8 @@ aic_attach(device_t dev)
 	/* Setup interrupt handler. */
 	err = xdma_setup_intr(sc->xchan, aic_intr, scp, &sc->ih);
 	if (err) {
-		device_printf(sc->dev, "Can't setup xDMA interrupt handler.\n");
+		device_printf(sc->dev,
+		    "Can't setup xDMA interrupt handler.\n");
 		return (ENXIO);
 	}
 
