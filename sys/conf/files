@@ -2840,6 +2840,7 @@ dev/sn/if_sn.c			optional sn
 dev/sn/if_sn_isa.c		optional sn isa
 dev/sn/if_sn_pccard.c		optional sn pccard
 dev/snp/snp.c			optional snp
+dev/softdma/softdma.c		optional softdma xdma fdt
 dev/sound/clone.c		optional sound
 dev/sound/unit.c		optional sound
 dev/sound/isa/ad1816.c		optional snd_ad1816 isa
