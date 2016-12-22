@@ -122,18 +122,26 @@
 		};
 	};
 
+	softdma: softdma@0 {
+		compatible = "freebsd,softdma";
+
+		#dma-cells = <3>;
+	};
+
 	xdma_test {
 		compatible = "freebsd,xdma-test";
 
-		dmas = <&dma 0 0 0xffffffff>;
+		dmas = <&softdma 0 0 0xffffffff>;
 		dma-names = "test";
 	};
 
 	xdma_test2 {
 		compatible = "freebsd,xdma-test";
 
-		dmas = <&dma 0 0 0xffffffff>;
+		dmas = <&softdma 0 0 0xffffffff>;
 		dma-names = "test";
+
+		status = "disabled";
 	};
 };
 
