@@ -37,6 +37,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/conf.h>
 #include <sys/bus.h>
 #include <sys/kernel.h>
+#include <sys/kthread.h>
 #include <sys/module.h>
 #include <sys/lock.h>
 #include <sys/mutex.h>
@@ -55,13 +56,27 @@ __FBSDID("$FreeBSD$");
 #include "xdma_if.h"
 
 struct softdma_channel {
-	xdma_channel_t *xchan;
-	int used;
-	int index;
+	struct softdma_softc	*sc;
+	xdma_channel_t		*xchan;
+	struct proc		*p;
+	int			used;
+	int			index;
 };
 
 #define	SOFTDMA_NCHANNELS	32
 struct softdma_channel softdma_channels[SOFTDMA_NCHANNELS];
+
+struct softdma_desc {
+	uint32_t dcm;		/* DMA Channel Command */
+	uint32_t dsa;		/* DMA Source Address */
+	uint32_t dta;		/* DMA Target Address */
+	uint32_t dtc;		/* DMA Transfer Counter */
+	uint32_t dtw;		/* DMA Transfer Width */
+
+	uint32_t sd;		/* Stride Address */
+	uint32_t drt;		/* DMA Request Type */
+	uint32_t reserved[2];
+};
 
 struct softdma_softc {
 	device_t		dev;
@@ -107,6 +122,43 @@ softdma_detach(device_t dev)
 	return (0);
 }
 
+static void
+softdma_worker(void *arg)
+{
+	struct softdma_channel *chan;
+	struct softdma_softc *sc;
+
+	chan = arg;
+
+	sc = chan->sc;
+
+	while (1) {
+
+	}
+}
+
+static int
+softdma_proc_create(struct softdma_channel *chan)
+{
+	struct softdma_softc *sc;
+
+	sc = chan->sc;
+
+	if (chan->p != NULL) {
+		/* Already created */
+		return (0);
+	}
+
+	if (kproc_create(softdma_worker, (void *)chan, &chan->p, 0, 0,
+	    "xdmatest_worker") != 0) {
+		device_printf(sc->dev,
+		    "%s: Failed to create worker thread.\n", __func__);
+		return (-1);
+	}
+
+	return (0);
+}
+
 static int
 softdma_channel_alloc(device_t dev, struct xdma_channel *xchan)
 {
@@ -123,8 +175,14 @@ softdma_channel_alloc(device_t dev, struct xdma_channel *xchan)
 		if (chan->used == 0) {
 			chan->xchan = xchan;
 			xchan->chan = (void *)chan;
-			chan->used = 1;
 			chan->index = i;
+			chan->sc = sc;
+
+			if (softdma_proc_create(chan) != 0) {
+				return (-1);
+			}
+
+			chan->used = 1;
 
 			return (0);
 		}
@@ -159,6 +217,66 @@ softdma_channel_prep_cyclic(device_t dev, struct xdma_channel *xchan)
 static int
 softdma_channel_prep_memcpy(device_t dev, struct xdma_channel *xchan)
 {
+	struct softdma_channel *chan;
+	struct softdma_desc *desc;
+	struct softdma_softc *sc;
+	xdma_config_t *conf;
+	int ret;
+
+	sc = device_get_softc(dev);
+
+	chan = (struct softdma_channel *)xchan->chan;
+
+	/* Ensure we are not in operation */
+	//chan_stop(sc, chan);
+
+	ret = xdma_desc_alloc(xchan, sizeof(struct softdma_desc), 8);
+	if (ret != 0) {
+		device_printf(sc->dev,
+		    "%s: Can't allocate descriptors.\n", __func__);
+		return (-1);
+	}
+
+	conf = &xchan->conf;
+	desc = (struct softdma_desc *)xchan->descs;
+
+	desc[0].dsa = conf->src_addr;
+	desc[0].dta = conf->dst_addr;
+	desc[0].dtw = 4;
+	desc[0].dtc = (conf->block_len / 4);
+
+#if 0
+	//desc[0].drt = DRT_AUTO;
+	//desc[0].dcm = DCM_SAI | DCM_DAI;
+
+	/* 4 byte copy for now. */
+	desc[0].dcm |= DCM_SP_4 | DCM_DP_4 | DCM_TSZ_4;
+	desc[0].dcm |= DCM_TIE;
+
+	conf->src_addr;
+	conf->dst_addr;
+	conf->block_len;
+	conf->block_num;
+#endif
+
+	return (0);
+}
+
+static int
+chan_start(struct softdma_channel *chan)
+{
+	struct softdma_softc *sc;
+
+	sc = chan->sc;
+
+	//bus_space_tag_t bst;
+	//bus_space_handle_t bsh;
+
+	//bst = fdtbus_bs_tag;
+
+	//bus_space_map(bst, conf->src_addr, conf->block_len, 0, &bsh);
+	//bus_space_write_4(bst, bsh, offs, val);
+	//bus_space_unmap(bst, bsh, conf->block_len);
 
 	return (0);
 }
@@ -175,7 +293,7 @@ softdma_channel_control(device_t dev, xdma_channel_t *xchan, int cmd)
 
 	switch (cmd) {
 	case XDMA_CMD_BEGIN:
-		//chan_start(sc, chan);
+		chan_start(chan);
 		break;
 	case XDMA_CMD_TERMINATE:
 		//chan_stop(sc, chan);
