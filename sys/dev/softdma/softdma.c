@@ -45,6 +45,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/rman.h>
 
 #include <machine/bus.h>
+#include <machine/fdt.h>
 
 #ifdef FDT
 #include <dev/fdt/fdt_common.h>
@@ -57,25 +58,26 @@ __FBSDID("$FreeBSD$");
 
 struct softdma_channel {
 	struct softdma_softc	*sc;
+	struct mtx		mtx;
 	xdma_channel_t		*xchan;
 	struct proc		*p;
 	int			used;
 	int			index;
+	int			run;
 };
 
 #define	SOFTDMA_NCHANNELS	32
 struct softdma_channel softdma_channels[SOFTDMA_NCHANNELS];
 
 struct softdma_desc {
-	uint32_t dcm;		/* DMA Channel Command */
-	uint32_t dsa;		/* DMA Source Address */
-	uint32_t dta;		/* DMA Target Address */
-	uint32_t dtc;		/* DMA Transfer Counter */
-	uint32_t dtw;		/* DMA Transfer Width */
-
-	uint32_t sd;		/* Stride Address */
-	uint32_t drt;		/* DMA Request Type */
-	uint32_t reserved[2];
+	uint32_t		src_addr;
+	uint32_t		dst_addr;
+	uint32_t		access_width;
+	uint32_t		count;
+	uint16_t		src_incr;
+	uint16_t		dst_incr;
+	struct softdma_desc	*next;
+	uint32_t		__reserved[2];
 };
 
 struct softdma_softc {
@@ -105,9 +107,14 @@ static int
 softdma_attach(device_t dev)
 {
 	struct softdma_softc *sc;
+	phandle_t xref, node;
 
 	sc = device_get_softc(dev);
 	sc->dev = dev;
+
+	node = ofw_bus_get_node(dev);
+	xref = OF_xref_from_node(node);
+	OF_device_register_xref(xref, dev);
 
 	return (0);
 }
@@ -123,6 +130,37 @@ softdma_detach(device_t dev)
 }
 
 static void
+softdma_process_descriptors(struct softdma_channel *chan)
+{
+	bus_space_handle_t bsh_src;
+	bus_space_handle_t bsh_dst;
+	struct xdma_channel *xchan;
+	struct softdma_desc *desc;
+	struct softdma_softc *sc;
+	bus_space_tag_t bst;
+	size_t len;
+
+	sc = chan->sc;
+
+	xchan = chan->xchan;
+	//conf = &xchan->conf;
+
+	desc = (struct softdma_desc *)xchan->descs;
+
+	bst = fdtbus_bs_tag;
+
+	while (desc != NULL) {
+		len = (desc->count * desc->access_width);
+		bus_space_map(bst, desc->src_addr, len, 0, &bsh_src);
+		bus_space_map(bst, desc->dst_addr, len, 0, &bsh_dst);
+		bus_space_copy_region_4(bst, bsh_src, 0, bsh_dst, 0, desc->count);
+		bus_space_unmap(bst, bsh_src, len);
+		bus_space_unmap(bst, bsh_dst, len);
+		desc = desc->next;
+	}
+}
+
+static void
 softdma_worker(void *arg)
 {
 	struct softdma_channel *chan;
@@ -133,8 +171,18 @@ softdma_worker(void *arg)
 	sc = chan->sc;
 
 	while (1) {
+		mtx_lock(&chan->mtx);
 
+		do {
+			mtx_sleep(chan, &chan->mtx, 0, "softdma_wait", hz / 2);
+		} while (chan->run == 0);
+
+		softdma_process_descriptors(chan);
+		xdma_callback(chan->xchan);
+
+		mtx_unlock(&chan->mtx);
 	}
+
 }
 
 static int
@@ -149,8 +197,10 @@ softdma_proc_create(struct softdma_channel *chan)
 		return (0);
 	}
 
+	mtx_init(&chan->mtx, "SoftDMA", NULL, MTX_DEF);
+
 	if (kproc_create(softdma_worker, (void *)chan, &chan->p, 0, 0,
-	    "xdmatest_worker") != 0) {
+	    "softdma_worker") != 0) {
 		device_printf(sc->dev,
 		    "%s: Failed to create worker thread.\n", __func__);
 		return (-1);
@@ -202,6 +252,7 @@ softdma_channel_free(device_t dev, struct xdma_channel *xchan)
 	xdma_assert_locked();
 
 	chan = (struct softdma_channel *)xchan->chan;
+	//mtx_destroy(&chan->mtx);
 	chan->used = 0;
 
 	return (0);
@@ -240,10 +291,13 @@ softdma_channel_prep_memcpy(device_t dev, struct xdma_channel *xchan)
 	conf = &xchan->conf;
 	desc = (struct softdma_desc *)xchan->descs;
 
-	desc[0].dsa = conf->src_addr;
-	desc[0].dta = conf->dst_addr;
-	desc[0].dtw = 4;
-	desc[0].dtc = (conf->block_len / 4);
+	desc[0].src_addr = conf->src_addr;
+	desc[0].dst_addr = conf->dst_addr;
+	desc[0].access_width = 4;
+	desc[0].count = (conf->block_len / 4);
+	desc[0].src_incr = 1;
+	desc[0].dst_incr = 1;
+	desc[0].next = NULL;
 
 #if 0
 	//desc[0].drt = DRT_AUTO;
@@ -265,18 +319,12 @@ softdma_channel_prep_memcpy(device_t dev, struct xdma_channel *xchan)
 static int
 chan_start(struct softdma_channel *chan)
 {
-	struct softdma_softc *sc;
+	//struct softdma_softc *sc;
 
-	sc = chan->sc;
+	//sc = chan->sc;
 
-	//bus_space_tag_t bst;
-	//bus_space_handle_t bsh;
-
-	//bst = fdtbus_bs_tag;
-
-	//bus_space_map(bst, conf->src_addr, conf->block_len, 0, &bsh);
-	//bus_space_write_4(bst, bsh, offs, val);
-	//bus_space_unmap(bst, bsh, conf->block_len);
+	chan->run = 1;
+	wakeup(chan);
 
 	return (0);
 }
@@ -342,4 +390,5 @@ static driver_t softdma_driver = {
 
 static devclass_t softdma_devclass;
 
-DRIVER_MODULE(softdma, simplebus, softdma_driver, softdma_devclass, 0, 0);
+EARLY_DRIVER_MODULE(softdma, simplebus, softdma_driver, softdma_devclass, 0, 0,
+    BUS_PASS_INTERRUPT + BUS_PASS_ORDER_LATE);
