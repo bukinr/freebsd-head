@@ -98,11 +98,65 @@ softdma_detach(device_t dev)
 	return (0);
 }
 
+static int
+softdma_channel_alloc(device_t dev, struct xdma_channel *xchan)
+{
+
+	return (0);
+}
+
+static int
+softdma_channel_free(device_t dev, struct xdma_channel *xchan)
+{
+
+	return (0);
+}
+
+static int
+softdma_channel_prep_cyclic(device_t dev, struct xdma_channel *xchan)
+{
+
+	return (0);
+}
+
+static int
+softdma_channel_prep_memcpy(device_t dev, struct xdma_channel *xchan)
+{
+
+	return (0);
+}
+
+static int
+softdma_channel_control(device_t dev, xdma_channel_t *xchan, int cmd)
+{
+
+	return (0);
+}
+
+#ifdef FDT
+static int
+softdma_ofw_md_data(device_t dev, pcell_t *cells, int ncells, void **ptr)
+{
+
+	return (0);
+}
+#endif
+
 static device_method_t softdma_methods[] = {
 	/* Device interface */
 	DEVMETHOD(device_probe,			softdma_probe),
 	DEVMETHOD(device_attach,		softdma_attach),
 	DEVMETHOD(device_detach,		softdma_detach),
+
+	/* xDMA Interface */
+	DEVMETHOD(xdma_channel_alloc,		softdma_channel_alloc),
+	DEVMETHOD(xdma_channel_free,		softdma_channel_free),
+	DEVMETHOD(xdma_channel_prep_cyclic,	softdma_channel_prep_cyclic),
+	DEVMETHOD(xdma_channel_prep_memcpy,	softdma_channel_prep_memcpy),
+	DEVMETHOD(xdma_channel_control,		softdma_channel_control),
+#ifdef FDT
+	DEVMETHOD(xdma_ofw_md_data,		softdma_ofw_md_data),
+#endif
 
 	DEVMETHOD_END
 };
