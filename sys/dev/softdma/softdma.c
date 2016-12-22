@@ -166,6 +166,24 @@ softdma_channel_prep_memcpy(device_t dev, struct xdma_channel *xchan)
 static int
 softdma_channel_control(device_t dev, xdma_channel_t *xchan, int cmd)
 {
+	struct softdma_channel *chan;
+	struct softdma_softc *sc;
+
+	sc = device_get_softc(dev);
+
+	chan = (struct softdma_channel *)xchan->chan;
+
+	switch (cmd) {
+	case XDMA_CMD_BEGIN:
+		//chan_start(sc, chan);
+		break;
+	case XDMA_CMD_TERMINATE:
+		//chan_stop(sc, chan);
+		break;
+	case XDMA_CMD_PAUSE:
+		/* TODO: implement me */
+		return (-1);
+	}
 
 	return (0);
 }
