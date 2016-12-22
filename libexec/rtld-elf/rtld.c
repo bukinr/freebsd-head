@@ -90,6 +90,7 @@ static const char *gethints(bool);
 static void hold_object(Obj_Entry *);
 static void unhold_object(Obj_Entry *);
 static void init_dag(Obj_Entry *);
+static void init_marker(Obj_Entry *);
 static void init_pagesizes(Elf_Auxinfo **aux_info);
 static void init_rtld(caddr_t, Elf_Auxinfo **);
 static void initlist_add_neededs(Needed_Entry *, Objlist *);
@@ -1829,6 +1830,14 @@ init_dag(Obj_Entry *root)
     root->dag_inited = true;
 }
 
+static void
+init_marker(Obj_Entry *marker)
+{
+
+	bzero(marker, sizeof(*marker));
+	marker->marker = true;
+}
+
 Obj_Entry *
 globallist_curr(const Obj_Entry *obj)
 {
@@ -2229,7 +2238,7 @@ load_object(const char *name, int fd_u, const Obj_Entry *refobj, int flags)
     fd = -1;
     if (name != NULL) {
 	TAILQ_FOREACH(obj, &obj_list, next) {
-	    if (obj->marker)
+	    if (obj->marker || obj->doomed)
 		continue;
 	    if (object_match_name(obj, name))
 		return (obj);
@@ -2276,7 +2285,7 @@ load_object(const char *name, int fd_u, const Obj_Entry *refobj, int flags)
 	return NULL;
     }
     TAILQ_FOREACH(obj, &obj_list, next) {
-	if (obj->marker)
+	if (obj->marker || obj->doomed)
 	    continue;
 	if (obj->ino == sb.st_ino && obj->dev == sb.st_dev)
 	    break;
@@ -2418,6 +2427,9 @@ objlist_call_fini(Objlist *list, Obj_Entry *root, RtldLockState *lockstate)
 
     assert(root == NULL || root->refcount == 1);
 
+    if (root != NULL)
+	root->doomed = true;
+
     /*
      * Preserve the current error message since a fini function might
      * call into the dynamic linker and overwrite it.
@@ -2430,16 +2442,11 @@ objlist_call_fini(Objlist *list, Obj_Entry *root, RtldLockState *lockstate)
 		continue;
 	    /* Remove object from fini list to prevent recursive invocation. */
 	    STAILQ_REMOVE(list, elm, Struct_Objlist_Entry, link);
-	    /*
-	     * XXX: If a dlopen() call references an object while the
-	     * fini function is in progress, we might end up trying to
-	     * unload the referenced object in dlclose() or the object
-	     * won't be unloaded although its fini function has been
-	     * called.
-	     */
+	    /* Ensure that new references cannot be acquired. */
+	    elm->obj->doomed = true;
+
 	    hold_object(elm->obj);
 	    lock_release(rtld_bind_lock, lockstate);
-
 	    /*
 	     * It is legal to have both DT_FINI and DT_FINI_ARRAY defined.
 	     * When this happens, DT_FINI_ARRAY is processed first.
@@ -3568,8 +3575,7 @@ dl_iterate_phdr(__dl_iterate_hdr_callback callback, void *param)
 	RtldLockState bind_lockstate, phdr_lockstate;
 	int error;
 
-	bzero(&marker, sizeof(marker));
-	marker.marker = true;
+	init_marker(&marker);
 	error = 0;
 
 	wlock_acquire(rtld_phdr_lock, &phdr_lockstate);
@@ -4421,7 +4427,7 @@ trace_loaded_objects(Obj_Entry *obj)
 static void
 unload_object(Obj_Entry *root)
 {
-	Obj_Entry *obj, *obj1;
+	Obj_Entry marker, *obj, *next;
 
 	assert(root->refcount == 0);
 
@@ -4432,7 +4438,8 @@ unload_object(Obj_Entry *root)
 	unlink_object(root);
 
 	/* Unmap all objects that are no longer referenced. */
-	TAILQ_FOREACH_SAFE(obj, &obj_list, next, obj1) {
+	for (obj = TAILQ_FIRST(&obj_list); obj != NULL; obj = next) {
+		next = TAILQ_NEXT(obj, next);
 		if (obj->marker || obj->refcount != 0)
 			continue;
 		LD_UTRACE(UTRACE_UNLOAD_OBJECT, obj, obj->mapbase,
@@ -4446,7 +4453,16 @@ unload_object(Obj_Entry *root)
 		TAILQ_REMOVE(&obj_list, obj, next);
 		obj_count--;
 
-		unload_filtees(root);
+		if (obj->filtees_loaded) {
+			if (next != NULL) {
+				init_marker(&marker);
+				TAILQ_INSERT_BEFORE(next, &marker, next);
+				unload_filtees(obj);
+				next = TAILQ_NEXT(&marker, next);
+				TAILQ_REMOVE(&obj_list, &marker, next);
+			} else
+				unload_filtees(obj);
+		}
 		release_object(obj);
 	}
 }
