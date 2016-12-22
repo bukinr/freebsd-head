@@ -153,11 +153,14 @@ softdma_process_descriptors(struct softdma_channel *chan)
 		len = (desc->count * desc->access_width);
 		bus_space_map(bst, desc->src_addr, len, 0, &bsh_src);
 		bus_space_map(bst, desc->dst_addr, len, 0, &bsh_dst);
+		//printf("copy %x -> %x (%d times)\n", bsh_src, bsh_dst, desc->count);
 		bus_space_copy_region_4(bst, bsh_src, 0, bsh_dst, 0, desc->count);
 		bus_space_unmap(bst, bsh_src, len);
 		bus_space_unmap(bst, bsh_dst, len);
 		desc = desc->next;
 	}
+
+	chan->run = 0;
 }
 
 static void
@@ -178,6 +181,7 @@ softdma_worker(void *arg)
 		} while (chan->run == 0);
 
 		softdma_process_descriptors(chan);
+
 		xdma_callback(chan->xchan);
 
 		mtx_unlock(&chan->mtx);
