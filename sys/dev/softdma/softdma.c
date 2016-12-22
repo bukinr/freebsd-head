@@ -54,6 +54,15 @@ __FBSDID("$FreeBSD$");
 #include <dev/xdma/xdma.h>
 #include "xdma_if.h"
 
+struct softdma_channel {
+	xdma_channel_t *xchan;
+	int used;
+	int index;
+};
+
+#define	SOFTDMA_NCHANNELS	32
+struct softdma_channel softdma_channels[SOFTDMA_NCHANNELS];
+
 struct softdma_softc {
 	device_t		dev;
 };
@@ -101,13 +110,41 @@ softdma_detach(device_t dev)
 static int
 softdma_channel_alloc(device_t dev, struct xdma_channel *xchan)
 {
+	struct softdma_channel *chan;
+	struct softdma_softc *sc;
+	int i;
 
-	return (0);
+	sc = device_get_softc(dev);
+
+	xdma_assert_locked();
+
+	for (i = 0; i < SOFTDMA_NCHANNELS; i++) {
+		chan = &softdma_channels[i];
+		if (chan->used == 0) {
+			chan->xchan = xchan;
+			xchan->chan = (void *)chan;
+			chan->used = 1;
+			chan->index = i;
+
+			return (0);
+		}
+	}
+
+	return (-1);
 }
 
 static int
 softdma_channel_free(device_t dev, struct xdma_channel *xchan)
 {
+	struct softdma_channel *chan;
+	struct softdma_softc *sc;
+
+	sc = device_get_softc(dev);
+
+	xdma_assert_locked();
+
+	chan = (struct softdma_channel *)xchan->chan;
+	chan->used = 0;
 
 	return (0);
 }
