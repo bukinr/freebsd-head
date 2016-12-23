@@ -138,7 +138,10 @@ softdma_process_descriptors(struct softdma_channel *chan)
 	struct softdma_desc *desc;
 	struct softdma_softc *sc;
 	bus_space_tag_t bst;
+	uint32_t src_offs, dst_offs;
+	uint32_t val; /* TODO */
 	size_t len;
+	int i;
 
 	sc = chan->sc;
 
@@ -151,16 +154,32 @@ softdma_process_descriptors(struct softdma_channel *chan)
 
 	while (desc != NULL) {
 		len = (desc->count * desc->access_width);
+
 		bus_space_map(bst, desc->src_addr, len, 0, &bsh_src);
 		bus_space_map(bst, desc->dst_addr, len, 0, &bsh_dst);
+
 		//printf("copy %x -> %x (%d times)\n", bsh_src, bsh_dst, desc->count);
-		bus_space_copy_region_4(bst, bsh_src, 0, bsh_dst, 0, desc->count);
+
+		if (desc->src_incr && desc->dst_incr) {
+			bus_space_copy_region_4(bst, bsh_src, 0, bsh_dst, 0, desc->count);
+		} else {
+			src_offs = dst_offs = 0;
+			for (i = 0; i < desc->count; i++) {
+				val = bus_space_read_4(bst, bsh_src, src_offs);
+				bus_space_write_4(bst, bsh_dst, dst_offs, val);
+				if (desc->src_incr)
+					src_offs += 4;
+				if (desc->dst_incr)
+					dst_offs += 4;
+			}
+		}
+
 		bus_space_unmap(bst, bsh_src, len);
 		bus_space_unmap(bst, bsh_dst, len);
+
+		/* Process next descriptor, if any. */
 		desc = desc->next;
 	}
-
-	chan->run = 0;
 }
 
 static void
@@ -182,6 +201,8 @@ softdma_worker(void *arg)
 
 		softdma_process_descriptors(chan);
 
+		/* Finish operation */
+		chan->run = 0;
 		xdma_callback(chan->xchan);
 
 		mtx_unlock(&chan->mtx);
@@ -302,20 +323,6 @@ softdma_channel_prep_memcpy(device_t dev, struct xdma_channel *xchan)
 	desc[0].src_incr = 1;
 	desc[0].dst_incr = 1;
 	desc[0].next = NULL;
-
-#if 0
-	//desc[0].drt = DRT_AUTO;
-	//desc[0].dcm = DCM_SAI | DCM_DAI;
-
-	/* 4 byte copy for now. */
-	desc[0].dcm |= DCM_SP_4 | DCM_DP_4 | DCM_TSZ_4;
-	desc[0].dcm |= DCM_TIE;
-
-	conf->src_addr;
-	conf->dst_addr;
-	conf->block_len;
-	conf->block_num;
-#endif
 
 	return (0);
 }
