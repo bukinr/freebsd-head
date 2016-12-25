@@ -123,18 +123,20 @@
 		serial@7f000000 {
 			compatible = "altera,jtag_uart-11_0";
 			reg = <0x7f000000 0x40>;
-			interrupts = <0>;
-			interrupt-parent = <&beripic0>;
+			//interrupts = <0>;
+			//interrupt-parent = <&beripic0>;
 		};
 
 		serial@7f001000 {
 			compatible = "altera,jtag_uart-11_0";
 			reg = <0x7f001000 0x40>;
+			status = "disabled";
 		};
 
 		serial@7f002000 {
 			compatible = "altera,jtag_uart-11_0";
 			reg = <0x7f002000 0x40>;
+			status = "disabled";
 		};
 
 		sdcard@7f008000 {
@@ -188,6 +190,10 @@
 			};
 		};
 
+		softdma: softdma {
+			compatible = "freebsd,softdma";
+		};
+
 		ethernet@7f007000 {
 			compatible = "altera,atse";
 			// MAC, RX+RXC, TX+TXC.
@@ -197,8 +203,11 @@
 			       0x7f007400 0x8
 			       0x7f007420 0x20>;
 			// RX, TX
-			interrupts = <1 2>;
-			interrupt-parent = <&beripic0>;
+			//interrupts = <1 2>;
+			//interrupt-parent = <&beripic0>;
+			dmas = <&softdma 0>,
+				<&softdma 1>;
+			dma-names = "tx", "rx";
 		};
 
 		ethernet@7f005000 {
@@ -212,6 +221,7 @@
 			// RX, TX
 			interrupts = <11 12>;
 			interrupt-parent = <&beripic0>;
+			status = "disabled";
 		};
 
 		touchscreen@70400000 {
