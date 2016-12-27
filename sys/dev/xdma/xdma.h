@@ -68,6 +68,8 @@ struct xdma_channel_config {
 	enum xdma_direction	direction;
 	uintptr_t		src_addr;	/* Physical address. */
 	uintptr_t		dst_addr;	/* Physical address. */
+	uint8_t			src_incr;
+	uint8_t			dst_incr;
 	int			block_len;	/* In bytes. */
 	int			block_num;	/* Count of blocks. */
 	int			src_width;	/* In bytes. */
