@@ -5833,7 +5833,7 @@ ctl_default_page_handler(struct ctl_scsiio *ctsio,
 			 struct ctl_page_index *page_index, uint8_t *page_ptr)
 {
 	struct ctl_lun *lun;
-	uint8_t *current_cp, *saved_cp;
+	uint8_t *current_cp;
 	int set_ua;
 	uint32_t initidx;
 
@@ -5843,13 +5843,10 @@ ctl_default_page_handler(struct ctl_scsiio *ctsio,
 
 	current_cp = (page_index->page_data + (page_index->page_len *
 	    CTL_PAGE_CURRENT));
-	saved_cp = (page_index->page_data + (page_index->page_len *
-	    CTL_PAGE_SAVED));
 
 	mtx_lock(&lun->lun_lock);
 	if (memcmp(current_cp, page_ptr, page_index->page_len)) {
 		memcpy(current_cp, page_ptr, page_index->page_len);
-		memcpy(saved_cp, page_ptr, page_index->page_len);
 		set_ua = 1;
 	}
 	if (set_ua != 0)
@@ -5939,7 +5936,7 @@ ctl_do_mode_select(union ctl_io *io)
 	int page_len, page_len_offset, page_len_size;
 	union ctl_modepage_info *modepage_info;
 	struct ctl_lun *lun;
-	int *len_left, *len_used;
+	uint16_t *len_left, *len_used;
 	int retval, i;
 
 	ctsio = &io->scsiio;
@@ -6158,10 +6155,13 @@ bailout_no_done:
 int
 ctl_mode_select(struct ctl_scsiio *ctsio)
 {
-	int param_len, pf, sp;
-	int header_size, bd_len;
+	struct ctl_lun *lun;
 	union ctl_modepage_info *modepage_info;
+	int bd_len, i, header_size, param_len, pf, rtd, sp;
+	uint32_t initidx;
 
+	lun = ctsio->io_hdr.ctl_private[CTL_PRIV_LUN].ptr;
+	initidx = ctl_get_initindex(&ctsio->io_hdr.nexus);
 	switch (ctsio->cdb[0]) {
 	case MODE_SELECT_6: {
 		struct scsi_mode_select_6 *cdb;
@@ -6169,6 +6169,7 @@ ctl_mode_select(struct ctl_scsiio *ctsio)
 		cdb = (struct scsi_mode_select_6 *)ctsio->cdb;
 
 		pf = (cdb->byte2 & SMS_PF) ? 1 : 0;
+		rtd = (cdb->byte2 & SMS_RTD) ? 1 : 0;
 		sp = (cdb->byte2 & SMS_SP) ? 1 : 0;
 		param_len = cdb->length;
 		header_size = sizeof(struct scsi_mode_header_6);
@@ -6180,6 +6181,7 @@ ctl_mode_select(struct ctl_scsiio *ctsio)
 		cdb = (struct scsi_mode_select_10 *)ctsio->cdb;
 
 		pf = (cdb->byte2 & SMS_PF) ? 1 : 0;
+		rtd = (cdb->byte2 & SMS_RTD) ? 1 : 0;
 		sp = (cdb->byte2 & SMS_SP) ? 1 : 0;
 		param_len = scsi_2btoul(cdb->length);
 		header_size = sizeof(struct scsi_mode_header_10);
@@ -6187,6 +6189,30 @@ ctl_mode_select(struct ctl_scsiio *ctsio)
 	}
 	default:
 		ctl_set_invalid_opcode(ctsio);
+		ctl_done((union ctl_io *)ctsio);
+		return (CTL_RETVAL_COMPLETE);
+	}
+
+	if (rtd) {
+		if (param_len != 0) {
+			ctl_set_invalid_field(ctsio, /*sks_valid*/ 0,
+			    /*command*/ 1, /*field*/ 0,
+			    /*bit_valid*/ 0, /*bit*/ 0);
+			ctl_done((union ctl_io *)ctsio);
+			return (CTL_RETVAL_COMPLETE);
+		}
+
+		/* Revert to defaults. */
+		ctl_init_page_index(lun);
+		mtx_lock(&lun->lun_lock);
+		ctl_est_ua_all(lun, initidx, CTL_UA_MODE_CHANGE);
+		mtx_unlock(&lun->lun_lock);
+		for (i = 0; i < CTL_NUM_MODE_PAGES; i++) {
+			ctl_isc_announce_mode(lun, -1,
+			    lun->mode_pages.index[i].page_code & SMPH_PC_MASK,
+			    lun->mode_pages.index[i].subpage);
+		}
+		ctl_set_success(ctsio);
 		ctl_done((union ctl_io *)ctsio);
 		return (CTL_RETVAL_COMPLETE);
 	}
@@ -9561,6 +9587,11 @@ ctl_inquiry_evpd_eid(struct ctl_scsiio *ctsio, int alloc_len)
 	 * it to that nexus once.  This bit is required as of SPC-4.
 	 */
 	eid_ptr->flags4 = SVPD_EID_LUICLR;
+
+	/*
+	 * We support revert to defaults (RTD) bit in MODE SELECT.
+	 */
+	eid_ptr->flags5 = SVPD_EID_RTD_SUP;
 
 	/*
 	 * XXX KDM in order to correctly answer this, we would need
