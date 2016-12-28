@@ -150,9 +150,6 @@ a_onchip_fifo_mem_core_read(struct resource *res, uint32_t off,
 	return (val4);
 }
 
-void atse_tx_data_write(uint32_t val);
-uint32_t atse_tx_data_read(void);
-
 void
 atse_tx_data_write(uint32_t val)
 {
