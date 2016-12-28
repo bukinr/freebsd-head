@@ -192,6 +192,8 @@
 
 		softdma: softdma {
 			compatible = "freebsd,softdma";
+
+			#dma-cells = <3>;
 		};
 
 		ethernet@7f007000 {
@@ -205,8 +207,8 @@
 			// RX, TX
 			//interrupts = <1 2>;
 			//interrupt-parent = <&beripic0>;
-			dmas = <&softdma 0>,
-				<&softdma 1>;
+			dmas = <&softdma 0 0 0xffffffff>,
+				<&softdma 1 1 0xffffffff>;
 			dma-names = "tx", "rx";
 		};
 
