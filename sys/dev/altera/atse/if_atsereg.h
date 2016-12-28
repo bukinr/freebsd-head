@@ -33,6 +33,8 @@
 #ifndef _DEV_IF_ATSEREG_H
 #define _DEV_IF_ATSEREG_H
 
+#include <dev/xdma/xdma.h>
+
 #define	ATSE_VENDOR			0x6af7
 #define	ATSE_DEVICE			0x00bd
 
@@ -468,6 +470,9 @@ struct atse_softc {
 #define	ATSE_RX_ERR_MAX			6
 	struct callout		atse_tick;
 	struct mtx		atse_mtx;
+	device_t		dev;
+	xdma_controller_t	*xdma_tx;
+	xdma_channel_t		*xchan;
 };
 
 
