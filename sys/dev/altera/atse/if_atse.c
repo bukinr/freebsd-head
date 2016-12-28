@@ -391,6 +391,14 @@ atse_tx_locked(struct atse_softc *sc, int *sent)
 		sc->atse_tx_buf_len = m->m_pkthdr.len;
 	}
 
+	uint32_t src;
+	uint32_t dst;
+	src = (uintptr_t)sc->atse_tx_buf;
+	dst = (rman_get_start(sc->atse_tx_mem_res) + A_ONCHIP_FIFO_MEM_CORE_DATA);
+	printf("tx: src addr %x, dst addr %x\n", src, dst);
+
+	//xdma_prep_fifo(sc->xchan, 
+
 	fill_level = ATSE_TX_READ_FILL_LEVEL(sc);
 #if 0	/* Returns 0xdeadc0de. */
 	val4 = ATSE_TX_META_READ(sc);
@@ -1758,8 +1766,6 @@ atse_sysctl_stats_attach(device_t dev)
 	sctx = device_get_sysctl_ctx(dev);
 	soid = device_get_sysctl_tree(dev);
 
-	atse_sc = sc;
-
 	/* MAC statistics. */
 	for (i = 0; i < nitems(atse_mac_stats_regs); i++) {
 		if (atse_mac_stats_regs[i].name == NULL ||
@@ -1796,6 +1802,23 @@ atse_attach(device_t dev)
 	int error;
 
 	sc = device_get_softc(dev);
+	sc->dev = dev;
+
+	atse_sc = sc;
+
+	/* Get xDMA controller */
+	sc->xdma_tx = xdma_ofw_get(sc->dev, "tx");
+	if (sc->xdma_tx == NULL) {
+		device_printf(dev, "Can't find DMA controller.\n");
+		return (ENXIO);
+	}
+
+	/* Alloc xDMA virtual channel. */
+	sc->xchan = xdma_channel_alloc(sc->xdma_tx);
+	if (sc->xchan == NULL) {
+		device_printf(dev, "Can't alloc virtual DMA channel.\n");
+		return (ENXIO);
+	}
 
 	atse_ethernet_option_bits_read(dev);
 
