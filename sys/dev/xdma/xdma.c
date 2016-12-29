@@ -242,6 +242,7 @@ xdma_dmamap_cb(void *arg, bus_dma_segment_t *segs, int nseg, int err)
 	KASSERT(xchan != NULL, ("xchan is NULL"));
 
 	if (err) {
+		printf("%s: error\n", __func__);
 		xchan->map_err = 1;
 		return;
 	}
@@ -267,10 +268,11 @@ xdma_desc_alloc_bus_dma(xdma_channel_t *xchan, uint32_t desc_size,
 
 	nsegments = conf->block_num;
 	all_desc_sz = (nsegments * desc_size);
+	printf("nsegments %d desc_size %d\n", nsegments, desc_size);
 
 	err = bus_dma_tag_create(
 	    bus_get_dma_tag(xdma->dev),
-	    align, desc_size,		/* alignment, boundary */
+	    align, 0,			/* alignment, boundary */
 	    BUS_SPACE_MAXADDR_32BIT,	/* lowaddr */
 	    BUS_SPACE_MAXADDR,		/* highaddr */
 	    NULL, NULL,			/* filter, filterarg */
@@ -292,8 +294,8 @@ xdma_desc_alloc_bus_dma(xdma_channel_t *xchan, uint32_t desc_size,
 		return (-1);
 	}
 
-	xchan->descs_phys = malloc(nsegments * sizeof(xdma_descriptor_t), M_XDMA,
-	    (M_WAITOK | M_ZERO));
+	xchan->descs_phys = malloc(nsegments * sizeof(xdma_descriptor_t),
+	    M_XDMA, (M_WAITOK | M_ZERO));
 
 	xchan->map_err = 0;
 	err = bus_dmamap_load(xchan->dma_tag, xchan->dma_map, xchan->descs,
@@ -412,7 +414,52 @@ xdma_prep_memcpy(xdma_channel_t *xchan, uintptr_t src_addr,
 	if (ret != 0) {
 		device_printf(xdma->dev,
 		    "%s: Can't prepare memcpy transfer.\n", __func__);
-		XDMA_UNLOCK();
+		XCHAN_UNLOCK(xchan);
+
+		return (-1);
+	}
+
+	if (xchan->flags & XCHAN_DESC_ALLOCATED) {
+		/* Driver created xDMA descriptors. */
+		bus_dmamap_sync(xchan->dma_tag, xchan->dma_map,
+		    BUS_DMASYNC_POSTWRITE);
+	}
+
+	XCHAN_UNLOCK(xchan);
+
+	return (0);
+}
+
+int
+xdma_prep_fifo(xdma_channel_t *xchan, uintptr_t src_addr,
+    uintptr_t dst_addr, size_t len)
+{
+	xdma_controller_t *xdma;
+	xdma_config_t *conf;
+	int ret;
+
+	xdma = xchan->xdma;
+	KASSERT(xdma != NULL, ("xdma is NULL"));
+
+	conf = &xchan->conf;
+	conf->direction = XDMA_MEM_TO_DEV;
+	conf->src_addr = src_addr;
+	conf->dst_addr = dst_addr;
+	conf->block_len = len;
+	conf->block_num = 1;
+
+	xchan->flags |= (XCHAN_CONFIGURED | XCHAN_TYPE_FIFO);
+
+	XCHAN_LOCK(xchan);
+
+	/* Deallocate old descriptors, if any. */
+	xdma_desc_free(xchan);
+
+	ret = XDMA_CHANNEL_PREP_FIFO(xdma->dma_dev, xchan);
+	if (ret != 0) {
+		device_printf(xdma->dev,
+		    "%s: Can't prepare fifo transfer.\n", __func__);
+		XCHAN_UNLOCK(xchan);
 
 		return (-1);
 	}
@@ -460,7 +507,7 @@ xdma_prep_cyclic(xdma_channel_t *xchan, enum xdma_direction dir,
 	if (ret != 0) {
 		device_printf(xdma->dev,
 		    "%s: Can't prepare cyclic transfer.\n", __func__);
-		XDMA_UNLOCK();
+		XCHAN_UNLOCK(xchan);
 		return (-1);
 	}
 

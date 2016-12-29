@@ -78,6 +78,11 @@ __FBSDID("$FreeBSD$");
 
 #include <net/bpf.h>
 
+#include <vm/vm.h>
+#include <vm/vm_extern.h>
+#include <vm/vm_kern.h>
+#include <vm/pmap.h>
+
 #include <machine/bus.h>
 #include <machine/resource.h>
 #include <sys/rman.h>
@@ -169,6 +174,45 @@ atse_tx_data_read(void)
 	sc = atse_sc;
 
 	val = bus_read_4(sc->atse_rx_mem_res, A_ONCHIP_FIFO_MEM_CORE_DATA);
+
+	return (val);
+}
+
+void
+atse_tx_meta_write(uint32_t val)
+{
+	struct atse_softc *sc;
+
+	sc = atse_sc;
+
+	a_onchip_fifo_mem_core_write(sc->atse_tx_mem_res,
+	    A_ONCHIP_FIFO_MEM_CORE_METADATA, val, "TXM", __func__, __LINE__);
+}
+
+uint32_t
+atse_tx_meta_read(void)
+{
+	struct atse_softc *sc;
+	uint32_t val;
+
+	sc = atse_sc;
+
+	val = a_onchip_fifo_mem_core_read(sc->atse_tx_mem_res,
+	    A_ONCHIP_FIFO_MEM_CORE_METADATA, "TXM", __func__, __LINE__);
+
+	return (val);
+}
+
+uint32_t
+atse_tx_read_fill_level(void)
+{
+	struct atse_softc *sc;
+	uint32_t val;
+
+	sc = atse_sc;
+
+	val = a_onchip_fifo_mem_core_read(sc->atse_txc_mem_res,
+	    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_FILL_LEVEL, "TX_FILL", __func__, __LINE__);
 
 	return (val);
 }
@@ -368,15 +412,51 @@ static int atse_detach(device_t);
 devclass_t atse_devclass;
 
 static int
+atse_xdma_intr(void *arg)
+{
+	struct atse_softc *sc;
+	struct ifnet *ifp;
+	struct mbuf *m;
+
+	sc = arg;
+
+	ifp = sc->atse_ifp;
+	m = sc->atse_tx_m;
+
+	printf("%s\n", __func__);
+
+	m_freem(m);
+	sc->atse_tx_m = NULL;
+	sc->atse_tx_m_offset = 0;
+	sc->txcount--;
+	ifp->if_drv_flags &= ~IFF_DRV_OACTIVE;
+
+	return (0);
+}
+
+static int
 atse_tx_locked(struct atse_softc *sc, int *sent)
 {
-	struct mbuf *m;
 	uint32_t val4, fill_level;
+	struct ifnet *ifp;
+	struct mbuf *m;
 	int leftm;
+	int ret;
 	int c;
 
 	ATSE_LOCK_ASSERT(sc);
 
+	printf("%s\n", __func__);
+
+	ifp = sc->atse_ifp;
+
+	if ((ifp->if_flags & IFF_UP) == 0) {
+		return (-1);
+	}
+
+	printf("%s 1\n", __func__);
+
+	ifp = sc->atse_ifp;
 	m = sc->atse_tx_m;
 	KASSERT(m != NULL, ("%s: m is null: sc=%p", __func__, sc));
 	KASSERT(m->m_flags & M_PKTHDR, ("%s: not a pkthdr: m=%p", __func__, m));
@@ -393,11 +473,27 @@ atse_tx_locked(struct atse_softc *sc, int *sent)
 
 	uint32_t src;
 	uint32_t dst;
-	src = (uintptr_t)sc->atse_tx_buf;
+	//src = (uintptr_t)sc->atse_tx_buf;
+	src = vtophys(sc->atse_tx_buf);
 	dst = (rman_get_start(sc->atse_tx_mem_res) + A_ONCHIP_FIFO_MEM_CORE_DATA);
-	printf("tx: src addr %x, dst addr %x\n", src, dst);
+	printf("tx: src addr %x, dst addr %x, len %d\n", src, dst, sc->atse_tx_buf_len);
 
-	//xdma_prep_fifo(sc->xchan, 
+	ret = xdma_prep_fifo(sc->xchan, src, dst, sc->atse_tx_buf_len);
+	if (ret != 0) {
+		device_printf(sc->dev, "Can't prepare xDMA for transfer\n");
+		return (-1);
+	}
+
+	sc->txcount++;
+
+	ifp->if_drv_flags |= IFF_DRV_OACTIVE;
+	xdma_begin(sc->xchan);
+
+	/* If anyone is interested give them a copy. */
+	BPF_MTAP(sc->atse_ifp, m);
+
+	//m_freem(m);
+	return (0);
 
 	fill_level = ATSE_TX_READ_FILL_LEVEL(sc);
 #if 0	/* Returns 0xdeadc0de. */
@@ -475,6 +571,11 @@ atse_start_locked(struct ifnet *ifp)
 	    IFF_DRV_RUNNING || (sc->atse_flags & ATSE_FLAGS_LINK) == 0)
 		return;
 
+	if (ifp->if_drv_flags & IFF_DRV_OACTIVE)
+		return;
+
+	//printf("%s\n", __func__);
+
 #if 1
 	/*
 	 * Disable the watchdog while sending, we are batching packets.
@@ -484,13 +585,22 @@ atse_start_locked(struct ifnet *ifp)
 	sc->atse_watchdog_timer = 0;
 #endif
 
+
+#if 0
 	if (sc->atse_tx_m != NULL) {
 		error = atse_tx_locked(sc, &sent);
 		if (error != 0)
 			goto done;
 	}
+#endif
+
 	/* We have more space to send so continue ... */
 	for (; !IFQ_DRV_IS_EMPTY(&ifp->if_snd); ) {
+
+		//if (sc->txcount > 0) {
+		//	ifp->if_drv_flags |= IFF_DRV_OACTIVE;
+		//	break;
+		//}
 
 		IFQ_DRV_DEQUEUE(&ifp->if_snd, sc->atse_tx_m);
 		sc->atse_tx_m_offset = 0;
@@ -499,6 +609,12 @@ atse_start_locked(struct ifnet *ifp)
 		error = atse_tx_locked(sc, &sent);
 		if (error != 0)
 			goto done;
+
+		if (sc->txcount > 0) {
+			ifp->if_drv_flags |= IFF_DRV_OACTIVE;
+			break;
+		}
+		sent = 1;
 	}
 
 done:
@@ -513,6 +629,7 @@ atse_start(struct ifnet *ifp)
 	struct atse_softc *sc;
 
 	sc = ifp->if_softc;
+
 	ATSE_LOCK(sc);
 	atse_start_locked(ifp);
 	ATSE_UNLOCK(sc);
@@ -1817,6 +1934,14 @@ atse_attach(device_t dev)
 	sc->xchan = xdma_channel_alloc(sc->xdma_tx);
 	if (sc->xchan == NULL) {
 		device_printf(dev, "Can't alloc virtual DMA channel.\n");
+		return (ENXIO);
+	}
+
+	/* Setup interrupt handler. */
+	error = xdma_setup_intr(sc->xchan, atse_xdma_intr, sc, &sc->ih);
+	if (error) {
+		device_printf(sc->dev,
+		    "Can't setup xDMA interrupt handler.\n");
 		return (ENXIO);
 	}
 

@@ -471,8 +471,12 @@ struct atse_softc {
 	struct callout		atse_tick;
 	struct mtx		atse_mtx;
 	device_t		dev;
+
+	/* xDMA */
 	xdma_controller_t	*xdma_tx;
 	xdma_channel_t		*xchan;
+	void			*ih;
+	int			txcount;
 };
 
 

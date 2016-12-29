@@ -42,6 +42,7 @@ enum xdma_direction {
 
 enum xdma_operation_type {
 	XDMA_MEMCPY,
+	XDMA_FIFO,
 	XDMA_SG,
 	XDMA_CYCLIC,
 };
@@ -94,6 +95,7 @@ struct xdma_channel {
 #define	XCHAN_CONFIGURED		(1 << 1)
 #define	XCHAN_TYPE_CYCLIC		(1 << 2)
 #define	XCHAN_TYPE_MEMCPY		(1 << 3)
+#define	XCHAN_TYPE_FIFO			(1 << 4)
 
 	/* A real hardware driver channel. */
 	void				*chan;
@@ -125,6 +127,7 @@ int xdma_channel_free(xdma_channel_t *);
 int xdma_prep_cyclic(xdma_channel_t *, enum xdma_direction,
     uintptr_t, uintptr_t, int, int, int, int);
 int xdma_prep_memcpy(xdma_channel_t *, uintptr_t, uintptr_t, size_t len);
+int xdma_prep_fifo(xdma_channel_t *, uintptr_t, uintptr_t, size_t len);
 int xdma_desc_alloc(xdma_channel_t *, uint32_t, uint32_t);
 int xdma_desc_free(xdma_channel_t *xchan);
 

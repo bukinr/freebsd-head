@@ -47,11 +47,16 @@ __FBSDID("$FreeBSD$");
 #include <machine/bus.h>
 #include <machine/fdt.h>
 
+#include <machine/cache.h>
+
 #ifdef FDT
 #include <dev/fdt/fdt_common.h>
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
 #endif
+
+#include <dev/altera/atse/a_api.h>
+#define	AVALON_FIFO_TX_BASIC_OPTS_DEPTH		16
 
 #include <dev/xdma/xdma.h>
 #include "xdma_if.h"
@@ -73,11 +78,12 @@ struct softdma_desc {
 	uint32_t		src_addr;
 	uint32_t		dst_addr;
 	uint32_t		access_width;
+	uint32_t		len;
 	uint32_t		count;
 	uint16_t		src_incr;
 	uint16_t		dst_incr;
 	struct softdma_desc	*next;
-	uint32_t		__reserved[2];
+	uint32_t		__reserved[1];
 };
 
 struct softdma_softc {
@@ -139,9 +145,11 @@ softdma_process_descriptors(struct softdma_channel *chan)
 	struct softdma_softc *sc;
 	bus_space_tag_t bst;
 	uint32_t src_offs, dst_offs;
+	uint32_t reg;
 	uint32_t val; /* TODO */
+	uint32_t leftm;
 	size_t len;
-	int i;
+	//int i;
 
 	sc = chan->sc;
 
@@ -157,21 +165,63 @@ softdma_process_descriptors(struct softdma_channel *chan)
 
 		bus_space_map(bst, desc->src_addr, len, 0, &bsh_src);
 		bus_space_map(bst, desc->dst_addr, len, 0, &bsh_dst);
+		mips_dcache_wbinv_all();
 
-		//printf("copy %x -> %x (%d times)\n", bsh_src, bsh_dst, desc->count);
+		uint32_t fill_level;
+
+		fill_level = atse_tx_read_fill_level();
+		printf("fill_level is %d\n", fill_level);
+
+		/* Set start of packet. */
+		reg = A_ONCHIP_FIFO_MEM_CORE_SOP;
+		reg &= ~A_ONCHIP_FIFO_MEM_CORE_EOP;
+		atse_tx_meta_write(reg);
+
+		printf("copy %x -> %x (%d bytes, %d times)\n",
+		    (uint32_t)bsh_src, (uint32_t)bsh_dst, desc->len, desc->count);
 
 		if (desc->src_incr && desc->dst_incr) {
 			bus_space_copy_region_4(bst, bsh_src, 0, bsh_dst, 0, desc->count);
 		} else {
 			src_offs = dst_offs = 0;
-			for (i = 0; i < desc->count; i++) {
+			uint32_t c;
+			c = 0;
+			while ((desc->len - c) > 4) {
 				val = bus_space_read_4(bst, bsh_src, src_offs);
 				bus_space_write_4(bst, bsh_dst, dst_offs, val);
 				if (desc->src_incr)
 					src_offs += 4;
 				if (desc->dst_incr)
 					dst_offs += 4;
+				fill_level += 1;
+
+				while (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
+					printf("FILL LEVEL %d\n", fill_level);
+					fill_level = atse_tx_read_fill_level();
+				}
+				c += 4;
 			}
+
+			leftm = (desc->len - c);
+			printf("leftm %d\n", leftm);
+
+			if (leftm == 2) {
+				val = bus_space_read_2(bst, bsh_src, src_offs);
+				val <<= 16;
+				src_offs += 2;
+			} else if (leftm == 4) {
+				val = bus_space_read_4(bst, bsh_src, src_offs);
+				src_offs += 4;
+			} else {
+				panic("leftm %d\n", leftm);
+			}
+
+			/* Set end of packet. */
+			reg = A_ONCHIP_FIFO_MEM_CORE_EOP;
+			reg |= ((4 - leftm) << A_ONCHIP_FIFO_MEM_CORE_EMPTY_SHIFT);
+			atse_tx_meta_write(reg);
+
+			bus_space_write_4(bst, bsh_dst, dst_offs, val);
 		}
 
 		bus_space_unmap(bst, bsh_src, len);
@@ -328,6 +378,42 @@ softdma_channel_prep_memcpy(device_t dev, struct xdma_channel *xchan)
 }
 
 static int
+softdma_channel_prep_fifo(device_t dev, struct xdma_channel *xchan)
+{
+	struct softdma_channel *chan;
+	struct softdma_desc *desc;
+	struct softdma_softc *sc;
+	xdma_config_t *conf;
+	int ret;
+
+	printf("%s\n", __func__);
+
+	sc = device_get_softc(dev);
+
+	chan = (struct softdma_channel *)xchan->chan;
+
+	ret = xdma_desc_alloc(xchan, sizeof(struct softdma_desc), 8);
+	if (ret != 0) {
+		device_printf(sc->dev,
+		    "%s: Can't allocate descriptors.\n", __func__);
+		return (-1);
+	}
+
+	conf = &xchan->conf;
+	desc = (struct softdma_desc *)xchan->descs;
+	desc[0].src_addr = conf->src_addr;
+	desc[0].dst_addr = conf->dst_addr;
+	desc[0].access_width = 4;
+	desc[0].len = conf->block_len;
+	desc[0].count = (conf->block_len / 4);
+	desc[0].src_incr = 1;
+	desc[0].dst_incr = 0;
+	desc[0].next = NULL;
+
+	return (0);
+}
+
+static int
 chan_start(struct softdma_channel *chan)
 {
 	//struct softdma_softc *sc;
@@ -385,6 +471,7 @@ static device_method_t softdma_methods[] = {
 	DEVMETHOD(xdma_channel_free,		softdma_channel_free),
 	DEVMETHOD(xdma_channel_prep_cyclic,	softdma_channel_prep_cyclic),
 	DEVMETHOD(xdma_channel_prep_memcpy,	softdma_channel_prep_memcpy),
+	DEVMETHOD(xdma_channel_prep_fifo,	softdma_channel_prep_fifo),
 	DEVMETHOD(xdma_channel_control,		softdma_channel_control),
 #ifdef FDT
 	DEVMETHOD(xdma_ofw_md_data,		softdma_ofw_md_data),

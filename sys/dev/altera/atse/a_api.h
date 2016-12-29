@@ -94,7 +94,10 @@
 	    A_ONCHIP_FIFO_MEM_CORE_INTR_UNDERFLOW)
 
 void atse_tx_data_write(uint32_t val);
+void atse_tx_meta_write(uint32_t val);
 uint32_t atse_tx_data_read(void);
+uint32_t atse_tx_meta_read(void);
+uint32_t atse_tx_read_fill_level(void);
 
 #endif /* _A_API_H */
 
