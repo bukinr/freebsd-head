@@ -28,6 +28,8 @@
  * SUCH DAMAGE.
  */
 
+/* The software implementation of Altera mSGDMA */
+
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
@@ -147,9 +149,10 @@ softdma_process_descriptors(struct softdma_channel *chan)
 	uint32_t src_offs, dst_offs;
 	uint32_t reg;
 	uint32_t val; /* TODO */
+	uint32_t fill_level;
 	uint32_t leftm;
+	uint32_t c;
 	size_t len;
-	//int i;
 
 	sc = chan->sc;
 
@@ -167,8 +170,6 @@ softdma_process_descriptors(struct softdma_channel *chan)
 		bus_space_map(bst, desc->dst_addr, len, 0, &bsh_dst);
 		mips_dcache_wbinv_all();
 
-		uint32_t fill_level;
-
 		fill_level = atse_tx_read_fill_level();
 		printf("fill_level is %d\n", fill_level);
 
@@ -184,7 +185,6 @@ softdma_process_descriptors(struct softdma_channel *chan)
 			bus_space_copy_region_4(bst, bsh_src, 0, bsh_dst, 0, desc->count);
 		} else {
 			src_offs = dst_offs = 0;
-			uint32_t c;
 			c = 0;
 			while ((desc->len - c) > 4) {
 				val = bus_space_read_4(bst, bsh_src, src_offs);
