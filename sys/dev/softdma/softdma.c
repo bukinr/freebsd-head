@@ -181,51 +181,47 @@ softdma_process_descriptors(struct softdma_channel *chan)
 		printf("copy %x -> %x (%d bytes, %d times)\n",
 		    (uint32_t)bsh_src, (uint32_t)bsh_dst, desc->len, desc->count);
 
-		if (desc->src_incr && desc->dst_incr) {
-			bus_space_copy_region_4(bst, bsh_src, 0, bsh_dst, 0, desc->count);
-		} else {
-			src_offs = dst_offs = 0;
-			c = 0;
-			while ((desc->len - c) > 4) {
-				val = bus_space_read_4(bst, bsh_src, src_offs);
-				bus_space_write_4(bst, bsh_dst, dst_offs, val);
-				if (desc->src_incr)
-					src_offs += 4;
-				if (desc->dst_incr)
-					dst_offs += 4;
-				fill_level += 1;
-
-				while (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
-					printf("FILL LEVEL %d, hz %d\n", fill_level, hz);
-					fill_level = atse_tx_read_fill_level();
-					if (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
-						mtx_sleep(sc, &chan->mtx, 0, "softdma_delay", 10000);
-					}
-				}
-				c += 4;
-			}
-
-			leftm = (desc->len - c);
-			printf("leftm %d\n", leftm);
-
-			if (leftm == 2) {
-				val = bus_space_read_2(bst, bsh_src, src_offs);
-				val <<= 16;
-				src_offs += 2;
-			} else if (leftm == 4) {
-				val = bus_space_read_4(bst, bsh_src, src_offs);
-				src_offs += 4;
-			} else {
-				panic("leftm %d\n", leftm);
-			}
-
-			/* Set end of packet. */
-			reg = A_ONCHIP_FIFO_MEM_CORE_EOP;
-			reg |= ((4 - leftm) << A_ONCHIP_FIFO_MEM_CORE_EMPTY_SHIFT);
-			atse_tx_meta_write(reg);
-
+		src_offs = dst_offs = 0;
+		c = 0;
+		while ((desc->len - c) > 4) {
+			val = bus_space_read_4(bst, bsh_src, src_offs);
 			bus_space_write_4(bst, bsh_dst, dst_offs, val);
+			if (desc->src_incr)
+				src_offs += 4;
+			if (desc->dst_incr)
+				dst_offs += 4;
+			fill_level += 1;
+
+			while (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
+				printf("FILL LEVEL %d, hz %d\n", fill_level, hz);
+				fill_level = atse_tx_read_fill_level();
+				if (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
+					mtx_sleep(sc, &chan->mtx, 0, "softdma_delay", 10000);
+				}
+			}
+			c += 4;
 		}
+
+		leftm = (desc->len - c);
+		printf("leftm %d\n", leftm);
+
+		if (leftm == 2) {
+			val = bus_space_read_2(bst, bsh_src, src_offs);
+			val <<= 16;
+			src_offs += 2;
+		} else if (leftm == 4) {
+			val = bus_space_read_4(bst, bsh_src, src_offs);
+			src_offs += 4;
+		} else {
+			panic("leftm %d\n", leftm);
+		}
+
+		/* Set end of packet. */
+		reg = A_ONCHIP_FIFO_MEM_CORE_EOP;
+		reg |= ((4 - leftm) << A_ONCHIP_FIFO_MEM_CORE_EMPTY_SHIFT);
+		atse_tx_meta_write(reg);
+
+		bus_space_write_4(bst, bsh_dst, dst_offs, val);
 
 		bus_space_unmap(bst, bsh_src, len);
 		bus_space_unmap(bst, bsh_dst, len);
