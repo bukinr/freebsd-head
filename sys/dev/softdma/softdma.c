@@ -196,8 +196,11 @@ softdma_process_descriptors(struct softdma_channel *chan)
 				fill_level += 1;
 
 				while (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
-					printf("FILL LEVEL %d\n", fill_level);
+					printf("FILL LEVEL %d, hz %d\n", fill_level, hz);
 					fill_level = atse_tx_read_fill_level();
+					if (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
+						mtx_sleep(sc, &chan->mtx, 0, "softdma_delay", 10000);
+					}
 				}
 				c += 4;
 			}
