@@ -85,6 +85,7 @@ ef10_ev_qcreate(
 	__in		size_t n,
 	__in		uint32_t id,
 	__in		uint32_t us,
+	__in		uint32_t flags,
 	__in		efx_evq_t *eep);
 
 			void
@@ -272,6 +273,12 @@ ef10_mac_loopback_set(
 #if EFSYS_OPT_MAC_STATS
 
 extern	__checkReturn			efx_rc_t
+ef10_mac_stats_get_mask(
+	__in				efx_nic_t *enp,
+	__inout_bcount(mask_size)	uint32_t *maskp,
+	__in				size_t mask_size);
+
+extern	__checkReturn			efx_rc_t
 ef10_mac_stats_update(
 	__in				efx_nic_t *enp,
 	__in				efsys_mem_t *esmp,
@@ -377,7 +384,7 @@ ef10_nvram_partn_lock(
 	__in			efx_nic_t *enp,
 	__in			uint32_t partn);
 
-extern				void
+extern	__checkReturn		efx_rc_t
 ef10_nvram_partn_unlock(
 	__in			efx_nic_t *enp,
 	__in			uint32_t partn);
@@ -444,7 +451,7 @@ ef10_nvram_partn_write(
 	__out_bcount(size)	caddr_t data,
 	__in			size_t size);
 
-extern				void
+extern	__checkReturn		efx_rc_t
 ef10_nvram_partn_rw_finish(
 	__in			efx_nic_t *enp,
 	__in			uint32_t partn);
@@ -601,6 +608,34 @@ ef10_phy_stats_update(
 
 #endif	/* EFSYS_OPT_PHY_STATS */
 
+#if EFSYS_OPT_BIST
+
+extern	__checkReturn		efx_rc_t
+ef10_bist_enable_offline(
+	__in			efx_nic_t *enp);
+
+extern	__checkReturn		efx_rc_t
+ef10_bist_start(
+	__in			efx_nic_t *enp,
+	__in			efx_bist_type_t type);
+
+extern	__checkReturn		efx_rc_t
+ef10_bist_poll(
+	__in			efx_nic_t *enp,
+	__in			efx_bist_type_t type,
+	__out			efx_bist_result_t *resultp,
+	__out_opt __drv_when(count > 0, __notnull)
+	uint32_t	*value_maskp,
+	__out_ecount_opt(count)	__drv_when(count > 0, __notnull)
+	unsigned long	*valuesp,
+	__in			size_t count);
+
+extern				void
+ef10_bist_stop(
+	__in			efx_nic_t *enp,
+	__in			efx_bist_type_t type);
+
+#endif	/* EFSYS_OPT_BIST */
 
 /* TX */
 
