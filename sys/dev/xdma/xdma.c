@@ -508,6 +508,7 @@ xdma_prep_cyclic(xdma_channel_t *xchan, enum xdma_direction dir,
 		device_printf(xdma->dev,
 		    "%s: Can't prepare cyclic transfer.\n", __func__);
 		XCHAN_UNLOCK(xchan);
+
 		return (-1);
 	}
 
