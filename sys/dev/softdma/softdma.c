@@ -158,7 +158,7 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 	len = (desc->count * desc->access_width);
 
 	bus_space_map(bst, desc->src_addr, len, 0, &bsh_src);
-	bus_space_map(bst, desc->dst_addr, len, 0, &bsh_dst);
+	bus_space_map(bst, desc->dst_addr, 4, 0, &bsh_dst);
 	mips_dcache_wbinv_all();
 
 	fill_level = atse_tx_read_fill_level();
@@ -215,7 +215,7 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 	bus_space_write_4(bst, bsh_dst, dst_offs, val);
 
 	bus_space_unmap(bst, bsh_src, len);
-	bus_space_unmap(bst, bsh_dst, len);
+	bus_space_unmap(bst, bsh_dst, 4);
 
 	return (0);
 }
@@ -223,6 +223,27 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 static int
 softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 {
+	bus_space_handle_t bsh_src;
+	bus_space_handle_t bsh_dst;
+	bus_space_tag_t bst;
+	uint32_t reg;
+	size_t len;
+
+	printf("%s\n", __func__);
+
+	bst = fdtbus_bs_tag;
+
+	len = (desc->count * desc->access_width);
+	bus_space_map(bst, desc->src_addr, 4, 0, &bsh_src);
+	bus_space_map(bst, desc->dst_addr, len, 0, &bsh_dst);
+	mips_dcache_wbinv_all();
+
+
+	reg = atse_rx_mem_core_read(A_ONCHIP_FIFO_MEM_CORE_METADATA);
+
+
+	bus_space_unmap(bst, bsh_src, 4);
+	bus_space_unmap(bst, bsh_dst, len);
 
 	return (0);
 }

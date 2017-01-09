@@ -217,6 +217,20 @@ atse_tx_read_fill_level(void)
 	return (val);
 }
 
+//
+
+uint32_t
+atse_rx_mem_core_read(uint32_t reg)
+{
+	struct atse_softc *sc;
+	uint32_t val;
+
+	val = a_onchip_fifo_mem_core_read(sc->atse_rx_mem_res,
+	    reg, "RXM", __func__, __LINE__);
+
+	return (val);
+}
+
 /* The FIFO does an endian conversion, so we must not do it as well. */
 /* XXX-BZ in fact we should do a htobe32 so le would be fine as well? */
 #define	ATSE_TX_DATA_WRITE(sc, val4)					\
