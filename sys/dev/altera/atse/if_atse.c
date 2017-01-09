@@ -412,7 +412,7 @@ static int atse_detach(device_t);
 devclass_t atse_devclass;
 
 static int
-atse_xdma_intr(void *arg)
+atse_xdma_tx_intr(void *arg)
 {
 	struct atse_softc *sc;
 	struct ifnet *ifp;
@@ -430,6 +430,31 @@ atse_xdma_intr(void *arg)
 	sc->atse_tx_m_offset = 0;
 	sc->txcount--;
 	ifp->if_drv_flags &= ~IFF_DRV_OACTIVE;
+
+	return (0);
+}
+
+static int
+atse_xdma_rx_intr(void *arg)
+{
+	struct atse_softc *sc;
+	struct ifnet *ifp;
+	struct mbuf *m;
+
+	sc = arg;
+
+	ifp = sc->atse_ifp;
+	m = sc->atse_rx_m;
+
+	printf("%s\n", __func__);
+
+#if 0
+	m_freem(m);
+	sc->atse_tx_m = NULL;
+	sc->atse_tx_m_offset = 0;
+	sc->txcount--;
+	ifp->if_drv_flags &= ~IFF_DRV_OACTIVE;
+#endif
 
 	return (0);
 }
@@ -478,7 +503,7 @@ atse_tx_locked(struct atse_softc *sc, int *sent)
 	dst = (rman_get_start(sc->atse_tx_mem_res) + A_ONCHIP_FIFO_MEM_CORE_DATA);
 	printf("tx: src addr %x, dst addr %x, len %d\n", src, dst, sc->atse_tx_buf_len);
 
-	ret = xdma_prep_fifo(sc->xchan, src, dst, sc->atse_tx_buf_len);
+	ret = xdma_prep_fifo(sc->xchan_tx, src, dst, sc->atse_tx_buf_len);
 	if (ret != 0) {
 		device_printf(sc->dev, "Can't prepare xDMA for transfer\n");
 		return (-1);
@@ -487,12 +512,13 @@ atse_tx_locked(struct atse_softc *sc, int *sent)
 	sc->txcount++;
 
 	ifp->if_drv_flags |= IFF_DRV_OACTIVE;
-	xdma_begin(sc->xchan);
+	xdma_begin(sc->xchan_tx);
 
 	/* If anyone is interested give them a copy. */
 	BPF_MTAP(sc->atse_ifp, m);
 
 	//m_freem(m);
+
 	return (0);
 
 	fill_level = ATSE_TX_READ_FILL_LEVEL(sc);
@@ -1407,6 +1433,18 @@ outer:
 			sc->atse_rx_m = m;
 		}
 
+
+
+
+
+
+
+
+
+
+
+
+
 		fill = ATSE_RX_READ_FILL_LEVEL(sc);
 		for (i = 0; i < fill; i++) {
 			/*
@@ -1931,14 +1969,36 @@ atse_attach(device_t dev)
 	}
 
 	/* Alloc xDMA virtual channel. */
-	sc->xchan = xdma_channel_alloc(sc->xdma_tx);
-	if (sc->xchan == NULL) {
+	sc->xchan_tx = xdma_channel_alloc(sc->xdma_tx);
+	if (sc->xchan_tx == NULL) {
 		device_printf(dev, "Can't alloc virtual DMA channel.\n");
 		return (ENXIO);
 	}
 
 	/* Setup interrupt handler. */
-	error = xdma_setup_intr(sc->xchan, atse_xdma_intr, sc, &sc->ih);
+	error = xdma_setup_intr(sc->xchan_tx, atse_xdma_tx_intr, sc, &sc->ih_tx);
+	if (error) {
+		device_printf(sc->dev,
+		    "Can't setup xDMA interrupt handler.\n");
+		return (ENXIO);
+	}
+
+	/* Get RX xDMA controller */
+	sc->xdma_rx = xdma_ofw_get(sc->dev, "rx");
+	if (sc->xdma_rx == NULL) {
+		device_printf(dev, "Can't find DMA controller.\n");
+		return (ENXIO);
+	}
+
+	/* Alloc xDMA virtual channel. */
+	sc->xchan_rx = xdma_channel_alloc(sc->xdma_rx);
+	if (sc->xchan_rx == NULL) {
+		device_printf(dev, "Can't alloc virtual DMA channel.\n");
+		return (ENXIO);
+	}
+
+	/* Setup interrupt handler. */
+	error = xdma_setup_intr(sc->xchan_rx, atse_xdma_rx_intr, sc, &sc->ih_rx);
 	if (error) {
 		device_printf(sc->dev,
 		    "Can't setup xDMA interrupt handler.\n");

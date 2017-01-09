@@ -474,8 +474,12 @@ struct atse_softc {
 
 	/* xDMA */
 	xdma_controller_t	*xdma_tx;
-	xdma_channel_t		*xchan;
-	void			*ih;
+	xdma_channel_t		*xchan_tx;
+
+	xdma_controller_t	*xdma_rx;
+	xdma_channel_t		*xchan_rx;
+	void			*ih_tx;
+	void			*ih_rx;
 	int			txcount;
 };
 
