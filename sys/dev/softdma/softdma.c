@@ -85,7 +85,7 @@ struct softdma_desc {
 	uint16_t		src_incr;
 	uint16_t		dst_incr;
 	struct softdma_desc	*next;
-	uint32_t		__reserved[1];
+	uint32_t		direction;
 };
 
 struct softdma_softc {
@@ -137,16 +137,14 @@ softdma_detach(device_t dev)
 	return (0);
 }
 
-static void
-softdma_process_descriptors(struct softdma_channel *chan)
+static int
+softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 {
+	uint32_t src_offs, dst_offs;
 	bus_space_handle_t bsh_src;
 	bus_space_handle_t bsh_dst;
-	struct xdma_channel *xchan;
-	struct softdma_desc *desc;
 	struct softdma_softc *sc;
 	bus_space_tag_t bst;
-	uint32_t src_offs, dst_offs;
 	uint32_t reg;
 	uint32_t val; /* TODO */
 	uint32_t fill_level;
@@ -156,75 +154,99 @@ softdma_process_descriptors(struct softdma_channel *chan)
 
 	sc = chan->sc;
 
+	bst = fdtbus_bs_tag;
+	len = (desc->count * desc->access_width);
+
+	bus_space_map(bst, desc->src_addr, len, 0, &bsh_src);
+	bus_space_map(bst, desc->dst_addr, len, 0, &bsh_dst);
+	mips_dcache_wbinv_all();
+
+	fill_level = atse_tx_read_fill_level();
+	printf("fill_level is %d\n", fill_level);
+
+	/* Set start of packet. */
+	reg = A_ONCHIP_FIFO_MEM_CORE_SOP;
+	reg &= ~A_ONCHIP_FIFO_MEM_CORE_EOP;
+	atse_tx_meta_write(reg);
+
+	printf("copy %x -> %x (%d bytes, %d times)\n",
+	    (uint32_t)bsh_src, (uint32_t)bsh_dst, desc->len, desc->count);
+
+	src_offs = dst_offs = 0;
+	c = 0;
+	while ((desc->len - c) > 4) {
+		val = bus_space_read_4(bst, bsh_src, src_offs);
+		bus_space_write_4(bst, bsh_dst, dst_offs, val);
+		if (desc->src_incr)
+			src_offs += 4;
+		if (desc->dst_incr)
+			dst_offs += 4;
+		fill_level += 1;
+
+		while (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
+			printf("FILL LEVEL %d, hz %d\n", fill_level, hz);
+			fill_level = atse_tx_read_fill_level();
+			if (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
+				mtx_sleep(sc, &chan->mtx, 0, "softdma_delay", 10000);
+			}
+		}
+		c += 4;
+	}
+
+	leftm = (desc->len - c);
+	printf("leftm %d\n", leftm);
+
+	if (leftm == 2) {
+		val = bus_space_read_2(bst, bsh_src, src_offs);
+		val <<= 16;
+		src_offs += 2;
+	} else if (leftm == 4) {
+		val = bus_space_read_4(bst, bsh_src, src_offs);
+		src_offs += 4;
+	} else {
+		panic("leftm %d\n", leftm);
+	}
+
+	/* Set end of packet. */
+	reg = A_ONCHIP_FIFO_MEM_CORE_EOP;
+	reg |= ((4 - leftm) << A_ONCHIP_FIFO_MEM_CORE_EMPTY_SHIFT);
+	atse_tx_meta_write(reg);
+
+	bus_space_write_4(bst, bsh_dst, dst_offs, val);
+
+	bus_space_unmap(bst, bsh_src, len);
+	bus_space_unmap(bst, bsh_dst, len);
+
+	return (0);
+}
+
+static int
+softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
+{
+
+	return (0);
+}
+
+static void
+softdma_process_descriptors(struct softdma_channel *chan)
+{
+	struct xdma_channel *xchan;
+	struct softdma_desc *desc;
+	struct softdma_softc *sc;
+
+	sc = chan->sc;
+
 	xchan = chan->xchan;
 	//conf = &xchan->conf;
 
 	desc = (struct softdma_desc *)xchan->descs;
 
-	bst = fdtbus_bs_tag;
-
 	while (desc != NULL) {
-		len = (desc->count * desc->access_width);
-
-		bus_space_map(bst, desc->src_addr, len, 0, &bsh_src);
-		bus_space_map(bst, desc->dst_addr, len, 0, &bsh_dst);
-		mips_dcache_wbinv_all();
-
-		fill_level = atse_tx_read_fill_level();
-		printf("fill_level is %d\n", fill_level);
-
-		/* Set start of packet. */
-		reg = A_ONCHIP_FIFO_MEM_CORE_SOP;
-		reg &= ~A_ONCHIP_FIFO_MEM_CORE_EOP;
-		atse_tx_meta_write(reg);
-
-		printf("copy %x -> %x (%d bytes, %d times)\n",
-		    (uint32_t)bsh_src, (uint32_t)bsh_dst, desc->len, desc->count);
-
-		src_offs = dst_offs = 0;
-		c = 0;
-		while ((desc->len - c) > 4) {
-			val = bus_space_read_4(bst, bsh_src, src_offs);
-			bus_space_write_4(bst, bsh_dst, dst_offs, val);
-			if (desc->src_incr)
-				src_offs += 4;
-			if (desc->dst_incr)
-				dst_offs += 4;
-			fill_level += 1;
-
-			while (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
-				printf("FILL LEVEL %d, hz %d\n", fill_level, hz);
-				fill_level = atse_tx_read_fill_level();
-				if (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
-					mtx_sleep(sc, &chan->mtx, 0, "softdma_delay", 10000);
-				}
-			}
-			c += 4;
-		}
-
-		leftm = (desc->len - c);
-		printf("leftm %d\n", leftm);
-
-		if (leftm == 2) {
-			val = bus_space_read_2(bst, bsh_src, src_offs);
-			val <<= 16;
-			src_offs += 2;
-		} else if (leftm == 4) {
-			val = bus_space_read_4(bst, bsh_src, src_offs);
-			src_offs += 4;
+		if (desc->direction == XDMA_MEM_TO_DEV) {
+			softdma_process_tx(chan, desc);
 		} else {
-			panic("leftm %d\n", leftm);
+			softdma_process_rx(chan, desc);
 		}
-
-		/* Set end of packet. */
-		reg = A_ONCHIP_FIFO_MEM_CORE_EOP;
-		reg |= ((4 - leftm) << A_ONCHIP_FIFO_MEM_CORE_EMPTY_SHIFT);
-		atse_tx_meta_write(reg);
-
-		bus_space_write_4(bst, bsh_dst, dst_offs, val);
-
-		bus_space_unmap(bst, bsh_src, len);
-		bus_space_unmap(bst, bsh_dst, len);
 
 		/* Process next descriptor, if any. */
 		desc = desc->next;
@@ -407,6 +429,7 @@ softdma_channel_prep_fifo(device_t dev, struct xdma_channel *xchan)
 	desc[0].count = (conf->block_len / 4);
 	desc[0].src_incr = 1;
 	desc[0].dst_incr = 0;
+	desc[0].direction = conf->direction;
 	desc[0].next = NULL;
 
 	return (0);

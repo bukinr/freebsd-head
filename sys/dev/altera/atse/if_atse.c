@@ -499,11 +499,12 @@ atse_tx_locked(struct atse_softc *sc, int *sent)
 	uint32_t src;
 	uint32_t dst;
 	//src = (uintptr_t)sc->atse_tx_buf;
+
 	src = vtophys(sc->atse_tx_buf);
 	dst = (rman_get_start(sc->atse_tx_mem_res) + A_ONCHIP_FIFO_MEM_CORE_DATA);
 	printf("tx: src addr %x, dst addr %x, len %d\n", src, dst, sc->atse_tx_buf_len);
 
-	ret = xdma_prep_fifo(sc->xchan_tx, src, dst, sc->atse_tx_buf_len);
+	ret = xdma_prep_fifo(sc->xchan_tx, src, dst, sc->atse_tx_buf_len, XDMA_MEM_TO_DEV);
 	if (ret != 0) {
 		device_printf(sc->dev, "Can't prepare xDMA for transfer\n");
 		return (-1);
@@ -1436,14 +1437,30 @@ outer:
 
 
 
+#if 0
+		int ret;
+		uint32_t src;
+		uint32_t dst;
+		//src = (uintptr_t)sc->atse_tx_buf;
 
+		src = (rman_get_start(sc->atse_rx_mem_res) + A_ONCHIP_FIFO_MEM_CORE_DATA);
+		//dst = vtophys(sc->atse_tx_buf);
+		dst = vtophys(sc->atse_rx_m->m_data);
+		printf("rx: src addr %x, dst addr %x, len %d\n", src, dst, sc->atse_rx_buf_len);
 
+		ret = xdma_prep_fifo(sc->xchan_rx, src, dst,
+		    sc->atse_rx_buf_len, XDMA_DEV_TO_MEM);
+		if (ret != 0) {
+			device_printf(sc->dev, "Can't prepare xDMA for RX transfer\n");
+			return (-1);
+		}
 
+		//sc->txcount++;
+		//ifp->if_drv_flags |= IFF_DRV_OACTIVE;
+		xdma_begin(sc->xchan_rx);
 
-
-
-
-
+		return (rx_npkts);
+#endif
 
 		fill = ATSE_RX_READ_FILL_LEVEL(sc);
 		for (i = 0; i < fill; i++) {

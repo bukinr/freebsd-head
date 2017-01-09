@@ -432,7 +432,7 @@ xdma_prep_memcpy(xdma_channel_t *xchan, uintptr_t src_addr,
 
 int
 xdma_prep_fifo(xdma_channel_t *xchan, uintptr_t src_addr,
-    uintptr_t dst_addr, size_t len)
+    uintptr_t dst_addr, size_t len, enum xdma_direction dir)
 {
 	xdma_controller_t *xdma;
 	xdma_config_t *conf;
@@ -442,7 +442,7 @@ xdma_prep_fifo(xdma_channel_t *xchan, uintptr_t src_addr,
 	KASSERT(xdma != NULL, ("xdma is NULL"));
 
 	conf = &xchan->conf;
-	conf->direction = XDMA_MEM_TO_DEV;
+	conf->direction = dir;
 	conf->src_addr = src_addr;
 	conf->dst_addr = dst_addr;
 	conf->block_len = len;
