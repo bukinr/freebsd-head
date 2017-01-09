@@ -99,7 +99,8 @@ uint32_t atse_tx_data_read(void);
 uint32_t atse_tx_meta_read(void);
 uint32_t atse_tx_read_fill_level(void);
 
-uint32_t atse_rx_mem_core_read(uint32_t reg);
+uint32_t atse_rx_mem_read(uint32_t reg);
+uint32_t atse_rx_read_fill_level(void);
 
 #endif /* _A_API_H */
 

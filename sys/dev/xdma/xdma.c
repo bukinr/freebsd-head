@@ -268,7 +268,7 @@ xdma_desc_alloc_bus_dma(xdma_channel_t *xchan, uint32_t desc_size,
 
 	nsegments = conf->block_num;
 	all_desc_sz = (nsegments * desc_size);
-	printf("nsegments %d desc_size %d\n", nsegments, desc_size);
+	//printf("%s: nsegments %d desc_size %d\n", __func__, nsegments, desc_size);
 
 	err = bus_dma_tag_create(
 	    bus_get_dma_tag(xdma->dev),

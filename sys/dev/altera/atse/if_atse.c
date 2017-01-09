@@ -217,8 +217,7 @@ atse_tx_read_fill_level(void)
 	return (val);
 }
 
-//
-
+#if 0
 uint32_t
 atse_rx_mem_core_read(uint32_t reg)
 {
@@ -229,6 +228,33 @@ atse_rx_mem_core_read(uint32_t reg)
 	    reg, "RXM", __func__, __LINE__);
 
 	return (val);
+}
+#endif
+
+uint32_t
+atse_rx_mem_read(uint32_t reg)
+{
+	struct atse_softc *sc;
+	uint32_t val;
+
+	sc = atse_sc;
+
+	val = bus_read_4(sc->atse_rx_mem_res, reg);
+
+	return (le32toh(val));
+}
+
+uint32_t
+atse_rx_read_fill_level(void)
+{
+	struct atse_softc *sc;
+	uint32_t val;
+
+	sc = atse_sc;
+
+	val = bus_read_4(sc->atse_rxc_mem_res, A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_FILL_LEVEL);
+
+	return (le32toh(val));
 }
 
 /* The FIFO does an endian conversion, so we must not do it as well. */
@@ -1432,6 +1458,10 @@ atse_rx_locked(struct atse_softc *sc)
 
 	ATSE_LOCK_ASSERT(sc);
 
+	if (sc->rx_busy == 1) {
+		return (0);
+	}
+
 	ifp = sc->atse_ifp;
 	rx_npkts = 0;
 	j = 0;
@@ -1451,7 +1481,14 @@ outer:
 
 
 
-#if 0
+#if 1
+		fill = ATSE_RX_READ_FILL_LEVEL(sc);
+		if (fill <= 0) {
+			goto done;
+		}
+
+		printf("%s: rx_fill_level %d\n", __func__, fill);
+
 		int ret;
 		uint32_t src;
 		uint32_t dst;
@@ -1460,7 +1497,7 @@ outer:
 		src = (rman_get_start(sc->atse_rx_mem_res) + A_ONCHIP_FIFO_MEM_CORE_DATA);
 		//dst = vtophys(sc->atse_tx_buf);
 		dst = vtophys(sc->atse_rx_m->m_data);
-		printf("rx: src addr %x, dst addr %x, len %d\n", src, dst, sc->atse_rx_buf_len);
+		//printf("rx: src addr %x, dst addr %x, len %d\n", src, dst, sc->atse_rx_buf_len);
 
 		ret = xdma_prep_fifo(sc->xchan_rx, src, dst,
 		    sc->atse_rx_buf_len, XDMA_DEV_TO_MEM);
@@ -1471,6 +1508,8 @@ outer:
 
 		//sc->txcount++;
 		//ifp->if_drv_flags |= IFF_DRV_OACTIVE;
+
+		sc->rx_busy = 1;
 		xdma_begin(sc->xchan_rx);
 
 		return (rx_npkts);
@@ -1590,6 +1629,8 @@ outer:
 
 	/* XXX-BZ could optimize in case of another packet waiting. */
 	} while (fill > 0);
+
+done:
 
 	return (rx_npkts);
 }

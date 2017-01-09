@@ -162,7 +162,11 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 	mips_dcache_wbinv_all();
 
 	fill_level = atse_tx_read_fill_level();
-	printf("fill_level is %d\n", fill_level);
+	if (fill_level == 0) {
+
+	}
+
+	printf("TX fill_level is %d\n", fill_level);
 
 	/* Set start of packet. */
 	reg = A_ONCHIP_FIFO_MEM_CORE_SOP;
@@ -226,21 +230,56 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 	bus_space_handle_t bsh_src;
 	bus_space_handle_t bsh_dst;
 	bus_space_tag_t bst;
-	uint32_t reg;
+	uint32_t fill_level;
+	uint32_t meta;
+	uint32_t data;
+	uint32_t empty;
 	size_t len;
 
-	printf("%s\n", __func__);
-
 	bst = fdtbus_bs_tag;
+
+	//printf("%s\n", __func__);
+
+	fill_level = atse_rx_read_fill_level();
+	if (fill_level == 0) {
+		return (0);
+	}
+
+	printf("RX fill_level is %d\n", fill_level);
 
 	len = (desc->count * desc->access_width);
 	bus_space_map(bst, desc->src_addr, 4, 0, &bsh_src);
 	bus_space_map(bst, desc->dst_addr, len, 0, &bsh_dst);
 	mips_dcache_wbinv_all();
 
+	while (fill_level > 0) {
+		data = atse_rx_mem_read(A_ONCHIP_FIFO_MEM_CORE_DATA);
+		meta = atse_rx_mem_read(A_ONCHIP_FIFO_MEM_CORE_METADATA);
 
-	reg = atse_rx_mem_core_read(A_ONCHIP_FIFO_MEM_CORE_METADATA);
+		if (meta & A_ONCHIP_FIFO_MEM_CORE_ERROR_MASK) {
+			printf("RX ERROR\n");
+		}
 
+		if ((meta & A_ONCHIP_FIFO_MEM_CORE_CHANNEL_MASK) != 0) {
+			printf("RX ERR: channel mask != 0\n");
+		}
+
+		if (meta & A_ONCHIP_FIFO_MEM_CORE_SOP) {
+			printf("RX: SOP received\n");
+		}
+
+		if (meta & A_ONCHIP_FIFO_MEM_CORE_EOP) {
+			printf("RX: EOP received\n");
+
+			empty = (meta & A_ONCHIP_FIFO_MEM_CORE_EMPTY_MASK) >>
+			    A_ONCHIP_FIFO_MEM_CORE_EMPTY_SHIFT;
+			//sc->atse_rx_buf_len += (4 - empty);
+		}
+
+		fill_level = atse_rx_read_fill_level();
+	}
+
+	printf("%s finished\n", __func__);
 
 	bus_space_unmap(bst, bsh_src, 4);
 	bus_space_unmap(bst, bsh_dst, len);
@@ -428,7 +467,12 @@ softdma_channel_prep_fifo(device_t dev, struct xdma_channel *xchan)
 	xdma_config_t *conf;
 	int ret;
 
-	printf("%s\n", __func__);
+	conf = &xchan->conf;
+	if (conf->direction == XDMA_MEM_TO_DEV) {
+		printf("%s: TX\n", __func__);
+	} else {
+		printf("%s: RX\n", __func__);
+	}
 
 	sc = device_get_softc(dev);
 
@@ -441,7 +485,6 @@ softdma_channel_prep_fifo(device_t dev, struct xdma_channel *xchan)
 		return (-1);
 	}
 
-	conf = &xchan->conf;
 	desc = (struct softdma_desc *)xchan->descs;
 	desc[0].src_addr = conf->src_addr;
 	desc[0].dst_addr = conf->dst_addr;
