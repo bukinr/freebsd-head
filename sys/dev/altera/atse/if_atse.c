@@ -97,6 +97,8 @@ MODULE_DEPEND(atse, ether, 1, 1, 1);
 MODULE_DEPEND(atse, miibus, 1, 1, 1);
 
 
+uint32_t total_copied;
+
 #define	ATSE_WATCHDOG_TIME	5
 
 #ifdef DEVICE_POLLING
@@ -483,10 +485,21 @@ atse_xdma_rx_intr(void *arg)
 
 	sc = arg;
 
+	ATSE_LOCK(sc);
+
 	ifp = sc->atse_ifp;
 	m = sc->atse_rx_m;
 
-	printf("%s\n", __func__);
+	KASSERT(m != NULL, ("m is NULL"));
+	printf("%s: %d rcvd\n", __func__, total_copied);
+
+	m->m_pkthdr.rcvif = ifp;
+	m->m_pkthdr.len = m->m_len = total_copied;
+	ATSE_UNLOCK(sc);
+	(*ifp->if_input)(ifp, m);
+	ATSE_LOCK(sc);
+	sc->atse_rx_m = NULL;
+	sc->rx_busy = 0;
 
 #if 0
 	m_freem(m);
@@ -495,6 +508,8 @@ atse_xdma_rx_intr(void *arg)
 	sc->txcount--;
 	ifp->if_drv_flags &= ~IFF_DRV_OACTIVE;
 #endif
+
+	ATSE_UNLOCK(sc);
 
 	return (0);
 }
@@ -1492,15 +1507,14 @@ outer:
 		int ret;
 		uint32_t src;
 		uint32_t dst;
-		//src = (uintptr_t)sc->atse_tx_buf;
 
 		src = (rman_get_start(sc->atse_rx_mem_res) + A_ONCHIP_FIFO_MEM_CORE_DATA);
-		//dst = vtophys(sc->atse_tx_buf);
-		dst = vtophys(sc->atse_rx_m->m_data);
-		//printf("rx: src addr %x, dst addr %x, len %d\n", src, dst, sc->atse_rx_buf_len);
+		dst = vtophys((vm_offset_t)sc->atse_rx_m->m_data);
+
+		printf("rx: src addr %x, dst addr %x, len %d\n", src, dst, sc->atse_rx_m->m_len);
 
 		ret = xdma_prep_fifo(sc->xchan_rx, src, dst,
-		    sc->atse_rx_buf_len, XDMA_DEV_TO_MEM);
+		    sc->atse_rx_m->m_len, XDMA_DEV_TO_MEM);
 		if (ret != 0) {
 			device_printf(sc->dev, "Can't prepare xDMA for RX transfer\n");
 			return (-1);
