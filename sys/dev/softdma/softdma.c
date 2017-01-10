@@ -192,7 +192,7 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 			printf("FILL LEVEL %d, hz %d\n", fill_level, hz);
 			fill_level = atse_tx_read_fill_level();
 			if (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
-				mtx_sleep(sc, &chan->mtx, 0, "softdma_delay", 10000);
+				mtx_sleep(sc, &chan->mtx, 0, "softdma_delay", hz);
 			}
 		}
 		c += 4;
@@ -216,6 +216,11 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 	reg = A_ONCHIP_FIFO_MEM_CORE_EOP;
 	reg |= ((4 - leftm) << A_ONCHIP_FIFO_MEM_CORE_EMPTY_SHIFT);
 	atse_tx_meta_write(reg);
+
+	/* Wait for FIFO entry available. */
+	while (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
+		fill_level = atse_tx_read_fill_level();
+	};
 
 	bus_space_write_4(bst, bsh_dst, dst_offs, val);
 
@@ -273,10 +278,12 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 
 		if (meta & A_ONCHIP_FIFO_MEM_CORE_ERROR_MASK) {
 			printf("RX ERROR\n");
+			break;
 		}
 
 		if ((meta & A_ONCHIP_FIFO_MEM_CORE_CHANNEL_MASK) != 0) {
 			printf("RX ERR: channel mask != 0\n");
+			break;
 		}
 
 		if (meta & A_ONCHIP_FIFO_MEM_CORE_SOP) {
@@ -311,6 +318,13 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 			//if (desc->dst_incr)
 				dst_offs += 2;
 			tot_rcvd += 2;
+		} else if (empty == 1) {
+			bus_space_write_1(bst, bsh_dst, dst_offs, ((data >> 8) & 0xff));
+			//if (desc->src_incr)
+			//	src_offs += 1;
+			//if (desc->dst_incr)
+				dst_offs += 1;
+			tot_rcvd += 1;
 		}
 
 		if (meta & A_ONCHIP_FIFO_MEM_CORE_EOP) {

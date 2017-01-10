@@ -494,7 +494,7 @@ atse_xdma_rx_intr(void *arg)
 	printf("%s: %d rcvd\n", __func__, total_copied);
 
 	m->m_pkthdr.rcvif = ifp;
-	m->m_pkthdr.len = m->m_len = total_copied;
+	//m->m_pkthdr.len = m->m_len = total_copied;
 	ATSE_UNLOCK(sc);
 	(*ifp->if_input)(ifp, m);
 	ATSE_LOCK(sc);
