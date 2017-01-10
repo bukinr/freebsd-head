@@ -192,7 +192,7 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 			printf("FILL LEVEL %d, hz %d\n", fill_level, hz);
 			fill_level = atse_tx_read_fill_level();
 			if (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
-				mtx_sleep(sc, &chan->mtx, 0, "softdma_delay", hz);
+				//mtx_sleep(sc, &chan->mtx, 0, "softdma_delay", hz);
 			}
 		}
 		c += 4;
@@ -243,13 +243,12 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 	uint32_t data;
 	uint32_t empty;
 	//uint32_t val;
-	uint32_t tot_rcvd;
 	size_t len;
+	int timeout;
 	int i;
 
 	sc = chan->sc;
 	empty = 0;
-	tot_rcvd = 0;
 	src_offs = dst_offs = 0;
 
 	bst = fdtbus_bs_tag;
@@ -291,40 +290,20 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 		}
 
 		if (meta & A_ONCHIP_FIFO_MEM_CORE_EOP) {
-
 			empty = (meta & A_ONCHIP_FIFO_MEM_CORE_EMPTY_MASK) >>
 			    A_ONCHIP_FIFO_MEM_CORE_EMPTY_SHIFT;
-
 			printf("RX: EOP received, empty %d\n", empty);
-
-			//tot_rcvd += (4 - empty);
-			//sc->atse_rx_buf_len += (4 - empty);
-			//break;
 		}
 
-		//printf("write 4 (%d)\n", i);
-
 		bus_space_write_2(bst, bsh_dst, dst_offs, ((data >> 16) & 0xffff));
-		//if (desc->src_incr)
-		//	src_offs += 2;
-		//if (desc->dst_incr)
-			dst_offs += 2;
-		tot_rcvd += 2;
+		dst_offs += 2;
 
 		if (empty == 0) {
 			bus_space_write_2(bst, bsh_dst, dst_offs, ((data >> 0) & 0xffff));
-			//if (desc->src_incr)
-			//	src_offs += 2;
-			//if (desc->dst_incr)
-				dst_offs += 2;
-			tot_rcvd += 2;
+			dst_offs += 2;
 		} else if (empty == 1) {
 			bus_space_write_1(bst, bsh_dst, dst_offs, ((data >> 8) & 0xff));
-			//if (desc->src_incr)
-			//	src_offs += 1;
-			//if (desc->dst_incr)
-				dst_offs += 1;
-			tot_rcvd += 1;
+			dst_offs += 1;
 		}
 
 		if (meta & A_ONCHIP_FIFO_MEM_CORE_EOP) {
@@ -333,19 +312,24 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 
 		i += 1;
 		fill_level = atse_rx_read_fill_level();
-		while (fill_level == 0) {
-			mtx_sleep(sc, &chan->mtx, 0, "softdma_delay", 10000);
+		timeout = 100;
+		while (fill_level == 0 && timeout--) {
+			//mtx_sleep(sc, &chan->mtx, 0, "softdma_delay", hz);
 			fill_level = atse_rx_read_fill_level();
 			printf(".");
 		}
+		if (timeout == 0) {
+			/* No EOP received. Broken packet. */
+			break;
+		}
 	}
 
-	printf("%s finished: tot_rcvd %d\n", __func__, tot_rcvd);
+	printf("%s finished: tot_rcvd %d\n", __func__, dst_offs);
 
 	bus_space_unmap(bst, bsh_src, 4);
 	bus_space_unmap(bst, bsh_dst, len);
 
-	return (tot_rcvd);
+	return (dst_offs);
 }
 
 static void
