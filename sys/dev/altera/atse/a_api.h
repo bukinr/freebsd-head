@@ -93,12 +93,9 @@
 	    A_ONCHIP_FIFO_MEM_CORE_INTR_OVERFLOW|	\
 	    A_ONCHIP_FIFO_MEM_CORE_INTR_UNDERFLOW)
 
-void atse_tx_data_write(uint32_t val);
-void atse_tx_meta_write(uint32_t val);
-uint32_t atse_tx_data_read(void);
-uint32_t atse_tx_meta_read(void);
+void atse_tx_mem_write(uint32_t reg, uint32_t val);
+uint32_t atse_tx_mem_read(uint32_t reg);
 uint32_t atse_tx_read_fill_level(void);
-
 uint32_t atse_rx_mem_read(uint32_t reg);
 uint32_t atse_rx_read_fill_level(void);
 

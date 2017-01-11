@@ -155,51 +155,26 @@ a_onchip_fifo_mem_core_read(struct resource *res, uint32_t off,
 }
 
 void
-atse_tx_data_write(uint32_t val)
+atse_tx_mem_write(uint32_t reg, uint32_t val)
 {
 	struct atse_softc *sc;
 
 	sc = atse_sc;
 
-	bus_write_4(sc->atse_tx_mem_res, A_ONCHIP_FIFO_MEM_CORE_DATA, val);
+	bus_write_4(sc->atse_tx_mem_res, reg, htole32(val));
 }
 
 uint32_t
-atse_tx_data_read(void)
+atse_tx_mem_read(uint32_t reg)
 {
 	struct atse_softc *sc;
 	uint32_t val;
 
 	sc = atse_sc;
 
-	val = bus_read_4(sc->atse_rx_mem_res, A_ONCHIP_FIFO_MEM_CORE_DATA);
+	val = bus_read_4(sc->atse_tx_mem_res, reg);
 
-	return (val);
-}
-
-void
-atse_tx_meta_write(uint32_t val)
-{
-	struct atse_softc *sc;
-
-	sc = atse_sc;
-
-	a_onchip_fifo_mem_core_write(sc->atse_tx_mem_res,
-	    A_ONCHIP_FIFO_MEM_CORE_METADATA, val, "TXM", __func__, __LINE__);
-}
-
-uint32_t
-atse_tx_meta_read(void)
-{
-	struct atse_softc *sc;
-	uint32_t val;
-
-	sc = atse_sc;
-
-	val = a_onchip_fifo_mem_core_read(sc->atse_tx_mem_res,
-	    A_ONCHIP_FIFO_MEM_CORE_METADATA, "TXM", __func__, __LINE__);
-
-	return (val);
+	return (le32toh(val));
 }
 
 uint32_t
@@ -210,25 +185,10 @@ atse_tx_read_fill_level(void)
 
 	sc = atse_sc;
 
-	val = a_onchip_fifo_mem_core_read(sc->atse_txc_mem_res,
-	    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_FILL_LEVEL, "TX_FILL", __func__, __LINE__);
+	val = bus_read_4(sc->atse_txc_mem_res, A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_FILL_LEVEL);
 
-	return (val);
+	return (le32toh(val));
 }
-
-#if 0
-uint32_t
-atse_rx_mem_core_read(uint32_t reg)
-{
-	struct atse_softc *sc;
-	uint32_t val;
-
-	val = a_onchip_fifo_mem_core_read(sc->atse_rx_mem_res,
-	    reg, "RXM", __func__, __LINE__);
-
-	return (val);
-}
-#endif
 
 uint32_t
 atse_rx_mem_read(uint32_t reg)

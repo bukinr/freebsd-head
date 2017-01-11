@@ -172,7 +172,7 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 	/* Set start of packet. */
 	reg = A_ONCHIP_FIFO_MEM_CORE_SOP;
 	reg &= ~A_ONCHIP_FIFO_MEM_CORE_EOP;
-	atse_tx_meta_write(reg);
+	atse_tx_mem_write(A_ONCHIP_FIFO_MEM_CORE_METADATA, reg);
 
 	printf("copy %x -> %x (%d bytes, %d times)\n",
 	    (uint32_t)bsh_src, (uint32_t)bsh_dst, desc->len, desc->count);
@@ -215,7 +215,7 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 	/* Set end of packet. */
 	reg = A_ONCHIP_FIFO_MEM_CORE_EOP;
 	reg |= ((4 - leftm) << A_ONCHIP_FIFO_MEM_CORE_EMPTY_SHIFT);
-	atse_tx_meta_write(reg);
+	atse_tx_mem_write(A_ONCHIP_FIFO_MEM_CORE_METADATA, reg);
 
 	/* Wait for FIFO entry available. */
 	while (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
