@@ -163,19 +163,17 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 	mips_dcache_wbinv_all();
 
 	fill_level = atse_tx_read_fill_level();
-	if (fill_level == 0) {
-
-	}
-
-	printf("TX fill_level is %d\n", fill_level);
+	//if (fill_level == 0) {
+	//}
+	//printf("TX fill_level is %d\n", fill_level);
 
 	/* Set start of packet. */
 	reg = A_ONCHIP_FIFO_MEM_CORE_SOP;
 	reg &= ~A_ONCHIP_FIFO_MEM_CORE_EOP;
 	atse_tx_mem_write(A_ONCHIP_FIFO_MEM_CORE_METADATA, reg);
 
-	printf("copy %x -> %x (%d bytes, %d times)\n",
-	    (uint32_t)bsh_src, (uint32_t)bsh_dst, desc->len, desc->count);
+	//printf("copy %x -> %x (%d bytes, %d times)\n",
+	//    (uint32_t)bsh_src, (uint32_t)bsh_dst, desc->len, desc->count);
 
 	src_offs = dst_offs = 0;
 	c = 0;
@@ -189,7 +187,7 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 		fill_level += 1;
 
 		while (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
-			printf("FILL LEVEL %d, hz %d\n", fill_level, hz);
+			//printf("FILL LEVEL %d, hz %d\n", fill_level, hz);
 			fill_level = atse_tx_read_fill_level();
 			if (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
 				//mtx_sleep(sc, &chan->mtx, 0, "softdma_delay", hz);
@@ -199,17 +197,23 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 	}
 
 	leftm = (desc->len - c);
-	printf("leftm %d\n", leftm);
-
-	if (leftm == 2) {
+	switch (leftm) {
+	case 1:
+		val = bus_space_read_1(bst, bsh_src, src_offs);
+		val <<= 24;
+		src_offs += 1;
+		break;
+	case 2:
 		val = bus_space_read_2(bst, bsh_src, src_offs);
 		val <<= 16;
 		src_offs += 2;
-	} else if (leftm == 4) {
+		break;
+	case 4:
 		val = bus_space_read_4(bst, bsh_src, src_offs);
 		src_offs += 4;
-	} else {
-		panic("leftm %d\n", leftm);
+		break;
+	default:
+		break;
 	}
 
 	/* Set end of packet. */
@@ -217,13 +221,12 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 	reg |= ((4 - leftm) << A_ONCHIP_FIFO_MEM_CORE_EMPTY_SHIFT);
 	atse_tx_mem_write(A_ONCHIP_FIFO_MEM_CORE_METADATA, reg);
 
-	/* Wait for FIFO entry available. */
+	/* Ensure there is a FIFO entry available. */
 	while (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
 		fill_level = atse_tx_read_fill_level();
 	};
 
 	bus_space_write_4(bst, bsh_dst, dst_offs, val);
-
 	bus_space_unmap(bst, bsh_src, len);
 	bus_space_unmap(bst, bsh_dst, 4);
 
@@ -239,17 +242,18 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 	struct softdma_softc *sc;
 	bus_space_tag_t bst;
 	uint32_t fill_level;
+	uint32_t empty;
 	uint32_t meta;
 	uint32_t data;
-	uint32_t empty;
-	//uint32_t val;
-	size_t len;
+	int sop_rcvd;
 	int timeout;
-	int i;
+	size_t len;
+	int error;
 
 	sc = chan->sc;
 	empty = 0;
 	src_offs = dst_offs = 0;
+	error = 0;
 
 	bst = fdtbus_bs_tag;
 
@@ -260,7 +264,7 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 		return (0);
 	}
 
-	printf("RX fill_level is %d, desc->len %d\n", fill_level, desc->len);
+	//printf("RX fill_level is %d, desc->len %d\n", fill_level, desc->len);
 
 	//len = (desc->count * desc->access_width);
 	len = desc->len;
@@ -268,7 +272,7 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 	bus_space_map(bst, desc->dst_addr, len, 0, &bsh_dst);
 	mips_dcache_wbinv_all();
 
-	i = 0;
+	sop_rcvd = 0;
 	while (fill_level) {
 		empty = 0;
 		//data = atse_rx_mem_read(A_ONCHIP_FIFO_MEM_CORE_DATA);
@@ -276,23 +280,31 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 		meta = atse_rx_mem_read(A_ONCHIP_FIFO_MEM_CORE_METADATA);
 
 		if (meta & A_ONCHIP_FIFO_MEM_CORE_ERROR_MASK) {
-			printf("RX ERROR\n");
+			//printf("RX ERROR\n");
+			error = 1;
 			break;
 		}
 
 		if ((meta & A_ONCHIP_FIFO_MEM_CORE_CHANNEL_MASK) != 0) {
-			printf("RX ERR: channel mask != 0\n");
+			//printf("RX ERR: channel mask != 0\n");
+			error = 1;
 			break;
 		}
 
 		if (meta & A_ONCHIP_FIFO_MEM_CORE_SOP) {
-			printf("RX: SOP received\n");
+			//printf("RX: SOP received\n");
+			sop_rcvd = 1;
 		}
 
 		if (meta & A_ONCHIP_FIFO_MEM_CORE_EOP) {
 			empty = (meta & A_ONCHIP_FIFO_MEM_CORE_EMPTY_MASK) >>
 			    A_ONCHIP_FIFO_MEM_CORE_EMPTY_SHIFT;
-			printf("RX: EOP received, empty %d\n", empty);
+			//printf("RX: EOP received, empty %d\n", empty);
+		}
+
+		if (sop_rcvd == 0) {
+			error = 1;
+			break;
 		}
 
 		bus_space_write_2(bst, bsh_dst, dst_offs, ((data >> 16) & 0xffff));
@@ -310,7 +322,6 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 			break;
 		}
 
-		i += 1;
 		fill_level = atse_rx_read_fill_level();
 		timeout = 100;
 		while (fill_level == 0 && timeout--) {
@@ -320,25 +331,29 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 		}
 		if (timeout == 0) {
 			/* No EOP received. Broken packet. */
+			error = 1;
 			break;
 		}
 	}
 
-	printf("%s finished: tot_rcvd %d\n", __func__, dst_offs);
+	//printf("%s finished: tot_rcvd %d\n", __func__, dst_offs);
 
 	bus_space_unmap(bst, bsh_src, 4);
 	bus_space_unmap(bst, bsh_dst, len);
+
+	if (error) {
+		return (-1);
+	}
 
 	return (dst_offs);
 }
 
 static uint32_t
-softdma_process_descriptors(struct softdma_channel *chan)
+softdma_process_descriptors(struct softdma_channel *chan, xdma_transfer_status_t *status)
 {
 	struct xdma_channel *xchan;
 	struct softdma_desc *desc;
 	struct softdma_softc *sc;
-	uint32_t total_copied;
 	int ret;
 
 	sc = chan->sc;
@@ -348,23 +363,25 @@ softdma_process_descriptors(struct softdma_channel *chan)
 
 	desc = (struct softdma_desc *)xchan->descs;
 
-	total_copied = 0;
-
 	while (desc != NULL) {
 		if (desc->direction == XDMA_MEM_TO_DEV) {
 			ret = softdma_process_tx(chan, desc);
 		} else {
 			ret = softdma_process_rx(chan, desc);
 		}
+
 		if (ret >= 0) {
-			total_copied += ret;
+			status->total_copied += ret;
+		} else {
+			status->error = 1;
+			break;
 		}
 
 		/* Process next descriptor, if any. */
 		desc = desc->next;
 	}
 
-	return (total_copied);
+	return (0);
 }
 
 static void
@@ -373,7 +390,6 @@ softdma_worker(void *arg)
 	xdma_transfer_status_t status;
 	struct softdma_channel *chan;
 	struct softdma_softc *sc;
-	uint32_t total_copied;
 
 	chan = arg;
 
@@ -386,12 +402,13 @@ softdma_worker(void *arg)
 			mtx_sleep(chan, &chan->mtx, 0, "softdma_wait", hz / 2);
 		} while (chan->run == 0);
 
-		total_copied = softdma_process_descriptors(chan);
+		status.error = 0;
+		status.total_copied = 0;
+
+		softdma_process_descriptors(chan, &status);
 
 		/* Finish operation */
 		chan->run = 0;
-		status.error = 0;
-		status.total_copied = total_copied;
 		xdma_callback(chan->xchan, &status);
 
 		mtx_unlock(&chan->mtx);
@@ -527,9 +544,9 @@ softdma_channel_prep_fifo(device_t dev, struct xdma_channel *xchan)
 
 	conf = &xchan->conf;
 	if (conf->direction == XDMA_MEM_TO_DEV) {
-		printf("%s: TX\n", __func__);
+		//printf("%s: TX\n", __func__);
 	} else {
-		printf("%s: RX\n", __func__);
+		//printf("%s: RX\n", __func__);
 	}
 
 	sc = device_get_softc(dev);

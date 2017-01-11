@@ -417,18 +417,22 @@ atse_xdma_tx_intr(void *arg, xdma_transfer_status_t *status)
 	struct ifnet *ifp;
 	struct mbuf *m;
 
+	//printf("%s\n", __func__);
+
 	sc = arg;
+
+	ATSE_LOCK(sc);
 
 	ifp = sc->atse_ifp;
 	m = sc->atse_tx_m;
-
-	printf("%s\n", __func__);
 
 	m_freem(m);
 	sc->atse_tx_m = NULL;
 	sc->atse_tx_m_offset = 0;
 	sc->txcount--;
 	ifp->if_drv_flags &= ~IFF_DRV_OACTIVE;
+
+	ATSE_UNLOCK(sc);
 
 	return (0);
 }
@@ -450,21 +454,18 @@ atse_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 	KASSERT(m != NULL, ("m is NULL"));
 	printf("%s: %d rcvd\n", __func__, status->total_copied);
 
-	m->m_pkthdr.rcvif = ifp;
-	m->m_pkthdr.len = m->m_len = status->total_copied;
-	ATSE_UNLOCK(sc);
-	(*ifp->if_input)(ifp, m);
-	ATSE_LOCK(sc);
+	if (status->error == 0) {
+		m->m_pkthdr.rcvif = ifp;
+		m->m_pkthdr.len = m->m_len = status->total_copied;
+		ATSE_UNLOCK(sc);
+		(*ifp->if_input)(ifp, m);
+		ATSE_LOCK(sc);
+	} else {
+		if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
+		m_freem(m);
+	}
 	sc->atse_rx_m = NULL;
 	sc->rx_busy = 0;
-
-#if 0
-	m_freem(m);
-	sc->atse_tx_m = NULL;
-	sc->atse_tx_m_offset = 0;
-	sc->txcount--;
-	ifp->if_drv_flags &= ~IFF_DRV_OACTIVE;
-#endif
 
 	ATSE_UNLOCK(sc);
 
@@ -1510,11 +1511,12 @@ outer:
 				sc->atse_flags |= ATSE_FLAGS_ERROR;
 				return (rx_npkts);
 			}
-			if ((meta & A_ONCHIP_FIFO_MEM_CORE_CHANNEL_MASK) != 0)
+			if ((meta & A_ONCHIP_FIFO_MEM_CORE_CHANNEL_MASK) != 0) {
 				device_printf(sc->atse_dev, "%s: unexpected "
 				    "channel %u\n", __func__, (meta &
 				    A_ONCHIP_FIFO_MEM_CORE_CHANNEL_MASK) >>
 				    A_ONCHIP_FIFO_MEM_CORE_CHANNEL_SHIFT);
+			}
 
 			if (meta & A_ONCHIP_FIFO_MEM_CORE_SOP) {
 				/*
