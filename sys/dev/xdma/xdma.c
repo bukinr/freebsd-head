@@ -153,8 +153,8 @@ xdma_channel_free(xdma_channel_t *xchan)
 }
 
 int
-xdma_setup_intr(xdma_channel_t *xchan, int (*cb)(void *), void *arg,
-    void **ihandler)
+xdma_setup_intr(xdma_channel_t *xchan, int (*cb)(void *, xdma_transfer_status_t *),
+    void *arg, void **ihandler)
 {
 	struct xdma_intr_handler *ih;
 	xdma_controller_t *xdma;
@@ -578,14 +578,14 @@ xdma_pause(xdma_channel_t *xchan)
 }
 
 int
-xdma_callback(xdma_channel_t *xchan)
+xdma_callback(xdma_channel_t *xchan, xdma_transfer_status_t *status)
 {
 	struct xdma_intr_handler *ih_tmp;
 	struct xdma_intr_handler *ih;
 
 	TAILQ_FOREACH_SAFE(ih, &xchan->ie_handlers, ih_next, ih_tmp) {
 		if (ih->cb != NULL) {
-			ih->cb(ih->cb_user);
+			ih->cb(ih->cb_user, status);
 		}
 	}
 

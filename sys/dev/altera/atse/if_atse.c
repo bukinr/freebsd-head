@@ -96,9 +96,6 @@ __FBSDID("$FreeBSD$");
 MODULE_DEPEND(atse, ether, 1, 1, 1);
 MODULE_DEPEND(atse, miibus, 1, 1, 1);
 
-
-uint32_t total_copied;
-
 #define	ATSE_WATCHDOG_TIME	5
 
 #ifdef DEVICE_POLLING
@@ -454,7 +451,7 @@ static int atse_detach(device_t);
 devclass_t atse_devclass;
 
 static int
-atse_xdma_tx_intr(void *arg)
+atse_xdma_tx_intr(void *arg, xdma_transfer_status_t *status)
 {
 	struct atse_softc *sc;
 	struct ifnet *ifp;
@@ -477,7 +474,7 @@ atse_xdma_tx_intr(void *arg)
 }
 
 static int
-atse_xdma_rx_intr(void *arg)
+atse_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 {
 	struct atse_softc *sc;
 	struct ifnet *ifp;
@@ -491,10 +488,10 @@ atse_xdma_rx_intr(void *arg)
 	m = sc->atse_rx_m;
 
 	KASSERT(m != NULL, ("m is NULL"));
-	printf("%s: %d rcvd\n", __func__, total_copied);
+	printf("%s: %d rcvd\n", __func__, status->total_copied);
 
 	m->m_pkthdr.rcvif = ifp;
-	//m->m_pkthdr.len = m->m_len = total_copied;
+	m->m_pkthdr.len = m->m_len = status->total_copied;
 	ATSE_UNLOCK(sc);
 	(*ifp->if_input)(ifp, m);
 	ATSE_LOCK(sc);

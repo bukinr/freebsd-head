@@ -227,7 +227,7 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 	bus_space_unmap(bst, bsh_src, len);
 	bus_space_unmap(bst, bsh_dst, 4);
 
-	return (0);
+	return (dst_offs);
 }
 
 static int
@@ -332,13 +332,14 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 	return (dst_offs);
 }
 
-static void
+static uint32_t
 softdma_process_descriptors(struct softdma_channel *chan)
 {
 	struct xdma_channel *xchan;
 	struct softdma_desc *desc;
 	struct softdma_softc *sc;
-	uint32_t ret;
+	uint32_t total_copied;
+	int ret;
 
 	sc = chan->sc;
 
@@ -347,24 +348,32 @@ softdma_process_descriptors(struct softdma_channel *chan)
 
 	desc = (struct softdma_desc *)xchan->descs;
 
+	total_copied = 0;
+
 	while (desc != NULL) {
 		if (desc->direction == XDMA_MEM_TO_DEV) {
-			softdma_process_tx(chan, desc);
+			ret = softdma_process_tx(chan, desc);
 		} else {
 			ret = softdma_process_rx(chan, desc);
-			total_copied = ret;
+		}
+		if (ret >= 0) {
+			total_copied += ret;
 		}
 
 		/* Process next descriptor, if any. */
 		desc = desc->next;
 	}
+
+	return (total_copied);
 }
 
 static void
 softdma_worker(void *arg)
 {
+	xdma_transfer_status_t status;
 	struct softdma_channel *chan;
 	struct softdma_softc *sc;
+	uint32_t total_copied;
 
 	chan = arg;
 
@@ -377,11 +386,13 @@ softdma_worker(void *arg)
 			mtx_sleep(chan, &chan->mtx, 0, "softdma_wait", hz / 2);
 		} while (chan->run == 0);
 
-		softdma_process_descriptors(chan);
+		total_copied = softdma_process_descriptors(chan);
 
 		/* Finish operation */
 		chan->run = 0;
-		xdma_callback(chan->xchan);
+		status.error = 0;
+		status.total_copied = total_copied;
+		xdma_callback(chan->xchan, &status);
 
 		mtx_unlock(&chan->mtx);
 	}

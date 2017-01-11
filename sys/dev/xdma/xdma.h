@@ -54,6 +54,13 @@ enum xdma_command {
 	XDMA_CMD_TERMINATE_ALL,
 };
 
+struct xdma_transfer_status {
+	int	error;
+	int	total_copied;
+};
+
+typedef struct xdma_transfer_status xdma_transfer_status_t;
+
 struct xdma_controller {
 	device_t dev;		/* DMA consumer device_t. */
 	device_t dma_dev;	/* A real DMA device_t. */
@@ -137,14 +144,14 @@ int xdma_pause(xdma_channel_t *xchan);
 int xdma_terminate(xdma_channel_t *xchan);
 
 /* Interrupt callback */
-int xdma_setup_intr(xdma_channel_t *xchan, int (*cb)(void *), void *arg, void **);
+int xdma_setup_intr(xdma_channel_t *xchan, int (*cb)(void *, xdma_transfer_status_t *), void *arg, void **);
 int xdma_teardown_intr(xdma_channel_t *xchan, struct xdma_intr_handler *ih);
 int xdma_teardown_all_intr(xdma_channel_t *xchan);
-int xdma_callback(struct xdma_channel *xchan);
+int xdma_callback(struct xdma_channel *xchan, xdma_transfer_status_t *status);
 void xdma_assert_locked(void);
 
 struct xdma_intr_handler {
-	int				(*cb)(void *);
+	int				(*cb)(void *cb_user, xdma_transfer_status_t *status);
 	void				*cb_user;
 	struct mtx			ih_lock;
 	TAILQ_ENTRY(xdma_intr_handler)	ih_next;
