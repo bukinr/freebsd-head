@@ -26,20 +26,23 @@ device		altera_avgen
 device		altera_jtag_uart
 device		altera_sdcard
 device		terasic_de4led
-device		terasic_mtl
+#device		terasic_mtl
 
 device		bpf
 device		cfi
 device		cfid
 options 	CFI_SUPPORT_STRATAFLASH
 options 	ATSE_CFI_HACK
-device		vt
-device		kbdmux
+#device		vt
+#device		kbdmux
 
 device		uart
 
 device		miibus
 options 	DEVICE_POLLING
+
+device		xdma
+device		softdma
 
 #
 # USB support
