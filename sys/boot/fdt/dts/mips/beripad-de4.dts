@@ -123,8 +123,8 @@
 		serial@7f000000 {
 			compatible = "altera,jtag_uart-11_0";
 			reg = <0x7f000000 0x40>;
-			//interrupts = <0>;
-			//interrupt-parent = <&beripic0>;
+			interrupts = <0>;
+			interrupt-parent = <&beripic0>;
 		};
 
 		serial@7f001000 {
@@ -205,8 +205,8 @@
 			       0x7f007400 0x8
 			       0x7f007420 0x20>;
 			// RX, TX
-			//interrupts = <1 2>;
-			//interrupt-parent = <&beripic0>;
+			interrupts = <1 2>;
+			interrupt-parent = <&beripic0>;
 			dmas = <&softdma 0 0 0xffffffff>,
 				<&softdma 1 1 0xffffffff>;
 			dma-names = "tx", "rx";
