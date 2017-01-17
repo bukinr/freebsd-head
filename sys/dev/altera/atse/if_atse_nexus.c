@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012,2013 Bjoern A. Zeeb
+ * Copyright (c) 2012, 2013 Bjoern A. Zeeb
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of

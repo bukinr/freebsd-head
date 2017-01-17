@@ -452,7 +452,7 @@ atse_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 	m = sc->atse_rx_m;
 
 	KASSERT(m != NULL, ("m is NULL"));
-	printf("%s: %d rcvd\n", __func__, status->total_copied);
+	//printf("%s: %d rcvd\n", __func__, status->total_copied);
 
 	if (status->error == 0) {
 		m->m_pkthdr.rcvif = ifp;
@@ -515,7 +515,7 @@ atse_tx_locked(struct atse_softc *sc, int *sent)
 
 	src = vtophys(sc->atse_tx_buf);
 	dst = (rman_get_start(sc->atse_tx_mem_res) + A_ONCHIP_FIFO_MEM_CORE_DATA);
-	printf("tx: src addr %x, dst addr %x, len %d\n", src, dst, sc->atse_tx_buf_len);
+	//printf("tx: src addr %x, dst addr %x, len %d\n", src, dst, sc->atse_tx_buf_len);
 
 	ret = xdma_prep_fifo(sc->xchan_tx, src, dst, sc->atse_tx_buf_len, XDMA_MEM_TO_DEV);
 	if (ret != 0) {
@@ -607,14 +607,24 @@ atse_start_locked(struct ifnet *ifp)
 	sc = ifp->if_softc;
 	ATSE_LOCK_ASSERT(sc);
 
-	if ((ifp->if_drv_flags & (IFF_DRV_RUNNING | IFF_DRV_OACTIVE)) !=
-	    IFF_DRV_RUNNING || (sc->atse_flags & ATSE_FLAGS_LINK) == 0)
+	printf("%s\n", __func__);
+
+	if ((ifp->if_drv_flags & (IFF_DRV_RUNNING | IFF_DRV_OACTIVE)) != IFF_DRV_RUNNING) {
 		return;
+	}
+
+	printf("%s 0\n", __func__);
+
+	if ((sc->atse_flags & ATSE_FLAGS_LINK) == 0) {
+		return;
+	}
+
+	printf("%s 1\n", __func__);
 
 	if (ifp->if_drv_flags & IFF_DRV_OACTIVE)
 		return;
 
-	//printf("%s\n", __func__);
+	printf("%s 2\n", __func__);
 
 #if 1
 	/*
@@ -1374,6 +1384,8 @@ atse_tick(void *xsc)
 	struct mii_data *mii;
 	struct ifnet *ifp;
 
+	printf(".");
+
 	sc = (struct atse_softc *)xsc;
 	ATSE_LOCK_ASSERT(sc);
 	ifp = sc->atse_ifp;
@@ -1383,6 +1395,12 @@ atse_tick(void *xsc)
 	atse_watchdog(sc);
 	if ((sc->atse_flags & ATSE_FLAGS_LINK) == 0)
 		atse_miibus_statchg(sc->atse_dev);
+
+	atse_rx_locked(sc);
+	if ((sc->atse_flags & ATSE_FLAGS_LINK) != 0) {
+		atse_start_locked(sc->atse_ifp);
+	}
+
 	callout_reset(&sc->atse_tick, hz, atse_tick, sc);
 }
 
@@ -1429,6 +1447,8 @@ atse_rx_locked(struct atse_softc *sc)
 	struct mbuf *m;
 	int rx_npkts;
 
+	printf("%s\n", __func__);
+
 	ATSE_LOCK_ASSERT(sc);
 
 	if (sc->rx_busy == 1) {
@@ -1460,7 +1480,7 @@ outer:
 			goto done;
 		}
 
-		printf("%s: rx_fill_level %d\n", __func__, fill);
+		//printf("%s: rx_fill_level %d\n", __func__, fill);
 
 		int ret;
 		uint32_t src;
@@ -1469,7 +1489,7 @@ outer:
 		src = (rman_get_start(sc->atse_rx_mem_res) + A_ONCHIP_FIFO_MEM_CORE_DATA);
 		dst = vtophys((vm_offset_t)sc->atse_rx_m->m_data);
 
-		printf("rx: src addr %x, dst addr %x, len %d\n", src, dst, sc->atse_rx_m->m_len);
+		//printf("rx: src addr %x, dst addr %x, len %d\n", src, dst, sc->atse_rx_m->m_len);
 
 		ret = xdma_prep_fifo(sc->xchan_rx, src, dst,
 		    sc->atse_rx_m->m_len, XDMA_DEV_TO_MEM);
@@ -1635,6 +1655,8 @@ atse_rx_intr(void *arg)
 	struct ifnet *ifp;
 	uint32_t rxe;
 
+	printf("%s\n", __func__);
+
 	sc = (struct atse_softc *)arg;
 	ifp = sc->atse_ifp;
 
@@ -1668,7 +1690,7 @@ atse_rx_intr(void *arg)
 	 * event posted between clearing events and reenabling interrupts.  If
 	 * a race is experienced, we must restart the whole mechanism.
 	 */
-	do {
+	//do {
 		ATSE_RX_INTR_DISABLE(sc);
 #if 0
 		sc->atse_rx_cycles = RX_CYCLES_IN_INTR;
@@ -1679,8 +1701,8 @@ atse_rx_intr(void *arg)
 		/* Disable interrupts if interface is down. */
 		if (ifp->if_drv_flags & IFF_DRV_RUNNING)
 			ATSE_RX_INTR_ENABLE(sc);
-	} while (!(ATSE_RX_STATUS_READ(sc) &
-	    A_ONCHIP_FIFO_MEM_CORE_STATUS_EMPTY));
+	//} while (!(ATSE_RX_STATUS_READ(sc) &
+	//    A_ONCHIP_FIFO_MEM_CORE_STATUS_EMPTY));
 	ATSE_UNLOCK(sc);
 
 }
@@ -1694,6 +1716,9 @@ atse_tx_intr(void *arg)
 
 	sc = (struct atse_softc *)arg;
 	ifp = sc->atse_ifp;
+
+	txe = ATSE_TX_EVENT_READ(sc);
+	printf("%s: 0x%x\n", __func__, txe);
 
 	ATSE_LOCK(sc);
 #ifdef DEVICE_POLLING
@@ -1723,7 +1748,7 @@ atse_tx_intr(void *arg)
 	 * enable, so we must recheck and potentially repeat the whole process
 	 * if it is detected.
 	 */
-	do {
+	//do {
 		ATSE_TX_INTR_DISABLE(sc);
 		sc->atse_watchdog_timer = 0;
 		atse_start_locked(ifp);
@@ -1732,8 +1757,8 @@ atse_tx_intr(void *arg)
 		/* Disable interrupts if interface is down. */
 		if (ifp->if_drv_flags & IFF_DRV_RUNNING)
 			ATSE_TX_INTR_ENABLE(sc);
-	} while (ATSE_TX_PENDING(sc) &&
-	    !(ATSE_TX_STATUS_READ(sc) & A_ONCHIP_FIFO_MEM_CORE_STATUS_FULL));
+	//} while (ATSE_TX_PENDING(sc) &&
+	//    !(ATSE_TX_STATUS_READ(sc) & A_ONCHIP_FIFO_MEM_CORE_STATUS_FULL));
 	ATSE_UNLOCK(sc);
 }
 
@@ -2154,6 +2179,7 @@ atse_attach(device_t dev)
 		error = ENXIO;
 #endif
 	} else {
+		printf("%s: Enable atse interrupts\n", __func__);
 		ATSE_RX_INTR_ENABLE(sc);
 		ATSE_TX_INTR_ENABLE(sc);
 	}
