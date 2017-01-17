@@ -189,6 +189,26 @@
 			};
 		};
 
+		msgdma0: msgdma0 {
+			compatible = "altera,msgdma";
+			reg = <0x80000000 0x8000>;
+			interrupts = <13 14>; /* rx, tx */
+			interrupt-parent = <&beripic0>;
+			status = "okay";
+
+			#dma-cells = <3>;
+		};
+
+		msgdma1: msgdma1 {
+			compatible = "altera,msgdma";
+			reg = <0x80008000 0x8000>;
+			interrupts = <3 10>; /* rx, tx */
+			interrupt-parent = <&beripic0>;
+			status = "disabled";
+
+			#dma-cells = <3>;
+		};
+
 		softdma: softdma {
 			compatible = "freebsd,softdma";
 
