@@ -458,6 +458,8 @@ beripic_alloc_intr(device_t ic, device_t child, int *rid, u_long irq,
 	struct beripic_softc *sc;
 	struct resource *rv;
 
+	printf("%s: %d\n", __func__, (uint32_t)irq);
+
 	sc = device_get_softc(ic);
 
 	rv = rman_reserve_resource(&(sc->bp_src_rman), irq, irq, 1, flags,
@@ -481,6 +483,8 @@ static int
 beripic_release_intr(device_t ic, struct resource *r)
 {
 	
+	printf("%s: %d\n", __func__, (uint32_t)rman_get_start(r));
+
 	return (rman_release_resource(r));
 }
 
@@ -488,6 +492,8 @@ static int
 beripic_activate_intr(device_t ic, struct resource *r)
 {
 	
+	printf("%s: %d\n", __func__, (uint32_t)rman_get_start(r));
+
 	return (rman_activate_resource(r));
 }
 
@@ -495,6 +501,8 @@ static int
 beripic_deactivate_intr(device_t ic, struct resource *r)
 {
 	
+	printf("%s: %d\n", __func__, (uint32_t)rman_get_start(r));
+
 	return (rman_deactivate_resource(r));
 }
 
@@ -502,6 +510,8 @@ static int
 beripic_config_intr(device_t dev, int irq, enum intr_trigger trig,
    enum intr_polarity pol)
 {
+
+	printf("%s: %d\n", __func__, irq);
 
 	if (trig != INTR_TRIGGER_CONFORM || pol != INTR_POLARITY_CONFORM)
 		return (EINVAL);
@@ -519,6 +529,8 @@ beripic_setup_intr(device_t ic, device_t child, struct resource *irq,
 	struct beripic_cookie *bpc;
 	int error;
 	u_long hirq, src, tid;
+
+	printf("%s: %d\n", __func__, (uint32_t)rman_get_start(irq));
 
 	sc = device_get_softc(ic);
 
@@ -544,6 +556,9 @@ beripic_setup_intr(device_t ic, device_t child, struct resource *irq,
 	bpc->hirq = sc->bp_irqs[sc->bp_next_irq];
 	hirq = rman_get_start(bpc->hirq);
 	tid = sc->bp_next_tid;
+	if (bootverbose)
+		device_printf(ic, "mapping pin %lu to irq %lu, tid %lu\n",
+			src, hirq, tid);
 
 	error = BUS_SETUP_INTR(device_get_parent(ic), ic, bpc->hirq, flags,
 	    beripic_filter, intr == NULL ? NULL : beripic_intr, bpia,

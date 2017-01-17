@@ -122,7 +122,7 @@ xdmatest_alloc_test_memory(struct xdmatest_softc *sc)
 	int err;
 
 	sc->len = (0x1000000 - 8); /* 16mb */
-	sc->len = 8;
+	//sc->len = 8;
 
 	/* Source memory. */
 
@@ -297,7 +297,11 @@ xdmatest_worker(void *arg)
 
 		mtx_lock(&sc->mtx);
 
-		xdmatest_test(sc);
+		if (xdmatest_test(sc) != 0) {
+			mtx_unlock(&sc->mtx);
+			device_printf(sc->dev,
+			    "%s: Test failed.\n", __func__);
+		}
 
 		timeout = 100;
 
@@ -310,6 +314,7 @@ xdmatest_worker(void *arg)
 			if (err == 0) {
 				/* Test succeeded. */
 				mtx_unlock(&sc->mtx);
+				//printf(".");
 				continue;
 			}
 		}

@@ -39,7 +39,7 @@ options 	ATSE_CFI_HACK
 device		uart
 
 device		miibus
-options 	DEVICE_POLLING
+# options 	DEVICE_POLLING
 
 device		xdma
 device		softdma
