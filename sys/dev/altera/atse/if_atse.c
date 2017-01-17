@@ -93,9 +93,6 @@ __FBSDID("$FreeBSD$");
 #include <dev/altera/atse/if_atsereg.h>
 #include <dev/altera/atse/a_api.h>
 
-MODULE_DEPEND(atse, ether, 1, 1, 1);
-MODULE_DEPEND(atse, miibus, 1, 1, 1);
-
 #define	ATSE_WATCHDOG_TIME	5
 
 #ifdef DEVICE_POLLING
@@ -613,13 +610,13 @@ atse_start_locked(struct ifnet *ifp)
 		return;
 	}
 
-	printf("%s 0\n", __func__);
+	//printf("%s 0\n", __func__);
 
 	if ((sc->atse_flags & ATSE_FLAGS_LINK) == 0) {
 		return;
 	}
 
-	printf("%s 1\n", __func__);
+	//printf("%s 1\n", __func__);
 
 	if (ifp->if_drv_flags & IFF_DRV_OACTIVE)
 		return;
@@ -2400,4 +2397,5 @@ atse_miibus_statchg(device_t dev)
 	CSR_WRITE_4(sc, BASE_CFG_COMMAND_CONFIG, val4);
 }
 
-/* end */
+MODULE_DEPEND(atse, ether, 1, 1, 1);
+MODULE_DEPEND(atse, miibus, 1, 1, 1);
