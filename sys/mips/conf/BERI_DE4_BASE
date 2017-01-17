@@ -43,6 +43,7 @@ device		miibus
 
 device		xdma
 device		softdma
+device		msgdma
 
 #
 # USB support
