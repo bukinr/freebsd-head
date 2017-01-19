@@ -96,16 +96,15 @@ struct msgdma_desc {
 
 struct msgdma_softc {
 	device_t		dev;
-	struct resource		*res[3];
+	struct resource		*res[2];
 	bus_space_tag_t		bst;
 	bus_space_handle_t	bsh;
-	void			*ih[2];
+	void			*ih;
 };
 
 static struct resource_spec msgdma_spec[] = {
 	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },
 	{ SYS_RES_IRQ,		0,	RF_ACTIVE },
-	{ SYS_RES_IRQ,		1,	RF_ACTIVE },
 	{ -1, 0 }
 };
 
@@ -123,17 +122,7 @@ static int msgdma_attach(device_t dev);
 static int msgdma_detach(device_t dev);
 
 static void
-msgdma_rx_intr(void *arg)
-{
-	struct msgdma_softc *sc;
-
-	sc = arg;
-
-	printf("%s\n", __func__);
-}
-
-static void
-msgdma_tx_intr(void *arg)
+msgdma_intr(void *arg)
 {
 	struct msgdma_softc *sc;
 
@@ -178,17 +167,9 @@ msgdma_attach(device_t dev)
 	sc->bst = rman_get_bustag(sc->res[0]);
 	sc->bsh = rman_get_bushandle(sc->res[0]);
 
-	/* Setup RX interrupt handler */
+	/* Setup interrupt handler */
 	err = bus_setup_intr(dev, sc->res[1], INTR_TYPE_MISC | INTR_MPSAFE,
-	    NULL, msgdma_rx_intr, sc, &sc->ih[0]);
-	if (err) {
-		device_printf(dev, "Unable to alloc interrupt resource.\n");
-		return (ENXIO);
-	}
-
-	/* Setup TX interrupt handler */
-	err = bus_setup_intr(dev, sc->res[2], INTR_TYPE_MISC | INTR_MPSAFE,
-	    NULL, msgdma_tx_intr, sc, &sc->ih[1]);
+	    NULL, msgdma_intr, sc, &sc->ih);
 	if (err) {
 		device_printf(dev, "Unable to alloc interrupt resource.\n");
 		return (ENXIO);
