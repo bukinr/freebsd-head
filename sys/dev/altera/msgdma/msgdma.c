@@ -28,7 +28,7 @@
  * SUCH DAMAGE.
  */
 
-/* The software implementation of Altera mSGDMA */
+/* Altera mSGDMA driver. */
 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
@@ -56,6 +56,11 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
 #endif
+
+#define	READ4(_sc, _reg)	\
+	bus_space_read_4(_sc->bst, _sc->bsh, _reg)
+#define	WRITE4(_sc, _reg, _val)	\
+	bus_space_write_4(_sc->bst, _sc->bsh, _reg, _val)
 
 #include <dev/altera/atse/a_api.h>
 #define	AVALON_FIFO_TX_BASIC_OPTS_DEPTH		16
@@ -91,16 +96,26 @@ struct msgdma_desc {
 
 struct msgdma_softc {
 	device_t		dev;
-	struct resource		*res[2];
+	struct resource		*res[3];
 	bus_space_tag_t		bst;
 	bus_space_handle_t	bsh;
-	void			*ih;
+	void			*ih[2];
 };
 
 static struct resource_spec msgdma_spec[] = {
 	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },
 	{ SYS_RES_IRQ,		0,	RF_ACTIVE },
+	{ SYS_RES_IRQ,		1,	RF_ACTIVE },
 	{ -1, 0 }
+};
+
+#define	HWTYPE_NONE	0
+#define	HWTYPE_STD	1
+
+static struct ofw_compat_data compat_data[] = {
+	{ "altr,msgdma-16.0",	HWTYPE_STD },
+	{ "altr,msgdma-1.0",	HWTYPE_STD },
+	{ NULL,			HWTYPE_NONE },
 };
 
 static int msgdma_probe(device_t dev);
@@ -108,7 +123,17 @@ static int msgdma_attach(device_t dev);
 static int msgdma_detach(device_t dev);
 
 static void
-msgdma_intr(void *arg)
+msgdma_rx_intr(void *arg)
+{
+	struct msgdma_softc *sc;
+
+	sc = arg;
+
+	printf("%s\n", __func__);
+}
+
+static void
+msgdma_tx_intr(void *arg)
 {
 	struct msgdma_softc *sc;
 
@@ -120,11 +145,13 @@ msgdma_intr(void *arg)
 static int
 msgdma_probe(device_t dev)
 {
+	int hwtype;
 
 	if (!ofw_bus_status_okay(dev))
 		return (ENXIO);
 
-	if (!ofw_bus_is_compatible(dev, "altera,msgdma"))
+	hwtype = ofw_bus_search_compatible(dev, compat_data)->ocd_data;
+	if (hwtype == HWTYPE_NONE)
 		return (ENXIO);
 
 	device_set_desc(dev, "Altera mSGDMA");
@@ -151,9 +178,17 @@ msgdma_attach(device_t dev)
 	sc->bst = rman_get_bustag(sc->res[0]);
 	sc->bsh = rman_get_bushandle(sc->res[0]);
 
-	/* Setup interrupt handler */
+	/* Setup RX interrupt handler */
 	err = bus_setup_intr(dev, sc->res[1], INTR_TYPE_MISC | INTR_MPSAFE,
-	    NULL, msgdma_intr, sc, &sc->ih);
+	    NULL, msgdma_rx_intr, sc, &sc->ih[0]);
+	if (err) {
+		device_printf(dev, "Unable to alloc interrupt resource.\n");
+		return (ENXIO);
+	}
+
+	/* Setup TX interrupt handler */
+	err = bus_setup_intr(dev, sc->res[2], INTR_TYPE_MISC | INTR_MPSAFE,
+	    NULL, msgdma_tx_intr, sc, &sc->ih[1]);
 	if (err) {
 		device_printf(dev, "Unable to alloc interrupt resource.\n");
 		return (ENXIO);
@@ -162,6 +197,11 @@ msgdma_attach(device_t dev)
 	node = ofw_bus_get_node(dev);
 	xref = OF_xref_from_node(node);
 	OF_device_register_xref(xref, dev);
+
+	printf("%s: read status: %x\n", __func__, READ4(sc, 0x4000));
+	printf("%s: read control: %x\n", __func__, READ4(sc, 0x4004));
+	printf("%s: read 1: %x\n", __func__, READ4(sc, 0x4008));
+	printf("%s: read 2: %x\n", __func__, READ4(sc, 0x400C));
 
 	return (0);
 }
