@@ -16,8 +16,6 @@ options 	NFSLOCKD		# Network Lock Manager
 options 	NFS_ROOT		# NFS usable as /, requires NFSCL
 
 options         FDT
-options         FDT_DTB_STATIC
-makeoptions     FDT_DTS_FILE=beripad-de4.dts
 
 hints		"BERI_DE4.hints"	# Flash partitions still use hints.
 
@@ -44,6 +42,8 @@ device		miibus
 device		xdma
 device		softdma
 device		msgdma
+
+#options 	INTRNG
 
 #
 # USB support
