@@ -95,7 +95,6 @@
 		 * we use mips4k coprocessor 0 interrupt management directly.
 		 */
 		compatible = "simple-bus", "mips,mips4k";
-		//ranges;
 
 		beripic0: beripic@7f804000 {
 			compatible = "sri-cambridge,beri-pic";
@@ -190,20 +189,40 @@
 			};
 		};
 
+		msgdma0: msgdma@80000000 { 
+			compatible = "altr,msgdma-16.0", "altr,msgdma-1.0"; 
+			reg = <0x80004080 0x00000020>,
+			      <0x800040a0 0x00000010>; 
+			reg-names = "csr", "descriptor_slave"; 
+			interrupts = <14>;
+			interrupt-parent = <&beripic0>;
+			#dma-cells = <3>;
+		}; 
+
+		msgdma1: msgdma@80000000 { 
+			compatible = "altr,msgdma-16.0", "altr,msgdma-1.0"; 
+			reg = <0x80004000 0x00000020>,
+			      <0x80004020 0x00000010>; 
+			reg-names = "csr", "descriptor_slave"; 
+			interrupts = <13>;
+			interrupt-parent = <&beripic0>;
+			#dma-cells = <3>;
+		}; 
+
 		softdma: softdma {
 			compatible = "freebsd,softdma";
 
 			#dma-cells = <3>;
 		};
 
-		ethernet@7f007000 {
+		ethernet@80007000 {
 			compatible = "altera,atse";
 			// MAC, RX+RXC, TX+TXC.
-			reg = <0x7f007000 0x400
-			       0x7f007500 0x8
-			       0x7f007520 0x20
-			       0x7f007400 0x8
-			       0x7f007420 0x20>;
+			reg = <0x80007000 0x400
+			       0x80007500 0x8
+			       0x80007520 0x20
+			       0x80007400 0x8
+			       0x80007420 0x20>;
 			// RX, TX
 			interrupts = <1 2>;
 			interrupt-parent = <&beripic0>;
