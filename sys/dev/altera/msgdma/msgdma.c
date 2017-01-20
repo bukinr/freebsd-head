@@ -35,6 +35,7 @@ __FBSDID("$FreeBSD$");
 
 #include "opt_platform.h"
 #include <sys/param.h>
+#include <sys/endian.h>
 #include <sys/systm.h>
 #include <sys/conf.h>
 #include <sys/bus.h>
@@ -48,7 +49,6 @@ __FBSDID("$FreeBSD$");
 
 #include <machine/bus.h>
 #include <machine/fdt.h>
-
 #include <machine/cache.h>
 
 #ifdef FDT
@@ -57,13 +57,37 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus_subr.h>
 #endif
 
+#include <dev/altera/atse/a_api.h>
+
+#define	AVALON_FIFO_TX_BASIC_OPTS_DEPTH		16
+
+#define	DMA_STATUS		0x00
+#define	 STATUS_RESETTING	(1 << 6)
+#define	DMA_CONTROL		0x04
+#define	 CONTROL_GIEM		(1 << 4) /* Global Interrupt Enable Mask */
+#define	 CONTROL_RESET		(1 << 1) /* Reset Dispatcher */
+
 #define	READ4(_sc, _reg)	\
 	bus_space_read_4(_sc->bst, _sc->bsh, _reg)
 #define	WRITE4(_sc, _reg, _val)	\
 	bus_space_write_4(_sc->bst, _sc->bsh, _reg, _val)
 
-#include <dev/altera/atse/a_api.h>
-#define	AVALON_FIFO_TX_BASIC_OPTS_DEPTH		16
+#define	WRITE4_DESC(_sc, _reg, _val)	\
+	bus_space_write_4(_sc->bst_d, _sc->bsh_d, _reg, _val)
+
+#define	CONTROL_GO		(1 << 31)	/* Commit all the descriptor info */
+#define	CONTROL_EDE		(1 << 24)	/* Early done enable */
+#define	CONTROL_ERR_S		16		/* Transmit Error, Error IRQ Enable */
+#define	CONTROL_ERR_M		(0xff << CONTROL_ERR_S)
+#define	CONTROL_ET_IRQ_EN	(1 << 15)	/* Early Termination IRQ Enable */
+#define	CONTROL_TC_IRQ_EN	(1 << 14)	/* Transfer Complete IRQ Enable */
+#define	CONTROL_END_ON_EOP	(1 << 12)	/* End on EOP */
+#define	CONTROL_PARK_WR		(1 << 11)	/* Park Writes */
+#define	CONTROL_PARK_RD		(1 << 10)	/* Park Reads */
+#define	CONTROL_GEN_EOP		(1 << 9)	/* Generate EOP */
+#define	CONTROL_GEN_SOP		(1 << 8)	/* Generate SOP */
+#define	CONTROL_TX_CHANNEL_S	0		/* Transmit Channel */
+#define	CONTROL_TX_CHANNEL_M	(0xff << CONTROL_TRANSMIT_CH_S)
 
 #include <dev/xdma/xdma.h>
 #include "xdma_if.h"
@@ -82,6 +106,13 @@ extern uint32_t total_copied;
 #define	SOFTDMA_NCHANNELS	32
 struct msgdma_channel msgdma_channels[SOFTDMA_NCHANNELS];
 
+struct msgdma_desc1 {
+	uint32_t src_addr;
+	uint32_t dst_addr;
+	uint32_t length;
+	uint32_t control;
+};
+
 struct msgdma_desc {
 	uint32_t		src_addr;
 	uint32_t		dst_addr;
@@ -96,14 +127,18 @@ struct msgdma_desc {
 
 struct msgdma_softc {
 	device_t		dev;
-	struct resource		*res[2];
+	struct resource		*res[3];
 	bus_space_tag_t		bst;
 	bus_space_handle_t	bsh;
+	bus_space_tag_t		bst_d;
+	bus_space_handle_t	bsh_d;
 	void			*ih;
+	struct msgdma_desc1	desc;
 };
 
 static struct resource_spec msgdma_spec[] = {
 	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },
+	{ SYS_RES_MEMORY,	1,	RF_ACTIVE },
 	{ SYS_RES_IRQ,		0,	RF_ACTIVE },
 	{ -1, 0 }
 };
@@ -163,12 +198,16 @@ msgdma_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	/* Memory interface */
+	/* CSR memory interface */
 	sc->bst = rman_get_bustag(sc->res[0]);
 	sc->bsh = rman_get_bushandle(sc->res[0]);
 
+	/* Descriptor memory interface */
+	sc->bst_d = rman_get_bustag(sc->res[1]);
+	sc->bsh_d = rman_get_bushandle(sc->res[1]);
+
 	/* Setup interrupt handler */
-	err = bus_setup_intr(dev, sc->res[1], INTR_TYPE_MISC | INTR_MPSAFE,
+	err = bus_setup_intr(dev, sc->res[2], INTR_TYPE_MISC | INTR_MPSAFE,
 	    NULL, msgdma_intr, sc, &sc->ih);
 	if (err) {
 		device_printf(dev, "Unable to alloc interrupt resource.\n");
@@ -179,10 +218,40 @@ msgdma_attach(device_t dev)
 	xref = OF_xref_from_node(node);
 	OF_device_register_xref(xref, dev);
 
-	printf("%s: read status: %x\n", __func__, READ4(sc, 0x4000));
-	printf("%s: read control: %x\n", __func__, READ4(sc, 0x4004));
-	printf("%s: read 1: %x\n", __func__, READ4(sc, 0x4008));
-	printf("%s: read 2: %x\n", __func__, READ4(sc, 0x400C));
+	printf("%s: read status: %x\n", __func__, READ4(sc, 0x00));
+	printf("%s: read control: %x\n", __func__, READ4(sc, 0x04));
+	printf("%s: read 1: %x\n", __func__, READ4(sc, 0x08));
+	printf("%s: read 2: %x\n", __func__, READ4(sc, 0x0C));
+
+	int timeout;
+
+	WRITE4(sc, DMA_STATUS,	0x3ff);
+	//WRITE4(sc, DMA_CONTROL,	CONTROL_RESET);
+
+	timeout = 100;
+	do {
+		if ((READ4(sc, DMA_STATUS) & STATUS_RESETTING) == 0)
+			break;
+	} while (timeout--);
+
+	printf("timeout %d\n", timeout);
+
+	WRITE4(sc, DMA_CONTROL, 0);
+	WRITE4(sc, DMA_CONTROL, CONTROL_GIEM);
+
+	printf("%s: read control after reset: %x\n", __func__, READ4(sc, DMA_CONTROL));
+
+#if 0
+	int i;
+	for (i = 0; i < 10000; i++) {
+		printf("%s: read control after reset: %x\n", __func__, READ4(sc, DMA_CONTROL));
+		DELAY(1);
+	}
+
+	for (i = 0; i < 20; i++) {
+		printf("%s: read status after reset: %x\n", __func__, READ4(sc, DMA_STATUS));
+	}
+#endif
 
 	return (0);
 }
@@ -217,9 +286,40 @@ msgdma_process_tx(struct msgdma_channel *chan, struct msgdma_desc *desc)
 	bst = fdtbus_bs_tag;
 	len = (desc->count * desc->access_width);
 
-	bus_space_map(bst, desc->src_addr, len, 0, &bsh_src);
-	bus_space_map(bst, desc->dst_addr, 4, 0, &bsh_dst);
+	//bus_space_map(bst, desc->src_addr, len, 0, &bsh_src);
+	//bus_space_map(bst, desc->dst_addr, 4, 0, &bsh_dst);
 	mips_dcache_wbinv_all();
+
+	printf("%s\n", __func__);
+
+	//printf("%s: read status before GO: %x\n", __func__, READ4(sc, DMA_STATUS));
+
+	struct msgdma_desc1 *desc1;
+	int i;
+
+	desc1 = &sc->desc;
+	desc1->src_addr = desc->src_addr;
+	desc1->dst_addr = 0;
+	desc1->length = desc->len;
+	desc1->control = (CONTROL_GO | CONTROL_GEN_SOP | CONTROL_GEN_EOP);
+	desc1->control |= (CONTROL_TC_IRQ_EN | CONTROL_ET_IRQ_EN);
+	//desc1->control |= CONTROL_ERR_M;
+	//desc1->control |= CONTROL_END_ON_EOP;
+	//desc1->control |= (1 << 13);
+
+	uint32_t *tmp;
+	tmp = (uint32_t *)desc1;
+	for (i = 0; i<4; i++) {
+		printf("write 0x%08x to 0x%08x\n", tmp[i], (uint32_t)(rman_get_start(sc->res[1]) + 4*i));
+		WRITE4_DESC(sc, 4*i, htole32(tmp[i]));
+	}
+
+	for (i = 0; i < 3; i++) {
+		DELAY(10);
+	}
+	printf("%s: read status after GO: %x\n", __func__, READ4(sc, DMA_STATUS));
+
+	return (desc->len);
 
 	fill_level = atse_tx_read_fill_level();
 	//if (fill_level == 0) {
@@ -316,14 +416,36 @@ msgdma_process_rx(struct msgdma_channel *chan, struct msgdma_desc *desc)
 
 	bst = fdtbus_bs_tag;
 
-	//printf("%s\n", __func__);
+	printf("%s\n", __func__);
+
+	struct msgdma_desc1 *desc1;
+	int i;
+
+	desc1 = &sc->desc;
+	desc1->src_addr = 0;
+	desc1->dst_addr = desc->dst_addr;
+	desc1->length = desc->len;
+	desc1->control = (CONTROL_GO);
+	desc1->control |= (CONTROL_TC_IRQ_EN | CONTROL_ET_IRQ_EN);
+	desc1->control |= CONTROL_ERR_M;
+	desc1->control |= CONTROL_END_ON_EOP;
+	desc1->control |= (1 << 13);
+
+	uint32_t *tmp;
+	tmp = (uint32_t *)desc1;
+	for (i = 0; i<4; i++) {
+		printf("rx: write 0x%08x to 0x%08x\n", tmp[i], (uint32_t)(rman_get_start(sc->res[1]) + 4*i));
+		WRITE4_DESC(sc, 4*i, htole32(tmp[i]));
+	}
+
+	return (0);
 
 	fill_level = atse_rx_read_fill_level();
 	if (fill_level == 0) {
 		return (0);
 	}
 
-	//printf("RX fill_level is %d, desc->len %d\n", fill_level, desc->len);
+	printf("RX fill_level is %d, desc->len %d\n", fill_level, desc->len);
 
 	//len = (desc->count * desc->access_width);
 	len = desc->len;
