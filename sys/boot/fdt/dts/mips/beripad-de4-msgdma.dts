@@ -226,8 +226,8 @@
 			// RX, TX
 			interrupts = <1 2>;
 			interrupt-parent = <&beripic0>;
-			dmas = <&softdma 0 0 0xffffffff>,
-				<&softdma 1 1 0xffffffff>;
+			dmas = <&msgdma0 0 0 0xffffffff>,
+				<&msgdma1 1 1 0xffffffff>;
 			dma-names = "tx", "rx";
 		};
 
