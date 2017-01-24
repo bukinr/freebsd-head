@@ -1,14 +1,6 @@
 /*-
- * Copyright (c) 2015 Ruslan Bukin <br@bsdpad.com>
+ * Copyright (c) 2017 Kevin Lo <kevlo@FreeBSD.org>
  * All rights reserved.
- *
- * Portions of this software were developed by SRI International and the
- * University of Cambridge Computer Laboratory under DARPA/AFRL contract
- * FA8750-10-C-0237 ("CTSRD"), as part of the DARPA CRASH research programme.
- *
- * Portions of this software were developed by the University of Cambridge
- * Computer Laboratory as part of the CTSRD Project, with support from the
- * UK Higher Education Innovation Fund (HEIF).
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,47 +26,17 @@
  * $FreeBSD$
  */
 
-#ifndef _MACHINE_FRAME_H_
-#define	_MACHINE_FRAME_H_
+#ifndef R92E_ROM_DEFS_H
+#define R92E_ROM_DEFS_H
 
-#ifndef LOCORE
+#include <dev/rtwn/rtl8192c/r92c_rom_defs.h>
 
-#include <sys/signal.h>
-#include <sys/ucontext.h>
+#define R92E_GROUP_2G		6
 
-/*
- * NOTE: keep this structure in sync with struct reg and struct mcontext.
- */
-struct trapframe {
-	uint64_t tf_ra;
-	uint64_t tf_sp;
-	uint64_t tf_gp;
-	uint64_t tf_tp;
-	uint64_t tf_t[7];
-	uint64_t tf_s[12];
-	uint64_t tf_a[8];
-	uint64_t tf_sepc;
-	uint64_t tf_sstatus;
-	uint64_t tf_sbadaddr;
-	uint64_t tf_scause;
-};
+#define R92E_MAX_TX_COUNT	4
+#define R92E_MAX_RF_PATH	4
 
-struct riscv_frame {
-	struct riscv_frame	*f_frame;
-	u_long			f_retaddr;
-};
+#define R92E_EFUSE_MAX_LEN	512
+#define R92E_EFUSE_MAP_LEN	512
 
-/*
- * Signal frame. Pushed onto user stack before calling sigcode.
- */
-struct sigframe {
-	siginfo_t	sf_si;	/* actual saved siginfo */
-	ucontext_t	sf_uc;	/* actual saved ucontext */
-};
-
-#endif /* !LOCORE */
-
-/* Definitions for syscalls */
-#define	NARGREG		8				/* 8 args in regs */
-
-#endif /* !_MACHINE_FRAME_H_ */
+#endif	/* R92E_ROM_DEFS_H */

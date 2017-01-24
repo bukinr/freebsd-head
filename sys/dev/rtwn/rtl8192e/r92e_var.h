@@ -1,14 +1,6 @@
 /*-
- * Copyright (c) 2015 Ruslan Bukin <br@bsdpad.com>
+ * Copyright (c) 2017 Kevin Lo <kevlo@FreeBSD.org>
  * All rights reserved.
- *
- * Portions of this software were developed by SRI International and the
- * University of Cambridge Computer Laboratory under DARPA/AFRL contract
- * FA8750-10-C-0237 ("CTSRD"), as part of the DARPA CRASH research programme.
- *
- * Portions of this software were developed by the University of Cambridge
- * Computer Laboratory as part of the CTSRD Project, with support from the
- * UK Higher Education Innovation Fund (HEIF).
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,47 +26,29 @@
  * $FreeBSD$
  */
 
-#ifndef _MACHINE_FRAME_H_
-#define	_MACHINE_FRAME_H_
+#ifndef R92E_VAR_H
+#define R92E_VAR_H
 
-#ifndef LOCORE
+#include <dev/rtwn/rtl8192e/r92e_rom_defs.h>
 
-#include <sys/signal.h>
-#include <sys/ucontext.h>
+struct r92e_softc {
+	uint8_t	chip;
+	uint8_t	rs_flags;
 
-/*
- * NOTE: keep this structure in sync with struct reg and struct mcontext.
- */
-struct trapframe {
-	uint64_t tf_ra;
-	uint64_t tf_sp;
-	uint64_t tf_gp;
-	uint64_t tf_tp;
-	uint64_t tf_t[7];
-	uint64_t tf_s[12];
-	uint64_t tf_a[8];
-	uint64_t tf_sepc;
-	uint64_t tf_sstatus;
-	uint64_t tf_sbadaddr;
-	uint64_t tf_scause;
+	uint8_t	regulatory;
+	uint8_t	crystalcap;
+
+	int8_t	cck_tx_pwr[R92E_MAX_RF_PATH][R92E_GROUP_2G];
+	int8_t	ht40_tx_pwr_2g[R92E_MAX_RF_PATH][R92E_GROUP_2G];
+
+	int8_t	cck_tx_pwr_diff_2g[R92E_MAX_RF_PATH][R92E_MAX_TX_COUNT];
+	int8_t	ofdm_tx_pwr_diff_2g[R92E_MAX_RF_PATH][R92E_MAX_TX_COUNT];
+	int8_t	bw20_tx_pwr_diff_2g[R92E_MAX_RF_PATH][R92E_MAX_TX_COUNT];
+	int8_t	bw40_tx_pwr_diff_2g[R92E_MAX_RF_PATH][R92E_MAX_TX_COUNT];
+
+	int		ac_usb_dma_size;
+	int		ac_usb_dma_time;
+	uint32_t	rf_chnlbw[R92E_MAX_RF_PATH];
 };
 
-struct riscv_frame {
-	struct riscv_frame	*f_frame;
-	u_long			f_retaddr;
-};
-
-/*
- * Signal frame. Pushed onto user stack before calling sigcode.
- */
-struct sigframe {
-	siginfo_t	sf_si;	/* actual saved siginfo */
-	ucontext_t	sf_uc;	/* actual saved ucontext */
-};
-
-#endif /* !LOCORE */
-
-/* Definitions for syscalls */
-#define	NARGREG		8				/* 8 args in regs */
-
-#endif /* !_MACHINE_FRAME_H_ */
+#endif	/* R92E_VAR_H */
