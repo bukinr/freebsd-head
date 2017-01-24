@@ -41,14 +41,17 @@ __FBSDID("$FreeBSD$");
 #include <sys/bus.h>
 
 #include <machine/bus.h>
-#include <machine/intr_machdep.h>
+#include <machine/intr.h>
+//#include <machine/intr_machdep.h>
 
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
 
 #include <dev/fdt/fdt_common.h>
 
-#include "fdt_ic_if.h"
+#include "pic_if.h"
+
+//#include "fdt_ic_if.h"
 
 struct beripic_softc;
 
@@ -61,6 +64,7 @@ static void	bp_config_source(device_t, int, int, u_long, u_long);
 static void	bp_set_counter_name(device_t, device_t, int);
 #endif
 
+#if 0
 static int	beripic_fdt_probe(device_t);
 static int	beripic_fdt_attach(device_t);
 
@@ -77,11 +81,14 @@ static int	beripic_teardown_intr(device_t, device_t, struct resource *,
 
 static int	beripic_filter(void *);
 static void	beripic_intr(void *);
+#endif
 
 #define	BP_MAX_HARD_IRQS	6
 #define	BP_FIRST_SOFT		64
 
 struct beripic_softc {
+	device_t		dev;
+
 	device_t		bp_dev;
 	struct resource		*bp_cfg_res;
 	struct resource		*bp_read_res;
@@ -114,7 +121,7 @@ struct beripic_softc {
 	struct rman		bp_src_rman;
 
 #ifdef __mips__
-	mips_intrcnt_t		*bp_counters;
+	//mips_intrcnt_t		*bp_counters;
 #endif
 
 	struct mtx		bp_cfgmtx;
@@ -126,7 +133,7 @@ struct beripic_intr_arg {
 	void			*arg;
 	struct resource		*irq;
 #ifdef __mips__
-	mips_intrcnt_t		counter;
+	////mips_intrcnt_t		counter;
 #endif
 };
 
@@ -246,12 +253,12 @@ bp_set_counter_name(device_t ic, device_t child, int src)
 	    child == NULL ? " " : device_get_nameunit(child)) >= sizeof(name))
 		name[sizeof(name) - 2] = '+';
 	
-	mips_intrcnt_setname(sc->bp_counters[src], name);
+	////mips_intrcnt_setname(sc->bp_counters[src], name);
 }
 #endif
 
 static int
-beripic_fdt_probe(device_t dev)
+beripic_probe(device_t dev)
 {
 
 	if (!ofw_bus_status_okay(dev))
@@ -261,11 +268,12 @@ beripic_fdt_probe(device_t dev)
 		return (ENXIO);
 		
 	device_set_desc(dev, "BERI Programmable Interrupt Controller");
+
 	return (BUS_PROBE_DEFAULT);
 }
 
 static int
-beripic_fdt_attach(device_t dev)
+beripic_attach(device_t dev)
 {
 	char configstr[64];
 	struct beripic_softc *sc;
@@ -274,10 +282,25 @@ beripic_fdt_attach(device_t dev)
 	phandle_t ph;
 	int error, i, src;
 	uint64_t config;
+	intptr_t xref;
 
 	sc = device_get_softc(dev);
-	sc->bp_dev = dev;
+	sc->dev = dev;
 
+	xref = OF_xref_from_node(ofw_bus_get_node(dev));
+
+	/*
+	 * Now, when everything is initialized, it's right time to
+	 * register interrupt controller to interrupt framefork.
+	 */
+	if (intr_pic_register(dev, xref) == NULL) {
+		device_printf(dev, "could not register PIC\n");
+		//goto cleanup;
+	}
+
+	return (0);
+
+	sc->bp_dev = dev;
 	mtx_init(&sc->bp_cfgmtx, "beripic config lock", NULL, MTX_DEF);
 
 	/*
@@ -394,10 +417,10 @@ beripic_fdt_attach(device_t dev)
 		    sc->bp_nhard, sc->bp_nsoft);
 
 #ifdef __mips__
-	sc->bp_counters = malloc(sizeof(*sc->bp_counters) * sc->bp_nsrcs,
-	    M_BERIPIC, M_WAITOK|M_ZERO);
+	////sc->bp_counters = malloc(sizeof(*sc->bp_counters) * sc->bp_nsrcs,
+	////    M_BERIPIC, M_WAITOK|M_ZERO);
 	for (i = 0; i < sc->bp_nsrcs; i++) {
-		sc->bp_counters[i] = mips_intrcnt_create("");
+		////sc->bp_counters[i] = mips_intrcnt_create("");
 		bp_set_counter_name(dev, NULL, i);
 	}
 #endif
@@ -451,6 +474,7 @@ err:
 	return (error);
 }
 
+#if 0
 static struct resource *
 beripic_alloc_intr(device_t ic, device_t child, int *rid, u_long irq,
     u_int flags)
@@ -685,13 +709,52 @@ beripic_clear_ipi(device_t ic, u_int tid)
 }
 #endif
 
-devclass_t	beripic_devclass;
+#endif
+
+static void
+beri_pic_enable_intr(device_t dev, struct intr_irqsrc *isrc)
+{
+
+	printf("%s\n", __func__);
+}
+
+static void
+beri_pic_disable_intr(device_t dev, struct intr_irqsrc *isrc)
+{
+
+	printf("%s\n", __func__);
+}
+
+static int
+beri_pic_map_intr(device_t dev, struct intr_map_data *data,
+        struct intr_irqsrc **isrcp)
+{
+
+	printf("%s\n", __func__);
+
+	return (0);
+}
+
+static void
+beri_pic_post_ithread(device_t dev, struct intr_irqsrc *isrc)
+{
+
+	printf("%s\n", __func__);
+}
+
+static void
+beri_pic_pre_ithread(device_t dev, struct intr_irqsrc *isrc)
+{
+
+	printf("%s\n", __func__);
+}
 
 static device_method_t beripic_fdt_methods[] = {
 	/* Device interface */
-	DEVMETHOD(device_probe,		beripic_fdt_probe),
-	DEVMETHOD(device_attach,	beripic_fdt_attach),
+	DEVMETHOD(device_probe,		beripic_probe),
+	DEVMETHOD(device_attach,	beripic_attach),
 
+#if 0
 	DEVMETHOD(fdt_ic_activate_intr,	beripic_activate_intr),
 	DEVMETHOD(fdt_ic_alloc_intr,	beripic_alloc_intr),
 	DEVMETHOD(fdt_ic_config_intr,	beripic_config_intr),
@@ -705,8 +768,8 @@ static device_method_t beripic_fdt_methods[] = {
 	DEVMETHOD(fdt_ic_clear_ipi,	beripic_clear_ipi),
 	DEVMETHOD(fdt_ic_send_ipi,	beripic_send_ipi),
 #endif
+#endif
 
-#if 0
 	/* Interrupt controller interface */
 	DEVMETHOD(pic_enable_intr,	beri_pic_enable_intr),
 	DEVMETHOD(pic_disable_intr,	beri_pic_disable_intr),
@@ -714,13 +777,16 @@ static device_method_t beripic_fdt_methods[] = {
 	DEVMETHOD(pic_post_ithread,	beri_pic_post_ithread),
 	DEVMETHOD(pic_pre_ithread,	beri_pic_pre_ithread),
 	DEVMETHOD_END
-#endif
+
 };
 
-static driver_t beripic_fdt_driver = {
+devclass_t	beripic_devclass;
+
+static driver_t beripic_driver = {
 	"beripic",
 	beripic_fdt_methods,
 	sizeof(struct beripic_softc)
 };
 
-DRIVER_MODULE(beripic, simplebus, beripic_fdt_driver, beripic_devclass, 0, 0);
+EARLY_DRIVER_MODULE(beripic, simplebus, beripic_driver, beripic_devclass, 0, 0,
+    BUS_PASS_INTERRUPT + BUS_PASS_ORDER_MIDDLE);
