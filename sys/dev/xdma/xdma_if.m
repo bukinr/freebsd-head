@@ -67,6 +67,14 @@ METHOD int channel_prep_fifo {
 };
 
 #
+#
+#
+METHOD int channel_prep_sg {
+	device_t		dev;
+	struct xdma_channel	*xchan;
+};
+
+#
 # Notify driver we have machine-dependend data.
 #
 METHOD int ofw_md_data {

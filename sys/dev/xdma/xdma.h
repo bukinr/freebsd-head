@@ -30,8 +30,8 @@
  * $FreeBSD$
  */
 
-#ifndef _DEV_EXTRES_XDMA_H_
-#define _DEV_EXTRES_XDMA_H_
+#ifndef _DEV_XDMA_H_
+#define _DEV_XDMA_H_
 
 enum xdma_direction {
 	XDMA_MEM_TO_MEM,
@@ -72,6 +72,11 @@ struct xdma_controller {
 
 typedef struct xdma_controller xdma_controller_t;
 
+struct xdma_mbuf_entry {
+	struct mbuf			*m;
+	TAILQ_ENTRY(xdma_mbuf_entry)	xm_next;
+};
+
 struct xdma_channel_config {
 	enum xdma_direction	direction;
 	uintptr_t		src_addr;	/* Physical address. */
@@ -82,6 +87,9 @@ struct xdma_channel_config {
 	int			block_num;	/* Count of blocks. */
 	int			src_width;	/* In bytes. */
 	int			dst_width;	/* In bytes. */
+
+	struct sglist			*sg;
+	TAILQ_HEAD(, xdma_mbuf_entry)	queue;
 };
 
 typedef struct xdma_channel_config xdma_config_t;
@@ -103,6 +111,7 @@ struct xdma_channel {
 #define	XCHAN_TYPE_CYCLIC		(1 << 2)
 #define	XCHAN_TYPE_MEMCPY		(1 << 3)
 #define	XCHAN_TYPE_FIFO			(1 << 4)
+#define	XCHAN_TYPE_SG			(1 << 5)
 
 	/* A real hardware driver channel. */
 	void				*chan;
@@ -135,8 +144,10 @@ int xdma_prep_cyclic(xdma_channel_t *, enum xdma_direction,
     uintptr_t, uintptr_t, int, int, int, int);
 int xdma_prep_memcpy(xdma_channel_t *, uintptr_t, uintptr_t, size_t len);
 int xdma_prep_fifo(xdma_channel_t *, uintptr_t, uintptr_t, size_t len, enum xdma_direction);
+int xdma_prep_sg(xdma_channel_t *xchan, uintptr_t, uintptr_t, enum xdma_direction);
 int xdma_desc_alloc(xdma_channel_t *, uint32_t, uint32_t);
 int xdma_desc_free(xdma_channel_t *xchan);
+int xdma_enqueue(xdma_channel_t *xchan, struct mbuf *m);
 
 /* Channel Control */
 int xdma_begin(xdma_channel_t *xchan);
@@ -157,4 +168,4 @@ struct xdma_intr_handler {
 	TAILQ_ENTRY(xdma_intr_handler)	ih_next;
 };
 
-#endif /* !_DEV_EXTRES_XDMA_H_ */
+#endif /* !_DEV_XDMA_H_ */

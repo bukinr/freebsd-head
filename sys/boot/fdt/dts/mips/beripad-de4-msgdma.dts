@@ -196,6 +196,7 @@
 			reg-names = "csr", "descriptor_slave"; 
 			interrupts = <14>;
 			interrupt-parent = <&beripic0>;
+			descriptor-type = "prefetcher";
 			#dma-cells = <3>;
 		}; 
 

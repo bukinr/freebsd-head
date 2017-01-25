@@ -539,7 +539,8 @@ msgdma_channel_prep_fifo(device_t dev, struct xdma_channel *xchan)
 	desc->transfered = 0;
 	desc->status = 0;
 	desc->reserved = 0;
-	desc->control = htole32(CONTROL_GO | CONTROL_TC_IRQ_EN | CONTROL_ET_IRQ_EN | CONTROL_ERR_M | CONTROL_OWN);
+	desc->control = htole32(CONTROL_GO | CONTROL_OWN);
+	desc->control |= htole32(CONTROL_TC_IRQ_EN | CONTROL_ET_IRQ_EN | CONTROL_ERR_M);
 	if (conf->direction == XDMA_MEM_TO_DEV) {
 		desc->control |= htole32(CONTROL_GEN_SOP | CONTROL_GEN_EOP);
 	} else {

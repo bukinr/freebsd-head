@@ -50,7 +50,6 @@ __FBSDID("$FreeBSD$");
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
 
-
 #include <dev/fdt/fdt_common.h>
 #include <dev/ofw/openfirm.h>
 #include <dev/ofw/ofw_bus.h>
@@ -68,11 +67,13 @@ atse_probe_fdt(device_t dev)
 	if (!ofw_bus_status_okay(dev))
 		return (ENXIO);
 
-	if (ofw_bus_is_compatible(dev, "altera,atse")) {
-		device_set_desc(dev, "Altera Triple-Speed Ethernet MegaCore");
-		return (BUS_PROBE_DEFAULT);
+	if (!ofw_bus_is_compatible(dev, "altera,atse")) {
+       		return (ENXIO);
 	}
-        return (ENXIO);
+
+	device_set_desc(dev, "Altera Triple-Speed Ethernet MegaCore");
+
+	return (BUS_PROBE_DEFAULT);
 }
 
 static int
@@ -216,5 +217,3 @@ static driver_t atse_driver_fdt = {
 
 DRIVER_MODULE(atse, simplebus, atse_driver_fdt, atse_devclass, 0, 0);
 DRIVER_MODULE(miibus, atse, miibus_driver, miibus_devclass, 0, 0);
-
-/* end */

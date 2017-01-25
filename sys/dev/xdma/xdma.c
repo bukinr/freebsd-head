@@ -40,8 +40,10 @@ __FBSDID("$FreeBSD$");
 #include <sys/kobj.h>
 #include <sys/malloc.h>
 #include <sys/mutex.h>
+#include <sys/mbuf.h>
 #include <sys/limits.h>
 #include <sys/lock.h>
+#include <sys/sglist.h>
 #include <sys/sysctl.h>
 #include <sys/systm.h>
 #include <sys/sx.h>
@@ -431,6 +433,65 @@ xdma_prep_memcpy(xdma_channel_t *xchan, uintptr_t src_addr,
 }
 
 int
+xdma_prep_sg(xdma_channel_t *xchan, uintptr_t src_addr,
+    uintptr_t dst_addr, enum xdma_direction dir)
+{
+	xdma_controller_t *xdma;
+	xdma_config_t *conf;
+	int ret;
+
+	xdma = xchan->xdma;
+	KASSERT(xdma != NULL, ("xdma is NULL"));
+
+	conf = &xchan->conf;
+	conf->sg = sglist_alloc(32, M_NOWAIT);
+	TAILQ_INIT(&conf->queue);
+
+	xchan->flags |= (XCHAN_CONFIGURED | XCHAN_TYPE_SG);
+
+	XCHAN_LOCK(xchan);
+
+	/* Deallocate old descriptors, if any. */
+	xdma_desc_free(xchan);
+
+	ret = XDMA_CHANNEL_PREP_SG(xdma->dma_dev, xchan);
+	if (ret != 0) {
+		device_printf(xdma->dev,
+		    "%s: Can't prepare fifo transfer.\n", __func__);
+		XCHAN_UNLOCK(xchan);
+
+		return (-1);
+	}
+
+	if (xchan->flags & XCHAN_DESC_ALLOCATED) {
+		/* Driver created xDMA descriptors. */
+		bus_dmamap_sync(xchan->dma_tag, xchan->dma_map,
+		    BUS_DMASYNC_POSTWRITE);
+	}
+
+	XCHAN_UNLOCK(xchan);
+
+	return (0);
+}
+
+int
+xdma_enqueue(xdma_channel_t *xchan, struct mbuf *m)
+{
+	struct xdma_mbuf_entry *xm;
+	//xdma_controller_t *xdma;
+	xdma_config_t *conf;
+
+	conf = &xchan->conf;
+
+	xm = malloc(sizeof(struct xdma_mbuf_entry), M_XDMA, M_WAITOK | M_ZERO);
+	xm->m = m;
+
+	TAILQ_INSERT_TAIL(&conf->queue, xm, xm_next);
+
+	return (0);
+}
+
+int
 xdma_prep_fifo(xdma_channel_t *xchan, uintptr_t src_addr,
     uintptr_t dst_addr, size_t len, enum xdma_direction dir)
 {
@@ -530,6 +591,11 @@ xdma_begin(xdma_channel_t *xchan)
 	int ret;
 
 	xdma = xchan->xdma;
+
+	if (xchan->flags & XCHAN_TYPE_SG) {
+
+		return (0);
+	};
 
 	ret = XDMA_CHANNEL_CONTROL(xdma->dma_dev, xchan, XDMA_CMD_BEGIN);
 	if (ret != 0) {

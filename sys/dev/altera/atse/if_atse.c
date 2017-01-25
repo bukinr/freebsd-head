@@ -96,6 +96,8 @@ __FBSDID("$FreeBSD$");
 
 #define	ATSE_WATCHDOG_TIME	5
 
+#include <machine/cache.h>
+
 #ifdef DEVICE_POLLING
 static poll_handler_t atse_poll;
 #endif
@@ -385,6 +387,10 @@ pxx_read_2(struct atse_softc *sc, bus_addr_t bmcr, uint32_t reg, const char *f,
 	DPRINTF("[%s:%d] %s R %s 0x%08x (0x%08jx) = 0x%04x\n", f, l, s,
 	    "atse_mem_res", reg, (bmcr + reg) * 4, val);
 
+	//printf("%s: reg %lx (base %lx, bmcr %lx reg %x), val4 %x\n",
+	//    __func__, (rman_get_start(sc->atse_mem_res) + ((bmcr + reg) * 4)),
+	//	rman_get_start(sc->atse_mem_res), bmcr, reg, val4);
+
 	return (val);
 }
 
@@ -450,11 +456,17 @@ atse_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 	m = sc->atse_rx_m;
 
 	KASSERT(m != NULL, ("m is NULL"));
-	//printf("%s: %d rcvd\n", __func__, status->total_copied);
+	printf("%s: %d rcvd\n", __func__, status->total_copied);
+
+	if (status->total_copied == 0) {
+		ATSE_UNLOCK(sc);
+		return (0);
+	}
 
 	if (status->error == 0) {
 		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = status->total_copied;
+		m_adj(m, ETHER_ALIGN);
 		ATSE_UNLOCK(sc);
 		(*ifp->if_input)(ifp, m);
 		ATSE_LOCK(sc);
@@ -464,6 +476,9 @@ atse_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 	}
 	sc->atse_rx_m = NULL;
 	sc->rx_busy = 0;
+
+	/* Setup next transfer */
+	atse_rx_locked(sc);
 
 	ATSE_UNLOCK(sc);
 
@@ -482,7 +497,7 @@ atse_tx_locked(struct atse_softc *sc, int *sent)
 
 	ATSE_LOCK_ASSERT(sc);
 
-	printf("%s\n", __func__);
+	//printf("%s\n", __func__);
 
 	ifp = sc->atse_ifp;
 
@@ -490,7 +505,7 @@ atse_tx_locked(struct atse_softc *sc, int *sent)
 		return (-1);
 	}
 
-	printf("%s 1\n", __func__);
+	//printf("%s 1\n", __func__);
 
 	ifp = sc->atse_ifp;
 	m = sc->atse_tx_m;
@@ -605,7 +620,7 @@ atse_start_locked(struct ifnet *ifp)
 	sc = ifp->if_softc;
 	ATSE_LOCK_ASSERT(sc);
 
-	printf("%s\n", __func__);
+	//printf("%s\n", __func__);
 
 	if ((ifp->if_drv_flags & (IFF_DRV_RUNNING | IFF_DRV_OACTIVE)) != IFF_DRV_RUNNING) {
 		return;
@@ -622,7 +637,7 @@ atse_start_locked(struct ifnet *ifp)
 	if (ifp->if_drv_flags & IFF_DRV_OACTIVE)
 		return;
 
-	printf("%s 2\n", __func__);
+	//printf("%s 2\n", __func__);
 
 #if 1
 	/*
@@ -1124,6 +1139,7 @@ atse_reset(struct atse_softc *sc)
 	CSR_WRITE_4(sc, TX_CMD_STAT, val4);
 	val4 = CSR_READ_4(sc, RX_CMD_STAT);
 	val4 &= ~RX_CMD_STAT_RX_SHIFT16;
+	val4 |= RX_CMD_STAT_RX_SHIFT16;
 	CSR_WRITE_4(sc, RX_CMD_STAT, val4);
 
 	/* e. Reset MAC. */
@@ -1206,8 +1222,8 @@ atse_init_locked(struct atse_softc *sc)
 	} else
 #endif
 	{
-		ATSE_RX_INTR_ENABLE(sc);
-		ATSE_TX_INTR_ENABLE(sc);
+		//ATSE_RX_INTR_ENABLE(sc);
+		//ATSE_TX_INTR_ENABLE(sc);
 	}
 
 	mii = device_get_softc(sc->atse_miibus);
@@ -1291,8 +1307,8 @@ atse_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 			    sc->atse_tx_irq_res != NULL) {
 				error = ether_poll_deregister(ifp);
 				/* Enable interrupts. */
-				ATSE_RX_INTR_ENABLE(sc);
-				ATSE_TX_INTR_ENABLE(sc);
+				//ATSE_RX_INTR_ENABLE(sc);
+				//ATSE_TX_INTR_ENABLE(sc);
 			} else {
 				ifp->if_capenable ^= IFCAP_POLLING;
 				error = EINVAL;
@@ -1382,7 +1398,7 @@ atse_tick(void *xsc)
 	struct mii_data *mii;
 	struct ifnet *ifp;
 
-	printf(".");
+	//printf(".");
 
 	sc = (struct atse_softc *)xsc;
 	ATSE_LOCK_ASSERT(sc);
@@ -1445,7 +1461,7 @@ atse_rx_locked(struct atse_softc *sc)
 	struct mbuf *m;
 	int rx_npkts;
 
-	printf("%s\n", __func__);
+	//printf("%s\n", __func__);
 
 	ATSE_LOCK_ASSERT(sc);
 
@@ -1465,16 +1481,16 @@ outer:
 				return (rx_npkts);
 			m->m_len = m->m_pkthdr.len = MCLBYTES;
 			/* Make sure upper layers will be aligned. */
-			m_adj(m, ETHER_ALIGN);
+			//m_adj(m, ETHER_ALIGN);
 			sc->atse_rx_m = m;
 		}
 
-
-
-
 #if 1
-		fill = ATSE_RX_READ_FILL_LEVEL(sc);
-		if (fill <= 0) {
+		//fill = ATSE_RX_READ_FILL_LEVEL(sc);
+		//if (fill <= 0) {
+		//	goto done;
+		//}
+		if (sc->rx_busy == 1) {
 			goto done;
 		}
 
@@ -1485,6 +1501,7 @@ outer:
 		uint32_t dst;
 
 		src = (rman_get_start(sc->atse_rx_mem_res) + A_ONCHIP_FIFO_MEM_CORE_DATA);
+		mips_dcache_wbinv_all();
 		dst = vtophys((vm_offset_t)sc->atse_rx_m->m_data);
 
 		//printf("rx: src addr %x, dst addr %x, len %d\n", src, dst, sc->atse_rx_m->m_len);
@@ -1653,7 +1670,7 @@ atse_rx_intr(void *arg)
 	struct ifnet *ifp;
 	uint32_t rxe;
 
-	printf("%s\n", __func__);
+	//printf("%s\n", __func__);
 
 	sc = (struct atse_softc *)arg;
 	ifp = sc->atse_ifp;
@@ -1697,8 +1714,8 @@ atse_rx_intr(void *arg)
 		ATSE_RX_EVENT_CLEAR(sc);
 
 		/* Disable interrupts if interface is down. */
-		if (ifp->if_drv_flags & IFF_DRV_RUNNING)
-			ATSE_RX_INTR_ENABLE(sc);
+		//if (ifp->if_drv_flags & IFF_DRV_RUNNING)
+		//	ATSE_RX_INTR_ENABLE(sc);
 	//} while (!(ATSE_RX_STATUS_READ(sc) &
 	//    A_ONCHIP_FIFO_MEM_CORE_STATUS_EMPTY));
 	ATSE_UNLOCK(sc);
@@ -1716,7 +1733,7 @@ atse_tx_intr(void *arg)
 	ifp = sc->atse_ifp;
 
 	txe = ATSE_TX_EVENT_READ(sc);
-	printf("%s: 0x%x\n", __func__, txe);
+	//printf("%s: 0x%x\n", __func__, txe);
 
 	ATSE_LOCK(sc);
 #ifdef DEVICE_POLLING
@@ -2178,8 +2195,8 @@ atse_attach(device_t dev)
 #endif
 	} else {
 		printf("%s: Enable atse interrupts\n", __func__);
-		ATSE_RX_INTR_ENABLE(sc);
-		ATSE_TX_INTR_ENABLE(sc);
+		//ATSE_RX_INTR_ENABLE(sc);
+		//ATSE_TX_INTR_ENABLE(sc);
 	}
 
 err:
@@ -2303,6 +2320,7 @@ int
 atse_miibus_readreg(device_t dev, int phy, int reg)
 {
 	struct atse_softc *sc;
+	int val;
 
 	sc = device_get_softc(dev);
 
@@ -2313,7 +2331,11 @@ atse_miibus_readreg(device_t dev, int phy, int reg)
 	if (phy != sc->atse_phy_addr)
 		return (0);
 
-	return (PHY_READ_2(sc, reg));
+	val = PHY_READ_2(sc, reg);
+
+	//printf("%s: phy %d reg %d val 0x%x\n", __func__, phy, reg, val);
+
+	return (val);
 }
 
 int
