@@ -49,6 +49,10 @@ __FBSDID("$FreeBSD$");
 #include <sys/sx.h>
 #include <sys/bus_dma.h>
 
+#include <net/ethernet.h>
+
+#include <machine/cache.h>
+
 #include <machine/bus.h>
 
 #ifdef FDT
@@ -56,6 +60,11 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
 #endif
+
+#include <vm/vm.h>
+#include <vm/vm_extern.h>
+#include <vm/vm_kern.h>
+#include <vm/pmap.h>
 
 #include <dev/xdma/xdma.h>
 
@@ -264,6 +273,7 @@ xdma_desc_alloc_bus_dma(xdma_channel_t *xchan, uint32_t desc_size,
 	xdma_config_t *conf;
 	int nsegments;
 	int err;
+	int i;
 
 	xdma = xchan->xdma;
 	conf = &xchan->conf;
@@ -312,6 +322,36 @@ xdma_desc_alloc_bus_dma(xdma_channel_t *xchan, uint32_t desc_size,
 		device_printf(xdma->dev,
 		    "%s: Can't load DMA map.\n", __func__);
 		return (-1);
+	}
+
+
+	/* XXX: Allocate busdma buffer for mbufs */
+	err = bus_dma_tag_create(
+	    bus_get_dma_tag(xdma->dev),	/* Parent tag. */
+	    align, 0,			/* alignment, boundary */
+	    BUS_SPACE_MAXADDR_32BIT,	/* lowaddr */
+	    BUS_SPACE_MAXADDR,		/* highaddr */
+	    NULL, NULL,			/* filter, filterarg */
+	    MCLBYTES, 1, 		/* maxsize, nsegments */
+	    MCLBYTES,			/* maxsegsize */
+	    0,				/* flags */
+	    NULL, NULL,			/* lockfunc, lockarg */
+	    &xchan->dma_buf_tag);
+	if (err != 0) {
+		device_printf(xdma->dev,
+		    "%s: Can't create bus_dma tag.\n", __func__);
+		return (-1);
+	}
+
+	for (i = 0; i < nsegments; i++) {
+		err = bus_dmamap_create(xchan->dma_buf_tag, BUS_DMA_COHERENT,
+		    &xchan->dma_buf_map[i].map);
+		if (err != 0) {
+			device_printf(xdma->dev,
+			    "%s: Can't create buf DMA map.\n", __func__);
+			return (-1);
+		}
+		//dwc_setup_txdesc(sc, idx, 0, 0);
 	}
 
 	return (0);
@@ -363,7 +403,7 @@ xdma_desc_alloc(xdma_channel_t *xchan, uint32_t desc_size, uint32_t align)
 	xchan->flags |= XCHAN_DESC_ALLOCATED;
 
 	/* We are going to write to descriptors. */
-	bus_dmamap_sync(xchan->dma_tag, xchan->dma_map, BUS_DMASYNC_PREWRITE);
+	//bus_dmamap_sync(xchan->dma_tag, xchan->dma_map, BUS_DMASYNC_PREWRITE);
 
 	return (0);
 }
@@ -444,6 +484,8 @@ xdma_prep_sg(xdma_channel_t *xchan, uintptr_t src_addr,
 	KASSERT(xdma != NULL, ("xdma is NULL"));
 
 	conf = &xchan->conf;
+	conf->direction = dir;
+	conf->block_num = 32;
 	conf->sg = sglist_alloc(32, M_NOWAIT);
 	TAILQ_INIT(&conf->queue);
 
@@ -463,11 +505,46 @@ xdma_prep_sg(xdma_channel_t *xchan, uintptr_t src_addr,
 		return (-1);
 	}
 
-	if (xchan->flags & XCHAN_DESC_ALLOCATED) {
-		/* Driver created xDMA descriptors. */
-		bus_dmamap_sync(xchan->dma_tag, xchan->dma_map,
-		    BUS_DMASYNC_POSTWRITE);
+	XCHAN_UNLOCK(xchan);
+
+	return (0);
+}
+
+#define	TX_DESC_COUNT	32
+
+static inline uint32_t  
+next_idx(xdma_channel_t *xchan, uint32_t curidx)
+{
+
+	return ((curidx + 1) % TX_DESC_COUNT);
+}
+
+int
+xdma_enqueue(xdma_channel_t *xchan, struct mbuf **mp)
+{
+	struct xdma_mbuf_entry *xm;
+	//xdma_controller_t *xdma;
+	xdma_config_t *conf;
+	struct mbuf *m;
+	//void *buf;
+
+	conf = &xchan->conf;
+
+	if ((m = m_defrag(*mp, M_NOWAIT)) == NULL) {
+		XCHAN_UNLOCK(xchan);
+		return (ENOMEM);
 	}
+
+	printf("%s: enqueuing %p, m->m_data %p phys 0x%x\n", __func__, m, m->m_data, (uint32_t)vtophys(m->m_data));
+
+	XCHAN_LOCK(xchan);
+
+	xm = malloc(sizeof(struct xdma_mbuf_entry), M_XDMA, M_WAITOK | M_ZERO);
+	xm->m = m;
+	//xm->buf = buf;
+	//xm->len = m->m_pkthdr.len;
+
+	TAILQ_INSERT_TAIL(&conf->queue, xm, xm_next);
 
 	XCHAN_UNLOCK(xchan);
 
@@ -475,18 +552,99 @@ xdma_prep_sg(xdma_channel_t *xchan, uintptr_t src_addr,
 }
 
 int
-xdma_enqueue(xdma_channel_t *xchan, struct mbuf *m)
+xdma_enqueue_sync(xdma_channel_t *xchan)
 {
+
+	if (xchan->flags & XCHAN_DESC_ALLOCATED) {
+		/* Driver created xDMA descriptors. */
+		bus_dmamap_sync(xchan->dma_tag, xchan->dma_map,
+		    BUS_DMASYNC_POSTWRITE);
+	}
+
+	return (0);
+}
+
+int
+xdma_enqueue_submit(xdma_channel_t *xchan)
+{
+	struct xdma_mbuf_entry *xm_tmp;
 	struct xdma_mbuf_entry *xm;
-	//xdma_controller_t *xdma;
+	struct mbuf *m;
+	xdma_controller_t *xdma;
 	xdma_config_t *conf;
+	struct sglist *sg;
+	int ret;
+	int i;
+	struct bus_dma_segment seg;
+	int error, nsegs;
+
+	printf("%s: submitting\n", __func__);
 
 	conf = &xchan->conf;
+	xdma = xchan->xdma;
+	KASSERT(xdma != NULL, ("xdma is NULL"));
 
-	xm = malloc(sizeof(struct xdma_mbuf_entry), M_XDMA, M_WAITOK | M_ZERO);
-	xm->m = m;
+	XCHAN_LOCK(xchan);
 
-	TAILQ_INSERT_TAIL(&conf->queue, xm, xm_next);
+	sg = sglist_alloc(32, M_NOWAIT);
+
+	TAILQ_FOREACH_SAFE(xm, &conf->queue, xm_next, xm_tmp) {
+		m = xm->m;
+
+		if (xchan->idx_count == (32 - 1)) {
+			break;
+		}
+
+		//if (xchan->idx_head == xchan->idx_tail) {
+		//	break;
+		//}
+
+		i = xchan->idx_head;
+
+		error = bus_dmamap_load_mbuf_sg(xchan->dma_buf_tag,
+		    xchan->dma_buf_map[i].map, m, &seg, &nsegs, 0);
+		if (error != 0) {
+			return (ENOMEM);
+		}
+
+		KASSERT(nsegs == 1, ("%s: %d segments returned!", __func__, nsegs));
+
+		bus_dmamap_sync(xchan->dma_buf_tag, xchan->dma_buf_map[i].map,
+		    BUS_DMASYNC_PREWRITE);
+
+		xchan->dma_buf_map[i].m = m;
+
+		xchan->idx_head = next_idx(xchan, xchan->idx_head);
+
+		//buf = contigmalloc(ETHER_MAX_LEN_JUMBO, M_DEVBUF, M_ZERO, 0, ~0, PAGE_SIZE, 0);
+		//m_copydata(m, 0, m->m_pkthdr.len, buf);
+		//mips_dcache_wbinv_all();
+		//sglist_append_phys(sg, (uint64_t)vtophys(xm->buf), xm->len);
+		//sglist_append_mbuf(sg, xm->m);
+
+		sglist_append_phys(sg, seg.ds_addr, seg.ds_len);
+		xchan->idx_count++;
+
+		/* tmp */
+		TAILQ_REMOVE(&conf->queue, xm, xm_next);
+		free(xm, M_XDMA);
+		//m_free(xm->m);
+	}
+
+	ret = XDMA_CHANNEL_SUBMIT_SG(xdma->dma_dev, xchan, sg);
+	if (ret != 0) {
+		device_printf(xdma->dev,
+		    "%s: Can't prepare fifo transfer.\n", __func__);
+
+		XCHAN_UNLOCK(xchan);
+
+		return (-1);
+	}
+
+	sglist_free(sg);
+	//sglist_reset(sg);
+
+	XCHAN_UNLOCK(xchan);
 
 	return (0);
 }
@@ -648,6 +806,21 @@ xdma_callback(xdma_channel_t *xchan, xdma_transfer_status_t *status)
 {
 	struct xdma_intr_handler *ih_tmp;
 	struct xdma_intr_handler *ih;
+	struct xchan_bufmap *bmap;
+	int i;
+
+	for (i = 0; i < status->cnt_done; i++) {
+		bmap = &xchan->dma_buf_map[xchan->idx_tail];
+		bus_dmamap_sync(xchan->dma_buf_tag, bmap->map, 
+		    BUS_DMASYNC_POSTWRITE);
+		bus_dmamap_unload(xchan->dma_buf_tag, bmap->map);
+                m_freem(bmap->m);
+
+		//dwc_setup_txdesc(sc, sc->tx_idx_tail, 0, 0);
+
+		xchan->idx_count--;
+		xchan->idx_tail = next_idx(xchan, xchan->idx_tail);
+	}
 
 	TAILQ_FOREACH_SAFE(ih, &xchan->ie_handlers, ih_next, ih_tmp) {
 		if (ih->cb != NULL) {

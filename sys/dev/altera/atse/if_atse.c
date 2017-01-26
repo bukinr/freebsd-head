@@ -485,6 +485,7 @@ atse_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 	return (0);
 }
 
+#if 0
 static int
 atse_tx_locked(struct atse_softc *sc, int *sent)
 {
@@ -610,12 +611,15 @@ atse_tx_locked(struct atse_softc *sc, int *sent)
 
 	return (EBUSY);
 }
+#endif
 
 static void
 atse_start_locked(struct ifnet *ifp)
 {
 	struct atse_softc *sc;
-	int error, sent;
+	struct mbuf *m;
+	//int error;
+	int sent;
 
 	sc = ifp->if_softc;
 	ATSE_LOCK_ASSERT(sc);
@@ -657,33 +661,49 @@ atse_start_locked(struct ifnet *ifp)
 	}
 #endif
 
+	sent = 0;
+
 	/* We have more space to send so continue ... */
 	for (; !IFQ_DRV_IS_EMPTY(&ifp->if_snd); ) {
+
+		if (sc->txcount > (32 - 1)) {
+			ifp->if_drv_flags |= IFF_DRV_OACTIVE;
+			break;
+		}
+
+		IFQ_DRV_DEQUEUE(&ifp->if_snd, m);
+		sc->atse_tx_m_offset = 0;
+		if (m == NULL)
+			break;
+
+		//uint32_t src;
+		//uint32_t dst;
+		//src = vtophys(sc->atse_tx_buf);
+		//dst = (rman_get_start(sc->atse_tx_mem_res) + A_ONCHIP_FIFO_MEM_CORE_DATA);
+
+		//m_copydata(m, 0, m->m_pkthdr.len, sc->atse_tx_buf);
+		//xdma_enqueue_phys(sc->xchan_tx, m);
+		xdma_enqueue(sc->xchan_tx, &m);
+
+		sc->txcount++;
+
+		//error = atse_tx_locked(sc, &sent);
+		//if (error != 0)
+		//	goto done;
 
 		//if (sc->txcount > 0) {
 		//	ifp->if_drv_flags |= IFF_DRV_OACTIVE;
 		//	break;
 		//}
-
-		IFQ_DRV_DEQUEUE(&ifp->if_snd, sc->atse_tx_m);
-		sc->atse_tx_m_offset = 0;
-		if (sc->atse_tx_m == NULL)
-			break;
-		error = atse_tx_locked(sc, &sent);
-		if (error != 0)
-			goto done;
-
-		if (sc->txcount > 0) {
-			ifp->if_drv_flags |= IFF_DRV_OACTIVE;
-			break;
-		}
 		sent = 1;
 	}
 
-done:
+//done:
 	/* If the IP core walks into Nekromanteion try to bail out. */
-	if (sent > 0)
+	if (sent > 0) {
 		sc->atse_watchdog_timer = ATSE_WATCHDOG_TIME;
+		xdma_enqueue_submit(sc->xchan_tx);
+	}
 }
 
 static void
@@ -1136,7 +1156,9 @@ atse_reset(struct atse_softc *sc)
 	 */
 	val4 = CSR_READ_4(sc, TX_CMD_STAT);
 	val4 &= ~(TX_CMD_STAT_OMIT_CRC|TX_CMD_STAT_TX_SHIFT16);
+	//val4 |= TX_CMD_STAT_TX_SHIFT16;
 	CSR_WRITE_4(sc, TX_CMD_STAT, val4);
+
 	val4 = CSR_READ_4(sc, RX_CMD_STAT);
 	val4 &= ~RX_CMD_STAT_RX_SHIFT16;
 	val4 |= RX_CMD_STAT_RX_SHIFT16;
@@ -1501,7 +1523,7 @@ outer:
 		uint32_t dst;
 
 		src = (rman_get_start(sc->atse_rx_mem_res) + A_ONCHIP_FIFO_MEM_CORE_DATA);
-		mips_dcache_wbinv_all();
+		//mips_dcache_wbinv_all();
 		dst = vtophys((vm_offset_t)sc->atse_rx_m->m_data);
 
 		//printf("rx: src addr %x, dst addr %x, len %d\n", src, dst, sc->atse_rx_m->m_len);
@@ -2067,6 +2089,8 @@ atse_attach(device_t dev)
 		    "Can't setup xDMA interrupt handler.\n");
 		return (ENXIO);
 	}
+
+	xdma_prep_sg(sc->xchan_tx, 0, 0, XDMA_MEM_TO_DEV);
 
 	/* Get RX xDMA controller */
 	sc->xdma_rx = xdma_ofw_get(sc->dev, "rx");

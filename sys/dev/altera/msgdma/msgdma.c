@@ -41,6 +41,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/bus.h>
 #include <sys/kernel.h>
 #include <sys/kthread.h>
+#include <sys/sglist.h>
 #include <sys/module.h>
 #include <sys/lock.h>
 #include <sys/mutex.h>
@@ -100,6 +101,8 @@ __FBSDID("$FreeBSD$");
 #include <dev/xdma/xdma.h>
 #include "xdma_if.h"
 
+#define	TX_DESC_COUNT	32
+
 struct msgdma_channel {
 	struct msgdma_softc	*sc;
 	struct mtx		mtx;
@@ -108,8 +111,10 @@ struct msgdma_channel {
 	int			used;
 	int			index;
 	int			run;
-};
 
+	int			idx_head;
+	int			idx_tail;
+};
 
 #define	PF_CONTROL			0x00
 #define	 PF_CONTROL_GIEM		(1 << 3)
@@ -155,10 +160,17 @@ struct msgdma_softc {
 	struct msgdma_desc	desc;
 	struct msgdma_desc	*curdesc;
 	struct msgdma_channel	*curchan;
-
 #define	SOFTDMA_NCHANNELS	32
 	struct msgdma_channel msgdma_channels[SOFTDMA_NCHANNELS];
 };
+
+static inline uint32_t
+next_idx(struct msgdma_softc *sc, uint32_t curidx)
+{
+
+	return ((curidx + 1) % TX_DESC_COUNT);
+}
+
 
 static struct resource_spec msgdma_spec[] = {
 	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },
@@ -184,30 +196,58 @@ static void
 msgdma_intr(void *arg)
 {
 	xdma_transfer_status_t status;
+	struct msgdma_desc *descs;
 	struct msgdma_desc *desc;
 	struct msgdma_channel *chan;
+	struct xdma_channel *xchan;
 	struct msgdma_softc *sc;
-	uint32_t len;
+	//uint32_t len;
 
 	sc = arg;
 	chan = sc->curchan;
-	desc = sc->curdesc;
+	//desc = sc->curdesc;
 
-	mips_dcache_wbinv_all();
+	printf("%s(%d): status 0x%08x next_descr 0x%08x, control 0x%08x\n", __func__,
+	    device_get_unit(sc->dev),
+		READ4_DESC(sc, PF_STATUS),
+		READ4_DESC(sc, PF_NEXT_LO),
+		READ4_DESC(sc, PF_CONTROL));
 
-	len = le32toh(desc->transfered);
-	if (desc->read_lo == 0) {
-		printf("%s: rx 0x%08x, transfered %d\n", __func__, READ4_DESC(sc, PF_STATUS), len);
-	} else {
-		printf("%s: tx 0x%08x, transfered %d\n", __func__, READ4_DESC(sc, PF_STATUS), len);
+	//mips_dcache_wbinv_all();
+	//len = le32toh(desc->transfered);
+	//if (desc->read_lo == 0) {
+	//	printf("%s: rx 0x%08x, transfered %d\n", __func__, READ4_DESC(sc, PF_STATUS), len);
+	//} else {
+	//	printf("%s: tx 0x%08x, transfered %d\n", __func__, READ4_DESC(sc, PF_STATUS), len);
+	//}
+
+	xchan = chan->xchan;
+
+	descs = (struct msgdma_desc *)xchan->descs;
+
+	uint32_t cnt_done;
+	uint32_t tot_copied;
+
+	cnt_done = 0;
+	tot_copied = 0;
+	while (chan->idx_tail != chan->idx_head) {
+		desc = &descs[chan->idx_tail];
+		if ((le32toh(desc->control) & CONTROL_OWN) != 0) {
+			break;
+		}
+		printf("marking desc %d done\n", chan->idx_tail);
+		chan->idx_tail = next_idx(sc, chan->idx_tail);
+		tot_copied += le32toh(desc->transfered);
+		cnt_done++;
 	}
 
 	WRITE4_DESC(sc, PF_STATUS, PF_STATUS_IRQ);
 
 	/* Finish operation */
-	chan->run = 0;
+	//chan->run = 0;
 	status.error = 0;
-	status.total_copied = len;
+	status.total_copied = tot_copied;
+	status.cnt_done = cnt_done;
 	xdma_callback(chan->xchan, &status);
 }
 
@@ -318,7 +358,7 @@ msgdma_process_desc(struct msgdma_channel *chan, struct msgdma_desc *desc)
 
 	sc = chan->sc;
 
-	mips_dcache_wbinv_all();
+	//mips_dcache_wbinv_all();
 
 	printf("%s\n", __func__);
 
@@ -364,7 +404,7 @@ msgdma_process_desc(struct msgdma_channel *chan, struct msgdma_desc *desc)
 	reg = (PF_CONTROL_GIEM | PF_CONTROL_RUN);
 	//reg |= PF_CONTROL_DESC_POLL_EN);
 
-	mips_dcache_wbinv_all();
+	//mips_dcache_wbinv_all();
 	WRITE4_DESC(sc, PF_CONTROL, reg);
 #endif
 
@@ -432,6 +472,8 @@ msgdma_channel_alloc(device_t dev, struct xdma_channel *xchan)
 			chan->index = i;
 			chan->sc = sc;
 			chan->used = 1;
+			chan->idx_head = 0;
+			chan->idx_tail = 0;
 
 			return (0);
 		}
@@ -499,6 +541,153 @@ msgdma_channel_prep_memcpy(device_t dev, struct xdma_channel *xchan)
 	desc[0].dst_incr = 1;
 	desc[0].next = NULL;
 #endif
+
+	return (0);
+}
+
+static int
+msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct sglist *sg)
+{
+	struct msgdma_channel *chan;
+	struct msgdma_desc *descs;
+	struct msgdma_desc *desc;
+	struct msgdma_softc *sc;
+	struct sglist_seg *seg;
+	xdma_config_t *conf;
+	uint32_t addr;
+	uint32_t len;
+	//uint32_t reg;
+	int i;
+
+	sc = device_get_softc(dev);
+
+	conf = &xchan->conf;
+	chan = (struct msgdma_channel *)xchan->chan;
+	sc->curchan = chan;
+
+	printf("%s: nseg %d\n", __func__, (uint32_t)sg->sg_nseg);
+
+	//mips_dcache_wbinv_all();
+
+	descs = (struct msgdma_desc *)xchan->descs;
+
+	//WRITE4_DESC(sc, PF_CONTROL, 0);
+	//WRITE4_DESC(sc, PF_NEXT_LO, (uint32_t)vtophys(&descs[chan->idx_head]));
+	//WRITE4_DESC(sc, PF_NEXT_LO, xchan->descs_phys[chan->idx_head].ds_addr);
+
+	for (i = 0; i < sg->sg_nseg; i++) {
+		seg = &sg->sg_segs[i];
+
+		addr = (uint32_t)seg->ss_paddr;
+		len = (uint32_t)seg->ss_len;
+
+		if (seg->ss_paddr & 0x3) {
+			//addr -= 2;
+			//len += 2;
+		}
+
+		printf("%s: descr %d segment 0x%x (%d bytes)\n", __func__, chan->idx_head, addr, len);
+
+		desc = &descs[chan->idx_head];
+		desc->read_lo = htole32(addr);
+		desc->write_lo = 0;
+		desc->length = htole32(len);
+		desc->transfered = 0;
+		desc->status = 0;
+		desc->reserved = 0;
+
+		chan->idx_head = next_idx(sc, chan->idx_head);
+
+		if (conf->direction == XDMA_MEM_TO_DEV) {
+			desc->control = htole32(CONTROL_GEN_SOP | CONTROL_GEN_EOP);
+		} else {
+			desc->control = htole32(CONTROL_END_ON_EOP | (0 << 13));
+		}
+		//if (i == (sg->sg_nseg - 1)) {
+		desc->control |= htole32(CONTROL_TC_IRQ_EN | CONTROL_ET_IRQ_EN | CONTROL_ERR_M);
+		//}
+
+		wmb();
+		desc->control |= htole32(CONTROL_OWN | CONTROL_GO);
+		wmb();
+	}
+
+	mips_dcache_wbinv_all();
+
+	//xdma_enqueue_sync(xchan);
+
+	//uint32_t reg0;
+	//reg0 = READ4_DESC(sc, PF_CONTROL);
+	//reg = (PF_CONTROL_GIEM | PF_CONTROL_DESC_POLL_EN);
+	//reg |= PF_CONTROL_RUN;
+	//WRITE4_DESC(sc, PF_CONTROL, reg);
+	//printf("Reg0 %x reg %x, next_descr %x\n", reg0, reg, READ4_DESC(sc, PF_NEXT_LO));
+
+	printf("%s: next_descr %x\n", __func__, READ4_DESC(sc, PF_NEXT_LO));
+
+	return (0);
+}
+
+static int
+msgdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
+{
+	//struct msgdma_channel *chan;
+	struct msgdma_desc *descs;
+	struct msgdma_desc *desc;
+	struct msgdma_softc *sc;
+	xdma_config_t *conf;
+	uint32_t addr;
+	uint32_t reg;
+	int ret;
+	int i;
+
+	sc = device_get_softc(dev);
+
+	conf = &xchan->conf;
+
+	printf("%s\n", __func__);
+
+#if 1
+	ret = xdma_desc_alloc(xchan, sizeof(struct msgdma_desc), 16);
+	if (ret != 0) {
+		device_printf(sc->dev,
+		    "%s: Can't allocate descriptors.\n", __func__);
+		return (-1);
+	}
+#endif
+
+	xchan->descs = contigmalloc(sizeof(struct msgdma_desc)*32, M_DEVBUF, M_ZERO, 0, ~0, PAGE_SIZE, 0);
+	//xchan->descs = (void *)kmem_alloc_contig(kernel_arena,
+	//    PAGE_SIZE, M_ZERO, 0, ~0, PAGE_SIZE, 0,
+	//    VM_MEMATTR_UNCACHEABLE);
+
+	descs = (struct msgdma_desc *)xchan->descs;
+	for (i = 0; i < 32; i++) {
+		desc = &descs[i];
+
+		//desc->read_lo = htole32(conf->src_addr);
+		//desc->write_lo = htole32(conf->dst_addr);
+		//desc->length = htole32(conf->block_len);
+
+		if (i == (32 - 1)) {
+			desc->next = htole32(vtophys(&descs[0]));
+			//desc->next = htole32(xchan->descs_phys[0].ds_addr);
+		} else {
+			desc->next = htole32(vtophys(&descs[i+1]));
+			//desc->next = htole32(xchan->descs_phys[i+1].ds_addr);
+		}
+		printf("%s: desc %d next addr %x\n", __func__, i, le32toh(desc->next));
+	}
+
+	addr = (uint32_t)vtophys(descs);
+	//addr = xchan->descs_phys[0].ds_addr;
+	WRITE4_DESC(sc, PF_NEXT_LO, addr);
+	WRITE4_DESC(sc, PF_NEXT_HI, 0);
+	WRITE4_DESC(sc, PF_POLL_FREQ, 1000);
+
+	reg = (PF_CONTROL_GIEM | PF_CONTROL_DESC_POLL_EN);
+	reg |= PF_CONTROL_RUN;
+	WRITE4_DESC(sc, PF_CONTROL, reg);
 
 	return (0);
 }
@@ -640,6 +829,10 @@ static device_method_t msgdma_methods[] = {
 	DEVMETHOD(xdma_channel_prep_memcpy,	msgdma_channel_prep_memcpy),
 	DEVMETHOD(xdma_channel_prep_fifo,	msgdma_channel_prep_fifo),
 	DEVMETHOD(xdma_channel_control,		msgdma_channel_control),
+
+	DEVMETHOD(xdma_channel_prep_sg,		msgdma_channel_prep_sg),
+	DEVMETHOD(xdma_channel_submit_sg,	msgdma_channel_submit_sg),
+
 #ifdef FDT
 	DEVMETHOD(xdma_ofw_md_data,		msgdma_ofw_md_data),
 #endif

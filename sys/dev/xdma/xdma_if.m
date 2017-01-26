@@ -75,6 +75,15 @@ METHOD int channel_prep_sg {
 };
 
 #
+#
+#
+METHOD int channel_submit_sg {
+	device_t		dev;
+	struct xdma_channel	*xchan;
+	struct sglist		*sg;
+};
+
+#
 # Notify driver we have machine-dependend data.
 #
 METHOD int ofw_md_data {
