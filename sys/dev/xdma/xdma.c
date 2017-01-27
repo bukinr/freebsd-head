@@ -528,7 +528,7 @@ xdma_dequeue(xdma_channel_t *xchan, struct mbuf **mp)
 
 	conf = &xchan->conf;
 
-	printf("%s\n", __func__);
+	//printf("%s\n", __func__);
 
 	XCHAN_LOCK(xchan);
 
@@ -562,7 +562,7 @@ xdma_enqueue(xdma_channel_t *xchan, struct mbuf **mp)
 		return (ENOMEM);
 	}
 
-	printf("%s: enqueuing %p, m->m_data %p phys 0x%x\n", __func__, m, m->m_data, (uint32_t)vtophys(m->m_data));
+	//printf("%s: enqueuing %p, m->m_data %p phys 0x%x\n", __func__, m, m->m_data, (uint32_t)vtophys(m->m_data));
 
 	XCHAN_LOCK(xchan);
 
@@ -606,7 +606,7 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 	struct bus_dma_segment seg;
 	int error, nsegs;
 
-	printf("%s: submitting\n", __func__);
+	//printf("%s: submitting\n", __func__);
 
 	conf = &xchan->conf;
 	xdma = xchan->xdma;
@@ -659,8 +659,8 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 		//sglist_append_phys(sg, seg.ds_addr, seg.ds_len);
 		//sglist_append_mbuf(sg, m);
 
-		printf("%s(%d): sglist_append_phys 0x%x %d bytes\n", __func__,
-		    device_get_unit(xdma->dma_dev), (uint32_t)seg.ds_addr, (uint32_t)seg.ds_len);
+		//printf("%s(%d): sglist_append_phys 0x%x %d bytes\n", __func__,
+		//    device_get_unit(xdma->dma_dev), (uint32_t)seg.ds_addr, (uint32_t)seg.ds_len);
 
 		sg = malloc(sizeof(struct xdma_sglist), M_XDMA, M_WAITOK | M_ZERO);
 		sg->paddr = seg.ds_addr;
@@ -848,15 +848,14 @@ xdma_pause(xdma_channel_t *xchan)
 }
 
 int
-xdma_callback(xdma_channel_t *xchan, xdma_transfer_status_t *status)
+xdma_mark_done(xdma_channel_t *xchan, uint32_t idx, uint32_t len)
 {
-	struct xdma_intr_handler *ih_tmp;
-	struct xdma_intr_handler *ih;
 	struct xdma_mbuf_entry *xm;
 	struct xchan_bufmap *bmap;
 	xdma_controller_t *xdma;
 	xdma_config_t *conf;
-	int i;
+	struct mbuf *m;
+	//int i;
 
 	/* TODO: lock for queue_in access ? */
 	XCHAN_LOCK(xchan);
@@ -864,30 +863,40 @@ xdma_callback(xdma_channel_t *xchan, xdma_transfer_status_t *status)
 	conf = &xchan->conf;
 	xdma = xchan->xdma;
 
-	for (i = 0; i < status->cnt_done; i++) {
-		printf("%s(%d): desc %d\n", __func__, device_get_unit(xdma->dma_dev), xchan->idx_tail);
-		bmap = &xchan->dma_buf_map[xchan->idx_tail];
-		if (conf->direction == XDMA_MEM_TO_DEV) {
-			bus_dmamap_sync(xchan->dma_buf_tag, bmap->map, 
-			    BUS_DMASYNC_POSTWRITE);
-		} else {
-			bus_dmamap_sync(xchan->dma_buf_tag, bmap->map, 
-			    BUS_DMASYNC_POSTREAD);
-		}
-		bus_dmamap_unload(xchan->dma_buf_tag, bmap->map);
-		//m_freem(bmap->m);
-
-		xm = malloc(sizeof(struct xdma_mbuf_entry), M_XDMA, M_WAITOK | M_ZERO);
-		xm->m = bmap->m;
-		TAILQ_INSERT_TAIL(&conf->queue_in, xm, xm_next);
-
-		//dwc_setup_txdesc(sc, sc->tx_idx_tail, 0, 0);
-
-		xchan->idx_count--;
-		xchan->idx_tail = next_idx(xchan, xchan->idx_tail);
+	//printf("%s(%d): desc %d\n", __func__, device_get_unit(xdma->dma_dev), xchan->idx_tail);
+	bmap = &xchan->dma_buf_map[xchan->idx_tail];
+	if (conf->direction == XDMA_MEM_TO_DEV) {
+		bus_dmamap_sync(xchan->dma_buf_tag, bmap->map, 
+		    BUS_DMASYNC_POSTWRITE);
+	} else {
+		bus_dmamap_sync(xchan->dma_buf_tag, bmap->map, 
+		    BUS_DMASYNC_POSTREAD);
 	}
+	bus_dmamap_unload(xchan->dma_buf_tag, bmap->map);
+	//m_freem(bmap->m);
+
+	m = bmap->m;
+	m->m_pkthdr.len = m->m_len = len;
+
+	xm = malloc(sizeof(struct xdma_mbuf_entry), M_XDMA, M_WAITOK | M_ZERO);
+	xm->m = m;
+	TAILQ_INSERT_TAIL(&conf->queue_in, xm, xm_next);
+
+	//dwc_setup_txdesc(sc, sc->tx_idx_tail, 0, 0);
+
+	xchan->idx_count--;
+	xchan->idx_tail = next_idx(xchan, xchan->idx_tail);
 
 	XCHAN_UNLOCK(xchan);
+
+	return (0);
+}
+
+int
+xdma_callback(xdma_channel_t *xchan, xdma_transfer_status_t *status)
+{
+	struct xdma_intr_handler *ih_tmp;
+	struct xdma_intr_handler *ih;
 
 	TAILQ_FOREACH_SAFE(ih, &xchan->ie_handlers, ih_next, ih_tmp) {
 		if (ih->cb != NULL) {

@@ -200,6 +200,7 @@ msgdma_intr(void *arg)
 	struct msgdma_desc *desc;
 	struct msgdma_channel *chan;
 	struct xdma_channel *xchan;
+	//struct xdma_sglist_list sg_queue;
 	struct msgdma_softc *sc;
 	//uint32_t len;
 
@@ -207,11 +208,13 @@ msgdma_intr(void *arg)
 	chan = sc->curchan;
 	//desc = sc->curdesc;
 
-	printf("%s(%d): status 0x%08x next_descr 0x%08x, control 0x%08x\n", __func__,
-	    device_get_unit(sc->dev),
-		READ4_DESC(sc, PF_STATUS),
-		READ4_DESC(sc, PF_NEXT_LO),
-		READ4_DESC(sc, PF_CONTROL));
+	//TAILQ_INIT(&sg_queue);
+
+	//printf("%s(%d): status 0x%08x next_descr 0x%08x, control 0x%08x\n", __func__,
+	//    device_get_unit(sc->dev),
+	//	READ4_DESC(sc, PF_STATUS),
+	//	READ4_DESC(sc, PF_NEXT_LO),
+	//	READ4_DESC(sc, PF_CONTROL));
 
 	//mips_dcache_wbinv_all();
 	//len = le32toh(desc->transfered);
@@ -235,10 +238,19 @@ msgdma_intr(void *arg)
 		if ((le32toh(desc->control) & CONTROL_OWN) != 0) {
 			break;
 		}
-		printf("%s(%d): marking desc %d done\n", __func__, device_get_unit(sc->dev), chan->idx_tail);
-		chan->idx_tail = next_idx(sc, chan->idx_tail);
+		//printf("%s(%d): marking desc %d done\n", __func__, device_get_unit(sc->dev), chan->idx_tail);
 		tot_copied += le32toh(desc->transfered);
 		cnt_done++;
+
+		xdma_mark_done(xchan, chan->idx_tail, le32toh(desc->transfered));
+
+		chan->idx_tail = next_idx(sc, chan->idx_tail);
+
+		//xdma_sglist_append(&sg_queue, paddr, len);
+		//sg = malloc(sizeof(struct xdma_sglist), M_XDMA, M_WAITOK | M_ZERO);
+		//sg->paddr = 0;
+		//sg->len = le32toh(desc->transfered);
+		//TAILQ_INSERT_TAIL(&sg_queue, sg, sg_next);
 	}
 
 	WRITE4_DESC(sc, PF_STATUS, PF_STATUS_IRQ);
@@ -567,7 +579,7 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct xdma_s
 	chan = (struct msgdma_channel *)xchan->chan;
 	sc->curchan = chan;
 
-	printf("%s(%d)\n", __func__, device_get_unit(dev));
+	//printf("%s(%d)\n", __func__, device_get_unit(dev));
 
 	//printf("%s(%d): nseg %d\n", __func__, device_get_unit(dev), (uint32_t)sg->sg_nseg);
 
@@ -580,21 +592,11 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct xdma_s
 	//WRITE4_DESC(sc, PF_NEXT_LO, xchan->descs_phys[chan->idx_head].ds_addr);
 
 	TAILQ_FOREACH_SAFE(sg, sg_queue, sg_next, sg_tmp) {
-	//for (i = 0; i < sg->sg_nseg; i++) {
-	//	seg = &sg->sg_segs[i];
-
-	//	addr = (uint32_t)seg->ss_paddr;
-	//	len = (uint32_t)seg->ss_len;
 		addr = (uint32_t)sg->paddr;
 		len = (uint32_t)sg->len;
 
-	//	if (seg->ss_paddr & 0x3) {
-	//		//addr -= 2;
-	//		//len += 2;
-	//	}
-
-		printf("%s(%d): descr %d segment 0x%x (%d bytes)\n", __func__,
-		    device_get_unit(dev), chan->idx_head, addr, len);
+		//printf("%s(%d): descr %d segment 0x%x (%d bytes)\n", __func__,
+		//    device_get_unit(dev), chan->idx_head, addr, len);
 
 		desc = &descs[chan->idx_head];
 		if (conf->direction == XDMA_MEM_TO_DEV) {
@@ -636,7 +638,7 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct xdma_s
 	//WRITE4_DESC(sc, PF_CONTROL, reg);
 	//printf("Reg0 %x reg %x, next_descr %x\n", reg0, reg, READ4_DESC(sc, PF_NEXT_LO));
 
-	printf("%s: next_descr %x\n", __func__, READ4_DESC(sc, PF_NEXT_LO));
+	//printf("%s: next_descr %x\n", __func__, READ4_DESC(sc, PF_NEXT_LO));
 
 	return (0);
 }

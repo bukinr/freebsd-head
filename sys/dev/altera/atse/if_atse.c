@@ -442,21 +442,32 @@ atse_xdma_tx_intr(void *arg, xdma_transfer_status_t *status)
 	struct atse_softc *sc;
 	struct ifnet *ifp;
 	struct mbuf *m;
-
-	//printf("%s\n", __func__);
+	int err;
+	int i;
 
 	sc = arg;
 
 	ATSE_LOCK(sc);
 
 	ifp = sc->atse_ifp;
-	m = sc->atse_tx_m;
 
-	m_freem(m);
-	sc->atse_tx_m = NULL;
-	sc->atse_tx_m_offset = 0;
-	sc->txcount--;
-	ifp->if_drv_flags &= ~IFF_DRV_OACTIVE;
+	//printf("%s: %d pkts sent (%d bytes)\n", __func__,
+	//    status->cnt_done, status->total_copied);
+
+	for (i = 0; i < status->cnt_done; i++) {
+		err = xdma_dequeue(sc->xchan_tx, &m);
+		if (err != 0) {
+			break;
+		}
+		m_freem(m);
+	}
+
+	//m = sc->atse_tx_m;
+	//m_freem(m);
+	//sc->atse_tx_m = NULL;
+	//sc->atse_tx_m_offset = 0;
+	//sc->txcount--;
+	//ifp->if_drv_flags &= ~IFF_DRV_OACTIVE;
 
 	ATSE_UNLOCK(sc);
 
@@ -471,6 +482,7 @@ atse_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 	struct mbuf *m;
 	int err;
 	int i;
+	uint32_t cnt_processed;
 
 	sc = arg;
 
@@ -478,21 +490,19 @@ atse_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 
 	ifp = sc->atse_ifp;
 
-	printf("%s: %d pkts rcvd (%d bytes)\n", __func__,
-	    status->cnt_done, status->total_copied);
-
-	uint32_t cnt_processed;
+	//printf("%s: %d pkts rcvd (%d bytes)\n", __func__,
+	//    status->cnt_done, status->total_copied);
 
 	for (i = 0; i < status->cnt_done; i++) {
 		err = xdma_dequeue(sc->xchan_rx, &m);
 		if (err != 0) {
 			break;
 		}
-		printf("dequeued mbuf len %d\n", m->m_len);
+		//printf("dequeued mbuf len %d\n", m->m_len);
 
 		m->m_pkthdr.rcvif = ifp;
 		//m->m_pkthdr.len = m->m_len;
-		m->m_pkthdr.len = m->m_len = status->total_copied;
+		//m->m_pkthdr.len = m->m_len = status->total_copied;
 		m_adj(m, ETHER_ALIGN);
 		ATSE_UNLOCK(sc);
 		(*ifp->if_input)(ifp, m);
@@ -722,10 +732,10 @@ atse_start_locked(struct ifnet *ifp)
 	/* We have more space to send so continue ... */
 	for (; !IFQ_DRV_IS_EMPTY(&ifp->if_snd); ) {
 
-		if (sc->txcount > (32 - 1)) {
-			ifp->if_drv_flags |= IFF_DRV_OACTIVE;
-			break;
-		}
+		//if (sc->txcount > (32 - 1)) {
+		//	ifp->if_drv_flags |= IFF_DRV_OACTIVE;
+		//	break;
+		//}
 
 		IFQ_DRV_DEQUEUE(&ifp->if_snd, m);
 		sc->atse_tx_m_offset = 0;
@@ -736,17 +746,15 @@ atse_start_locked(struct ifnet *ifp)
 		//uint32_t dst;
 		//src = vtophys(sc->atse_tx_buf);
 		//dst = (rman_get_start(sc->atse_tx_mem_res) + A_ONCHIP_FIFO_MEM_CORE_DATA);
-
 		//m_copydata(m, 0, m->m_pkthdr.len, sc->atse_tx_buf);
 		//xdma_enqueue_phys(sc->xchan_tx, m);
+
 		xdma_enqueue(sc->xchan_tx, &m);
 
-		sc->txcount++;
-
+		//sc->txcount++;
 		//error = atse_tx_locked(sc, &sent);
 		//if (error != 0)
 		//	goto done;
-
 		//if (sc->txcount > 0) {
 		//	ifp->if_drv_flags |= IFF_DRV_OACTIVE;
 		//	break;
