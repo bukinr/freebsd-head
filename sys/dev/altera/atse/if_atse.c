@@ -415,7 +415,7 @@ static int atse_detach(device_t);
 devclass_t atse_devclass;
 
 static int
-atse_rx_enqueue(struct atse_softc *sc, uint32_t n)
+atse_rx_enqueue(struct atse_softc *sc, uint32_t n, int submit)
 {
 	struct mbuf *m;
 	int i;
@@ -429,7 +429,9 @@ atse_rx_enqueue(struct atse_softc *sc, uint32_t n)
 		xdma_enqueue(sc->xchan_rx, &m);
 	}
 
-	xdma_enqueue_submit(sc->xchan_rx);
+	if (submit == 1) {
+		xdma_enqueue_submit(sc->xchan_rx);
+	}
 
 	return (0);
 }
@@ -479,6 +481,8 @@ atse_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 	printf("%s: %d pkts rcvd (%d bytes)\n", __func__,
 	    status->cnt_done, status->total_copied);
 
+	uint32_t cnt_processed;
+
 	for (i = 0; i < status->cnt_done; i++) {
 		err = xdma_dequeue(sc->xchan_rx, &m);
 		if (err != 0) {
@@ -493,7 +497,10 @@ atse_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 		ATSE_UNLOCK(sc);
 		(*ifp->if_input)(ifp, m);
 		ATSE_LOCK(sc);
+		cnt_processed++;
 	}
+
+	atse_rx_enqueue(sc, cnt_processed, 0);
 
 	ATSE_UNLOCK(sc);
 
@@ -2286,7 +2293,7 @@ err:
 	if (error == 0)
 		atse_sysctl_stats_attach(dev);
 
-	atse_rx_enqueue(sc, 32);
+	atse_rx_enqueue(sc, 32, 1);
 
 	return (error);
 }

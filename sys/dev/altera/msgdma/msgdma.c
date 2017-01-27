@@ -230,7 +230,7 @@ msgdma_intr(void *arg)
 
 	cnt_done = 0;
 	tot_copied = 0;
-	do {
+	while (chan->idx_tail != chan->idx_head) {
 		desc = &descs[chan->idx_tail];
 		if ((le32toh(desc->control) & CONTROL_OWN) != 0) {
 			break;
@@ -239,7 +239,7 @@ msgdma_intr(void *arg)
 		chan->idx_tail = next_idx(sc, chan->idx_tail);
 		tot_copied += le32toh(desc->transfered);
 		cnt_done++;
-	} while (chan->idx_tail != chan->idx_head);
+	}
 
 	WRITE4_DESC(sc, PF_STATUS, PF_STATUS_IRQ);
 

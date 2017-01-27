@@ -621,9 +621,9 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 	TAILQ_FOREACH_SAFE(xm, &conf->queue, xm_next, xm_tmp) {
 		m = xm->m;
 
-		//if (xchan->idx_count == (32 - 1)) {
-		//	break;
-		//}
+		if (xchan->idx_count == (32 - 1)) {
+			break;
+		}
 
 		//if (xchan->idx_head == xchan->idx_tail) {
 		//	break;
@@ -894,6 +894,8 @@ xdma_callback(xdma_channel_t *xchan, xdma_transfer_status_t *status)
 			ih->cb(ih->cb_user, status);
 		}
 	}
+
+	xdma_enqueue_submit(xchan);
 
 	return (0);
 }
