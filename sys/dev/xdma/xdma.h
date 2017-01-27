@@ -91,8 +91,8 @@ struct xdma_channel_config {
 	int			src_width;	/* In bytes. */
 	int			dst_width;	/* In bytes. */
 
-	struct sglist			*sg;
 	TAILQ_HEAD(, xdma_mbuf_entry)	queue;
+	TAILQ_HEAD(, xdma_mbuf_entry)	queue_in;
 };
 
 typedef struct xdma_channel_config xdma_config_t;
@@ -103,6 +103,14 @@ struct xdma_descriptor {
 };
 
 typedef struct xdma_descriptor xdma_descriptor_t;
+
+struct xdma_sglist {
+	vm_paddr_t			paddr;
+	size_t				len;
+	TAILQ_ENTRY(xdma_sglist)	sg_next;
+};
+
+TAILQ_HEAD(xdma_sglist_list, xdma_sglist);
 
 struct xchan_bufmap {
 	bus_dmamap_t	map;
@@ -163,6 +171,7 @@ int xdma_prep_sg(xdma_channel_t *xchan, uintptr_t, uintptr_t, enum xdma_directio
 int xdma_desc_alloc(xdma_channel_t *, uint32_t, uint32_t);
 int xdma_desc_free(xdma_channel_t *xchan);
 
+int xdma_dequeue(xdma_channel_t *xchan, struct mbuf **m);
 int xdma_enqueue(xdma_channel_t *xchan, struct mbuf **m);
 int xdma_enqueue_submit(xdma_channel_t *xchan);
 int xdma_enqueue_sync(xdma_channel_t *xchan);

@@ -415,6 +415,26 @@ static int atse_detach(device_t);
 devclass_t atse_devclass;
 
 static int
+atse_rx_enqueue(struct atse_softc *sc, uint32_t n)
+{
+	struct mbuf *m;
+	int i;
+
+	for (i = 0; i < n; i++) {
+		m = m_getcl(M_NOWAIT, MT_DATA, M_PKTHDR);
+		if (m == NULL)
+			return (-1);
+		m->m_pkthdr.len = m->m_len = m->m_ext.ext_size;
+		//m->m_len = m->m_pkthdr.len = MCLBYTES;
+		xdma_enqueue(sc->xchan_rx, &m);
+	}
+
+	xdma_enqueue_submit(sc->xchan_rx);
+
+	return (0);
+}
+
+static int
 atse_xdma_tx_intr(void *arg, xdma_transfer_status_t *status)
 {
 	struct atse_softc *sc;
@@ -447,16 +467,45 @@ atse_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 	struct atse_softc *sc;
 	struct ifnet *ifp;
 	struct mbuf *m;
+	int err;
+	int i;
 
 	sc = arg;
 
 	ATSE_LOCK(sc);
 
 	ifp = sc->atse_ifp;
+
+	printf("%s: %d pkts rcvd (%d bytes)\n", __func__,
+	    status->cnt_done, status->total_copied);
+
+	for (i = 0; i < status->cnt_done; i++) {
+		err = xdma_dequeue(sc->xchan_rx, &m);
+		if (err != 0) {
+			break;
+		}
+		printf("dequeued mbuf len %d\n", m->m_len);
+
+		m->m_pkthdr.rcvif = ifp;
+		//m->m_pkthdr.len = m->m_len;
+		m->m_pkthdr.len = m->m_len = status->total_copied;
+		m_adj(m, ETHER_ALIGN);
+		ATSE_UNLOCK(sc);
+		(*ifp->if_input)(ifp, m);
+		ATSE_LOCK(sc);
+	}
+
+	ATSE_UNLOCK(sc);
+
+	return (0);
+
+
 	m = sc->atse_rx_m;
 
 	KASSERT(m != NULL, ("m is NULL"));
-	printf("%s: %d rcvd\n", __func__, status->total_copied);
+
+
+
 
 	if (status->total_copied == 0) {
 		ATSE_UNLOCK(sc);
@@ -1487,6 +1536,11 @@ atse_rx_locked(struct atse_softc *sc)
 
 	ATSE_LOCK_ASSERT(sc);
 
+
+	return (0);
+
+
+
 	if (sc->rx_busy == 1) {
 		return (0);
 	}
@@ -2114,6 +2168,8 @@ atse_attach(device_t dev)
 		return (ENXIO);
 	}
 
+	xdma_prep_sg(sc->xchan_rx, 0, 0, XDMA_DEV_TO_MEM);
+
 	atse_ethernet_option_bits_read(dev);
 
 	mtx_init(&sc->atse_mtx, device_get_nameunit(dev), MTX_NETWORK_LOCK,
@@ -2229,6 +2285,8 @@ err:
 
 	if (error == 0)
 		atse_sysctl_stats_attach(dev);
+
+	atse_rx_enqueue(sc, 32);
 
 	return (error);
 }

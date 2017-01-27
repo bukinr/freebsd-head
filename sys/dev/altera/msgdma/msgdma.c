@@ -230,16 +230,16 @@ msgdma_intr(void *arg)
 
 	cnt_done = 0;
 	tot_copied = 0;
-	while (chan->idx_tail != chan->idx_head) {
+	do {
 		desc = &descs[chan->idx_tail];
 		if ((le32toh(desc->control) & CONTROL_OWN) != 0) {
 			break;
 		}
-		printf("marking desc %d done\n", chan->idx_tail);
+		printf("%s(%d): marking desc %d done\n", __func__, device_get_unit(sc->dev), chan->idx_tail);
 		chan->idx_tail = next_idx(sc, chan->idx_tail);
 		tot_copied += le32toh(desc->transfered);
 		cnt_done++;
-	}
+	} while (chan->idx_tail != chan->idx_head);
 
 	WRITE4_DESC(sc, PF_STATUS, PF_STATUS_IRQ);
 
@@ -546,18 +546,20 @@ msgdma_channel_prep_memcpy(device_t dev, struct xdma_channel *xchan)
 }
 
 static int
-msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct sglist *sg)
+msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct xdma_sglist_list *sg_queue)
 {
 	struct msgdma_channel *chan;
 	struct msgdma_desc *descs;
 	struct msgdma_desc *desc;
 	struct msgdma_softc *sc;
-	struct sglist_seg *seg;
+	//struct sglist_seg *seg;
 	xdma_config_t *conf;
 	uint32_t addr;
 	uint32_t len;
 	//uint32_t reg;
-	int i;
+	//int i;
+	struct xdma_sglist *sg;
+	struct xdma_sglist *sg_tmp;
 
 	sc = device_get_softc(dev);
 
@@ -565,7 +567,9 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct sglist
 	chan = (struct msgdma_channel *)xchan->chan;
 	sc->curchan = chan;
 
-	printf("%s: nseg %d\n", __func__, (uint32_t)sg->sg_nseg);
+	printf("%s(%d)\n", __func__, device_get_unit(dev));
+
+	//printf("%s(%d): nseg %d\n", __func__, device_get_unit(dev), (uint32_t)sg->sg_nseg);
 
 	//mips_dcache_wbinv_all();
 
@@ -575,22 +579,31 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct sglist
 	//WRITE4_DESC(sc, PF_NEXT_LO, (uint32_t)vtophys(&descs[chan->idx_head]));
 	//WRITE4_DESC(sc, PF_NEXT_LO, xchan->descs_phys[chan->idx_head].ds_addr);
 
-	for (i = 0; i < sg->sg_nseg; i++) {
-		seg = &sg->sg_segs[i];
+	TAILQ_FOREACH_SAFE(sg, sg_queue, sg_next, sg_tmp) {
+	//for (i = 0; i < sg->sg_nseg; i++) {
+	//	seg = &sg->sg_segs[i];
 
-		addr = (uint32_t)seg->ss_paddr;
-		len = (uint32_t)seg->ss_len;
+	//	addr = (uint32_t)seg->ss_paddr;
+	//	len = (uint32_t)seg->ss_len;
+		addr = (uint32_t)sg->paddr;
+		len = (uint32_t)sg->len;
 
-		if (seg->ss_paddr & 0x3) {
-			//addr -= 2;
-			//len += 2;
-		}
+	//	if (seg->ss_paddr & 0x3) {
+	//		//addr -= 2;
+	//		//len += 2;
+	//	}
 
-		printf("%s: descr %d segment 0x%x (%d bytes)\n", __func__, chan->idx_head, addr, len);
+		printf("%s(%d): descr %d segment 0x%x (%d bytes)\n", __func__,
+		    device_get_unit(dev), chan->idx_head, addr, len);
 
 		desc = &descs[chan->idx_head];
-		desc->read_lo = htole32(addr);
-		desc->write_lo = 0;
+		if (conf->direction == XDMA_MEM_TO_DEV) {
+			desc->read_lo = htole32(addr);
+			desc->write_lo = 0;
+		} else {
+			desc->read_lo = 0;
+			desc->write_lo = htole32(addr);
+		}
 		desc->length = htole32(len);
 		desc->transfered = 0;
 		desc->status = 0;
@@ -601,7 +614,7 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct sglist
 		if (conf->direction == XDMA_MEM_TO_DEV) {
 			desc->control = htole32(CONTROL_GEN_SOP | CONTROL_GEN_EOP);
 		} else {
-			desc->control = htole32(CONTROL_END_ON_EOP | (0 << 13));
+			desc->control = htole32(CONTROL_END_ON_EOP | (1 << 13));
 		}
 		//if (i == (sg->sg_nseg - 1)) {
 		desc->control |= htole32(CONTROL_TC_IRQ_EN | CONTROL_ET_IRQ_EN | CONTROL_ERR_M);
@@ -612,7 +625,7 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct sglist
 		wmb();
 	}
 
-	mips_dcache_wbinv_all();
+	//mips_dcache_wbinv_all();
 
 	//xdma_enqueue_sync(xchan);
 
@@ -645,7 +658,7 @@ msgdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 
 	conf = &xchan->conf;
 
-	printf("%s\n", __func__);
+	printf("%s(%d)\n", __func__, device_get_unit(dev));
 
 #if 1
 	ret = xdma_desc_alloc(xchan, sizeof(struct msgdma_desc), 16);
@@ -656,10 +669,10 @@ msgdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 	}
 #endif
 
-	xchan->descs = contigmalloc(sizeof(struct msgdma_desc)*32, M_DEVBUF, M_ZERO, 0, ~0, PAGE_SIZE, 0);
-	//xchan->descs = (void *)kmem_alloc_contig(kernel_arena,
-	//    PAGE_SIZE, M_ZERO, 0, ~0, PAGE_SIZE, 0,
-	//    VM_MEMATTR_UNCACHEABLE);
+	//xchan->descs = contigmalloc(sizeof(struct msgdma_desc)*32, M_DEVBUF, M_ZERO, 0, ~0, PAGE_SIZE, 0);
+	xchan->descs = (void *)kmem_alloc_contig(kernel_arena,
+	    sizeof(struct msgdma_desc)*32, M_ZERO, 0, ~0, PAGE_SIZE, 0,
+	    VM_MEMATTR_UNCACHEABLE);
 
 	descs = (struct msgdma_desc *)xchan->descs;
 	for (i = 0; i < 32; i++) {
@@ -676,7 +689,7 @@ msgdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 			desc->next = htole32(vtophys(&descs[i+1]));
 			//desc->next = htole32(xchan->descs_phys[i+1].ds_addr);
 		}
-		printf("%s: desc %d next addr %x\n", __func__, i, le32toh(desc->next));
+		printf("%s(%d): desc %d next addr %x\n", __func__, device_get_unit(dev), i, le32toh(desc->next));
 	}
 
 	addr = (uint32_t)vtophys(descs);
