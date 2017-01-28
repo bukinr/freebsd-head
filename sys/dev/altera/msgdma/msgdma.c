@@ -618,9 +618,7 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct xdma_s
 		} else {
 			desc->control = htole32(CONTROL_END_ON_EOP | (1 << 13));
 		}
-		//if (i == (sg->sg_nseg - 1)) {
 		desc->control |= htole32(CONTROL_TC_IRQ_EN | CONTROL_ET_IRQ_EN | CONTROL_ERR_M);
-		//}
 
 		wmb();
 		desc->control |= htole32(CONTROL_OWN | CONTROL_GO);
@@ -628,7 +626,6 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct xdma_s
 	}
 
 	//mips_dcache_wbinv_all();
-
 	//xdma_enqueue_sync(xchan);
 
 	//uint32_t reg0;
@@ -637,7 +634,6 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct xdma_s
 	//reg |= PF_CONTROL_RUN;
 	//WRITE4_DESC(sc, PF_CONTROL, reg);
 	//printf("Reg0 %x reg %x, next_descr %x\n", reg0, reg, READ4_DESC(sc, PF_NEXT_LO));
-
 	//printf("%s: next_descr %x\n", __func__, READ4_DESC(sc, PF_NEXT_LO));
 
 	return (0);

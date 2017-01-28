@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2016 Ruslan Bukin <br@bsdpad.com>
+ * Copyright (c) 2016-2017 Ruslan Bukin <br@bsdpad.com>
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -524,7 +524,6 @@ xdma_dequeue(xdma_channel_t *xchan, struct mbuf **mp)
 	struct xdma_mbuf_entry *xm_tmp;
 	struct xdma_mbuf_entry *xm;
 	xdma_config_t *conf;
-	//struct mbuf *m;
 
 	conf = &xchan->conf;
 
@@ -538,6 +537,7 @@ xdma_dequeue(xdma_channel_t *xchan, struct mbuf **mp)
 		free(xm, M_XDMA);
 
 		XCHAN_UNLOCK(xchan);
+
 		return (0);
 	}
 
@@ -550,15 +550,16 @@ int
 xdma_enqueue(xdma_channel_t *xchan, struct mbuf **mp)
 {
 	struct xdma_mbuf_entry *xm;
-	//xdma_controller_t *xdma;
+	xdma_controller_t *xdma;
 	xdma_config_t *conf;
 	struct mbuf *m;
-	//void *buf;
 
+	xdma = xchan->xdma;
 	conf = &xchan->conf;
 
 	if ((m = m_defrag(*mp, M_NOWAIT)) == NULL) {
-		//XCHAN_UNLOCK(xchan);
+		device_printf(xdma->dma_dev,
+		    "%s: Can't defrag mbuf\n", __func__);
 		return (ENOMEM);
 	}
 
@@ -568,9 +569,6 @@ xdma_enqueue(xdma_channel_t *xchan, struct mbuf **mp)
 
 	xm = malloc(sizeof(struct xdma_mbuf_entry), M_XDMA, M_WAITOK | M_ZERO);
 	xm->m = m;
-	//xm->buf = buf;
-	//xm->len = m->m_pkthdr.len;
-
 	TAILQ_INSERT_TAIL(&conf->queue, xm, xm_next);
 
 	XCHAN_UNLOCK(xchan);
@@ -594,6 +592,7 @@ xdma_enqueue_sync(xdma_channel_t *xchan)
 int
 xdma_enqueue_submit(xdma_channel_t *xchan)
 {
+	struct xdma_sglist_list sg_queue;
 	struct xdma_mbuf_entry *xm_tmp;
 	struct xdma_mbuf_entry *xm;
 	struct mbuf *m;
@@ -614,7 +613,11 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 
 	XCHAN_LOCK(xchan);
 
-	struct xdma_sglist_list sg_queue;
+	if (TAILQ_EMPTY(&conf->queue)) {
+
+		XCHAN_UNLOCK(xchan);
+		return (0);
+	}
 
 	TAILQ_INIT(&sg_queue);
 
@@ -624,10 +627,6 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 		if (xchan->idx_count == (32 - 1)) {
 			break;
 		}
-
-		//if (xchan->idx_head == xchan->idx_tail) {
-		//	break;
-		//}
 
 		i = xchan->idx_head;
 
@@ -651,14 +650,6 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 		xchan->dma_buf_map[i].m = xm->m;
 		xchan->idx_head = next_idx(xchan, xchan->idx_head);
 
-		//buf = contigmalloc(ETHER_MAX_LEN_JUMBO, M_DEVBUF, M_ZERO, 0, ~0, PAGE_SIZE, 0);
-		//m_copydata(m, 0, m->m_pkthdr.len, buf);
-		//mips_dcache_wbinv_all();
-		//sglist_append_phys(sg, (uint64_t)vtophys(xm->buf), xm->len);
-		//sglist_append_mbuf(sg, xm->m);
-		//sglist_append_phys(sg, seg.ds_addr, seg.ds_len);
-		//sglist_append_mbuf(sg, m);
-
 		//printf("%s(%d): sglist_append_phys 0x%x %d bytes\n", __func__,
 		//    device_get_unit(xdma->dma_dev), (uint32_t)seg.ds_addr, (uint32_t)seg.ds_len);
 
@@ -669,10 +660,8 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 	
 		xchan->idx_count++;
 
-		/* tmp */
 		TAILQ_REMOVE(&conf->queue, xm, xm_next);
 		free(xm, M_XDMA);
-		//m_free(xm->m);
 	}
 
 	ret = XDMA_CHANNEL_SUBMIT_SG(xdma->dma_dev, xchan, &sg_queue);
@@ -855,7 +844,6 @@ xdma_mark_done(xdma_channel_t *xchan, uint32_t idx, uint32_t len)
 	xdma_controller_t *xdma;
 	xdma_config_t *conf;
 	struct mbuf *m;
-	//int i;
 
 	/* TODO: lock for queue_in access ? */
 	XCHAN_LOCK(xchan);
@@ -864,6 +852,7 @@ xdma_mark_done(xdma_channel_t *xchan, uint32_t idx, uint32_t len)
 	xdma = xchan->xdma;
 
 	//printf("%s(%d): desc %d\n", __func__, device_get_unit(xdma->dma_dev), xchan->idx_tail);
+
 	bmap = &xchan->dma_buf_map[xchan->idx_tail];
 	if (conf->direction == XDMA_MEM_TO_DEV) {
 		bus_dmamap_sync(xchan->dma_buf_tag, bmap->map, 
@@ -873,7 +862,6 @@ xdma_mark_done(xdma_channel_t *xchan, uint32_t idx, uint32_t len)
 		    BUS_DMASYNC_POSTREAD);
 	}
 	bus_dmamap_unload(xchan->dma_buf_tag, bmap->map);
-	//m_freem(bmap->m);
 
 	m = bmap->m;
 	m->m_pkthdr.len = m->m_len = len;

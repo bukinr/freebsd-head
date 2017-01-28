@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2016 Ruslan Bukin <br@bsdpad.com>
+ * Copyright (c) 2016-2017 Ruslan Bukin <br@bsdpad.com>
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -75,8 +75,6 @@ typedef struct xdma_controller xdma_controller_t;
 
 struct xdma_mbuf_entry {
 	struct mbuf			*m;
-	void				*buf;
-	uint32_t			len;
 	TAILQ_ENTRY(xdma_mbuf_entry)	xm_next;
 };
 
