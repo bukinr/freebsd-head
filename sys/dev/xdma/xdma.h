@@ -96,8 +96,10 @@ struct xdma_channel_config {
 typedef struct xdma_channel_config xdma_config_t;
 
 struct xdma_descriptor {
-	bus_addr_t	ds_addr;
-	bus_size_t	ds_len;
+	bus_addr_t			ds_addr;
+	bus_size_t			ds_len;
+	bus_dmamap_t			dma_map;
+	void				*desc;
 };
 
 typedef struct xdma_descriptor xdma_descriptor_t;
@@ -135,9 +137,8 @@ struct xdma_channel {
 
 	/* Descriptors. */
 	bus_dma_tag_t			dma_tag;
-	bus_dmamap_t			dma_map;
-	void				*descs;
-	xdma_descriptor_t		*descs_phys;
+	xdma_descriptor_t		*descs;
+	uint32_t			map_descr;
 	uint8_t				map_err;
 
 	/* Bufs */
@@ -173,7 +174,8 @@ int xdma_mark_done(xdma_channel_t *xchan, uint32_t idx, uint32_t len);
 int xdma_dequeue(xdma_channel_t *xchan, struct mbuf **m);
 int xdma_enqueue(xdma_channel_t *xchan, struct mbuf **m);
 int xdma_enqueue_submit(xdma_channel_t *xchan);
-int xdma_enqueue_sync(xdma_channel_t *xchan);
+int xdma_enqueue_sync_pre(xdma_channel_t *xchan, uint32_t);
+int xdma_enqueue_sync_post(xdma_channel_t *xchan, uint32_t);
 
 /* Channel Control */
 int xdma_begin(xdma_channel_t *xchan);

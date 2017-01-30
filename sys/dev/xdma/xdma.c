@@ -246,9 +246,10 @@ static void
 xdma_dmamap_cb(void *arg, bus_dma_segment_t *segs, int nseg, int err)
 {
 	xdma_channel_t *xchan;
-	int i;
+	//int i;
 
 	xchan = (xdma_channel_t *)arg;
+
 	KASSERT(xchan != NULL, ("xchan is NULL"));
 
 	if (err) {
@@ -257,10 +258,9 @@ xdma_dmamap_cb(void *arg, bus_dma_segment_t *segs, int nseg, int err)
 		return;
 	}
 
-	for (i = 0; i < nseg; i++) {
-		xchan->descs_phys[i].ds_addr = segs[i].ds_addr;
-		xchan->descs_phys[i].ds_len = segs[i].ds_len;
-	}
+	printf("%s: map %d nseg %d\n", __func__, xchan->map_descr, nseg);
+	xchan->descs[xchan->map_descr].ds_addr = segs[0].ds_addr;
+	xchan->descs[xchan->map_descr].ds_len = segs[0].ds_len;
 }
 
 static int
@@ -279,7 +279,8 @@ xdma_desc_alloc_bus_dma(xdma_channel_t *xchan, uint32_t desc_size,
 
 	nsegments = conf->block_num;
 	all_desc_sz = (nsegments * desc_size);
-	//printf("%s: nsegments %d desc_size %d\n", __func__, nsegments, desc_size);
+
+	printf("%s: nsegments %d desc_size %d\n", __func__, nsegments, desc_size);
 
 	err = bus_dma_tag_create(
 	    bus_get_dma_tag(xdma->dev),
@@ -287,7 +288,7 @@ xdma_desc_alloc_bus_dma(xdma_channel_t *xchan, uint32_t desc_size,
 	    BUS_SPACE_MAXADDR_32BIT,	/* lowaddr */
 	    BUS_SPACE_MAXADDR,		/* highaddr */
 	    NULL, NULL,			/* filter, filterarg */
-	    all_desc_sz, nsegments,	/* maxsize, nsegments*/
+	    desc_size, 1,		/* maxsize, nsegments*/
 	    desc_size, 0,		/* maxsegsize, flags */
 	    NULL, NULL,			/* lockfunc, lockarg */
 	    &xchan->dma_tag);
@@ -297,32 +298,46 @@ xdma_desc_alloc_bus_dma(xdma_channel_t *xchan, uint32_t desc_size,
 		return (-1);
 	}
 
-	err = bus_dmamem_alloc(xchan->dma_tag, (void **)&xchan->descs,
-	    BUS_DMA_WAITOK | BUS_DMA_COHERENT, &xchan->dma_map);
-	if (err) {
-		device_printf(xdma->dev,
-		    "%s: Can't allocate memory for descriptors.\n", __func__);
-		return (-1);
-	}
-
-	xchan->descs_phys = malloc(nsegments * sizeof(xdma_descriptor_t),
+	xchan->descs = malloc(nsegments * sizeof(xdma_descriptor_t),
 	    M_XDMA, (M_WAITOK | M_ZERO));
 
-	xchan->map_err = 0;
-	err = bus_dmamap_load(xchan->dma_tag, xchan->dma_map, xchan->descs,
-	    all_desc_sz, xdma_dmamap_cb, xchan, BUS_DMA_WAITOK);
-	if (err) {
-		device_printf(xdma->dev,
-		    "%s: Can't load DMA map.\n", __func__);
-		return (-1);
-	}
+	xdma_descriptor_t *desc;
 
-	if (xchan->map_err != 0) {
-		device_printf(xdma->dev,
-		    "%s: Can't load DMA map.\n", __func__);
-		return (-1);
-	}
+	for (i = 0; i < nsegments; i++) {
+		desc = &xchan->descs[i];
+		err = bus_dmamem_alloc(xchan->dma_tag, (void **)&desc->desc,
+		    BUS_DMA_COHERENT | BUS_DMA_WAITOK | BUS_DMA_ZERO, &desc->dma_map);
+		if (err) {
+			device_printf(xdma->dev,
+			    "%s: Can't allocate memory for descriptors.\n", __func__);
+			return (-1);
+		}
 
+		xchan->map_err = 0;
+		xchan->map_descr = i;
+		err = bus_dmamap_load(xchan->dma_tag, desc->dma_map, desc->desc,
+		    desc_size, xdma_dmamap_cb, xchan, BUS_DMA_WAITOK);
+		if (err) {
+			device_printf(xdma->dev,
+			    "%s: Can't load DMA map.\n", __func__);
+			return (-1);
+		}
+
+		if (xchan->map_err != 0) {
+			device_printf(xdma->dev,
+			    "%s: Can't load DMA map.\n", __func__);
+			return (-1);
+		}
+		printf("%s: desc->desc %lx, desc->ds_addr %x\n", __func__, (uint64_t)desc->desc, (uint32_t)desc->ds_addr);
+
+#if 0
+		desc->desc = (void *)kmem_alloc_contig(kernel_arena,
+			32, M_ZERO, 0, ~0, PAGE_SIZE, 0,
+			VM_MEMATTR_UNCACHEABLE);
+		desc->ds_addr = vtophys(desc->desc);
+		//bus_dmamap_sync(xchan->dma_tag, desc->dma_map, BUS_DMASYNC_PREWRITE);
+#endif
+	}
 
 	/* XXX: Allocate busdma buffer for mbufs */
 	err = bus_dma_tag_create(
@@ -410,16 +425,24 @@ xdma_desc_alloc(xdma_channel_t *xchan, uint32_t desc_size, uint32_t align)
 int
 xdma_desc_free(xdma_channel_t *xchan)
 {
+	xdma_descriptor_t *desc;
+	xdma_config_t *conf;
+	int i;
+
+	conf = &xchan->conf;
 
 	if ((xchan->flags & XCHAN_DESC_ALLOCATED) == 0) {
 		/* No descriptors allocated. */
 		return (-1);
 	}
 
-	bus_dmamap_unload(xchan->dma_tag, xchan->dma_map);
-	bus_dmamem_free(xchan->dma_tag, xchan->descs, xchan->dma_map);
+	for (i = 0; i < conf->block_num; i++) {
+		desc = &xchan->descs[i];
+		bus_dmamap_unload(xchan->dma_tag, desc->dma_map);
+		bus_dmamem_free(xchan->dma_tag, desc->desc, desc->dma_map);
+	}
 	bus_dma_tag_destroy(xchan->dma_tag);
-	free(xchan->descs_phys, M_XDMA);
+	free(xchan->descs, M_XDMA);
 
 	xchan->flags &= ~(XCHAN_DESC_ALLOCATED);
 
@@ -462,8 +485,8 @@ xdma_prep_memcpy(xdma_channel_t *xchan, uintptr_t src_addr,
 
 	if (xchan->flags & XCHAN_DESC_ALLOCATED) {
 		/* Driver created xDMA descriptors. */
-		bus_dmamap_sync(xchan->dma_tag, xchan->dma_map,
-		    BUS_DMASYNC_POSTWRITE);
+		//bus_dmamap_sync(xchan->dma_tag, xchan->dma_map,
+		//    BUS_DMASYNC_POSTWRITE);
 	}
 
 	XCHAN_UNLOCK(xchan);
@@ -565,25 +588,49 @@ xdma_enqueue(xdma_channel_t *xchan, struct mbuf **mp)
 
 	//printf("%s: enqueuing %p, m->m_data %p phys 0x%x\n", __func__, m, m->m_data, (uint32_t)vtophys(m->m_data));
 
-	XCHAN_LOCK(xchan);
-
 	xm = malloc(sizeof(struct xdma_mbuf_entry), M_XDMA, M_WAITOK | M_ZERO);
 	xm->m = m;
-	TAILQ_INSERT_TAIL(&conf->queue, xm, xm_next);
 
+	XCHAN_LOCK(xchan);
+	TAILQ_INSERT_TAIL(&conf->queue, xm, xm_next);
 	XCHAN_UNLOCK(xchan);
 
 	return (0);
 }
 
 int
-xdma_enqueue_sync(xdma_channel_t *xchan)
+xdma_enqueue_sync_post(xdma_channel_t *xchan, uint32_t i)
 {
+	xdma_config_t *conf;
+
+	conf = &xchan->conf;
+
+	//return (0);
 
 	if (xchan->flags & XCHAN_DESC_ALLOCATED) {
 		/* Driver created xDMA descriptors. */
-		bus_dmamap_sync(xchan->dma_tag, xchan->dma_map,
-		    BUS_DMASYNC_POSTWRITE);
+
+		bus_dmamap_sync(xchan->dma_tag, xchan->descs[i].dma_map,
+		    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
+	}
+
+	return (0);
+}
+
+int
+xdma_enqueue_sync_pre(xdma_channel_t *xchan, uint32_t i)
+{
+	xdma_config_t *conf;
+
+	conf = &xchan->conf;
+
+	//return (0);
+
+	if (xchan->flags & XCHAN_DESC_ALLOCATED) {
+		/* Driver created xDMA descriptors. */
+
+		bus_dmamap_sync(xchan->dma_tag, xchan->descs[i].dma_map,
+		    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 	}
 
 	return (0);
@@ -634,7 +681,7 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 		    xchan->dma_buf_map[i].map, m, &seg, &nsegs, 0);
 		if (error != 0) {
 			printf("ERROR: nomem\n");
-			return (ENOMEM);
+			break;
 		}
 
 		KASSERT(nsegs == 1, ("%s: %d segments returned!", __func__, nsegs));
@@ -674,12 +721,13 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 		return (-1);
 	}
 
+	XCHAN_UNLOCK(xchan);
+
+	/* Destroy temporary queue. */
 	TAILQ_FOREACH_SAFE(sg, &sg_queue, sg_next, sg_tmp) {
 		TAILQ_REMOVE(&sg_queue, sg, sg_next);
 		free(sg, M_XDMA);
 	}
-
-	XCHAN_UNLOCK(xchan);
 
 	return (0);
 }
@@ -720,8 +768,8 @@ xdma_prep_fifo(xdma_channel_t *xchan, uintptr_t src_addr,
 
 	if (xchan->flags & XCHAN_DESC_ALLOCATED) {
 		/* Driver created xDMA descriptors. */
-		bus_dmamap_sync(xchan->dma_tag, xchan->dma_map,
-		    BUS_DMASYNC_POSTWRITE);
+		//bus_dmamap_sync(xchan->dma_tag, xchan->dma_map,
+		//    BUS_DMASYNC_POSTWRITE);
 	}
 
 	XCHAN_UNLOCK(xchan);
@@ -768,8 +816,8 @@ xdma_prep_cyclic(xdma_channel_t *xchan, enum xdma_direction dir,
 
 	if (xchan->flags & XCHAN_DESC_ALLOCATED) {
 		/* Driver has created xDMA descriptors. */
-		bus_dmamap_sync(xchan->dma_tag, xchan->dma_map,
-		    BUS_DMASYNC_POSTWRITE);
+		//bus_dmamap_sync(xchan->dma_tag, xchan->dma_map,
+		//    BUS_DMASYNC_POSTWRITE);
 	}
 
 	XCHAN_UNLOCK(xchan);
