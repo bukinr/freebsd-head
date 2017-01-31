@@ -688,7 +688,6 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 		}
 
 		xchan->dma_buf_map[i].m = xm->m;
-		xchan->idx_head = xchan_next_idx(xchan, xchan->idx_head);
 
 		//printf("%s(%d): sglist_append_phys 0x%x %d bytes\n", __func__,
 		//    device_get_unit(xdma->dma_dev), (uint32_t)seg.ds_addr, (uint32_t)seg.ds_len);
@@ -698,6 +697,7 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 		sg->len = seg.ds_len;
 		TAILQ_INSERT_TAIL(&sg_queue, sg, sg_next);
 	
+		xchan->idx_head = xchan_next_idx(xchan, xchan->idx_head);
 		xchan->idx_count++;
 
 		TAILQ_REMOVE(&conf->queue_in, xm, xm_next);
@@ -911,8 +911,8 @@ xdma_mark_done(xdma_channel_t *xchan, uint32_t idx, uint32_t len)
 	xm->m = m;
 	TAILQ_INSERT_TAIL(&conf->queue_out, xm, xm_next);
 
-	xchan->idx_count--;
 	xchan->idx_tail = xchan_next_idx(xchan, xchan->idx_tail);
+	xchan->idx_count--;
 
 	XCHAN_UNLOCK(xchan);
 
