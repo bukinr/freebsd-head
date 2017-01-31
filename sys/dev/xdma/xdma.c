@@ -534,7 +534,7 @@ xdma_prep_sg(xdma_channel_t *xchan, uintptr_t src_addr,
 }
 
 static inline uint32_t  
-next_idx(xdma_channel_t *xchan, uint32_t curidx)
+xchan_next_idx(xdma_channel_t *xchan, uint32_t curidx)
 {
 	xdma_config_t *conf;
 
@@ -689,7 +689,7 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 		}
 
 		xchan->dma_buf_map[i].m = xm->m;
-		xchan->idx_head = next_idx(xchan, xchan->idx_head);
+		xchan->idx_head = xchan_next_idx(xchan, xchan->idx_head);
 
 		//printf("%s(%d): sglist_append_phys 0x%x %d bytes\n", __func__,
 		//    device_get_unit(xdma->dma_dev), (uint32_t)seg.ds_addr, (uint32_t)seg.ds_len);
@@ -915,7 +915,7 @@ xdma_mark_done(xdma_channel_t *xchan, uint32_t idx, uint32_t len)
 	//dwc_setup_txdesc(sc, sc->tx_idx_tail, 0, 0);
 
 	xchan->idx_count--;
-	xchan->idx_tail = next_idx(xchan, xchan->idx_tail);
+	xchan->idx_tail = xchan_next_idx(xchan, xchan->idx_tail);
 
 	XCHAN_UNLOCK(xchan);
 
