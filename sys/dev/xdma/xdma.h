@@ -89,8 +89,8 @@ struct xdma_channel_config {
 	int			src_width;	/* In bytes. */
 	int			dst_width;	/* In bytes. */
 
-	TAILQ_HEAD(, xdma_mbuf_entry)	queue;
 	TAILQ_HEAD(, xdma_mbuf_entry)	queue_in;
+	TAILQ_HEAD(, xdma_mbuf_entry)	queue_out;
 };
 
 typedef struct xdma_channel_config xdma_config_t;

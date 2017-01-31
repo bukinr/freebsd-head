@@ -509,8 +509,8 @@ xdma_prep_sg(xdma_channel_t *xchan, uintptr_t src_addr,
 	conf->direction = dir;
 	conf->block_num = ndesc;
 
+	TAILQ_INIT(&conf->queue_out);
 	TAILQ_INIT(&conf->queue_in);
-	TAILQ_INIT(&conf->queue);
 
 	xchan->flags |= (XCHAN_CONFIGURED | XCHAN_TYPE_SG);
 
@@ -556,9 +556,9 @@ xdma_dequeue(xdma_channel_t *xchan, struct mbuf **mp)
 
 	XCHAN_LOCK(xchan);
 
-	TAILQ_FOREACH_SAFE(xm, &conf->queue_in, xm_next, xm_tmp) {
+	TAILQ_FOREACH_SAFE(xm, &conf->queue_out, xm_next, xm_tmp) {
 		*mp = xm->m;
-		TAILQ_REMOVE(&conf->queue_in, xm, xm_next);
+		TAILQ_REMOVE(&conf->queue_out, xm, xm_next);
 		free(xm, M_XDMA);
 
 		XCHAN_UNLOCK(xchan);
@@ -594,7 +594,7 @@ xdma_enqueue(xdma_channel_t *xchan, struct mbuf **mp)
 	xm->m = m;
 
 	XCHAN_LOCK(xchan);
-	TAILQ_INSERT_TAIL(&conf->queue, xm, xm_next);
+	TAILQ_INSERT_TAIL(&conf->queue_in, xm, xm_next);
 	XCHAN_UNLOCK(xchan);
 
 	return (0);
@@ -654,7 +654,7 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 
 	XCHAN_LOCK(xchan);
 
-	if (TAILQ_EMPTY(&conf->queue)) {
+	if (TAILQ_EMPTY(&conf->queue_in)) {
 
 		XCHAN_UNLOCK(xchan);
 		return (0);
@@ -662,7 +662,7 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 
 	TAILQ_INIT(&sg_queue);
 
-	TAILQ_FOREACH_SAFE(xm, &conf->queue, xm_next, xm_tmp) {
+	TAILQ_FOREACH_SAFE(xm, &conf->queue_in, xm_next, xm_tmp) {
 		m = xm->m;
 
 		if (xchan->idx_count == (conf->block_num - 1)) {
@@ -701,7 +701,7 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 	
 		xchan->idx_count++;
 
-		TAILQ_REMOVE(&conf->queue, xm, xm_next);
+		TAILQ_REMOVE(&conf->queue_in, xm, xm_next);
 		free(xm, M_XDMA);
 	}
 
@@ -887,7 +887,7 @@ xdma_mark_done(xdma_channel_t *xchan, uint32_t idx, uint32_t len)
 	xdma_config_t *conf;
 	struct mbuf *m;
 
-	/* TODO: lock for queue_in access ? */
+	/* TODO: lock for queue_out access ? */
 	XCHAN_LOCK(xchan);
 
 	conf = &xchan->conf;
@@ -910,7 +910,7 @@ xdma_mark_done(xdma_channel_t *xchan, uint32_t idx, uint32_t len)
 
 	xm = malloc(sizeof(struct xdma_mbuf_entry), M_XDMA, M_WAITOK | M_ZERO);
 	xm->m = m;
-	TAILQ_INSERT_TAIL(&conf->queue_in, xm, xm_next);
+	TAILQ_INSERT_TAIL(&conf->queue_out, xm, xm_next);
 
 	//dwc_setup_txdesc(sc, sc->tx_idx_tail, 0, 0);
 
