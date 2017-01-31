@@ -621,10 +621,8 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct xdma_s
 		tmp = chan->idx_head;
 		chan->idx_head = next_idx(sc, chan->idx_head);
 
-		//wmb();
 		desc->control |= htole32(CONTROL_OWN | CONTROL_GO);
 		xdma_enqueue_sync_pre(xchan, tmp);
-		//wmb();
 	}
 
 	//mips_dcache_wbinv_all();

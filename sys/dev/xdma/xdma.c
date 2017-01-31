@@ -306,7 +306,7 @@ xdma_desc_alloc_bus_dma(xdma_channel_t *xchan, uint32_t desc_size,
 	for (i = 0; i < nsegments; i++) {
 		desc = &xchan->descs[i];
 		err = bus_dmamem_alloc(xchan->dma_tag, (void **)&desc->desc,
-		    BUS_DMA_COHERENT | BUS_DMA_WAITOK | BUS_DMA_ZERO, &desc->dma_map);
+		    BUS_DMA_WAITOK | BUS_DMA_ZERO, &desc->dma_map);
 		if (err) {
 			device_printf(xdma->dev,
 			    "%s: Can't allocate memory for descriptors.\n", __func__);
