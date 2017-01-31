@@ -48,10 +48,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/sx.h>
 #include <sys/bus_dma.h>
 
-#include <net/ethernet.h>
-
-#include <machine/cache.h>
-
 #include <machine/bus.h>
 
 #ifdef FDT
@@ -60,10 +56,10 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus_subr.h>
 #endif
 
-#include <vm/vm.h>
-#include <vm/vm_extern.h>
-#include <vm/vm_kern.h>
-#include <vm/pmap.h>
+//#include <vm/vm.h>
+//#include <vm/vm_extern.h>
+//#include <vm/vm_kern.h>
+//#include <vm/pmap.h>
 
 #include <dev/xdma/xdma.h>
 
@@ -163,7 +159,8 @@ xdma_channel_free(xdma_channel_t *xchan)
 }
 
 int
-xdma_setup_intr(xdma_channel_t *xchan, int (*cb)(void *, xdma_transfer_status_t *),
+xdma_setup_intr(xdma_channel_t *xchan,
+    int (*cb)(void *, xdma_transfer_status_t *),
     void *arg, void **ihandler)
 {
 	struct xdma_intr_handler *ih;
@@ -610,11 +607,7 @@ xdma_enqueue_sync_post(xdma_channel_t *xchan, uint32_t i)
 
 	conf = &xchan->conf;
 
-	//return (0);
-
 	if (xchan->flags & XCHAN_DESC_ALLOCATED) {
-		/* Driver created xDMA descriptors. */
-
 		bus_dmamap_sync(xchan->dma_tag, xchan->descs[i].dma_map,
 		    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
 	}
@@ -629,11 +622,7 @@ xdma_enqueue_sync_pre(xdma_channel_t *xchan, uint32_t i)
 
 	conf = &xchan->conf;
 
-	//return (0);
-
 	if (xchan->flags & XCHAN_DESC_ALLOCATED) {
-		/* Driver created xDMA descriptors. */
-
 		bus_dmamap_sync(xchan->dma_tag, xchan->descs[i].dma_map,
 		    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 	}
