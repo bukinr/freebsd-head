@@ -403,9 +403,9 @@ xdma_desc_alloc(xdma_channel_t *xchan, uint32_t desc_size, uint32_t align)
 
 	conf = &xchan->conf;
 
-	XCHAN_UNLOCK(xchan);
+	//XCHAN_UNLOCK(xchan);
 	ret = xdma_desc_alloc_bus_dma(xchan, desc_size, align);
-	XCHAN_LOCK(xchan);
+	//XCHAN_LOCK(xchan);
 	if (ret != 0) {
 		device_printf(xdma->dev,
 		    "%s: Can't allocate memory for descriptors.\n",
@@ -559,9 +559,9 @@ xdma_dequeue(xdma_channel_t *xchan, struct mbuf **mp)
 	TAILQ_FOREACH_SAFE(xm, &conf->queue_out, xm_next, xm_tmp) {
 		*mp = xm->m;
 		TAILQ_REMOVE(&conf->queue_out, xm, xm_next);
-		free(xm, M_XDMA);
-
 		XCHAN_UNLOCK(xchan);
+
+		free(xm, M_XDMA);
 
 		return (0);
 	}
