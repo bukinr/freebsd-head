@@ -193,6 +193,36 @@ static int msgdma_probe(device_t dev);
 static int msgdma_attach(device_t dev);
 static int msgdma_detach(device_t dev);
 
+#if 0
+static uint32_t
+process_desc(uint32_t n)
+{
+
+	xdma_enqueue_sync_post(xchan, chan->idx_tail);
+
+	//desc = &descs[chan->idx_tail];
+	desc = xchan->descs[chan->idx_tail].desc;
+	if ((le32toh(desc->control) & CONTROL_OWN) != 0) {
+		break;
+	}
+	//printf("%s(%d): marking desc %d done\n", __func__, device_get_unit(sc->dev), chan->idx_tail);
+	tot_copied += le32toh(desc->transfered);
+	cnt_done++;
+
+	xdma_mark_done(xchan, chan->idx_tail, le32toh(desc->transfered));
+
+	chan->idx_tail = next_idx(xchan, chan->idx_tail);
+
+	//xdma_sglist_append(&sg_queue, paddr, len);
+	//sg = malloc(sizeof(struct xdma_sglist), M_XDMA, M_WAITOK | M_ZERO);
+	//sg->paddr = 0;
+	//sg->len = le32toh(desc->transfered);
+	//TAILQ_INSERT_TAIL(&sg_queue, sg, sg_next);
+
+	return (0);
+}
+#endif
+
 static void
 msgdma_intr(void *arg)
 {
@@ -201,9 +231,11 @@ msgdma_intr(void *arg)
 	struct msgdma_desc *desc;
 	struct msgdma_channel *chan;
 	struct xdma_channel *xchan;
+	xdma_config_t *conf;
 	//struct xdma_sglist_list sg_queue;
 	struct msgdma_softc *sc;
 	//uint32_t len;
+	//int i;
 
 	sc = arg;
 	chan = sc->curchan;
@@ -226,6 +258,7 @@ msgdma_intr(void *arg)
 	//}
 
 	xchan = chan->xchan;
+	conf = &xchan->conf;
 
 	//descs = (struct msgdma_desc *)xchan->descs;
 
@@ -234,27 +267,20 @@ msgdma_intr(void *arg)
 
 	cnt_done = 0;
 	tot_copied = 0;
+
 	while (chan->idx_tail != chan->idx_head) {
 		xdma_enqueue_sync_post(xchan, chan->idx_tail);
-
-		//desc = &descs[chan->idx_tail];
 		desc = xchan->descs[chan->idx_tail].desc;
 		if ((le32toh(desc->control) & CONTROL_OWN) != 0) {
 			break;
 		}
-		//printf("%s(%d): marking desc %d done\n", __func__, device_get_unit(sc->dev), chan->idx_tail);
+
+		//printf("%s(%d) p %d\n", __func__, device_get_unit(sc->dev), chan->idx_tail);
+
 		tot_copied += le32toh(desc->transfered);
 		cnt_done++;
-
 		xdma_mark_done(xchan, chan->idx_tail, le32toh(desc->transfered));
-
 		chan->idx_tail = next_idx(xchan, chan->idx_tail);
-
-		//xdma_sglist_append(&sg_queue, paddr, len);
-		//sg = malloc(sizeof(struct xdma_sglist), M_XDMA, M_WAITOK | M_ZERO);
-		//sg->paddr = 0;
-		//sg->len = le32toh(desc->transfered);
-		//TAILQ_INSERT_TAIL(&sg_queue, sg, sg_next);
 	}
 
 	WRITE4_DESC(sc, PF_STATUS, PF_STATUS_IRQ);
@@ -621,7 +647,6 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct xdma_s
 		desc->control |= htole32(CONTROL_TC_IRQ_EN | CONTROL_ET_IRQ_EN | CONTROL_ERR_M);
 		tmp = chan->idx_head;
 		chan->idx_head = next_idx(xchan, chan->idx_head);
-
 		desc->control |= htole32(CONTROL_OWN | CONTROL_GO);
 		xdma_enqueue_sync_pre(xchan, tmp);
 	}

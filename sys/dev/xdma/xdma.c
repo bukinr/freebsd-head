@@ -364,7 +364,6 @@ xdma_desc_alloc_bus_dma(xdma_channel_t *xchan, uint32_t desc_size,
 			    "%s: Can't create buf DMA map.\n", __func__);
 			return (-1);
 		}
-		//dwc_setup_txdesc(sc, idx, 0, 0);
 	}
 
 	return (0);
@@ -828,7 +827,7 @@ xdma_begin(xdma_channel_t *xchan)
 	xdma = xchan->xdma;
 
 	if (xchan->flags & XCHAN_TYPE_SG) {
-
+		/* Not valid. */
 		return (0);
 	};
 
@@ -912,8 +911,6 @@ xdma_mark_done(xdma_channel_t *xchan, uint32_t idx, uint32_t len)
 	xm->m = m;
 	TAILQ_INSERT_TAIL(&conf->queue_out, xm, xm_next);
 
-	//dwc_setup_txdesc(sc, sc->tx_idx_tail, 0, 0);
-
 	xchan->idx_count--;
 	xchan->idx_tail = xchan_next_idx(xchan, xchan->idx_tail);
 
@@ -934,7 +931,11 @@ xdma_callback(xdma_channel_t *xchan, xdma_transfer_status_t *status)
 		}
 	}
 
-	xdma_enqueue_submit(xchan);
+	if (xchan->flags & XCHAN_TYPE_SG) {
+		/* Check if more entries available in queue. */
+		xdma_enqueue_submit(xchan);
+		return (0);
+	};
 
 	return (0);
 }
