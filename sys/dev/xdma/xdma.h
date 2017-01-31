@@ -143,7 +143,7 @@ struct xdma_channel {
 
 	/* Bufs */
 	bus_dma_tag_t			dma_buf_tag;
-	struct xchan_bufmap		dma_buf_map[32];
+	struct xchan_bufmap		*dma_buf_map;
 	uint32_t			idx_count;
 	uint32_t			idx_head;
 	uint32_t			idx_tail;
@@ -166,7 +166,7 @@ int xdma_prep_cyclic(xdma_channel_t *, enum xdma_direction,
     uintptr_t, uintptr_t, int, int, int, int);
 int xdma_prep_memcpy(xdma_channel_t *, uintptr_t, uintptr_t, size_t len);
 int xdma_prep_fifo(xdma_channel_t *, uintptr_t, uintptr_t, size_t len, enum xdma_direction);
-int xdma_prep_sg(xdma_channel_t *xchan, uintptr_t, uintptr_t, enum xdma_direction);
+int xdma_prep_sg(xdma_channel_t *xchan, uintptr_t, uintptr_t, uint32_t, enum xdma_direction);
 int xdma_desc_alloc(xdma_channel_t *, uint32_t, uint32_t);
 int xdma_desc_free(xdma_channel_t *xchan);
 int xdma_mark_done(xdma_channel_t *xchan, uint32_t idx, uint32_t len);

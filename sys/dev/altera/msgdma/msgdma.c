@@ -101,8 +101,6 @@ __FBSDID("$FreeBSD$");
 #include <dev/xdma/xdma.h>
 #include "xdma_if.h"
 
-#define	TX_DESC_COUNT	32
-
 struct msgdma_channel {
 	struct msgdma_softc	*sc;
 	struct mtx		mtx;
@@ -149,6 +147,8 @@ struct msgdma_desc {
 };
 #endif
 
+#define	MSGDMA_NCHANNELS	1
+
 struct msgdma_softc {
 	device_t		dev;
 	struct resource		*res[3];
@@ -160,17 +160,18 @@ struct msgdma_softc {
 	struct msgdma_desc	desc;
 	struct msgdma_desc	*curdesc;
 	struct msgdma_channel	*curchan;
-#define	SOFTDMA_NCHANNELS	32
-	struct msgdma_channel msgdma_channels[SOFTDMA_NCHANNELS];
+	struct msgdma_channel	msgdma_channels[MSGDMA_NCHANNELS];
 };
 
 static inline uint32_t
-next_idx(struct msgdma_softc *sc, uint32_t curidx)
+next_idx(xdma_channel_t *xchan, uint32_t curidx)
 {
+	xdma_config_t *conf;
 
-	return ((curidx + 1) % TX_DESC_COUNT);
+	conf = &xchan->conf;
+
+	return ((curidx + 1) % conf->block_num);
 }
-
 
 static struct resource_spec msgdma_spec[] = {
 	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },
@@ -247,7 +248,7 @@ msgdma_intr(void *arg)
 
 		xdma_mark_done(xchan, chan->idx_tail, le32toh(desc->transfered));
 
-		chan->idx_tail = next_idx(sc, chan->idx_tail);
+		chan->idx_tail = next_idx(xchan, chan->idx_tail);
 
 		//xdma_sglist_append(&sg_queue, paddr, len);
 		//sg = malloc(sizeof(struct xdma_sglist), M_XDMA, M_WAITOK | M_ZERO);
@@ -479,7 +480,7 @@ msgdma_channel_alloc(device_t dev, struct xdma_channel *xchan)
 
 	xdma_assert_locked();
 
-	for (i = 0; i < SOFTDMA_NCHANNELS; i++) {
+	for (i = 0; i < MSGDMA_NCHANNELS; i++) {
 		chan = &sc->msgdma_channels[i];
 		if (chan->used == 0) {
 			chan->xchan = xchan;
@@ -619,7 +620,7 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct xdma_s
 		}
 		desc->control |= htole32(CONTROL_TC_IRQ_EN | CONTROL_ET_IRQ_EN | CONTROL_ERR_M);
 		tmp = chan->idx_head;
-		chan->idx_head = next_idx(sc, chan->idx_head);
+		chan->idx_head = next_idx(xchan, chan->idx_head);
 
 		desc->control |= htole32(CONTROL_OWN | CONTROL_GO);
 		xdma_enqueue_sync_pre(xchan, tmp);
@@ -671,7 +672,7 @@ msgdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 	//    VM_MEMATTR_UNCACHEABLE);
 
 	//descs = (struct msgdma_desc *)xchan->descs;
-	for (i = 0; i < 32; i++) {
+	for (i = 0; i < conf->block_num; i++) {
 		//desc = &descs[i];
 		desc = xchan->descs[i].desc;
 
@@ -679,7 +680,7 @@ msgdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 		//desc->write_lo = htole32(conf->dst_addr);
 		//desc->length = htole32(conf->block_len);
 
-		if (i == (32 - 1)) {
+		if (i == (conf->block_num - 1)) {
 			//desc->next = htole32(vtophys(&descs[0]));
 			desc->next = htole32(xchan->descs[0].ds_addr);
 		} else {

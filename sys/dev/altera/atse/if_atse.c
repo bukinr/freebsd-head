@@ -96,6 +96,9 @@ __FBSDID("$FreeBSD$");
 
 #define	ATSE_WATCHDOG_TIME	5
 
+#define	NUM_TX_DESC		16
+#define	NUM_RX_DESC		16
+
 #include <machine/cache.h>
 
 #ifdef DEVICE_POLLING
@@ -413,7 +416,7 @@ static int atse_detach(device_t);
 devclass_t atse_devclass;
 
 static int
-atse_rx_enqueue(struct atse_softc *sc, uint32_t n, int submit)
+atse_rx_enqueue(struct atse_softc *sc, uint32_t n)
 {
 	struct mbuf *m;
 	int i;
@@ -425,10 +428,6 @@ atse_rx_enqueue(struct atse_softc *sc, uint32_t n, int submit)
 		m->m_pkthdr.len = m->m_len = m->m_ext.ext_size;
 		//m->m_len = m->m_pkthdr.len = MCLBYTES;
 		xdma_enqueue(sc->xchan_rx, &m);
-	}
-
-	if (submit == 1) {
-		xdma_enqueue_submit(sc->xchan_rx);
 	}
 
 	return (0);
@@ -508,7 +507,7 @@ atse_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 		cnt_processed++;
 	}
 
-	atse_rx_enqueue(sc, cnt_processed, 0);
+	atse_rx_enqueue(sc, cnt_processed);
 
 	ATSE_UNLOCK(sc);
 
@@ -1823,7 +1822,7 @@ atse_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	xdma_prep_sg(sc->xchan_tx, 0, 0, XDMA_MEM_TO_DEV);
+	xdma_prep_sg(sc->xchan_tx, 0, 0, NUM_TX_DESC, XDMA_MEM_TO_DEV);
 
 	/* Get RX xDMA controller */
 	sc->xdma_rx = xdma_ofw_get(sc->dev, "rx");
@@ -1847,7 +1846,7 @@ atse_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	xdma_prep_sg(sc->xchan_rx, 0, 0, XDMA_DEV_TO_MEM);
+	xdma_prep_sg(sc->xchan_rx, 0, 0, NUM_RX_DESC, XDMA_DEV_TO_MEM);
 
 	atse_ethernet_option_bits_read(dev);
 
@@ -1965,7 +1964,8 @@ err:
 	if (error == 0)
 		atse_sysctl_stats_attach(dev);
 
-	atse_rx_enqueue(sc, 32, 1);
+	atse_rx_enqueue(sc, NUM_RX_DESC);
+	xdma_enqueue_submit(sc->xchan_rx);
 
 	return (error);
 }

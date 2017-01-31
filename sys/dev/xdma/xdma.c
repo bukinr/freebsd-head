@@ -267,6 +267,7 @@ static int
 xdma_desc_alloc_bus_dma(xdma_channel_t *xchan, uint32_t desc_size,
     uint32_t align)
 {
+	xdma_descriptor_t *desc;
 	xdma_controller_t *xdma;
 	bus_size_t all_desc_sz;
 	xdma_config_t *conf;
@@ -300,8 +301,8 @@ xdma_desc_alloc_bus_dma(xdma_channel_t *xchan, uint32_t desc_size,
 
 	xchan->descs = malloc(nsegments * sizeof(xdma_descriptor_t),
 	    M_XDMA, (M_WAITOK | M_ZERO));
-
-	xdma_descriptor_t *desc;
+	xchan->dma_buf_map = malloc(nsegments * sizeof(struct xchan_bufmap),
+	    M_XDMA, (M_WAITOK | M_ZERO));
 
 	for (i = 0; i < nsegments; i++) {
 		desc = &xchan->descs[i];
@@ -328,7 +329,8 @@ xdma_desc_alloc_bus_dma(xdma_channel_t *xchan, uint32_t desc_size,
 			    "%s: Can't load DMA map.\n", __func__);
 			return (-1);
 		}
-		printf("%s: desc->desc %lx, desc->ds_addr %x\n", __func__, (uint64_t)desc->desc, (uint32_t)desc->ds_addr);
+		printf("%s: desc->desc %lx, desc->ds_addr %x\n", __func__,
+		    (uint64_t)desc->desc, (uint32_t)desc->ds_addr);
 
 #if 0
 		desc->desc = (void *)kmem_alloc_contig(kernel_arena,
@@ -443,6 +445,7 @@ xdma_desc_free(xdma_channel_t *xchan)
 	}
 	bus_dma_tag_destroy(xchan->dma_tag);
 	free(xchan->descs, M_XDMA);
+	free(xchan->dma_buf_map, M_XDMA);
 
 	xchan->flags &= ~(XCHAN_DESC_ALLOCATED);
 
@@ -496,7 +499,7 @@ xdma_prep_memcpy(xdma_channel_t *xchan, uintptr_t src_addr,
 
 int
 xdma_prep_sg(xdma_channel_t *xchan, uintptr_t src_addr,
-    uintptr_t dst_addr, enum xdma_direction dir)
+    uintptr_t dst_addr, uint32_t ndesc, enum xdma_direction dir)
 {
 	xdma_controller_t *xdma;
 	xdma_config_t *conf;
@@ -507,7 +510,8 @@ xdma_prep_sg(xdma_channel_t *xchan, uintptr_t src_addr,
 
 	conf = &xchan->conf;
 	conf->direction = dir;
-	conf->block_num = 32;
+	conf->block_num = ndesc;
+
 	TAILQ_INIT(&conf->queue_in);
 	TAILQ_INIT(&conf->queue);
 
@@ -532,13 +536,14 @@ xdma_prep_sg(xdma_channel_t *xchan, uintptr_t src_addr,
 	return (0);
 }
 
-#define	TX_DESC_COUNT	32
-
 static inline uint32_t  
 next_idx(xdma_channel_t *xchan, uint32_t curidx)
 {
+	xdma_config_t *conf;
 
-	return ((curidx + 1) % TX_DESC_COUNT);
+	conf = &xchan->conf;
+
+	return ((curidx + 1) % conf->block_num);
 }
 
 int
@@ -671,7 +676,7 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 	TAILQ_FOREACH_SAFE(xm, &conf->queue, xm_next, xm_tmp) {
 		m = xm->m;
 
-		if (xchan->idx_count == (32 - 1)) {
+		if (xchan->idx_count == (conf->block_num - 1)) {
 			break;
 		}
 
