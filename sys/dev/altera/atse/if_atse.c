@@ -331,8 +331,6 @@ atse_rx_read_fill_level(void)
 	    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_INT_ENABLE,		\
 	    "TX_INTR", __func__, __LINE__)
 
-static int	atse_rx_locked(struct atse_softc *sc);
-
 /*
  * Register space access macros.
  */
@@ -544,140 +542,12 @@ atse_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 	sc->rx_busy = 0;
 
 	/* Setup next transfer */
-	atse_rx_locked(sc);
+	//atse_rx_locked(sc);
 
 	ATSE_UNLOCK(sc);
 
 	return (0);
 }
-
-#if 0
-static int
-atse_tx_locked(struct atse_softc *sc, int *sent)
-{
-	uint32_t val4, fill_level;
-	struct ifnet *ifp;
-	struct mbuf *m;
-	int leftm;
-	int ret;
-	int c;
-
-	ATSE_LOCK_ASSERT(sc);
-
-	//printf("%s\n", __func__);
-
-	ifp = sc->atse_ifp;
-
-	if ((ifp->if_flags & IFF_UP) == 0) {
-		return (-1);
-	}
-
-	//printf("%s 1\n", __func__);
-
-	ifp = sc->atse_ifp;
-	m = sc->atse_tx_m;
-	KASSERT(m != NULL, ("%s: m is null: sc=%p", __func__, sc));
-	KASSERT(m->m_flags & M_PKTHDR, ("%s: not a pkthdr: m=%p", __func__, m));
-
-	/*
-	 * Copy to buffer to minimize our pain as we can only store
-	 * double words which, after the first mbuf gets out of alignment
-	 * quite quickly.
-	 */
-	if (sc->atse_tx_m_offset == 0) {
-		m_copydata(m, 0, m->m_pkthdr.len, sc->atse_tx_buf);
-		sc->atse_tx_buf_len = m->m_pkthdr.len;
-	}
-
-	uint32_t src;
-	uint32_t dst;
-	//src = (uintptr_t)sc->atse_tx_buf;
-
-	src = vtophys(sc->atse_tx_buf);
-	dst = (rman_get_start(sc->atse_tx_mem_res) + A_ONCHIP_FIFO_MEM_CORE_DATA);
-	//printf("tx: src addr %x, dst addr %x, len %d\n", src, dst, sc->atse_tx_buf_len);
-
-	ret = xdma_prep_fifo(sc->xchan_tx, src, dst, sc->atse_tx_buf_len, XDMA_MEM_TO_DEV);
-	if (ret != 0) {
-		device_printf(sc->dev, "Can't prepare xDMA for transfer\n");
-		return (-1);
-	}
-
-	sc->txcount++;
-
-	ifp->if_drv_flags |= IFF_DRV_OACTIVE;
-	xdma_begin(sc->xchan_tx);
-
-	/* If anyone is interested give them a copy. */
-	BPF_MTAP(sc->atse_ifp, m);
-
-	//m_freem(m);
-
-	return (0);
-
-	fill_level = ATSE_TX_READ_FILL_LEVEL(sc);
-#if 0	/* Returns 0xdeadc0de. */
-	val4 = ATSE_TX_META_READ(sc);
-#endif
-	if (sc->atse_tx_m_offset == 0) {
-		/* Write start of packet. */
-		val4 = A_ONCHIP_FIFO_MEM_CORE_SOP;
-		val4 &= ~A_ONCHIP_FIFO_MEM_CORE_EOP;
-		ATSE_TX_META_WRITE(sc, val4);
-	}
-
-	/* TX FIFO is single clock mode, so we have the full FIFO. */
-	c = 0;
-	while ((sc->atse_tx_buf_len - sc->atse_tx_m_offset) > 4 &&
-	     fill_level < AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
-
-		bcopy(&sc->atse_tx_buf[sc->atse_tx_m_offset], &val4,
-		    sizeof(val4));
-		ATSE_TX_DATA_WRITE(sc, val4);
-		sc->atse_tx_m_offset += sizeof(val4);
-		c += sizeof(val4);
-
-		fill_level++;
-		if (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH)
-			fill_level = ATSE_TX_READ_FILL_LEVEL(sc);
-	}
-	if (sent != NULL)
-		*sent += c;
-
-	/* Set EOP *before* writing the last symbol. */
-	if (sc->atse_tx_m_offset >= (sc->atse_tx_buf_len - 4) &&
-	    fill_level < AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
-
-		/* Set EndOfPacket. */
-		val4 = A_ONCHIP_FIFO_MEM_CORE_EOP;
-
-		/* Set EMPTY. */
-		leftm = sc->atse_tx_buf_len - sc->atse_tx_m_offset;
-		val4 |= ((4 - leftm) << A_ONCHIP_FIFO_MEM_CORE_EMPTY_SHIFT);
-		ATSE_TX_META_WRITE(sc, val4);
-
-		/* Write last symbol. */
-		val4 = 0;
-		bcopy(sc->atse_tx_buf + sc->atse_tx_m_offset, &val4, leftm);
-		ATSE_TX_DATA_WRITE(sc, val4);
-
-		if (sent != NULL)
-			*sent += leftm;
-
-		/* OK, the packet is gone. */
-		sc->atse_tx_m = NULL;
-		sc->atse_tx_m_offset = 0;
-
-		/* If anyone is interested give them a copy. */
-		BPF_MTAP(sc->atse_ifp, m);
-
-		m_freem(m);
-		return (0);
-	}
-
-	return (EBUSY);
-}
-#endif
 
 static void
 atse_start_locked(struct ifnet *ifp)
@@ -716,15 +586,6 @@ atse_start_locked(struct ifnet *ifp)
 	 * but who knows.
 	 */
 	sc->atse_watchdog_timer = 0;
-#endif
-
-
-#if 0
-	if (sc->atse_tx_m != NULL) {
-		error = atse_tx_locked(sc, &sent);
-		if (error != 0)
-			goto done;
-	}
 #endif
 
 	sent = 0;
@@ -1472,7 +1333,7 @@ atse_watchdog(struct atse_softc *sc)
 	sc->atse_ifp->if_drv_flags &= ~IFF_DRV_RUNNING;
 	atse_init_locked(sc);
 
-	atse_rx_locked(sc);
+	//atse_rx_locked(sc);
 	if (!IFQ_DRV_IS_EMPTY(&sc->atse_ifp->if_snd))
 		atse_start_locked(sc->atse_ifp);
 }
@@ -1496,7 +1357,7 @@ atse_tick(void *xsc)
 	if ((sc->atse_flags & ATSE_FLAGS_LINK) == 0)
 		atse_miibus_statchg(sc->atse_dev);
 
-	atse_rx_locked(sc);
+	//atse_rx_locked(sc);
 	if ((sc->atse_flags & ATSE_FLAGS_LINK) != 0) {
 		atse_start_locked(sc->atse_ifp);
 	}
@@ -1537,203 +1398,6 @@ atse_update_rx_err(struct atse_softc *sc, uint32_t mask)
 		if ((mask & (1 << i)) != 0)
 			sc->atse_rx_err[i]++;
 }
-
-static int
-atse_rx_locked(struct atse_softc *sc)
-{
-	uint32_t fill, i, j;
-	uint32_t data, meta;
-	struct ifnet *ifp;
-	struct mbuf *m;
-	int rx_npkts;
-
-	//printf("%s\n", __func__);
-
-	ATSE_LOCK_ASSERT(sc);
-
-
-	return (0);
-
-
-
-	if (sc->rx_busy == 1) {
-		return (0);
-	}
-
-	ifp = sc->atse_ifp;
-	rx_npkts = 0;
-	j = 0;
-	meta = 0;
-	do {
-outer:
-		if (sc->atse_rx_m == NULL) {
-			m = m_getcl(M_NOWAIT, MT_DATA, M_PKTHDR);
-			if (m == NULL)
-				return (rx_npkts);
-			m->m_len = m->m_pkthdr.len = MCLBYTES;
-			/* Make sure upper layers will be aligned. */
-			//m_adj(m, ETHER_ALIGN);
-			sc->atse_rx_m = m;
-		}
-
-#if 1
-		//fill = ATSE_RX_READ_FILL_LEVEL(sc);
-		//if (fill <= 0) {
-		//	goto done;
-		//}
-		if (sc->rx_busy == 1) {
-			goto done;
-		}
-
-		//printf("%s: rx_fill_level %d\n", __func__, fill);
-
-		int ret;
-		uint32_t src;
-		uint32_t dst;
-
-		src = (rman_get_start(sc->atse_rx_mem_res) + A_ONCHIP_FIFO_MEM_CORE_DATA);
-		//mips_dcache_wbinv_all();
-		dst = vtophys((vm_offset_t)sc->atse_rx_m->m_data);
-
-		//printf("rx: src addr %x, dst addr %x, len %d\n", src, dst, sc->atse_rx_m->m_len);
-
-		ret = xdma_prep_fifo(sc->xchan_rx, src, dst,
-		    sc->atse_rx_m->m_len, XDMA_DEV_TO_MEM);
-		if (ret != 0) {
-			device_printf(sc->dev, "Can't prepare xDMA for RX transfer\n");
-			return (-1);
-		}
-
-		//sc->txcount++;
-		//ifp->if_drv_flags |= IFF_DRV_OACTIVE;
-
-		sc->rx_busy = 1;
-		xdma_begin(sc->xchan_rx);
-
-		return (rx_npkts);
-#endif
-
-		fill = ATSE_RX_READ_FILL_LEVEL(sc);
-		for (i = 0; i < fill; i++) {
-			/*
-			 * XXX-BZ for whatever reason the FIFO requires the
-			 * the data read before we can access the meta data.
-			 */
-			data = ATSE_RX_DATA_READ(sc);
-			meta = ATSE_RX_META_READ(sc);
-			if (meta & A_ONCHIP_FIFO_MEM_CORE_ERROR_MASK) {
-				/* XXX-BZ evaluate error. */
-				atse_update_rx_err(sc, ((meta &
-				    A_ONCHIP_FIFO_MEM_CORE_ERROR_MASK) >>
-				    A_ONCHIP_FIFO_MEM_CORE_ERROR_SHIFT) & 0xff);
-				if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
-				sc->atse_rx_buf_len = 0;
-				/*
-				 * Should still read till EOP or next SOP.
-				 *
-				 * XXX-BZ might also depend on
-				 * BASE_CFG_COMMAND_CONFIG_RX_ERR_DISC
-				 */
-				sc->atse_flags |= ATSE_FLAGS_ERROR;
-				return (rx_npkts);
-			}
-			if ((meta & A_ONCHIP_FIFO_MEM_CORE_CHANNEL_MASK) != 0) {
-				device_printf(sc->atse_dev, "%s: unexpected "
-				    "channel %u\n", __func__, (meta &
-				    A_ONCHIP_FIFO_MEM_CORE_CHANNEL_MASK) >>
-				    A_ONCHIP_FIFO_MEM_CORE_CHANNEL_SHIFT);
-			}
-
-			if (meta & A_ONCHIP_FIFO_MEM_CORE_SOP) {
-				/*
-				 * There is no need to clear SOP between 1st
-				 * and subsequent packet data junks.
-				 */
-				if (sc->atse_rx_buf_len != 0 &&
-				    (sc->atse_flags & ATSE_FLAGS_SOP_SEEN) == 0)
-				{
-					device_printf(sc->atse_dev, "%s: SOP "
-					    "without empty buffer: %u\n",
-					    __func__, sc->atse_rx_buf_len);
-					/* XXX-BZ any better counter? */
-					if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
-				}
-
-				if ((sc->atse_flags & ATSE_FLAGS_SOP_SEEN) == 0)
-				{
-					sc->atse_flags |= ATSE_FLAGS_SOP_SEEN;
-					sc->atse_rx_buf_len = 0;
-				}
-			}
-#if 0 /* We had to read the data before we could access meta data. See above. */
-			data = ATSE_RX_DATA_READ(sc);
-#endif
-			/* Make sure to not overflow the mbuf data size. */
-			if (sc->atse_rx_buf_len >= sc->atse_rx_m->m_len -
-			    sizeof(data)) {
-				/*
-				 * XXX-BZ Error.  We need more mbufs and are
-				 * not setup for this yet.
-				 */
-				if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
-				sc->atse_flags |= ATSE_FLAGS_ERROR;
-			}
-			if ((sc->atse_flags & ATSE_FLAGS_ERROR) == 0)
-				/*
-				 * MUST keep this bcopy as m_data after m_adj
-				 * for IP header aligment is on half-word
-				 * and not word alignment.
-				 */
-				bcopy(&data, (uint8_t *)(sc->atse_rx_m->m_data +
-				    sc->atse_rx_buf_len), sizeof(data));
-			if (meta & A_ONCHIP_FIFO_MEM_CORE_EOP) {
-				uint8_t empty;
-
-				empty = (meta &
-				    A_ONCHIP_FIFO_MEM_CORE_EMPTY_MASK) >>
-				    A_ONCHIP_FIFO_MEM_CORE_EMPTY_SHIFT;
-				sc->atse_rx_buf_len += (4 - empty);
-
-				if_inc_counter(ifp, IFCOUNTER_IPACKETS, 1);
-				rx_npkts++;
-
-				m = sc->atse_rx_m;
-				m->m_pkthdr.len = m->m_len =
-				    sc->atse_rx_buf_len;
-				sc->atse_rx_m = NULL;
-
-				sc->atse_rx_buf_len = 0;
-				sc->atse_flags &= ~ATSE_FLAGS_SOP_SEEN;
-				if (sc->atse_flags & ATSE_FLAGS_ERROR) {
-					sc->atse_flags &= ~ATSE_FLAGS_ERROR;
-					m_freem(m);
-				} else {
-					m->m_pkthdr.rcvif = ifp;
-					ATSE_UNLOCK(sc);
-					(*ifp->if_input)(ifp, m);
-					ATSE_LOCK(sc);
-				}
-#ifdef DEVICE_POLLING
-				if (ifp->if_capenable & IFCAP_POLLING) {
-					if (sc->atse_rx_cycles <= 0)
-						return (rx_npkts);
-					sc->atse_rx_cycles--;
-				}
-#endif
-				goto outer;	/* Need a new mbuf. */
-			} else {
-				sc->atse_rx_buf_len += sizeof(data);
-			}
-		} /* for */
-
-	/* XXX-BZ could optimize in case of another packet waiting. */
-	} while (fill > 0);
-
-done:
-
-	return (rx_npkts);
-}
-
 
 /*
  * Report current media status.
@@ -1801,7 +1465,7 @@ atse_rx_intr(void *arg)
 #if 0
 		sc->atse_rx_cycles = RX_CYCLES_IN_INTR;
 #endif
-		atse_rx_locked(sc);
+		//atse_rx_locked(sc);
 		ATSE_RX_EVENT_CLEAR(sc);
 
 		/* Disable interrupts if interface is down. */
@@ -1883,7 +1547,7 @@ atse_poll(struct ifnet *ifp, enum poll_cmd cmd, int count)
 	}
 
 	sc->atse_rx_cycles = count;
-	rx_npkts = atse_rx_locked(sc);
+	rx_npkts = 0; //atse_rx_locked(sc);
 	atse_start_locked(ifp);
 
 	if (sc->atse_rx_cycles > 0 || cmd == POLL_AND_CHECK_STATUS) {
