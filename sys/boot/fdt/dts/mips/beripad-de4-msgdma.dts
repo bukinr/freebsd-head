@@ -210,23 +210,27 @@
 			#dma-cells = <3>;
 		}; 
 
-		softdma: softdma {
+		softdma0: softdma@80007500 {
 			compatible = "freebsd,softdma";
+			reg = < 0x80007500 0x8		/* RX */
+				0x80007520 0x20 >;	/* RXC */
+			interrupts = <1>;
+			interrupt-parent = <&beripic0>;
+			#dma-cells = <3>;
+		};
 
+		softdma1: softdma@80007400 {
+			compatible = "freebsd,softdma";
+			reg = < 0x80007400 0x8		/* TX */
+				0x80007420 0x20 >;	/* TXC */
+			interrupts = <2>;
+			interrupt-parent = <&beripic0>;
 			#dma-cells = <3>;
 		};
 
 		ethernet@80007000 {
 			compatible = "altera,atse";
-			// MAC, RX+RXC, TX+TXC.
-			reg = <0x80007000 0x400
-			       0x80007500 0x8
-			       0x80007520 0x20
-			       0x80007400 0x8
-			       0x80007420 0x20>;
-			// RX, TX
-			interrupts = <1 2>;
-			interrupt-parent = <&beripic0>;
+			reg = <0x80007000 0x400>;	/* MAC */
 			dmas = <&msgdma0 0 0 0xffffffff>,
 				<&msgdma1 1 1 0xffffffff>;
 			dma-names = "tx", "rx";

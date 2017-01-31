@@ -221,6 +221,7 @@ atse_rx_read_fill_level(void)
 
 /* The FIFO does an endian conversion, so we must not do it as well. */
 /* XXX-BZ in fact we should do a htobe32 so le would be fine as well? */
+#if 0
 #define	ATSE_TX_DATA_WRITE(sc, val4)					\
 	bus_write_4((sc)->atse_tx_mem_res, A_ONCHIP_FIFO_MEM_CORE_DATA, val4)
 
@@ -333,6 +334,7 @@ atse_rx_read_fill_level(void)
 	a_onchip_fifo_mem_core_read((sc)->atse_txc_mem_res,		\
 	    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_INT_ENABLE,		\
 	    "TX_INTR", __func__, __LINE__)
+#endif /* if 0 */
 
 /*
  * Register space access macros.
@@ -656,10 +658,10 @@ atse_stop_locked(struct atse_softc *sc)
 
 	ifp = sc->atse_ifp;
 	ifp->if_drv_flags &= ~(IFF_DRV_RUNNING | IFF_DRV_OACTIVE);
-	ATSE_RX_INTR_DISABLE(sc);
-	ATSE_TX_INTR_DISABLE(sc);
-	ATSE_RX_EVENT_CLEAR(sc);
-	ATSE_TX_EVENT_CLEAR(sc);
+	//ATSE_RX_INTR_DISABLE(sc);
+	//ATSE_TX_INTR_DISABLE(sc);
+	//ATSE_RX_EVENT_CLEAR(sc);
+	//ATSE_TX_EVENT_CLEAR(sc);
 
 	/* Disable MAC transmit and receive datapath. */
 	mask = BASE_CFG_COMMAND_CONFIG_TX_ENA|BASE_CFG_COMMAND_CONFIG_RX_ENA;
@@ -1288,6 +1290,7 @@ atse_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 	return (error);
 }
 
+#if 0
 static void
 atse_intr_debug(struct atse_softc *sc, const char *intrname)
 {
@@ -1314,6 +1317,7 @@ atse_intr_debug(struct atse_softc *sc, const char *intrname)
 	    rxs, rxe, rxi, rxf,
 	    txs, txe, txi, txf);
 }
+#endif
 
 static void
 atse_watchdog(struct atse_softc *sc)
@@ -1327,7 +1331,7 @@ atse_watchdog(struct atse_softc *sc)
 	device_printf(sc->atse_dev, "watchdog timeout\n");
 	if_inc_counter(sc->atse_ifp, IFCOUNTER_OERRORS, 1);
 
-	atse_intr_debug(sc, "poll");
+	//atse_intr_debug(sc, "poll");
 
 	sc->atse_ifp->if_drv_flags &= ~IFF_DRV_RUNNING;
 	atse_init_locked(sc);
@@ -1387,6 +1391,7 @@ atse_ifmedia_upd(struct ifnet *ifp)
 	return (error);
 }
 
+#if 0
 static void
 atse_update_rx_err(struct atse_softc *sc, uint32_t mask)
 {
@@ -1397,6 +1402,7 @@ atse_update_rx_err(struct atse_softc *sc, uint32_t mask)
 		if ((mask & (1 << i)) != 0)
 			sc->atse_rx_err[i]++;
 }
+#endif
 
 /*
  * Report current media status.
@@ -1417,6 +1423,7 @@ atse_ifmedia_sts(struct ifnet *ifp, struct ifmediareq *ifmr)
 	ATSE_UNLOCK(sc);
 }
 
+#if 0
 static void
 atse_rx_intr(void *arg)
 {
@@ -1475,7 +1482,9 @@ atse_rx_intr(void *arg)
 	ATSE_UNLOCK(sc);
 
 }
+#endif /* if 0 */
 
+#if 0
 static void
 atse_tx_intr(void *arg)
 {
@@ -1530,6 +1539,7 @@ atse_tx_intr(void *arg)
 	//    !(ATSE_TX_STATUS_READ(sc) & A_ONCHIP_FIFO_MEM_CORE_STATUS_FULL));
 	ATSE_UNLOCK(sc);
 }
+#endif /* if 0 */
 
 #ifdef DEVICE_POLLING
 static int
@@ -1912,6 +1922,7 @@ atse_attach(device_t dev)
 	ifp->if_capabilities |= IFCAP_POLLING;
 #endif
 
+#if 0
 	/* Hook up interrupts. */
 	if (sc->atse_rx_irq_res != NULL) {
 		error = bus_setup_intr(dev, sc->atse_rx_irq_res, INTR_TYPE_NET |
@@ -1956,6 +1967,7 @@ atse_attach(device_t dev)
 		//ATSE_RX_INTR_ENABLE(sc);
 		//ATSE_TX_INTR_ENABLE(sc);
 	}
+#endif /* if 0 */
 
 err:
 	if (error != 0)

@@ -108,6 +108,7 @@ atse_attach_fdt(device_t dev)
 		    (void *)(rman_get_start(sc->atse_mem_res) +
 		    rman_get_size(sc->atse_mem_res)));
 
+#if 0
 	/*
 	 * RX and RXC FIFO memory regions.
 	 * 0x00: 2 * 32bit FIFO data,
@@ -181,6 +182,7 @@ atse_attach_fdt(device_t dev)
 	sc->atse_tx_irq_rid = 1;
 	sc->atse_tx_irq_res = bus_alloc_resource_any(dev, SYS_RES_IRQ,
 	    &sc->atse_tx_irq_rid, RF_ACTIVE | RF_SHAREABLE);
+#endif
 
 	error = atse_attach(dev);
 	if (error)
