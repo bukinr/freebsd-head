@@ -510,7 +510,6 @@ atse_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 	}
 
 	atse_rx_enqueue(sc, cnt_processed);
-	xdma_enqueue_submit(sc->xchan_rx);
 
 	ATSE_UNLOCK(sc);
 
@@ -1977,7 +1976,7 @@ err:
 	if (error == 0)
 		atse_sysctl_stats_attach(dev);
 
-	atse_rx_enqueue(sc, NUM_RX_DESC);
+	atse_rx_enqueue(sc, (NUM_RX_DESC * 2));
 	xdma_enqueue_submit(sc->xchan_rx);
 
 	return (error);
