@@ -91,11 +91,31 @@ struct softdma_desc {
 
 struct softdma_softc {
 	device_t		dev;
+	struct resource		*res[3];
+	bus_space_tag_t		bst;
+	bus_space_handle_t	bsh;
+	bus_space_tag_t		bst_c;
+	bus_space_handle_t	bsh_c;
+	void			*ih;
+};
+
+static struct resource_spec softdma_spec[] = {
+	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },
+	{ SYS_RES_MEMORY,	1,	RF_ACTIVE },
+	{ SYS_RES_IRQ,		0,	RF_ACTIVE },
+	{ -1, 0 }
 };
 
 static int softdma_probe(device_t dev);
 static int softdma_attach(device_t dev);
 static int softdma_detach(device_t dev);
+
+static void
+softdma_intr(void *arg)
+{
+
+	printf("%s\n", __func__);
+}
 
 static int
 softdma_probe(device_t dev)
@@ -117,9 +137,31 @@ softdma_attach(device_t dev)
 {
 	struct softdma_softc *sc;
 	phandle_t xref, node;
+	int err;
 
 	sc = device_get_softc(dev);
 	sc->dev = dev;
+
+	if (bus_alloc_resources(dev, softdma_spec, sc->res)) {
+		device_printf(dev, "could not allocate resources for device\n");
+		return (ENXIO);
+	}
+
+	/* FIFO memory interface */
+	sc->bst = rman_get_bustag(sc->res[0]);
+	sc->bsh = rman_get_bushandle(sc->res[0]);
+
+	/* FIFO control memory interface */
+	sc->bst_c = rman_get_bustag(sc->res[1]);
+	sc->bsh_c = rman_get_bushandle(sc->res[1]);
+
+	/* Setup interrupt handler */
+	err = bus_setup_intr(dev, sc->res[2], INTR_TYPE_MISC | INTR_MPSAFE,
+	    NULL, softdma_intr, sc, &sc->ih);
+	if (err) {
+		device_printf(dev, "Unable to alloc interrupt resource.\n");
+		return (ENXIO);
+	}
 
 	node = ofw_bus_get_node(dev);
 	xref = OF_xref_from_node(node);
