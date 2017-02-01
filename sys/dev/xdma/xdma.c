@@ -72,6 +72,7 @@ MALLOC_DEFINE(M_XDMA, "xdma", "xDMA framework");
  * so we have global lock for physical channel management.
  */
 static struct mtx xdma_mtx;
+
 #define	XDMA_LOCK()		mtx_lock(&xdma_mtx)
 #define	XDMA_UNLOCK()		mtx_unlock(&xdma_mtx)
 #define	XDMA_ASSERT_LOCKED()	mtx_assert(&xdma_mtx, MA_OWNED)
@@ -82,6 +83,17 @@ static struct mtx xdma_mtx;
 #define	XCHAN_LOCK(xchan)		mtx_lock(&(xchan)->mtx_lock)
 #define	XCHAN_UNLOCK(xchan)		mtx_unlock(&(xchan)->mtx_lock)
 #define	XCHAN_ASSERT_LOCKED(xchan)	mtx_assert(&(xchan)->mtx_lock, MA_OWNED)
+
+/*
+ * Channel queues locks.
+ */
+#define	QUEUE_IN_LOCK(xchan)		mtx_lock(&(xchan)->mtx_qin_lock)
+#define	QUEUE_IN_UNLOCK(xchan)		mtx_unlock(&(xchan)->mtx_qin_lock)
+#define	QUEUE_IN_ASSERT_LOCKED(xchan)	mtx_assert(&(xchan)->mtx_qin_lock, MA_OWNED)
+
+#define	QUEUE_OUT_LOCK(xchan)		mtx_lock(&(xchan)->mtx_qout_lock)
+#define	QUEUE_OUT_UNLOCK(xchan)		mtx_unlock(&(xchan)->mtx_qout_lock)
+#define	QUEUE_OUT_ASSERT_LOCKED(xchan)	mtx_assert(&(xchan)->mtx_qout_lock, MA_OWNED)
 
 /*
  * Allocate virtual xDMA channel.
@@ -115,6 +127,8 @@ xdma_channel_alloc(xdma_controller_t *xdma)
 
 	TAILQ_INIT(&xchan->ie_handlers);
 	mtx_init(&xchan->mtx_lock, "xDMA", NULL, MTX_DEF);
+	mtx_init(&xchan->mtx_qin_lock, "xDMA queue in", NULL, MTX_DEF);
+	mtx_init(&xchan->mtx_qout_lock, "xDMA queue out", NULL, MTX_DEF);
 
 	TAILQ_INSERT_TAIL(&xdma->channels, xchan, xchan_next);
 
@@ -502,14 +516,21 @@ xdma_prep_sg(xdma_channel_t *xchan, uintptr_t src_addr,
 	int ret;
 
 	xdma = xchan->xdma;
+
 	KASSERT(xdma != NULL, ("xdma is NULL"));
+
+	if (xchan->flags & XCHAN_CONFIGURED) {
+		device_printf(xdma->dev,
+		    "%s: Channel is already configured.\n", __func__);
+		return (-1);
+	}
 
 	conf = &xchan->conf;
 	conf->direction = dir;
 	conf->block_num = ndesc;
 
-	TAILQ_INIT(&conf->queue_out);
-	TAILQ_INIT(&conf->queue_in);
+	TAILQ_INIT(&xchan->queue_out);
+	TAILQ_INIT(&xchan->queue_in);
 
 	xchan->flags |= (XCHAN_CONFIGURED | XCHAN_TYPE_SG);
 
@@ -553,19 +574,22 @@ xdma_dequeue(xdma_channel_t *xchan, struct mbuf **mp)
 
 	//printf("%s\n", __func__);
 
-	XCHAN_LOCK(xchan);
+	QUEUE_OUT_LOCK(xchan);
+	//XCHAN_LOCK(xchan);
 
-	TAILQ_FOREACH_SAFE(xm, &conf->queue_out, xm_next, xm_tmp) {
+	TAILQ_FOREACH_SAFE(xm, &xchan->queue_out, xm_next, xm_tmp) {
 		*mp = xm->m;
-		TAILQ_REMOVE(&conf->queue_out, xm, xm_next);
-		XCHAN_UNLOCK(xchan);
+		TAILQ_REMOVE(&xchan->queue_out, xm, xm_next);
+		//XCHAN_UNLOCK(xchan);
+		QUEUE_OUT_UNLOCK(xchan);
 
 		free(xm, M_XDMA);
 
 		return (0);
 	}
 
-	XCHAN_UNLOCK(xchan);
+	QUEUE_OUT_UNLOCK(xchan);
+	//XCHAN_UNLOCK(xchan);
 
 	return (-1);
 }
@@ -592,9 +616,12 @@ xdma_enqueue(xdma_channel_t *xchan, struct mbuf **mp)
 	xm = malloc(sizeof(struct xdma_mbuf_entry), M_XDMA, M_WAITOK | M_ZERO);
 	xm->m = m;
 
-	XCHAN_LOCK(xchan);
-	TAILQ_INSERT_TAIL(&conf->queue_in, xm, xm_next);
-	XCHAN_UNLOCK(xchan);
+	//XCHAN_LOCK(xchan);
+	//XCHAN_UNLOCK(xchan);
+
+	QUEUE_IN_LOCK(xchan);
+	TAILQ_INSERT_TAIL(&xchan->queue_in, xm, xm_next);
+	QUEUE_IN_UNLOCK(xchan);
 
 	return (0);
 }
@@ -651,17 +678,19 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 	xdma = xchan->xdma;
 	KASSERT(xdma != NULL, ("xdma is NULL"));
 
-	XCHAN_LOCK(xchan);
+	QUEUE_IN_LOCK(xchan);
+	//XCHAN_LOCK(xchan);
 
-	if (TAILQ_EMPTY(&conf->queue_in)) {
+	if (TAILQ_EMPTY(&xchan->queue_in)) {
 
-		XCHAN_UNLOCK(xchan);
+		QUEUE_IN_UNLOCK(xchan);
+		//XCHAN_UNLOCK(xchan);
 		return (0);
 	}
 
 	TAILQ_INIT(&sg_queue);
 
-	TAILQ_FOREACH_SAFE(xm, &conf->queue_in, xm_next, xm_tmp) {
+	TAILQ_FOREACH_SAFE(xm, &xchan->queue_in, xm_next, xm_tmp) {
 		m = xm->m;
 
 		if (xchan->idx_count == (conf->block_num - 1)) {
@@ -698,11 +727,16 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 		TAILQ_INSERT_TAIL(&sg_queue, sg, sg_next);
 	
 		xchan->idx_head = xchan_next_idx(xchan, xchan->idx_head);
-		xchan->idx_count++;
+		atomic_add_int(&xchan->idx_count, 1);
+		//xchan->idx_count++;
 
-		TAILQ_REMOVE(&conf->queue_in, xm, xm_next);
+		TAILQ_REMOVE(&xchan->queue_in, xm, xm_next);
 		free(xm, M_XDMA);
 	}
+
+	QUEUE_IN_UNLOCK(xchan);
+
+	XCHAN_LOCK(xchan);
 
 	ret = XDMA_CHANNEL_SUBMIT_SG(xdma->dma_dev, xchan, &sg_queue);
 	if (ret != 0) {
@@ -886,8 +920,17 @@ xdma_mark_done(xdma_channel_t *xchan, uint32_t idx, uint32_t len)
 	xdma_config_t *conf;
 	struct mbuf *m;
 
+	if (mtx_owned(&xchan->mtx_lock) != 0) {
+		printf("o\n");
+	}
+
 	/* TODO: lock for queue_out access ? */
-	XCHAN_LOCK(xchan);
+	QUEUE_OUT_LOCK(xchan);
+	//XCHAN_LOCK(xchan);
+
+	if (mtx_recursed(&xchan->mtx_lock) != 0) {
+		printf("r\n");
+	}
 
 	conf = &xchan->conf;
 	xdma = xchan->xdma;
@@ -909,12 +952,14 @@ xdma_mark_done(xdma_channel_t *xchan, uint32_t idx, uint32_t len)
 
 	xm = malloc(sizeof(struct xdma_mbuf_entry), M_XDMA, M_WAITOK | M_ZERO);
 	xm->m = m;
-	TAILQ_INSERT_TAIL(&conf->queue_out, xm, xm_next);
+	TAILQ_INSERT_TAIL(&xchan->queue_out, xm, xm_next);
 
 	xchan->idx_tail = xchan_next_idx(xchan, xchan->idx_tail);
-	xchan->idx_count--;
+	atomic_subtract_int(&xchan->idx_count, 1);
+	//xchan->idx_count--;
 
-	XCHAN_UNLOCK(xchan);
+	//XCHAN_UNLOCK(xchan);
+	QUEUE_OUT_UNLOCK(xchan);
 
 	return (0);
 }

@@ -88,9 +88,6 @@ struct xdma_channel_config {
 	int			block_num;	/* Count of blocks. */
 	int			src_width;	/* In bytes. */
 	int			dst_width;	/* In bytes. */
-
-	TAILQ_HEAD(, xdma_mbuf_entry)	queue_in;
-	TAILQ_HEAD(, xdma_mbuf_entry)	queue_out;
 };
 
 typedef struct xdma_channel_config xdma_config_t;
@@ -151,6 +148,12 @@ struct xdma_channel {
 	struct mtx			mtx_lock;
 
 	TAILQ_ENTRY(xdma_channel)	xchan_next;
+
+	struct mtx			mtx_qin_lock;
+	struct mtx			mtx_qout_lock;
+
+	TAILQ_HEAD(, xdma_mbuf_entry)	queue_in;
+	TAILQ_HEAD(, xdma_mbuf_entry)	queue_out;
 };
 
 typedef struct xdma_channel xdma_channel_t;
