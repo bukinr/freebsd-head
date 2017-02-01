@@ -532,6 +532,24 @@ softdma_channel_free(device_t dev, struct xdma_channel *xchan)
 }
 
 static int
+softdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
+{
+
+	printf("%s\n", __func__);
+
+	return (0);
+}
+
+static int
+softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct xdma_sglist_list *sg_queue)
+{
+
+	printf("%s\n", __func__);
+
+	return (0);
+}
+
+static int
 softdma_channel_prep_cyclic(device_t dev, struct xdma_channel *xchan)
 {
 
@@ -681,6 +699,9 @@ static device_method_t softdma_methods[] = {
 	DEVMETHOD(xdma_channel_prep_memcpy,	softdma_channel_prep_memcpy),
 	DEVMETHOD(xdma_channel_prep_fifo,	softdma_channel_prep_fifo),
 	DEVMETHOD(xdma_channel_control,		softdma_channel_control),
+
+	DEVMETHOD(xdma_channel_prep_sg,		softdma_channel_prep_sg),
+	DEVMETHOD(xdma_channel_submit_sg,	softdma_channel_submit_sg),
 #ifdef FDT
 	DEVMETHOD(xdma_ofw_md_data,		softdma_ofw_md_data),
 #endif
