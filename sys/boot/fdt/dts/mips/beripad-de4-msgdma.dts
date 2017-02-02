@@ -210,19 +210,19 @@
 			#dma-cells = <3>;
 		}; 
 
-		softdma0: softdma@80007400 {
+		softdma0: softdma@7f007400 {
 			compatible = "freebsd,softdma";
-			reg = < 0x80007400 0x8		/* tx */
-				0x80007420 0x20 >;	/* txc */
+			reg = < 0x7f007400 0x8		/* tx */
+				0x7f007420 0x20 >;	/* txc */
 			interrupts = <2>;
 			interrupt-parent = <&beripic0>;
 			#dma-cells = <3>;
 		};
 
-		softdma1: softdma@80007500 {
+		softdma1: softdma@7f007500 {
 			compatible = "freebsd,softdma";
-			reg = < 0x80007500 0x8		/* rx */
-				0x80007520 0x20 >;	/* rxc */
+			reg = < 0x7f007500 0x8		/* rx */
+				0x7f007520 0x20 >;	/* rxc */
 			interrupts = <1>;
 			interrupt-parent = <&beripic0>;
 			#dma-cells = <3>;
@@ -233,9 +233,17 @@
 			reg = <0x80007000 0x400>;		/* mac */
 			dmas = <&msgdma0 0 0 0xffffffff>,
 			       <&msgdma1 1 1 0xffffffff>;
-			//dmas = <&softdma0 0 0 0xffffffff>,
-			//       <&softdma1 1 1 0xffffffff>;
 			dma-names = "tx", "rx";
+			status = "disabled";
+		};
+
+		ethernet@7f007000 {
+			compatible = "altera,atse";
+			reg = <0x7f007000 0x400>;		/* mac */
+			dmas = <&softdma0 0 0 0xffffffff>,
+			       <&softdma1 1 1 0xffffffff>;
+			dma-names = "tx", "rx";
+			//status = "disabled";
 		};
 
 		ethernet@7f005000 {
