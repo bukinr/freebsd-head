@@ -63,8 +63,6 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus_subr.h>
 #endif
 
-#include <dev/altera/atse/a_api.h>
-
 #define	AVALON_FIFO_TX_BASIC_OPTS_DEPTH		16
 
 #define	DMA_STATUS		0x00
