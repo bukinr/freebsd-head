@@ -85,8 +85,6 @@ struct softdma_channel {
 };
 
 extern uint32_t total_copied;
-#define	SOFTDMA_NCHANNELS	32
-struct softdma_channel softdma_channels[SOFTDMA_NCHANNELS];
 
 #define	CONTROL_OWN	(1 << 31)
 
@@ -111,6 +109,8 @@ struct softdma_desc {
 	uint32_t control;
 };
 
+#define	SOFTDMA_NCHANNELS	1
+
 struct softdma_softc {
 	device_t		dev;
 	struct resource		*res[3];
@@ -119,6 +119,7 @@ struct softdma_softc {
 	bus_space_tag_t		bst_c;
 	bus_space_handle_t	bsh_c;
 	void			*ih;
+	struct softdma_channel softdma_channels[SOFTDMA_NCHANNELS];
 };
 
 static struct resource_spec softdma_spec[] = {
@@ -176,16 +177,22 @@ softdma_read_fill_level(struct softdma_softc *sc)
 static void
 softdma_intr(void *arg)
 {
+	struct softdma_channel *chan;
 	struct softdma_softc *sc;
 	int reg;
 
 	sc = arg;
 
+	chan = &sc->softdma_channels[0];
+
 	printf("%s(%d)\n", __func__, device_get_unit(sc->dev));
 
 	reg = softdma_memc_read(sc, A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_EVENT);
 	if (reg != 0) {
+		printf("%s(%d): %x\n", __func__, device_get_unit(sc->dev), reg);
 		softdma_memc_write(sc, A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_EVENT, reg);
+		chan->run = 1;
+		wakeup(chan);
 	}
 }
 
@@ -348,8 +355,6 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 	bus_space_unmap(bst, bsh_src, len);
 	bus_space_unmap(bst, bsh_dst, 4);
 
-	desc->control = 0;
-
 	return (dst_offs);
 }
 
@@ -397,8 +402,10 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 	sop_rcvd = 0;
 	while (fill_level) {
 		empty = 0;
-		data = softdma_mem_read(sc, A_ONCHIP_FIFO_MEM_CORE_DATA);
+		//data = softdma_mem_read(sc, A_ONCHIP_FIFO_MEM_CORE_DATA);
 		//data = bus_space_read_4(bst, bsh_src, src_offs);
+
+		data = bus_read_4(sc->res[0], A_ONCHIP_FIFO_MEM_CORE_DATA);
 		meta = softdma_mem_read(sc, A_ONCHIP_FIFO_MEM_CORE_METADATA);
 
 		if (meta & A_ONCHIP_FIFO_MEM_CORE_ERROR_MASK) {
@@ -497,7 +504,15 @@ softdma_process_descriptors(struct softdma_channel *chan, xdma_transfer_status_t
 			ret = softdma_process_tx(chan, desc);
 		} else {
 			ret = softdma_process_rx(chan, desc);
+			if (ret == 0) {
+				break;
+			}
+			xdma_enqueue_sync_post(xchan, chan->idx_tail);
 		}
+
+		status->cnt_done += 1;
+		desc->control = 0;
+		xdma_mark_done(xchan, chan->idx_tail, ret);
 
 		if (ret >= 0) {
 			status->total_copied += ret;
@@ -535,6 +550,7 @@ softdma_worker(void *arg)
 
 		status.error = 0;
 		status.total_copied = 0;
+		status.cnt_done = 0;
 
 		softdma_process_descriptors(chan, &status);
 
@@ -583,7 +599,7 @@ softdma_channel_alloc(device_t dev, struct xdma_channel *xchan)
 	xdma_assert_locked();
 
 	for (i = 0; i < SOFTDMA_NCHANNELS; i++) {
-		chan = &softdma_channels[i];
+		chan = &sc->softdma_channels[i];
 		if (chan->used == 0) {
 			chan->xchan = xchan;
 			xchan->chan = (void *)chan;
@@ -700,7 +716,11 @@ softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	//WRITE4_DESC(sc, PF_NEXT_LO, (uint32_t)vtophys(&descs[chan->idx_head]));
 	//WRITE4_DESC(sc, PF_NEXT_LO, xchan->descs_phys[chan->idx_head].ds_addr);
 
+	uint32_t enqueued;
 	uint32_t tmp;
+
+	enqueued = 0;
+
 	TAILQ_FOREACH_SAFE(sg, sg_queue, sg_next, sg_tmp) {
 		addr = (uint32_t)sg->paddr;
 		len = (uint32_t)sg->len;
@@ -750,7 +770,11 @@ softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 
 		desc->control = CONTROL_OWN;
 		xdma_enqueue_sync_pre(xchan, tmp);
-		xdma_enqueue_sync_post(xchan, tmp);
+		enqueued = 1;
+	}
+
+	if (enqueued == 0) {
+		return (0);
 	}
 
 	if (conf->direction == XDMA_MEM_TO_DEV) {
