@@ -214,10 +214,6 @@ struct atse_softc *atse_sc;
 			    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_EVENT,	\
 			    val4, "TX_EVENT", __func__, __LINE__);	\
 	} while(0)
-
-#define	ATSE_RX_EVENTS	(A_ONCHIP_FIFO_MEM_CORE_INTR_FULL |	\
-			    A_ONCHIP_FIFO_MEM_CORE_INTR_OVERFLOW |	\
-			    A_ONCHIP_FIFO_MEM_CORE_INTR_UNDERFLOW)
 #define	ATSE_RX_INTR_ENABLE(sc)						\
 	a_onchip_fifo_mem_core_write((sc)->atse_rxc_mem_res,		\
 	    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_INT_ENABLE,		\
@@ -232,9 +228,6 @@ struct atse_softc *atse_sc;
 	    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_INT_ENABLE,		\
 	    "RX_INTR", __func__, __LINE__)
 
-#define	ATSE_TX_EVENTS	(A_ONCHIP_FIFO_MEM_CORE_INTR_EMPTY |		\
-			    A_ONCHIP_FIFO_MEM_CORE_INTR_OVERFLOW |	\
-			    A_ONCHIP_FIFO_MEM_CORE_INTR_UNDERFLOW)
 #define	ATSE_TX_INTR_ENABLE(sc)						\
 	a_onchip_fifo_mem_core_write((sc)->atse_txc_mem_res,		\
 	    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_INT_ENABLE,		\
