@@ -92,7 +92,6 @@ __FBSDID("$FreeBSD$");
 #include <dev/mii/miivar.h>
 
 #include <dev/altera/atse/if_atsereg.h>
-#include <dev/altera/atse/a_api.h>
 
 #define	ATSE_WATCHDOG_TIME	5
 
@@ -133,91 +132,6 @@ struct atse_softc *atse_sc;
 #else
 #define	DPRINTF(format, ...)
 #endif
-
-/* a_api.c functions; factor out? */
-static inline void
-a_onchip_fifo_mem_core_write(struct resource *res, uint32_t off,
-    uint32_t val4, const char *desc, const char *f, const int l)
-{
-
-	val4 = htole32(val4);
-	DPRINTF("[%s:%d] FIFOW %s 0x%08x = 0x%08x\n", f, l, desc, off, val4);
-	bus_write_4(res, off, val4);
-}
-
-static inline uint32_t
-a_onchip_fifo_mem_core_read(struct resource *res, uint32_t off,
-    const char *desc, const char *f, const int l)
-{
-	uint32_t val4;
-
-	val4 = le32toh(bus_read_4(res, off));
-	DPRINTF("[%s:%d] FIFOR %s 0x%08x = 0x%08x\n", f, l, desc, off, val4);
-
-	return (val4);
-}
-
-void
-atse_tx_mem_write(uint32_t reg, uint32_t val)
-{
-	struct atse_softc *sc;
-
-	sc = atse_sc;
-
-	bus_write_4(sc->atse_tx_mem_res, reg, htole32(val));
-}
-
-uint32_t
-atse_tx_mem_read(uint32_t reg)
-{
-	struct atse_softc *sc;
-	uint32_t val;
-
-	sc = atse_sc;
-
-	val = bus_read_4(sc->atse_tx_mem_res, reg);
-
-	return (le32toh(val));
-}
-
-uint32_t
-atse_tx_read_fill_level(void)
-{
-	struct atse_softc *sc;
-	uint32_t val;
-
-	sc = atse_sc;
-
-	val = bus_read_4(sc->atse_txc_mem_res, A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_FILL_LEVEL);
-
-	return (le32toh(val));
-}
-
-uint32_t
-atse_rx_mem_read(uint32_t reg)
-{
-	struct atse_softc *sc;
-	uint32_t val;
-
-	sc = atse_sc;
-
-	val = bus_read_4(sc->atse_rx_mem_res, reg);
-
-	return (le32toh(val));
-}
-
-uint32_t
-atse_rx_read_fill_level(void)
-{
-	struct atse_softc *sc;
-	uint32_t val;
-
-	sc = atse_sc;
-
-	val = bus_read_4(sc->atse_rxc_mem_res, A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_FILL_LEVEL);
-
-	return (le32toh(val));
-}
 
 /* The FIFO does an endian conversion, so we must not do it as well. */
 /* XXX-BZ in fact we should do a htobe32 so le would be fine as well? */
