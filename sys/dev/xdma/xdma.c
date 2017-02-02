@@ -553,7 +553,7 @@ xdma_prep_sg(xdma_channel_t *xchan, uintptr_t src_addr,
 	return (0);
 }
 
-static inline uint32_t  
+inline uint32_t
 xchan_next_idx(xdma_channel_t *xchan, uint32_t curidx)
 {
 	xdma_config_t *conf;

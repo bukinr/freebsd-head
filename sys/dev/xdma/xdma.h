@@ -173,6 +173,7 @@ int xdma_prep_sg(xdma_channel_t *xchan, uintptr_t, uintptr_t, uint32_t, enum xdm
 int xdma_desc_alloc(xdma_channel_t *, uint32_t, uint32_t);
 int xdma_desc_free(xdma_channel_t *xchan);
 int xdma_mark_done(xdma_channel_t *xchan, uint32_t idx, uint32_t len);
+uint32_t xchan_next_idx(xdma_channel_t *xchan, uint32_t curidx);
 
 int xdma_dequeue(xdma_channel_t *xchan, struct mbuf **m);
 int xdma_enqueue(xdma_channel_t *xchan, struct mbuf **m);

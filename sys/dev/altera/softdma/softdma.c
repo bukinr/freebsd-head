@@ -71,6 +71,9 @@ struct softdma_channel {
 	int			used;
 	int			index;
 	int			run;
+
+	uint32_t		idx_tail;
+	uint32_t		idx_head;
 };
 
 extern uint32_t total_copied;
@@ -85,8 +88,17 @@ struct softdma_desc {
 	uint32_t		count;
 	uint16_t		src_incr;
 	uint16_t		dst_incr;
-	struct softdma_desc	*next;
 	uint32_t		direction;
+
+	uint32_t read_lo;
+	uint32_t write_lo;
+	uint32_t length;
+	//uint32_t next;
+	struct softdma_desc	*next;
+	uint32_t transfered;
+	uint32_t status;
+	uint32_t reserved;
+	uint32_t control;
 };
 
 struct softdma_softc {
@@ -113,8 +125,11 @@ static int softdma_detach(device_t dev);
 static void
 softdma_intr(void *arg)
 {
+	struct softdma_softc *sc;
 
-	printf("%s\n", __func__);
+	sc = arg;
+
+	printf("%s(%d)\n", __func__, device_get_unit(sc->dev));
 }
 
 static int
@@ -534,17 +549,115 @@ softdma_channel_free(device_t dev, struct xdma_channel *xchan)
 static int
 softdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 {
+	//struct softdma_channel *chan;
+	//struct softdma_desc *descs;
+	//uint32_t addr;
+	//uint32_t reg;
+
+	struct softdma_desc *desc;
+	struct softdma_softc *sc;
+	xdma_config_t *conf;
+	int ret;
+	int i;
+
+	sc = device_get_softc(dev);
+
+	conf = &xchan->conf;
 
 	printf("%s\n", __func__);
+
+	ret = xdma_desc_alloc(xchan, sizeof(struct softdma_desc), 4);
+	if (ret != 0) {
+		device_printf(sc->dev,
+		    "%s: Can't allocate descriptors.\n", __func__);
+		return (-1);
+	}
+
+	for (i = 0; i < conf->block_num; i++) {
+		desc = xchan->descs[i].desc;
+
+		if (i == (conf->block_num - 1)) {
+			desc->next = xchan->descs[0].desc;
+		} else {
+			desc->next = xchan->descs[i+1].desc;
+		}
+
+		printf("%s(%d): desc %d vaddr %lx next vaddr %lx\n", __func__,
+		    device_get_unit(dev), i, (uint64_t)desc, (uint64_t)desc->next);
+	}
+
 
 	return (0);
 }
 
 static int
-softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct xdma_sglist_list *sg_queue)
+softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
+    struct xdma_sglist_list *sg_queue)
 {
+	struct softdma_channel *chan;
+	//struct softdma_desc *descs;
+	struct softdma_desc *desc;
+	struct softdma_softc *sc;
+	//struct sglist_seg *seg;
+	xdma_config_t *conf;
+	uint32_t addr;
+	uint32_t len;
+	//uint32_t reg;
+	//int i;
+	struct xdma_sglist *sg;
+	struct xdma_sglist *sg_tmp;
 
-	printf("%s\n", __func__);
+	sc = device_get_softc(dev);
+
+	conf = &xchan->conf;
+
+	chan = (struct softdma_channel *)xchan->chan;
+
+	//sc->curchan = chan;
+
+	printf("%s(%d)\n", __func__, device_get_unit(dev));
+
+	//printf("%s(%d): nseg %d\n", __func__, device_get_unit(dev), (uint32_t)sg->sg_nseg);
+	//mips_dcache_wbinv_all();
+	//descs = (struct softdma_desc *)xchan->descs;
+	//WRITE4_DESC(sc, PF_CONTROL, 0);
+	//WRITE4_DESC(sc, PF_NEXT_LO, (uint32_t)vtophys(&descs[chan->idx_head]));
+	//WRITE4_DESC(sc, PF_NEXT_LO, xchan->descs_phys[chan->idx_head].ds_addr);
+
+	uint32_t tmp;
+	TAILQ_FOREACH_SAFE(sg, sg_queue, sg_next, sg_tmp) {
+		addr = (uint32_t)sg->paddr;
+		len = (uint32_t)sg->len;
+
+		//printf("%s(%d): descr %d segment 0x%x (%d bytes)\n", __func__,
+		//    device_get_unit(dev), chan->idx_head, addr, len);
+
+		//desc = &descs[chan->idx_head];
+		desc = xchan->descs[chan->idx_head].desc;
+		if (conf->direction == XDMA_MEM_TO_DEV) {
+			desc->read_lo = addr;
+			desc->write_lo = 0;
+		} else {
+			desc->read_lo = 0;
+			desc->write_lo = addr;
+		}
+		desc->length = len;
+		desc->transfered = 0;
+		desc->status = 0;
+		desc->reserved = 0;
+
+		//if (conf->direction == XDMA_MEM_TO_DEV) {
+		//	desc->control = htole32(CONTROL_GEN_SOP | CONTROL_GEN_EOP);
+		//} else {
+		//	desc->control = htole32(CONTROL_END_ON_EOP | (1 << 13));
+		//}
+		//desc->control |= htole32(CONTROL_TC_IRQ_EN | CONTROL_ET_IRQ_EN | CONTROL_ERR_M);
+
+		tmp = chan->idx_head;
+		chan->idx_head = xchan_next_idx(xchan, chan->idx_head);
+		//desc->control |= htole32(CONTROL_OWN | CONTROL_GO);
+		xdma_enqueue_sync_pre(xchan, tmp);
+	}
 
 	return (0);
 }
