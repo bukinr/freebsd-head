@@ -185,11 +185,11 @@ softdma_intr(void *arg)
 
 	chan = &sc->softdma_channels[0];
 
-	printf("%s(%d)\n", __func__, device_get_unit(sc->dev));
+	//printf("%s(%d)\n", __func__, device_get_unit(sc->dev));
 
 	reg = softdma_memc_read(sc, A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_EVENT);
 	if (reg != 0) {
-		printf("%s(%d): %x\n", __func__, device_get_unit(sc->dev), reg);
+		printf("%s(%d): 0x%x\n", __func__, device_get_unit(sc->dev), reg);
 		softdma_memc_write(sc, A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_EVENT, reg);
 		chan->run = 1;
 		wakeup(chan);
@@ -283,11 +283,12 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 
 	bus_space_map(bst, desc->src_addr, len, 0, &bsh_src);
 	//bus_space_map(bst, desc->dst_addr, 4, 0, &bsh_dst);
-	//mips_dcache_wbinv_all();
 
 	fill_level = softdma_read_fill_level(sc);
-	//if (fill_level == 0) {
-	//}
+	while (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
+		fill_level = softdma_read_fill_level(sc);
+	}
+
 	printf("%s(%d): TX fill_level is %d\n", __func__, device_get_unit(sc->dev), fill_level);
 
 	/* Set start of packet. */
@@ -346,6 +347,7 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 	softdma_mem_write(sc, A_ONCHIP_FIFO_MEM_CORE_METADATA, reg);
 
 	/* Ensure there is a FIFO entry available. */
+	fill_level = softdma_read_fill_level(sc);
 	while (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
 		fill_level = softdma_read_fill_level(sc);
 	};
@@ -353,7 +355,7 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 	bus_write_4(sc->res[0], A_ONCHIP_FIFO_MEM_CORE_DATA, val);
 	//bus_space_write_4(bst, bsh_dst, dst_offs, val);
 	bus_space_unmap(bst, bsh_src, len);
-	bus_space_unmap(bst, bsh_dst, 4);
+	//bus_space_unmap(bst, bsh_dst, 4);
 
 	return (dst_offs);
 }
@@ -510,8 +512,8 @@ softdma_process_descriptors(struct softdma_channel *chan, xdma_transfer_status_t
 			xdma_enqueue_sync_post(xchan, chan->idx_tail);
 		}
 
-		status->cnt_done += 1;
 		desc->control = 0;
+		status->cnt_done += 1;
 		xdma_mark_done(xchan, chan->idx_tail, ret);
 
 		if (ret >= 0) {
