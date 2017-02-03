@@ -109,6 +109,7 @@ static poll_handler_t atse_poll;
 #define	ATSE_ETHERNET_OPTION_BITS_READ	1
 static int atse_ethernet_option_bits_flag = ATSE_ETHERNET_OPTION_BITS_UNDEF;
 static uint8_t atse_ethernet_option_bits[ALTERA_ETHERNET_OPTION_BITS_LEN];
+static void atse_start_locked(struct ifnet *ifp);
 
 static int	atse_intr_debug_enable = 0;
 SYSCTL_INT(_debug, OID_AUTO, atse_intr_debug_enable, CTLFLAG_RW,
@@ -366,14 +367,16 @@ atse_xdma_tx_intr(void *arg, xdma_transfer_status_t *status)
 			break;
 		}
 		m_freem(m);
+		sc->txcount--;
 	}
 
 	//m = sc->atse_tx_m;
 	//m_freem(m);
 	//sc->atse_tx_m = NULL;
 	//sc->atse_tx_m_offset = 0;
-	//sc->txcount--;
-	//ifp->if_drv_flags &= ~IFF_DRV_OACTIVE;
+
+	ifp->if_drv_flags &= ~IFF_DRV_OACTIVE;
+	atse_start_locked(ifp);
 
 	ATSE_UNLOCK(sc);
 
@@ -501,10 +504,10 @@ atse_start_locked(struct ifnet *ifp)
 	/* We have more space to send so continue ... */
 	for (; !IFQ_DRV_IS_EMPTY(&ifp->if_snd); ) {
 
-		//if (sc->txcount > (32 - 1)) {
-		//	ifp->if_drv_flags |= IFF_DRV_OACTIVE;
-		//	break;
-		//}
+		if (sc->txcount > (32 - 1)) {
+			ifp->if_drv_flags |= IFF_DRV_OACTIVE;
+			break;
+		}
 
 		IFQ_DRV_DEQUEUE(&ifp->if_snd, m);
 		sc->atse_tx_m_offset = 0;
@@ -518,9 +521,13 @@ atse_start_locked(struct ifnet *ifp)
 		//m_copydata(m, 0, m->m_pkthdr.len, sc->atse_tx_buf);
 		//xdma_enqueue_phys(sc->xchan_tx, m);
 
+		/* If anyone is interested give them a copy first. */
+		BPF_MTAP(sc->atse_ifp, m);
+
 		xdma_enqueue(sc->xchan_tx, &m);
 
-		//sc->txcount++;
+		sc->txcount++;
+
 		//error = atse_tx_locked(sc, &sent);
 		//if (error != 0)
 		//	goto done;
