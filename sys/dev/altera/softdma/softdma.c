@@ -189,7 +189,7 @@ softdma_intr(void *arg)
 
 	reg = softdma_memc_read(sc, A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_EVENT);
 	if (reg != 0) {
-		printf("%s(%d): 0x%x\n", __func__, device_get_unit(sc->dev), reg);
+		//printf("%s(%d): 0x%x\n", __func__, device_get_unit(sc->dev), reg);
 		softdma_memc_write(sc, A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_EVENT, reg);
 		chan->run = 1;
 		wakeup(chan);
@@ -264,7 +264,7 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 {
 	uint32_t src_offs, dst_offs;
 	bus_space_handle_t bsh_src;
-	bus_space_handle_t bsh_dst;
+	//bus_space_handle_t bsh_dst;
 	struct softdma_softc *sc;
 	bus_space_tag_t bst;
 	uint32_t reg;
@@ -279,7 +279,7 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 	bst = fdtbus_bs_tag;
 	len = (desc->count * desc->access_width);
 
-	printf("%s(%d)\n", __func__, device_get_unit(sc->dev));
+	//printf("%s(%d): len %d\n", __func__, device_get_unit(sc->dev), desc->len);
 
 	bus_space_map(bst, desc->src_addr, len, 0, &bsh_src);
 	//bus_space_map(bst, desc->dst_addr, 4, 0, &bsh_dst);
@@ -289,19 +289,19 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 		fill_level = softdma_read_fill_level(sc);
 	}
 
-	printf("%s(%d): TX fill_level is %d\n", __func__, device_get_unit(sc->dev), fill_level);
+	//printf("%s(%d): TX fill_level is %d\n", __func__, device_get_unit(sc->dev), fill_level);
 
 	/* Set start of packet. */
 	reg = A_ONCHIP_FIFO_MEM_CORE_SOP;
 	reg &= ~A_ONCHIP_FIFO_MEM_CORE_EOP;
 	softdma_mem_write(sc, A_ONCHIP_FIFO_MEM_CORE_METADATA, reg);
 
-	printf("copy %x -> %x (%d bytes, %d times)\n",
-	    (uint32_t)bsh_src, (uint32_t)bsh_dst, desc->len, desc->count);
+	//printf("copy %x -> device (%d bytes, %d times)\n",
+	//    (uint32_t)bsh_src, desc->len, desc->count);
 
 	src_offs = dst_offs = 0;
 	c = 0;
-	while ((desc->len - c) > 4) {
+	while ((desc->len - c) >= 4) {
 		val = bus_space_read_4(bst, bsh_src, src_offs);
 		//bus_space_write_4(bst, bsh_dst, dst_offs, val);
 		bus_write_4(sc->res[0], A_ONCHIP_FIFO_MEM_CORE_DATA, val);
@@ -321,23 +321,33 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 		c += 4;
 	}
 
+	uint32_t tmp;
+	tmp = 0;
+
 	leftm = (desc->len - c);
+	//printf("%s(%d): len %d leftm %d\n", __func__, device_get_unit(sc->dev), desc->len, leftm);
 	switch (leftm) {
+	case 0:
+		break;
 	case 1:
 		val = bus_space_read_1(bst, bsh_src, src_offs);
 		val <<= 24;
 		src_offs += 1;
 		break;
 	case 2:
+	case 3:
 		val = bus_space_read_2(bst, bsh_src, src_offs);
 		val <<= 16;
 		src_offs += 2;
-		break;
-	case 4:
-		val = bus_space_read_4(bst, bsh_src, src_offs);
-		src_offs += 4;
+
+		if (leftm == 3) {
+			tmp = bus_space_read_1(bst, bsh_src, src_offs);
+			val |= (tmp << 8);
+			src_offs += 1;
+		}
 		break;
 	default:
+		panic("here\n");
 		break;
 	}
 
@@ -364,7 +374,7 @@ static int
 softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 {
 	uint32_t src_offs, dst_offs;
-	bus_space_handle_t bsh_src;
+	//bus_space_handle_t bsh_src;
 	bus_space_handle_t bsh_dst;
 	struct softdma_softc *sc;
 	bus_space_tag_t bst;
@@ -384,20 +394,20 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 
 	bst = fdtbus_bs_tag;
 
-	printf("%s(%d)\n", __func__, device_get_unit(sc->dev));
+	//printf("%s(%d)\n", __func__, device_get_unit(sc->dev));
 
 	fill_level = softdma_read_fill_level(sc);
 	if (fill_level == 0) {
-		printf("%s(%d): read level is 0\n", __func__, device_get_unit(sc->dev));
+		//printf("%s(%d): read level is 0\n", __func__, device_get_unit(sc->dev));
 		return (0);
 	}
 
-	printf("%s(%d): RX fill_level is %d, desc->len %d\n", __func__,
-	    device_get_unit(sc->dev), fill_level, desc->len);
+	//printf("%s(%d): RX fill_level is %d, desc->len %d\n", __func__,
+	//    device_get_unit(sc->dev), fill_level, desc->len);
 
 	//len = (desc->count * desc->access_width);
 	len = desc->len;
-	bus_space_map(bst, desc->src_addr, 4, 0, &bsh_src);
+	//bus_space_map(bst, desc->src_addr, 4, 0, &bsh_src);
 	bus_space_map(bst, desc->dst_addr, len, 0, &bsh_dst);
 	mips_dcache_wbinv_all();
 
@@ -423,14 +433,14 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 		}
 
 		if (meta & A_ONCHIP_FIFO_MEM_CORE_SOP) {
-			printf("RX: SOP received\n");
+			//printf("RX: SOP received\n");
 			sop_rcvd = 1;
 		}
 
 		if (meta & A_ONCHIP_FIFO_MEM_CORE_EOP) {
 			empty = (meta & A_ONCHIP_FIFO_MEM_CORE_EMPTY_MASK) >>
 			    A_ONCHIP_FIFO_MEM_CORE_EMPTY_SHIFT;
-			printf("RX: EOP received, empty %d\n", empty);
+			//printf("RX: EOP received, empty %d\n", empty);
 		}
 
 		if (sop_rcvd == 0) {
@@ -447,6 +457,8 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 		} else if (empty == 1) {
 			bus_space_write_1(bst, bsh_dst, dst_offs, ((data >> 8) & 0xff));
 			dst_offs += 1;
+		} else {
+			panic("empty %d\n", empty);
 		}
 
 		if (meta & A_ONCHIP_FIFO_MEM_CORE_EOP) {
@@ -467,9 +479,9 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 		}
 	}
 
-	printf("%s finished: tot_rcvd %d\n", __func__, dst_offs);
+	//printf("%s finished: tot_rcvd %d\n", __func__, dst_offs);
 
-	bus_space_unmap(bst, bsh_src, 4);
+	//bus_space_unmap(bst, bsh_src, 4);
 	bus_space_unmap(bst, bsh_dst, len);
 
 	if (error) {
@@ -709,7 +721,7 @@ softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 
 	//sc->curchan = chan;
 
-	printf("%s(%d)\n", __func__, device_get_unit(dev));
+	//printf("%s(%d)\n", __func__, device_get_unit(dev));
 
 	//printf("%s(%d): nseg %d\n", __func__, device_get_unit(dev), (uint32_t)sg->sg_nseg);
 	//mips_dcache_wbinv_all();
