@@ -450,10 +450,12 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 		dst_offs += 2;
 
 		if (empty == 0) {
-			bus_space_write_2(bst, bsh_dst, dst_offs, ((data >> 0) & 0xffff));
+			bus_space_write_2(bst, bsh_dst, dst_offs,
+			    ((data >> 0) & 0xffff));
 			dst_offs += 2;
 		} else if (empty == 1) {
-			bus_space_write_1(bst, bsh_dst, dst_offs, ((data >> 8) & 0xff));
+			bus_space_write_1(bst, bsh_dst, dst_offs,
+			    ((data >> 8) & 0xff));
 			dst_offs += 1;
 		} else {
 			panic("empty %d\n", empty);
@@ -517,6 +519,7 @@ softdma_process_descriptors(struct softdma_channel *chan, xdma_transfer_status_t
 		} else {
 			ret = softdma_process_rx(chan, desc);
 			if (ret == 0) {
+				/* No new data available. */
 				break;
 			}
 			xdma_enqueue_sync_post(xchan, chan->idx_tail);
