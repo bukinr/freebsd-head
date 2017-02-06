@@ -134,116 +134,6 @@ struct atse_softc *atse_sc;
 #define	DPRINTF(format, ...)
 #endif
 
-/* The FIFO does an endian conversion, so we must not do it as well. */
-/* XXX-BZ in fact we should do a htobe32 so le would be fine as well? */
-#if 0
-#define	ATSE_TX_DATA_WRITE(sc, val4)					\
-	bus_write_4((sc)->atse_tx_mem_res, A_ONCHIP_FIFO_MEM_CORE_DATA, val4)
-
-#define	ATSE_TX_META_WRITE(sc, val4)					\
-	a_onchip_fifo_mem_core_write((sc)->atse_tx_mem_res,		\
-	    A_ONCHIP_FIFO_MEM_CORE_METADATA,				\
-	    (val4), "TXM", __func__, __LINE__)
-#define	ATSE_TX_META_READ(sc)						\
-	a_onchip_fifo_mem_core_read((sc)->atse_tx_mem_res,		\
-	    A_ONCHIP_FIFO_MEM_CORE_METADATA,				\
-	    "TXM", __func__, __LINE__)
-
-#define	ATSE_TX_READ_FILL_LEVEL(sc)					\
-	a_onchip_fifo_mem_core_read((sc)->atse_txc_mem_res,		\
-	    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_FILL_LEVEL,		\
-	    "TX_FILL", __func__, __LINE__)
-#define	ATSE_RX_READ_FILL_LEVEL(sc)					\
-	a_onchip_fifo_mem_core_read((sc)->atse_rxc_mem_res,		\
-	    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_FILL_LEVEL,		\
-	    "RX_FILL", __func__, __LINE__)
-
-/* The FIFO does an endian conversion, so we must not do it as well. */
-/* XXX-BZ in fact we should do a htobe32 so le would be fine as well? */
-#define	ATSE_RX_DATA_READ(sc)						\
-	bus_read_4((sc)->atse_rx_mem_res, A_ONCHIP_FIFO_MEM_CORE_DATA)
-#define	ATSE_RX_META_READ(sc)						\
-	a_onchip_fifo_mem_core_read((sc)->atse_rx_mem_res,		\
-	    A_ONCHIP_FIFO_MEM_CORE_METADATA,				\
-	    "RXM", __func__, __LINE__)
-
-#define	ATSE_RX_STATUS_READ(sc)						\
-	a_onchip_fifo_mem_core_read((sc)->atse_rxc_mem_res,		\
-	    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_I_STATUS,			\
-	    "RX_EVENT", __func__, __LINE__)
-
-#define	ATSE_TX_STATUS_READ(sc)						\
-	a_onchip_fifo_mem_core_read((sc)->atse_txc_mem_res,		\
-	    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_I_STATUS,			\
-	    "TX_EVENT", __func__, __LINE__)
-
-#define	ATSE_RX_EVENT_READ(sc)						\
-	a_onchip_fifo_mem_core_read((sc)->atse_rxc_mem_res,		\
-	    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_EVENT,			\
-	    "RX_EVENT", __func__, __LINE__)
-
-#define	ATSE_TX_EVENT_READ(sc)						\
-	a_onchip_fifo_mem_core_read((sc)->atse_txc_mem_res,		\
-	    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_EVENT,			\
-	    "TX_EVENT", __func__, __LINE__)
-
-#define	ATSE_RX_EVENT_CLEAR(sc)						\
-	do {								\
-		uint32_t val4;						\
-									\
-		val4 = a_onchip_fifo_mem_core_read(			\
-		    (sc)->atse_rxc_mem_res,				\
-		    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_EVENT,		\
-		    "RX_EVENT", __func__, __LINE__);			\
-		if (val4 != 0x00)					\
-			a_onchip_fifo_mem_core_write(			\
-			    (sc)->atse_rxc_mem_res,			\
-			    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_EVENT,	\
-			    val4, "RX_EVENT", __func__, __LINE__);	\
-	} while(0)
-#define	ATSE_TX_EVENT_CLEAR(sc)						\
-	do {								\
-		uint32_t val4;						\
-									\
-		val4 = a_onchip_fifo_mem_core_read(			\
-		    (sc)->atse_txc_mem_res,				\
-		    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_EVENT,		\
-		    "TX_EVENT", __func__, __LINE__);			\
-		if (val4 != 0x00)					\
-			a_onchip_fifo_mem_core_write(			\
-			    (sc)->atse_txc_mem_res,			\
-			    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_EVENT,	\
-			    val4, "TX_EVENT", __func__, __LINE__);	\
-	} while(0)
-#define	ATSE_RX_INTR_ENABLE(sc)						\
-	a_onchip_fifo_mem_core_write((sc)->atse_rxc_mem_res,		\
-	    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_INT_ENABLE,		\
-	    ATSE_RX_EVENTS,						\
-	    "RX_INTR", __func__, __LINE__)	/* XXX-BZ review later. */
-#define	ATSE_RX_INTR_DISABLE(sc)					\
-	a_onchip_fifo_mem_core_write((sc)->atse_rxc_mem_res,		\
-	    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_INT_ENABLE, 0,		\
-	    "RX_INTR", __func__, __LINE__)
-#define	ATSE_RX_INTR_READ(sc)						\
-	a_onchip_fifo_mem_core_read((sc)->atse_rxc_mem_res,		\
-	    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_INT_ENABLE,		\
-	    "RX_INTR", __func__, __LINE__)
-
-#define	ATSE_TX_INTR_ENABLE(sc)						\
-	a_onchip_fifo_mem_core_write((sc)->atse_txc_mem_res,		\
-	    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_INT_ENABLE,		\
-	    ATSE_TX_EVENTS,						\
-	    "TX_INTR", __func__, __LINE__)	/* XXX-BZ review later. */
-#define	ATSE_TX_INTR_DISABLE(sc)					\
-	a_onchip_fifo_mem_core_write((sc)->atse_txc_mem_res,		\
-	    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_INT_ENABLE, 0,		\
-	    "TX_INTR", __func__, __LINE__)
-#define	ATSE_TX_INTR_READ(sc)						\
-	a_onchip_fifo_mem_core_read((sc)->atse_txc_mem_res,		\
-	    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_INT_ENABLE,		\
-	    "TX_INTR", __func__, __LINE__)
-#endif /* if 0 */
-
 /*
  * Register space access macros.
  */
@@ -370,11 +260,6 @@ atse_xdma_tx_intr(void *arg, xdma_transfer_status_t *status)
 		sc->txcount--;
 	}
 
-	//m = sc->atse_tx_m;
-	//m_freem(m);
-	//sc->atse_tx_m = NULL;
-	//sc->atse_tx_m_offset = 0;
-
 	ifp->if_drv_flags &= ~IFF_DRV_OACTIVE;
 	atse_start_locked(ifp);
 
@@ -402,6 +287,8 @@ atse_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 	//printf("%s: %d pkts rcvd (%d bytes)\n", __func__,
 	//    status->cnt_done, status->total_copied);
 
+	//if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
+
 	for (i = 0; i < status->cnt_done; i++) {
 		err = xdma_dequeue(sc->xchan_rx, &m);
 		if (err != 0) {
@@ -420,40 +307,6 @@ atse_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 	}
 
 	atse_rx_enqueue(sc, cnt_processed);
-
-	ATSE_UNLOCK(sc);
-
-	return (0);
-
-
-	m = sc->atse_rx_m;
-
-	KASSERT(m != NULL, ("m is NULL"));
-
-
-
-
-	if (status->total_copied == 0) {
-		ATSE_UNLOCK(sc);
-		return (0);
-	}
-
-	if (status->error == 0) {
-		m->m_pkthdr.rcvif = ifp;
-		m->m_pkthdr.len = m->m_len = status->total_copied;
-		m_adj(m, ETHER_ALIGN);
-		ATSE_UNLOCK(sc);
-		(*ifp->if_input)(ifp, m);
-		ATSE_LOCK(sc);
-	} else {
-		if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
-		m_freem(m);
-	}
-	sc->atse_rx_m = NULL;
-	sc->rx_busy = 0;
-
-	/* Setup next transfer */
-	//atse_rx_locked(sc);
 
 	ATSE_UNLOCK(sc);
 
@@ -510,7 +363,7 @@ atse_start_locked(struct ifnet *ifp)
 		}
 
 		IFQ_DRV_DEQUEUE(&ifp->if_snd, m);
-		sc->atse_tx_m_offset = 0;
+		//sc->atse_tx_m_offset = 0;
 		if (m == NULL)
 			break;
 
@@ -1071,7 +924,7 @@ atse_init_locked(struct atse_softc *sc)
 
 	/* Memory rings?  DMA engine? */
 
-	sc->atse_rx_buf_len = 0;
+	//sc->atse_rx_buf_len = 0;
 	sc->atse_flags &= ATSE_FLAGS_LINK;	/* Preserve. */
 
 #ifdef DEVICE_POLLING
@@ -1779,7 +1632,7 @@ atse_attach(device_t dev)
 
 	callout_init_mtx(&sc->atse_tick, &sc->atse_mtx, 0);
 
-	sc->atse_tx_buf = malloc(ETHER_MAX_LEN_JUMBO, M_DEVBUF, M_WAITOK);
+	//sc->atse_tx_buf = malloc(ETHER_MAX_LEN_JUMBO, M_DEVBUF, M_WAITOK);
 
 	/*
 	 * We are only doing single-PHY with this driver currently.  The
@@ -1923,18 +1776,20 @@ atse_detach(device_t dev)
 	if (sc->atse_miibus != NULL)
 		device_delete_child(dev, sc->atse_miibus);
 
+#if 0
 	if (sc->atse_tx_intrhand)
 		bus_teardown_intr(dev, sc->atse_tx_irq_res,
 		    sc->atse_tx_intrhand);
 	if (sc->atse_rx_intrhand)
 		bus_teardown_intr(dev, sc->atse_rx_irq_res,
 		    sc->atse_rx_intrhand);
+#endif
 
 	if (ifp != NULL)
 		if_free(ifp);
 
-	if (sc->atse_tx_buf != NULL)
-		free(sc->atse_tx_buf, M_DEVBUF);
+	//if (sc->atse_tx_buf != NULL)
+	//	free(sc->atse_tx_buf, M_DEVBUF);
 
 	mtx_destroy(&sc->atse_mtx);
 
@@ -1949,6 +1804,7 @@ atse_detach_resources(device_t dev)
 
 	sc = device_get_softc(dev);
 
+#if 0
 	if (sc->atse_txc_mem_res != NULL) {
 		bus_release_resource(dev, SYS_RES_MEMORY, sc->atse_txc_mem_rid,
 		    sc->atse_txc_mem_res);
@@ -1979,6 +1835,7 @@ atse_detach_resources(device_t dev)
 		    sc->atse_rx_irq_res);
 		sc->atse_rx_irq_res = NULL;
 	}
+#endif
 	if (sc->atse_mem_res != NULL) {
 		bus_release_resource(dev, SYS_RES_MEMORY, sc->atse_mem_rid,
 		    sc->atse_mem_res);
