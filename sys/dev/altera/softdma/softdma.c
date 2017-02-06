@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2016 Ruslan Bukin <br@bsdpad.com>
+ * Copyright (c) 2017 Ruslan Bukin <br@bsdpad.com>
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -59,17 +59,20 @@ __FBSDID("$FreeBSD$");
 #endif
 
 #include <dev/altera/softdma/a_api.h>
-#define	AVALON_FIFO_TX_BASIC_OPTS_DEPTH		16
 
 #include <dev/xdma/xdma.h>
 #include "xdma_if.h"
 
-#define	ATSE_RX_EVENTS	(A_ONCHIP_FIFO_MEM_CORE_INTR_FULL |	\
-			    A_ONCHIP_FIFO_MEM_CORE_INTR_OVERFLOW |	\
-			    A_ONCHIP_FIFO_MEM_CORE_INTR_UNDERFLOW)
-#define	ATSE_TX_EVENTS	(A_ONCHIP_FIFO_MEM_CORE_INTR_EMPTY |		\
-			    A_ONCHIP_FIFO_MEM_CORE_INTR_OVERFLOW |	\
-			    A_ONCHIP_FIFO_MEM_CORE_INTR_UNDERFLOW)
+#define	AVALON_FIFO_TX_BASIC_OPTS_DEPTH		16
+#define	SOFTDMA_NCHANNELS			1
+#define	CONTROL_OWN				(1 << 31)
+
+#define	ATSE_RX_EVENTS	(A_ONCHIP_FIFO_MEM_CORE_INTR_FULL	|\
+			 A_ONCHIP_FIFO_MEM_CORE_INTR_OVERFLOW	|\
+			 A_ONCHIP_FIFO_MEM_CORE_INTR_UNDERFLOW)
+#define	ATSE_TX_EVENTS	(A_ONCHIP_FIFO_MEM_CORE_INTR_EMPTY	|\
+			 A_ONCHIP_FIFO_MEM_CORE_INTR_OVERFLOW	|\
+			 A_ONCHIP_FIFO_MEM_CORE_INTR_UNDERFLOW)
 
 struct softdma_channel {
 	struct softdma_softc	*sc;
@@ -79,12 +82,9 @@ struct softdma_channel {
 	int			used;
 	int			index;
 	int			run;
-
 	uint32_t		idx_tail;
 	uint32_t		idx_head;
 };
-
-#define	CONTROL_OWN	(1 << 31)
 
 struct softdma_desc {
 	uint32_t		src_addr;
@@ -107,8 +107,6 @@ struct softdma_desc {
 	uint32_t control;
 };
 
-#define	SOFTDMA_NCHANNELS	1
-
 struct softdma_softc {
 	device_t		dev;
 	struct resource		*res[3];
@@ -121,8 +119,8 @@ struct softdma_softc {
 };
 
 static struct resource_spec softdma_spec[] = {
-	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },	/* tx/rx */
-	{ SYS_RES_MEMORY,	1,	RF_ACTIVE },	/* txc/rxc */
+	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },	/* fifo */
+	{ SYS_RES_MEMORY,	1,	RF_ACTIVE },	/* core */
 	{ SYS_RES_IRQ,		0,	RF_ACTIVE },
 	{ -1, 0 }
 };
@@ -166,10 +164,14 @@ softdma_memc_read(struct softdma_softc *sc, uint32_t reg)
 }
 
 static uint32_t
-softdma_read_fill_level(struct softdma_softc *sc)
+softdma_fill_level(struct softdma_softc *sc)
 {
+	uint32_t val;
 
-	return (softdma_memc_read(sc, A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_FILL_LEVEL));
+	val = softdma_memc_read(sc,
+	    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_FILL_LEVEL);
+
+	return (val);
 }
 
 static void
@@ -282,9 +284,9 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 	bus_space_map(bst, desc->src_addr, len, 0, &bsh_src);
 	//bus_space_map(bst, desc->dst_addr, 4, 0, &bsh_dst);
 
-	fill_level = softdma_read_fill_level(sc);
+	fill_level = softdma_fill_level(sc);
 	while (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
-		fill_level = softdma_read_fill_level(sc);
+		fill_level = softdma_fill_level(sc);
 	}
 
 	//printf("%s(%d): TX fill_level is %d\n", __func__, device_get_unit(sc->dev), fill_level);
@@ -311,7 +313,7 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 
 		while (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
 			//printf("FILL LEVEL %d, hz %d\n", fill_level, hz);
-			fill_level = softdma_read_fill_level(sc);
+			fill_level = softdma_fill_level(sc);
 			if (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
 				//mtx_sleep(sc, &chan->mtx, 0, "softdma_delay", hz);
 			}
@@ -325,8 +327,6 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 	leftm = (desc->len - c);
 	//printf("%s(%d): len %d leftm %d\n", __func__, device_get_unit(sc->dev), desc->len, leftm);
 	switch (leftm) {
-	case 0:
-		break;
 	case 1:
 		val = bus_space_read_1(bst, bsh_src, src_offs);
 		val <<= 24;
@@ -344,8 +344,8 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 			src_offs += 1;
 		}
 		break;
+	case 0:
 	default:
-		panic("here\n");
 		break;
 	}
 
@@ -355,9 +355,9 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 	softdma_mem_write(sc, A_ONCHIP_FIFO_MEM_CORE_METADATA, reg);
 
 	/* Ensure there is a FIFO entry available. */
-	fill_level = softdma_read_fill_level(sc);
+	fill_level = softdma_fill_level(sc);
 	while (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
-		fill_level = softdma_read_fill_level(sc);
+		fill_level = softdma_fill_level(sc);
 	};
 
 	bus_write_4(sc->res[0], A_ONCHIP_FIFO_MEM_CORE_DATA, val);
@@ -394,7 +394,7 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 
 	//printf("%s(%d)\n", __func__, device_get_unit(sc->dev));
 
-	fill_level = softdma_read_fill_level(sc);
+	fill_level = softdma_fill_level(sc);
 	if (fill_level == 0) {
 		//printf("%s(%d): read level is 0\n", __func__, device_get_unit(sc->dev));
 		return (0);
@@ -465,11 +465,11 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 			break;
 		}
 
-		fill_level = softdma_read_fill_level(sc);
+		fill_level = softdma_fill_level(sc);
 		timeout = 100;
 		while (fill_level == 0 && timeout--) {
 			//mtx_sleep(sc, &chan->mtx, 0, "softdma_delay", hz);
-			fill_level = softdma_read_fill_level(sc);
+			fill_level = softdma_fill_level(sc);
 			printf(".");
 		}
 		if (timeout == 0) {
