@@ -54,6 +54,11 @@ enum xdma_command {
 	XDMA_CMD_TERMINATE_ALL,
 };
 
+struct xdma_desc_status {
+	uint32_t transferred;
+	uint32_t error;
+};
+
 struct xdma_transfer_status {
 	int	error;
 	int	total_copied;
@@ -172,7 +177,7 @@ int xdma_prep_fifo(xdma_channel_t *, uintptr_t, uintptr_t, size_t len, enum xdma
 int xdma_prep_sg(xdma_channel_t *xchan, uintptr_t, uintptr_t, uint32_t, enum xdma_direction);
 int xdma_desc_alloc(xdma_channel_t *, uint32_t, uint32_t);
 int xdma_desc_free(xdma_channel_t *xchan);
-int xdma_mark_done(xdma_channel_t *xchan, uint32_t idx, uint32_t len);
+int xdma_desc_done(xdma_channel_t *xchan, uint32_t idx, struct xdma_desc_status *);
 uint32_t xchan_next_idx(xdma_channel_t *xchan, uint32_t curidx);
 
 int xdma_dequeue(xdma_channel_t *xchan, struct mbuf **m);

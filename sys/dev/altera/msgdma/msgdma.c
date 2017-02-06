@@ -138,7 +138,7 @@ struct msgdma_desc {
 	uint32_t write_lo;
 	uint32_t length;
 	uint32_t next;
-	uint32_t transfered;
+	uint32_t transferred;
 	uint32_t status;
 	uint32_t reserved;
 	uint32_t control;
@@ -204,17 +204,17 @@ process_desc(uint32_t n)
 		break;
 	}
 	//printf("%s(%d): marking desc %d done\n", __func__, device_get_unit(sc->dev), chan->idx_tail);
-	tot_copied += le32toh(desc->transfered);
+	tot_copied += le32toh(desc->transferred);
 	cnt_done++;
 
-	xdma_mark_done(xchan, chan->idx_tail, le32toh(desc->transfered));
+	xdma_desc_done(xchan, chan->idx_tail, le32toh(desc->transferred));
 
 	chan->idx_tail = next_idx(xchan, chan->idx_tail);
 
 	//xdma_sglist_append(&sg_queue, paddr, len);
 	//sg = malloc(sizeof(struct xdma_sglist), M_XDMA, M_WAITOK | M_ZERO);
 	//sg->paddr = 0;
-	//sg->len = le32toh(desc->transfered);
+	//sg->len = le32toh(desc->transferred);
 	//TAILQ_INSERT_TAIL(&sg_queue, sg, sg_next);
 
 	return (0);
@@ -248,11 +248,11 @@ msgdma_intr(void *arg)
 	//	READ4_DESC(sc, PF_CONTROL));
 
 	//mips_dcache_wbinv_all();
-	//len = le32toh(desc->transfered);
+	//len = le32toh(desc->transferred);
 	//if (desc->read_lo == 0) {
-	//	printf("%s: rx 0x%08x, transfered %d\n", __func__, READ4_DESC(sc, PF_STATUS), len);
+	//	printf("%s: rx 0x%08x, transferred %d\n", __func__, READ4_DESC(sc, PF_STATUS), len);
 	//} else {
-	//	printf("%s: tx 0x%08x, transfered %d\n", __func__, READ4_DESC(sc, PF_STATUS), len);
+	//	printf("%s: tx 0x%08x, transferred %d\n", __func__, READ4_DESC(sc, PF_STATUS), len);
 	//}
 
 	xchan = chan->xchan;
@@ -275,9 +275,12 @@ msgdma_intr(void *arg)
 
 		//printf("%s(%d) p %d\n", __func__, device_get_unit(sc->dev), chan->idx_tail);
 
-		tot_copied += le32toh(desc->transfered);
+		tot_copied += le32toh(desc->transferred);
 		cnt_done++;
-		xdma_mark_done(xchan, chan->idx_tail, le32toh(desc->transfered));
+		struct xdma_desc_status st;
+		st.error = 0;
+		st.transferred = le32toh(desc->transferred);
+		xdma_desc_done(xchan, chan->idx_tail, &st);
 		chan->idx_tail = next_idx(xchan, chan->idx_tail);
 	}
 
@@ -633,7 +636,7 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct xdma_s
 			desc->write_lo = htole32(addr);
 		}
 		desc->length = htole32(len);
-		desc->transfered = 0;
+		desc->transferred = 0;
 		desc->status = 0;
 		desc->reserved = 0;
 
@@ -760,7 +763,7 @@ msgdma_channel_prep_fifo(device_t dev, struct xdma_channel *xchan)
 	desc->write_lo = htole32(conf->dst_addr);
 	desc->length = htole32(conf->block_len);
 	desc->next = 0;
-	desc->transfered = 0;
+	desc->transferred = 0;
 	desc->status = 0;
 	desc->reserved = 0;
 	desc->control = htole32(CONTROL_GO | CONTROL_OWN);

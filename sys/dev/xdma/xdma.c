@@ -912,7 +912,8 @@ xdma_pause(xdma_channel_t *xchan)
 }
 
 int
-xdma_mark_done(xdma_channel_t *xchan, uint32_t idx, uint32_t len)
+xdma_desc_done(xdma_channel_t *xchan, uint32_t idx,
+    struct xdma_desc_status *status)
 {
 	struct xdma_mbuf_entry *xm;
 	struct xchan_bufmap *bmap;
@@ -935,7 +936,8 @@ xdma_mark_done(xdma_channel_t *xchan, uint32_t idx, uint32_t len)
 	conf = &xchan->conf;
 	xdma = xchan->xdma;
 
-	//printf("%s(%d): desc %d\n", __func__, device_get_unit(xdma->dma_dev), xchan->idx_tail);
+	//printf("%s(%d): desc %d\n", __func__,
+	//    device_get_unit(xdma->dma_dev), xchan->idx_tail);
 
 	bmap = &xchan->dma_buf_map[xchan->idx_tail];
 	if (conf->direction == XDMA_MEM_TO_DEV) {
@@ -948,7 +950,7 @@ xdma_mark_done(xdma_channel_t *xchan, uint32_t idx, uint32_t len)
 	bus_dmamap_unload(xchan->dma_buf_tag, bmap->map);
 
 	m = bmap->m;
-	m->m_pkthdr.len = m->m_len = len;
+	m->m_pkthdr.len = m->m_len = status->transferred;
 
 	xm = malloc(sizeof(struct xdma_mbuf_entry), M_XDMA, M_WAITOK | M_ZERO);
 	xm->m = m;

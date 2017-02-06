@@ -527,7 +527,11 @@ softdma_process_descriptors(struct softdma_channel *chan, xdma_transfer_status_t
 
 		desc->control = 0;
 		status->cnt_done += 1;
-		xdma_mark_done(xchan, chan->idx_tail, ret);
+
+		struct xdma_desc_status st;
+		st.error = 0;
+		st.transferred = ret;
+		xdma_desc_done(xchan, chan->idx_tail, &st);
 
 		if (ret >= 0) {
 			status->total_copied += ret;

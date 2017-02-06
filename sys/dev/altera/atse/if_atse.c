@@ -95,8 +95,8 @@ __FBSDID("$FreeBSD$");
 
 #define	ATSE_WATCHDOG_TIME	5
 
-#define	NUM_TX_DESC		32
-#define	NUM_RX_DESC		32
+#define	NUM_TX_DESC		512
+#define	NUM_RX_DESC		512
 
 #include <machine/cache.h>
 
@@ -357,10 +357,10 @@ atse_start_locked(struct ifnet *ifp)
 	/* We have more space to send so continue ... */
 	for (; !IFQ_DRV_IS_EMPTY(&ifp->if_snd); ) {
 
-		if (sc->txcount > (32 - 1)) {
-			ifp->if_drv_flags |= IFF_DRV_OACTIVE;
-			break;
-		}
+		//if (sc->txcount > (NUM_TX_DESC - 1)) {
+			//ifp->if_drv_flags |= IFF_DRV_OACTIVE;
+			//break;
+		//}
 
 		IFQ_DRV_DEQUEUE(&ifp->if_snd, m);
 		//sc->atse_tx_m_offset = 0;
