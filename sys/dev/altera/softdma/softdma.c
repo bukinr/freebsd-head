@@ -28,7 +28,7 @@
  * SUCH DAMAGE.
  */
 
-/* The software implementation of Altera mSGDMA */
+/* Altera FIFO driver with xDMA(4) interface. */
 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
@@ -83,8 +83,6 @@ struct softdma_channel {
 	uint32_t		idx_tail;
 	uint32_t		idx_head;
 };
-
-extern uint32_t total_copied;
 
 #define	CONTROL_OWN	(1 << 31)
 
