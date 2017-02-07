@@ -79,11 +79,6 @@ __FBSDID("$FreeBSD$");
 
 #include <net/bpf.h>
 
-#include <vm/vm.h>
-#include <vm/vm_extern.h>
-#include <vm/vm_kern.h>
-#include <vm/pmap.h>
-
 #include <machine/bus.h>
 #include <machine/resource.h>
 #include <sys/rman.h>
@@ -107,22 +102,12 @@ static int atse_ethernet_option_bits_flag = ATSE_ETHERNET_OPTION_BITS_UNDEF;
 static uint8_t atse_ethernet_option_bits[ALTERA_ETHERNET_OPTION_BITS_LEN];
 static void atse_start_locked(struct ifnet *ifp);
 
-static int	atse_intr_debug_enable = 0;
-SYSCTL_INT(_debug, OID_AUTO, atse_intr_debug_enable, CTLFLAG_RW,
-    &atse_intr_debug_enable, 0,
-   "Extra debugging output for atse interrupts");
-
-struct atse_softc *atse_sc;
-
 /*
  * Softc and critical resource locking.
  */
 #define	ATSE_LOCK(_sc)		mtx_lock(&(_sc)->atse_mtx)
 #define	ATSE_UNLOCK(_sc)	mtx_unlock(&(_sc)->atse_mtx)
 #define	ATSE_LOCK_ASSERT(_sc)	mtx_assert(&(_sc)->atse_mtx, MA_OWNED)
-
-#define	ATSE_TX_PENDING(sc)	(sc->atse_tx_m != NULL ||		\
-				    !IFQ_DRV_IS_EMPTY(&ifp->if_snd))
 
 #ifdef DEBUG
 #define	DPRINTF(format, ...)	printf(format, __VA_ARGS__)
@@ -365,12 +350,8 @@ atse_start_locked(struct ifnet *ifp)
 			break;
 		}
 
-		//uint32_t src;
 		//uint32_t dst;
-		//src = vtophys(sc->atse_tx_buf);
 		//dst = (rman_get_start(sc->atse_tx_mem_res) + A_ONCHIP_FIFO_MEM_CORE_DATA);
-		//m_copydata(m, 0, m->m_pkthdr.len, sc->atse_tx_buf);
-		//xdma_enqueue_phys(sc->xchan_tx, m);
 
 		/* If anyone is interested give them a copy first. */
 		BPF_MTAP(sc->atse_ifp, m);
@@ -414,16 +395,13 @@ atse_stop_locked(struct atse_softc *sc)
 
 	ifp = sc->atse_ifp;
 	ifp->if_drv_flags &= ~(IFF_DRV_RUNNING | IFF_DRV_OACTIVE);
-	//ATSE_RX_INTR_DISABLE(sc);
-	//ATSE_TX_INTR_DISABLE(sc);
-	//ATSE_RX_EVENT_CLEAR(sc);
-	//ATSE_TX_EVENT_CLEAR(sc);
 
 	/* Disable MAC transmit and receive datapath. */
 	mask = BASE_CFG_COMMAND_CONFIG_TX_ENA|BASE_CFG_COMMAND_CONFIG_RX_ENA;
 	val4 = CSR_READ_4(sc, BASE_CFG_COMMAND_CONFIG);
 	val4 &= ~mask;
 	CSR_WRITE_4(sc, BASE_CFG_COMMAND_CONFIG, val4);
+
 	/* Wait for bits to be cleared; i=100 is excessive. */
 	for (i = 0; i < 100; i++) {
 		val4 = CSR_READ_4(sc, BASE_CFG_COMMAND_CONFIG);
@@ -431,9 +409,11 @@ atse_stop_locked(struct atse_softc *sc)
 			break;
 		DELAY(10);
 	}
-	if ((val4 & mask) != 0)
+
+	if ((val4 & mask) != 0) {
 		device_printf(sc->atse_dev, "Disabling MAC TX/RX timed out.\n");
 		/* Punt. */
+	}
 
 	sc->atse_flags &= ~ATSE_FLAGS_LINK;
 
@@ -1300,8 +1280,6 @@ atse_attach(device_t dev)
 
 	sc = device_get_softc(dev);
 	sc->dev = dev;
-
-	atse_sc = sc;
 
 	/* Get xDMA controller */
 	sc->xdma_tx = xdma_ofw_get(sc->dev, "tx");
