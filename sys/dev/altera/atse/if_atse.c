@@ -353,10 +353,12 @@ atse_start_locked(struct ifnet *ifp)
 	/* We have more space to send so continue ... */
 	for (; !IFQ_DRV_IS_EMPTY(&ifp->if_snd); ) {
 
-		//if (sc->txcount > (NUM_TX_DESC - 1)) {
-			//ifp->if_drv_flags |= IFF_DRV_OACTIVE;
-			//break;
-		//}
+#ifdef TX_QUEUE_LIMIT
+		if (sc->txcount > (NUM_TX_DESC - 1)) {
+			ifp->if_drv_flags |= IFF_DRV_OACTIVE;
+			break;
+		}
+#endif
 
 		IFQ_DRV_DEQUEUE(&ifp->if_snd, m);
 		//sc->atse_tx_m_offset = 0;

@@ -269,7 +269,7 @@ xdma_dmamap_cb(void *arg, bus_dma_segment_t *segs, int nseg, int err)
 		return;
 	}
 
-	printf("%s: map %d nseg %d\n", __func__, xchan->map_descr, nseg);
+	//printf("%s: map %d nseg %d\n", __func__, xchan->map_descr, nseg);
 	xchan->descs[xchan->map_descr].ds_addr = segs[0].ds_addr;
 	xchan->descs[xchan->map_descr].ds_len = segs[0].ds_len;
 }
