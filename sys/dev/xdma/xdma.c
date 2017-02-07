@@ -56,11 +56,6 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus_subr.h>
 #endif
 
-//#include <vm/vm.h>
-//#include <vm/vm_extern.h>
-//#include <vm/vm_kern.h>
-//#include <vm/pmap.h>
-
 #include <dev/xdma/xdma.h>
 
 #include <xdma_if.h>
@@ -342,14 +337,6 @@ xdma_desc_alloc_bus_dma(xdma_channel_t *xchan, uint32_t desc_size,
 		}
 		printf("%s: desc->desc %lx, desc->ds_addr %x\n", __func__,
 		    (uint64_t)desc->desc, (uint32_t)desc->ds_addr);
-
-#if 0
-		desc->desc = (void *)kmem_alloc_contig(kernel_arena,
-			32, M_ZERO, 0, ~0, PAGE_SIZE, 0,
-			VM_MEMATTR_UNCACHEABLE);
-		desc->ds_addr = vtophys(desc->desc);
-		//bus_dmamap_sync(xchan->dma_tag, desc->dma_map, BUS_DMASYNC_PREWRITE);
-#endif
 	}
 
 	/* XXX: Allocate busdma buffer for mbufs */
