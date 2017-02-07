@@ -102,6 +102,7 @@ static int chan_start(struct pdma_softc *sc, struct pdma_channel *chan);
 static void
 pdma_intr(void *arg)
 {
+	xdma_transfer_status_t status;
 	struct pdma_channel *chan;
 	struct pdma_softc *sc;
 	xdma_channel_t *xchan;
@@ -134,7 +135,8 @@ pdma_intr(void *arg)
 				chan_start(sc, chan);
 			}
 
-			xdma_callback(chan->xchan);
+			status.error = 0;
+			xdma_callback(chan->xchan, &status);
 		}
 	}
 }
@@ -217,7 +219,8 @@ chan_start(struct pdma_softc *sc, struct pdma_channel *chan)
 
 	/* 8 byte descriptor. */
 	WRITE4(sc, PDMA_DCS(chan->index), DCS_DES8);
-	WRITE4(sc, PDMA_DDA(chan->index), xchan->descs_phys[chan->cur_desc].ds_addr);
+	WRITE4(sc, PDMA_DDA(chan->index),
+	    xchan->descs[chan->cur_desc].ds_addr);
 	WRITE4(sc, PDMA_DDS, (1 << chan->index));
 
 	/* Channel transfer enable. */
@@ -295,6 +298,7 @@ static int
 pdma_channel_prep_memcpy(device_t dev, struct xdma_channel *xchan)
 {
 	struct pdma_channel *chan;
+	xdma_descriptor_t *descs;
 	struct pdma_hwdesc *desc;
 	struct pdma_softc *sc;
 	xdma_config_t *conf;
@@ -314,16 +318,18 @@ pdma_channel_prep_memcpy(device_t dev, struct xdma_channel *xchan)
 	}
 
 	conf = &xchan->conf;
-	desc = (struct pdma_hwdesc *)xchan->descs;
-	desc[0].dsa = conf->src_addr;
-	desc[0].dta = conf->dst_addr;
-	desc[0].drt = DRT_AUTO;
-	desc[0].dcm = DCM_SAI | DCM_DAI;
+	descs = xchan->descs;
+
+	desc = descs[0].desc;
+	desc->dsa = conf->src_addr;
+	desc->dta = conf->dst_addr;
+	desc->drt = DRT_AUTO;
+	desc->dcm = DCM_SAI | DCM_DAI;
 
 	/* 4 byte copy for now. */
-	desc[0].dtc = (conf->block_len / 4);
-	desc[0].dcm |= DCM_SP_4 | DCM_DP_4 | DCM_TSZ_4;
-	desc[0].dcm |= DCM_TIE;
+	desc->dtc = (conf->block_len / 4);
+	desc->dcm |= DCM_SP_4 | DCM_DP_4 | DCM_TSZ_4;
+	desc->dcm |= DCM_TIE;
 
 	return (0);
 }
@@ -385,6 +391,7 @@ pdma_channel_prep_cyclic(device_t dev, struct xdma_channel *xchan)
 {
 	struct pdma_fdt_data *data;
 	struct pdma_channel *chan;
+	xdma_descriptor_t *descs;
 	struct pdma_hwdesc *desc;
 	xdma_controller_t *xdma;
 	struct pdma_softc *sc;
@@ -414,24 +421,26 @@ pdma_channel_prep_cyclic(device_t dev, struct xdma_channel *xchan)
 	chan->flags = CHAN_DESCR_RELINK;
 	chan->cur_desc = 0;
 
-	desc = (struct pdma_hwdesc *)xchan->descs;
+	descs = xchan->descs;
 
 	for (i = 0; i < conf->block_num; i++) {
+		desc = (struct pdma_hwdesc *)descs[i].desc;
+
 		if (conf->direction == XDMA_MEM_TO_DEV) {
-			desc[i].dsa = conf->src_addr + (i * conf->block_len);
-			desc[i].dta = conf->dst_addr;
-			desc[i].drt = data->tx;
-			desc[i].dcm = DCM_SAI;
+			desc->dsa = conf->src_addr + (i * conf->block_len);
+			desc->dta = conf->dst_addr;
+			desc->drt = data->tx;
+			desc->dcm = DCM_SAI;
 		} else if (conf->direction == XDMA_DEV_TO_MEM) {
-			desc[i].dsa = conf->src_addr;
-			desc[i].dta = conf->dst_addr + (i * conf->block_len);
-			desc[i].drt = data->rx;
-			desc[i].dcm = DCM_DAI;
+			desc->dsa = conf->src_addr;
+			desc->dta = conf->dst_addr + (i * conf->block_len);
+			desc->drt = data->rx;
+			desc->dcm = DCM_DAI;
 		} else if (conf->direction == XDMA_MEM_TO_MEM) {
-			desc[i].dsa = conf->src_addr + (i * conf->block_len);
-			desc[i].dta = conf->dst_addr + (i * conf->block_len);
-			desc[i].drt = DRT_AUTO;
-			desc[i].dcm = DCM_SAI | DCM_DAI;
+			desc->dsa = conf->src_addr + (i * conf->block_len);
+			desc->dta = conf->dst_addr + (i * conf->block_len);
+			desc->drt = DRT_AUTO;
+			desc->dcm = DCM_SAI | DCM_DAI;
 		}
 
 		if (access_width(conf, &dcm, &max_width) != 0) {
@@ -440,8 +449,10 @@ pdma_channel_prep_cyclic(device_t dev, struct xdma_channel *xchan)
 			return (-1);
 		}
 
-		desc[i].dcm |= dcm | DCM_TIE;
-		desc[i].dtc = (conf->block_len / max_width);
+		desc->dcm |= dcm | DCM_TIE;
+		desc->dtc = (conf->block_len / max_width);
+
+		xdma_enqueue_sync_pre(xchan, i);
 
 		/*
 		 * PDMA does not provide interrupt after processing each descriptor,
@@ -452,9 +463,9 @@ pdma_channel_prep_cyclic(device_t dev, struct xdma_channel *xchan)
 		 */
 		if ((chan->flags & CHAN_DESCR_RELINK) == 0) {
 			if (i != (conf->block_num - 1)) {
-				desc[i].dcm |= DCM_LINK;
+				desc->dcm |= DCM_LINK;
 				reg = ((i + 1) * sizeof(struct pdma_hwdesc));
-				desc[i].dtc |= (reg >> 4) << 24;
+				desc->dtc |= (reg >> 4) << 24;
 			}
 		}
 	}
