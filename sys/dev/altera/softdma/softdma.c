@@ -737,7 +737,7 @@ softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 		desc->control = CONTROL_OWN;
 		xdma_enqueue_sync_pre(xchan, tmp);
 
-		enqueued = 1;
+		enqueued += 1;
 	}
 
 	if (enqueued == 0) {

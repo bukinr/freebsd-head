@@ -643,6 +643,43 @@ xdma_enqueue_sync_pre(xdma_channel_t *xchan, uint32_t i)
 	return (0);
 }
 
+static int
+xdma_sg_queue_init(struct xdma_sg_queue *sg_queue)
+{
+
+	TAILQ_INIT(sg_queue);
+
+	return (0);
+}
+
+static int
+xdma_sg_queue_destroy(struct xdma_sg_queue *sg_queue)
+{
+	struct xdma_sg *sg;
+	struct xdma_sg *sg_tmp;
+
+	TAILQ_FOREACH_SAFE(sg, sg_queue, sg_next, sg_tmp) {
+		TAILQ_REMOVE(sg_queue, sg, sg_next);
+		free(sg, M_XDMA);
+	}
+
+	return (0);
+}
+
+static int
+xdma_sg_queue_add(struct xdma_sg_queue *sg_queue,
+    struct bus_dma_segment *seg)
+{
+	struct xdma_sg *sg;
+
+	sg = malloc(sizeof(struct xdma_sg), M_XDMA, M_WAITOK | M_ZERO);
+	sg->paddr = seg->ds_addr;
+	sg->len = seg->ds_len;
+	TAILQ_INSERT_TAIL(sg_queue, sg, sg_next);
+
+	return (0);
+}
+
 int
 xdma_enqueue_submit(xdma_channel_t *xchan)
 {
@@ -652,8 +689,6 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 	struct mbuf *m;
 	xdma_controller_t *xdma;
 	xdma_config_t *conf;
-	struct xdma_sg *sg;
-	struct xdma_sg *sg_tmp;
 	int ret;
 	int i;
 	struct bus_dma_segment seg;
@@ -675,7 +710,7 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 		return (0);
 	}
 
-	TAILQ_INIT(&sg_queue);
+	xdma_sg_queue_init(&sg_queue);
 
 	TAILQ_FOREACH_SAFE(xm, &xchan->queue_in, xm_next, xm_tmp) {
 		m = xm->m;
@@ -708,14 +743,10 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 		//printf("%s(%d): sglist_append_phys 0x%x %d bytes\n", __func__,
 		//    device_get_unit(xdma->dma_dev), (uint32_t)seg.ds_addr, (uint32_t)seg.ds_len);
 
-		sg = malloc(sizeof(struct xdma_sg), M_XDMA, M_WAITOK | M_ZERO);
-		sg->paddr = seg.ds_addr;
-		sg->len = seg.ds_len;
-		TAILQ_INSERT_TAIL(&sg_queue, sg, sg_next);
+		xdma_sg_queue_add(&sg_queue, &seg);
 	
 		xchan->idx_head = xchan_next_idx(xchan, xchan->idx_head);
 		atomic_add_int(&xchan->idx_count, 1);
-		//xchan->idx_count++;
 
 		TAILQ_REMOVE(&xchan->queue_in, xm, xm_next);
 		free(xm, M_XDMA);
@@ -737,11 +768,7 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 
 	XCHAN_UNLOCK(xchan);
 
-	/* Destroy temporary queue. */
-	TAILQ_FOREACH_SAFE(sg, &sg_queue, sg_next, sg_tmp) {
-		TAILQ_REMOVE(&sg_queue, sg, sg_next);
-		free(sg, M_XDMA);
-	}
+	xdma_sg_queue_destroy(&sg_queue);
 
 	return (0);
 }
@@ -945,7 +972,6 @@ xdma_desc_done(xdma_channel_t *xchan, uint32_t idx,
 
 	xchan->idx_tail = xchan_next_idx(xchan, xchan->idx_tail);
 	atomic_subtract_int(&xchan->idx_count, 1);
-	//xchan->idx_count--;
 
 	//XCHAN_UNLOCK(xchan);
 	QUEUE_OUT_UNLOCK(xchan);
