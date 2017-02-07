@@ -100,10 +100,6 @@ __FBSDID("$FreeBSD$");
 
 #include <machine/cache.h>
 
-#ifdef DEVICE_POLLING
-static poll_handler_t atse_poll;
-#endif
-
 /* XXX once we'd do parallel attach, we need a global lock for this. */
 #define	ATSE_ETHERNET_OPTION_BITS_UNDEF	0
 #define	ATSE_ETHERNET_OPTION_BITS_READ	1
@@ -916,30 +912,13 @@ atse_init_locked(struct atse_softc *sc)
 
 	/* Make things frind to halt, cleanup, ... */
 	atse_stop_locked(sc);
-	/* ... reset, ... */
+
 	atse_reset(sc);
 
 	/* ... and fire up the engine again. */
 	atse_rxfilter_locked(sc);
 
-	/* Memory rings?  DMA engine? */
-
-	//sc->atse_rx_buf_len = 0;
 	sc->atse_flags &= ATSE_FLAGS_LINK;	/* Preserve. */
-
-#ifdef DEVICE_POLLING
-	/* Only enable interrupts if we are not polling. */
-	if (ifp->if_capenable & IFCAP_POLLING) {
-		ATSE_RX_INTR_DISABLE(sc);
-		ATSE_TX_INTR_DISABLE(sc);
-		ATSE_RX_EVENT_CLEAR(sc);
-		ATSE_TX_EVENT_CLEAR(sc);
-	} else
-#endif
-	{
-		//ATSE_RX_INTR_ENABLE(sc);
-		//ATSE_TX_INTR_ENABLE(sc);
-	}
 
 	mii = device_get_softc(sc->atse_miibus);
 
@@ -997,39 +976,6 @@ atse_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 	case SIOCSIFCAP:
 		ATSE_LOCK(sc);
 		mask = ifr->ifr_reqcap ^ ifp->if_capenable;
-#ifdef DEVICE_POLLING
-		if ((mask & IFCAP_POLLING) != 0 &&
-		    (IFCAP_POLLING & ifp->if_capabilities) != 0) {
-			ifp->if_capenable ^= IFCAP_POLLING;
-			if ((IFCAP_POLLING & ifp->if_capenable) != 0) {
-
-				error = ether_poll_register(atse_poll, ifp);
-				if (error != 0) {
-					ATSE_UNLOCK(sc);
-					break;
-				}
-				/* Disable interrupts. */
-				ATSE_RX_INTR_DISABLE(sc);
-				ATSE_TX_INTR_DISABLE(sc);
-				ATSE_RX_EVENT_CLEAR(sc);
-				ATSE_TX_EVENT_CLEAR(sc);
-
-			/*
-			 * Do not allow disabling of polling if we do
-			 * not have interrupts.
-			 */
-			} else if (sc->atse_rx_irq_res != NULL ||
-			    sc->atse_tx_irq_res != NULL) {
-				error = ether_poll_deregister(ifp);
-				/* Enable interrupts. */
-				//ATSE_RX_INTR_ENABLE(sc);
-				//ATSE_TX_INTR_ENABLE(sc);
-			} else {
-				ifp->if_capenable ^= IFCAP_POLLING;
-				error = EINVAL;
-			}
-		}
-#endif /* DEVICE_POLLING */
 		ATSE_UNLOCK(sc);
 		break;
 	case SIOCADDMULTI:
@@ -1204,12 +1150,6 @@ atse_rx_intr(void *arg)
 	ifp = sc->atse_ifp;
 
 	ATSE_LOCK(sc);
-#ifdef DEVICE_POLLING
-	if (ifp->if_capenable & IFCAP_POLLING) {
-		ATSE_UNLOCK(sc);
-		return;
-	}
-#endif
 
 	atse_intr_debug(sc, "rx");
 	rxe = ATSE_RX_EVENT_READ(sc);
@@ -1266,12 +1206,6 @@ atse_tx_intr(void *arg)
 	//printf("%s: 0x%x\n", __func__, txe);
 
 	ATSE_LOCK(sc);
-#ifdef DEVICE_POLLING
-	if (ifp->if_capenable & IFCAP_POLLING) {
-		ATSE_UNLOCK(sc);
-		return;
-	}
-#endif
 
 	/* XXX-BZ build histogram. */
 	atse_intr_debug(sc, "tx");
@@ -1307,59 +1241,6 @@ atse_tx_intr(void *arg)
 	ATSE_UNLOCK(sc);
 }
 #endif /* if 0 */
-
-#ifdef DEVICE_POLLING
-static int
-atse_poll(struct ifnet *ifp, enum poll_cmd cmd, int count)
-{
-	struct atse_softc *sc;
-	int rx_npkts = 0;
-
-	sc = ifp->if_softc;
-	ATSE_LOCK(sc);
-	if ((ifp->if_drv_flags & IFF_DRV_RUNNING) == 0) {
-		ATSE_UNLOCK(sc);
-		return (rx_npkts);
-	}
-
-	sc->atse_rx_cycles = count;
-	rx_npkts = 0; //atse_rx_locked(sc);
-	atse_start_locked(ifp);
-
-	if (sc->atse_rx_cycles > 0 || cmd == POLL_AND_CHECK_STATUS) {
-		uint32_t rx, tx;
-
-		rx = ATSE_RX_EVENT_READ(sc);
-		tx = ATSE_TX_EVENT_READ(sc);
-
-		if (rx & (A_ONCHIP_FIFO_MEM_CORE_EVENT_OVERFLOW|
-		    A_ONCHIP_FIFO_MEM_CORE_EVENT_UNDERFLOW)) {
-			/* XXX-BZ ERROR HANDLING. */
-			atse_update_rx_err(sc, ((rx &
-			    A_ONCHIP_FIFO_MEM_CORE_ERROR_MASK) >>
-			    A_ONCHIP_FIFO_MEM_CORE_ERROR_SHIFT) & 0xff);
-			if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
-		}
-		if (tx & (A_ONCHIP_FIFO_MEM_CORE_EVENT_OVERFLOW|
-		    A_ONCHIP_FIFO_MEM_CORE_EVENT_UNDERFLOW)) {
-			/* XXX-BZ ERROR HANDLING. */
-			if_inc_counter(ifp, IFCOUNTER_OERRORS, 1);
-		}
-		if (ATSE_TX_READ_FILL_LEVEL(sc) == 0)
-			sc->atse_watchdog_timer = 0;
-
-#if 0
-		if (/* Severe error; if only we could find out. */) {
-			ifp->if_drv_flags &= ~IFF_DRV_RUNNING;
-			atse_init_locked(sc);
-		}
-#endif
-	}
-
-	ATSE_UNLOCK(sc);
-	return (rx_npkts);
-}
-#endif /* DEVICE_POLLING */
 
 static struct atse_mac_stats_regs {
 	const char *name;
@@ -1684,57 +1565,6 @@ atse_attach(device_t dev)
 	ifp->if_hdrlen = sizeof(struct ether_vlan_header);
 	ifp->if_capabilities |= IFCAP_VLAN_MTU;
 	ifp->if_capenable = ifp->if_capabilities;
-#ifdef DEVICE_POLLING
-	/* We will enable polling by default if no irqs available. See below. */
-	ifp->if_capabilities |= IFCAP_POLLING;
-#endif
-
-#if 0
-	/* Hook up interrupts. */
-	if (sc->atse_rx_irq_res != NULL) {
-		error = bus_setup_intr(dev, sc->atse_rx_irq_res, INTR_TYPE_NET |
-		    INTR_MPSAFE, NULL, atse_rx_intr, sc, &sc->atse_rx_intrhand);
-		if (error != 0) {
-			device_printf(dev, "enabling RX IRQ failed\n");
-			ether_ifdetach(ifp);
-			goto err;
-		}
-	}
-
-	if (sc->atse_tx_irq_res != NULL) {
-		error = bus_setup_intr(dev, sc->atse_tx_irq_res, INTR_TYPE_NET |
-		    INTR_MPSAFE, NULL, atse_tx_intr, sc, &sc->atse_tx_intrhand);
-		if (error != 0) {
-			bus_teardown_intr(dev, sc->atse_rx_irq_res,
-			    sc->atse_rx_intrhand);
-			device_printf(dev, "enabling TX IRQ failed\n");
-			ether_ifdetach(ifp);
-			goto err;
-		}
-	}
-
-	if ((ifp->if_capenable & IFCAP_POLLING) != 0 ||
-	   (sc->atse_rx_irq_res == NULL && sc->atse_tx_irq_res == NULL)) {
-#ifdef DEVICE_POLLING
-		/* If not on and no IRQs force it on. */
-		if (sc->atse_rx_irq_res == NULL && sc->atse_tx_irq_res == NULL){
-			ifp->if_capenable |= IFCAP_POLLING;
-			device_printf(dev, "forcing to polling due to no "
-			    "interrupts\n");
-		}
-		error = ether_poll_register(atse_poll, ifp);
-		if (error != 0)
-			goto err;
-#else
-		device_printf(dev, "no DEVICE_POLLING in kernel and no IRQs\n");
-		error = ENXIO;
-#endif
-	} else {
-		printf("%s: Enable atse interrupts\n", __func__);
-		//ATSE_RX_INTR_ENABLE(sc);
-		//ATSE_TX_INTR_ENABLE(sc);
-	}
-#endif /* if 0 */
 
 err:
 	if (error != 0)
@@ -1759,11 +1589,6 @@ atse_detach(device_t dev)
 	KASSERT(mtx_initialized(&sc->atse_mtx), ("%s: mutex not initialized",
 	    device_get_nameunit(dev)));
 	ifp = sc->atse_ifp;
-
-#ifdef DEVICE_POLLING
-	if (ifp->if_capenable & IFCAP_POLLING)
-		ether_poll_deregister(ifp);
-#endif
 
 	/* Only cleanup if attach succeeded. */
 	if (device_is_attached(dev)) {
