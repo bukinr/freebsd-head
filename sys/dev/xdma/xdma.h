@@ -180,8 +180,9 @@ int xdma_desc_free(xdma_channel_t *xchan);
 int xdma_desc_done(xdma_channel_t *xchan, uint32_t idx, struct xdma_desc_status *);
 uint32_t xchan_next_idx(xdma_channel_t *xchan, uint32_t curidx);
 
+/* xchan queues operations */
 int xdma_dequeue(xdma_channel_t *xchan, struct mbuf **m);
-int xdma_enqueue(xdma_channel_t *xchan, struct mbuf **m);
+int xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **m);
 int xdma_enqueue_submit(xdma_channel_t *xchan);
 int xdma_enqueue_sync_pre(xdma_channel_t *xchan, uint32_t);
 int xdma_enqueue_sync_post(xdma_channel_t *xchan, uint32_t);

@@ -251,20 +251,21 @@ xdma_teardown_all_intr(xdma_channel_t *xchan)
 static void
 xdma_dmamap_cb(void *arg, bus_dma_segment_t *segs, int nseg, int err)
 {
+	xdma_controller_t *xdma;
 	xdma_channel_t *xchan;
-	//int i;
 
 	xchan = (xdma_channel_t *)arg;
-
 	KASSERT(xchan != NULL, ("xchan is NULL"));
 
+	xdma = xchan->xdma;
+	KASSERT(xdma != NULL, ("xdma is NULL"));
+
 	if (err) {
-		printf("%s: error\n", __func__);
+		device_printf(xdma->dma_dev, "%s failed\n", __func__);
 		xchan->map_err = 1;
 		return;
 	}
 
-	//printf("%s: map %d nseg %d\n", __func__, xchan->map_descr, nseg);
 	xchan->descs[xchan->map_descr].ds_addr = segs[0].ds_addr;
 	xchan->descs[xchan->map_descr].ds_len = segs[0].ds_len;
 }
@@ -582,7 +583,7 @@ xdma_dequeue(xdma_channel_t *xchan, struct mbuf **mp)
 }
 
 int
-xdma_enqueue(xdma_channel_t *xchan, struct mbuf **mp)
+xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp)
 {
 	struct xdma_mbuf_entry *xm;
 	xdma_controller_t *xdma;

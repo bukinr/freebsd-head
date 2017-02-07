@@ -223,7 +223,7 @@ atse_rx_enqueue(struct atse_softc *sc, uint32_t n)
 			return (-1);
 		m->m_pkthdr.len = m->m_len = m->m_ext.ext_size;
 		//m->m_len = m->m_pkthdr.len = MCLBYTES;
-		xdma_enqueue(sc->xchan_rx, &m);
+		xdma_enqueue_mbuf(sc->xchan_rx, &m);
 	}
 
 	return (0);
@@ -315,7 +315,7 @@ atse_start_locked(struct ifnet *ifp)
 	struct atse_softc *sc;
 	struct mbuf *m;
 	//int error;
-	int sent;
+	int enqueued;
 
 	sc = ifp->if_softc;
 	ATSE_LOCK_ASSERT(sc);
@@ -348,7 +348,7 @@ atse_start_locked(struct ifnet *ifp)
 	sc->atse_watchdog_timer = 0;
 #endif
 
-	sent = 0;
+	enqueued = 0;
 
 	/* We have more space to send so continue ... */
 	for (; !IFQ_DRV_IS_EMPTY(&ifp->if_snd); ) {
@@ -361,9 +361,9 @@ atse_start_locked(struct ifnet *ifp)
 #endif
 
 		IFQ_DRV_DEQUEUE(&ifp->if_snd, m);
-		//sc->atse_tx_m_offset = 0;
-		if (m == NULL)
+		if (m == NULL) {
 			break;
+		}
 
 		//uint32_t src;
 		//uint32_t dst;
@@ -375,23 +375,14 @@ atse_start_locked(struct ifnet *ifp)
 		/* If anyone is interested give them a copy first. */
 		BPF_MTAP(sc->atse_ifp, m);
 
-		xdma_enqueue(sc->xchan_tx, &m);
+		xdma_enqueue_mbuf(sc->xchan_tx, &m);
 
 		sc->txcount++;
 
-		//error = atse_tx_locked(sc, &sent);
-		//if (error != 0)
-		//	goto done;
-		//if (sc->txcount > 0) {
-		//	ifp->if_drv_flags |= IFF_DRV_OACTIVE;
-		//	break;
-		//}
-		sent = 1;
+		enqueued++;
 	}
 
-//done:
-	/* If the IP core walks into Nekromanteion try to bail out. */
-	if (sent > 0) {
+	if (enqueued > 0) {
 		sc->atse_watchdog_timer = ATSE_WATCHDOG_TIME;
 		xdma_enqueue_submit(sc->xchan_tx);
 	}
