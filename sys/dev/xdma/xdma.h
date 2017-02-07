@@ -106,13 +106,13 @@ struct xdma_descriptor {
 
 typedef struct xdma_descriptor xdma_descriptor_t;
 
-struct xdma_sglist {
+struct xdma_sg {
 	vm_paddr_t			paddr;
 	size_t				len;
-	TAILQ_ENTRY(xdma_sglist)	sg_next;
+	TAILQ_ENTRY(xdma_sg)		sg_next;
 };
 
-TAILQ_HEAD(xdma_sglist_list, xdma_sglist);
+TAILQ_HEAD(xdma_sg_queue, xdma_sg);
 
 struct xchan_bufmap {
 	bus_dmamap_t	map;

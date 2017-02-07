@@ -287,7 +287,7 @@ xdma_desc_alloc_bus_dma(xdma_channel_t *xchan, uint32_t desc_size,
 	nsegments = conf->block_num;
 	all_desc_sz = (nsegments * desc_size);
 
-	printf("%s: nsegments %d desc_size %d\n", __func__, nsegments, desc_size);
+	//printf("%s: nsegments %d desc_size %d\n", __func__, nsegments, desc_size);
 
 	err = bus_dma_tag_create(
 	    bus_get_dma_tag(xdma->dev),
@@ -335,8 +335,8 @@ xdma_desc_alloc_bus_dma(xdma_channel_t *xchan, uint32_t desc_size,
 			    "%s: Can't load DMA map.\n", __func__);
 			return (-1);
 		}
-		printf("%s: desc->desc %lx, desc->ds_addr %x\n", __func__,
-		    (uint64_t)desc->desc, (uint32_t)desc->ds_addr);
+		//printf("%s: desc->desc %lx, desc->ds_addr %x\n", __func__,
+		//    (uint64_t)desc->desc, (uint32_t)desc->ds_addr);
 	}
 
 	/* XXX: Allocate busdma buffer for mbufs */
@@ -646,14 +646,14 @@ xdma_enqueue_sync_pre(xdma_channel_t *xchan, uint32_t i)
 int
 xdma_enqueue_submit(xdma_channel_t *xchan)
 {
-	struct xdma_sglist_list sg_queue;
+	struct xdma_sg_queue sg_queue;
 	struct xdma_mbuf_entry *xm_tmp;
 	struct xdma_mbuf_entry *xm;
 	struct mbuf *m;
 	xdma_controller_t *xdma;
 	xdma_config_t *conf;
-	struct xdma_sglist *sg;
-	struct xdma_sglist *sg_tmp;
+	struct xdma_sg *sg;
+	struct xdma_sg *sg_tmp;
 	int ret;
 	int i;
 	struct bus_dma_segment seg;
@@ -708,7 +708,7 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 		//printf("%s(%d): sglist_append_phys 0x%x %d bytes\n", __func__,
 		//    device_get_unit(xdma->dma_dev), (uint32_t)seg.ds_addr, (uint32_t)seg.ds_len);
 
-		sg = malloc(sizeof(struct xdma_sglist), M_XDMA, M_WAITOK | M_ZERO);
+		sg = malloc(sizeof(struct xdma_sg), M_XDMA, M_WAITOK | M_ZERO);
 		sg->paddr = seg.ds_addr;
 		sg->len = seg.ds_len;
 		TAILQ_INSERT_TAIL(&sg_queue, sg, sg_next);

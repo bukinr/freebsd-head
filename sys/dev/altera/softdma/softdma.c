@@ -680,13 +680,13 @@ softdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 
 static int
 softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
-    struct xdma_sglist_list *sg_queue)
+    struct xdma_sg_queue *sg_queue)
 {
 	struct softdma_channel *chan;
 	struct softdma_desc *desc;
 	struct softdma_softc *sc;
-	struct xdma_sglist *sg_tmp;
-	struct xdma_sglist *sg;
+	struct xdma_sg *sg_tmp;
+	struct xdma_sg *sg;
 	xdma_config_t *conf;
 	uint32_t enqueued;
 	uint32_t tmp;

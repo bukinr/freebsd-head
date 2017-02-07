@@ -210,7 +210,7 @@ process_desc(uint32_t n)
 	chan->idx_tail = next_idx(xchan, chan->idx_tail);
 
 	//xdma_sglist_append(&sg_queue, paddr, len);
-	//sg = malloc(sizeof(struct xdma_sglist), M_XDMA, M_WAITOK | M_ZERO);
+	//sg = malloc(sizeof(struct xdma_sg), M_XDMA, M_WAITOK | M_ZERO);
 	//sg->paddr = 0;
 	//sg->len = le32toh(desc->transferred);
 	//TAILQ_INSERT_TAIL(&sg_queue, sg, sg_next);
@@ -579,7 +579,7 @@ msgdma_channel_prep_memcpy(device_t dev, struct xdma_channel *xchan)
 }
 
 static int
-msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct xdma_sglist_list *sg_queue)
+msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct xdma_sg_queue *sg_queue)
 {
 	struct msgdma_channel *chan;
 	//struct msgdma_desc *descs;
@@ -591,8 +591,8 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct xdma_s
 	uint32_t len;
 	//uint32_t reg;
 	//int i;
-	struct xdma_sglist *sg;
-	struct xdma_sglist *sg_tmp;
+	struct xdma_sg *sg;
+	struct xdma_sg *sg_tmp;
 
 	sc = device_get_softc(dev);
 
