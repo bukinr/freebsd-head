@@ -63,14 +63,6 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus_subr.h>
 #endif
 
-#define	AVALON_FIFO_TX_BASIC_OPTS_DEPTH		16
-
-#define	DMA_STATUS		0x00
-#define	 STATUS_RESETTING	(1 << 6)
-#define	DMA_CONTROL		0x04
-#define	 CONTROL_GIEM		(1 << 4) /* Global Interrupt Enable Mask */
-#define	 CONTROL_RESET		(1 << 1) /* Reset Dispatcher */
-
 #define	READ4(_sc, _reg)	\
 	le32toh(bus_space_read_4(_sc->bst, _sc->bsh, _reg))
 #define	WRITE4(_sc, _reg, _val)	\
@@ -80,6 +72,12 @@ __FBSDID("$FreeBSD$");
 	le32toh(bus_space_read_4(_sc->bst_d, _sc->bsh_d, _reg))
 #define	WRITE4_DESC(_sc, _reg, _val)	\
 	bus_space_write_4(_sc->bst_d, _sc->bsh_d, _reg, htole32(_val))
+
+#define	DMA_STATUS		0x00
+#define	 STATUS_RESETTING	(1 << 6)
+#define	DMA_CONTROL		0x04
+#define	 CONTROL_GIEM		(1 << 4) /* Global Interrupt Enable Mask */
+#define	 CONTROL_RESET		(1 << 1) /* Reset Dispatcher */
 
 #define	CONTROL_GO		(1 << 31)	/* Commit all the descriptor info */
 #define	CONTROL_OWN		(1 << 30)	/* Owned by hardware (prefetcher-enabled only) */
@@ -96,6 +94,17 @@ __FBSDID("$FreeBSD$");
 #define	CONTROL_TX_CHANNEL_S	0		/* Transmit Channel */
 #define	CONTROL_TX_CHANNEL_M	(0xff << CONTROL_TRANSMIT_CH_S)
 
+#define	PF_CONTROL			0x00
+#define	 PF_CONTROL_GIEM		(1 << 3)
+#define	 PF_CONTROL_RESET		(1 << 2)
+#define	 PF_CONTROL_DESC_POLL_EN	(1 << 1)
+#define	 PF_CONTROL_RUN			(1 << 0)
+#define	PF_NEXT_LO			0x04
+#define	PF_NEXT_HI			0x08
+#define	PF_POLL_FREQ			0x0C
+#define	PF_STATUS			0x10
+#define	 PF_STATUS_IRQ			(1 << 0)
+
 #include <dev/xdma/xdma.h>
 #include "xdma_if.h"
 
@@ -111,17 +120,6 @@ struct msgdma_channel {
 	int			idx_head;
 	int			idx_tail;
 };
-
-#define	PF_CONTROL			0x00
-#define	 PF_CONTROL_GIEM		(1 << 3)
-#define	 PF_CONTROL_RESET		(1 << 2)
-#define	 PF_CONTROL_DESC_POLL_EN	(1 << 1)
-#define	 PF_CONTROL_RUN			(1 << 0)
-#define	PF_NEXT_LO			0x04
-#define	PF_NEXT_HI			0x08
-#define	PF_POLL_FREQ			0x0C
-#define	PF_STATUS			0x10
-#define	 PF_STATUS_IRQ			(1 << 0)
 
 //#define	PREFETCHER_DISABLED	1
 
@@ -225,12 +223,10 @@ static void
 msgdma_intr(void *arg)
 {
 	xdma_transfer_status_t status;
-	//struct msgdma_desc *descs;
 	struct msgdma_desc *desc;
 	struct msgdma_channel *chan;
 	struct xdma_channel *xchan;
 	xdma_config_t *conf;
-	//struct xdma_sglist_list sg_queue;
 	struct msgdma_softc *sc;
 	//uint32_t len;
 	//int i;
@@ -247,7 +243,6 @@ msgdma_intr(void *arg)
 	//	READ4_DESC(sc, PF_NEXT_LO),
 	//	READ4_DESC(sc, PF_CONTROL));
 
-	//mips_dcache_wbinv_all();
 	//len = le32toh(desc->transferred);
 	//if (desc->read_lo == 0) {
 	//	printf("%s: rx 0x%08x, transferred %d\n", __func__, READ4_DESC(sc, PF_STATUS), len);
@@ -397,11 +392,10 @@ static int
 msgdma_process_desc(struct msgdma_channel *chan, struct msgdma_desc *desc)
 {
 	struct msgdma_softc *sc;
+	uint32_t addr;
 	uint32_t reg;
 
 	sc = chan->sc;
-
-	//mips_dcache_wbinv_all();
 
 	printf("%s\n", __func__);
 
@@ -427,9 +421,6 @@ msgdma_process_desc(struct msgdma_channel *chan, struct msgdma_desc *desc)
 	//desc = &sc->desc;
 	sc->curdesc = desc;
 
-
-	uint32_t addr;
-
 	//uint32_t *tmp;
 	//tmp = (uint32_t *)desc;
 	//for (i = 0; i < 8; i++) {
@@ -447,7 +438,6 @@ msgdma_process_desc(struct msgdma_channel *chan, struct msgdma_desc *desc)
 	reg = (PF_CONTROL_GIEM | PF_CONTROL_RUN);
 	//reg |= PF_CONTROL_DESC_POLL_EN);
 
-	//mips_dcache_wbinv_all();
 	WRITE4_DESC(sc, PF_CONTROL, reg);
 #endif
 
