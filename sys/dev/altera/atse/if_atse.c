@@ -1003,35 +1003,6 @@ atse_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 	return (error);
 }
 
-#if 0
-static void
-atse_intr_debug(struct atse_softc *sc, const char *intrname)
-{
-	uint32_t rxs, rxe, rxi, rxf, txs, txe, txi, txf;
-
-	if (!atse_intr_debug_enable)
-		return;
-
-	rxs = ATSE_RX_STATUS_READ(sc);
-	rxe = ATSE_RX_EVENT_READ(sc);
-	rxi = ATSE_RX_INTR_READ(sc);
-	rxf = ATSE_RX_READ_FILL_LEVEL(sc);
-
-	txs = ATSE_TX_STATUS_READ(sc);
-	txe = ATSE_TX_EVENT_READ(sc);
-	txi = ATSE_TX_INTR_READ(sc);
-	txf = ATSE_TX_READ_FILL_LEVEL(sc);
-
-	printf(
-	    "%s - %s: "
-	    "rxs 0x%x rxe 0x%x rxi 0x%x rxf 0x%x "
-	    "txs 0x%x txe 0x%x txi 0x%x txf 0x%x\n",
-	    __func__, intrname,
-	    rxs, rxe, rxi, rxf,
-	    txs, txe, txi, txf);
-}
-#endif
-
 static void
 atse_watchdog(struct atse_softc *sc)
 {
@@ -1104,19 +1075,6 @@ atse_ifmedia_upd(struct ifnet *ifp)
 	return (error);
 }
 
-#if 0
-static void
-atse_update_rx_err(struct atse_softc *sc, uint32_t mask)
-{
-	int i;
-
-	/* RX error are 6 bits, we only know 4 of them. */
-	for (i = 0; i < ATSE_RX_ERR_MAX; i++)
-		if ((mask & (1 << i)) != 0)
-			sc->atse_rx_err[i]++;
-}
-#endif
-
 /*
  * Report current media status.
  */
@@ -1135,112 +1093,6 @@ atse_ifmedia_sts(struct ifnet *ifp, struct ifmediareq *ifmr)
 	ifmr->ifm_status = mii->mii_media_status;
 	ATSE_UNLOCK(sc);
 }
-
-#if 0
-static void
-atse_rx_intr(void *arg)
-{
-	struct atse_softc *sc;
-	struct ifnet *ifp;
-	uint32_t rxe;
-
-	//printf("%s\n", __func__);
-
-	sc = (struct atse_softc *)arg;
-	ifp = sc->atse_ifp;
-
-	ATSE_LOCK(sc);
-
-	atse_intr_debug(sc, "rx");
-	rxe = ATSE_RX_EVENT_READ(sc);
-	if (rxe & (A_ONCHIP_FIFO_MEM_CORE_EVENT_OVERFLOW|
-	    A_ONCHIP_FIFO_MEM_CORE_EVENT_UNDERFLOW)) {
-		/* XXX-BZ ERROR HANDLING. */
-		atse_update_rx_err(sc, ((rxe &
-		    A_ONCHIP_FIFO_MEM_CORE_ERROR_MASK) >>
-		    A_ONCHIP_FIFO_MEM_CORE_ERROR_SHIFT) & 0xff);
-		if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
-	}
-
-	/*
-	 * There is considerable subtlety in the race-free handling of rx
-	 * interrupts: we must disable interrupts whenever we manipulate the
-	 * FIFO to prevent further interrupts from firing before we are done;
-	 * we must clear the event after processing to prevent the event from
-	 * being immediately reposted due to data remaining; we must clear the
-	 * event mask before reenabling interrupts or risk missing a positive
-	 * edge; and we must recheck everything after completing in case the
-	 * event posted between clearing events and reenabling interrupts.  If
-	 * a race is experienced, we must restart the whole mechanism.
-	 */
-	//do {
-		ATSE_RX_INTR_DISABLE(sc);
-#if 0
-		sc->atse_rx_cycles = RX_CYCLES_IN_INTR;
-#endif
-		//atse_rx_locked(sc);
-		ATSE_RX_EVENT_CLEAR(sc);
-
-		/* Disable interrupts if interface is down. */
-		//if (ifp->if_drv_flags & IFF_DRV_RUNNING)
-		//	ATSE_RX_INTR_ENABLE(sc);
-	//} while (!(ATSE_RX_STATUS_READ(sc) &
-	//    A_ONCHIP_FIFO_MEM_CORE_STATUS_EMPTY));
-	ATSE_UNLOCK(sc);
-
-}
-#endif /* if 0 */
-
-#if 0
-static void
-atse_tx_intr(void *arg)
-{
-	struct atse_softc *sc;
-	struct ifnet *ifp;
-	uint32_t txe;
-
-	sc = (struct atse_softc *)arg;
-	ifp = sc->atse_ifp;
-
-	txe = ATSE_TX_EVENT_READ(sc);
-	//printf("%s: 0x%x\n", __func__, txe);
-
-	ATSE_LOCK(sc);
-
-	/* XXX-BZ build histogram. */
-	atse_intr_debug(sc, "tx");
-	txe = ATSE_TX_EVENT_READ(sc);
-	if (txe & (A_ONCHIP_FIFO_MEM_CORE_EVENT_OVERFLOW|
-	    A_ONCHIP_FIFO_MEM_CORE_EVENT_UNDERFLOW)) {
-		/* XXX-BZ ERROR HANDLING. */
-		if_inc_counter(ifp, IFCOUNTER_OERRORS, 1);
-	}
-
-	/*
-	 * There is also considerable subtlety in the race-free handling of
-	 * tx interrupts: all processing occurs with interrupts disabled to
-	 * prevent spurious refiring while transmit is in progress (which
-	 * could occur if the FIFO drains while sending -- quite likely); we
-	 * must not clear the event mask until after we've sent, also to
-	 * prevent spurious refiring; once we've cleared the event mask we can
-	 * reenable interrupts, but there is a possible race between clear and
-	 * enable, so we must recheck and potentially repeat the whole process
-	 * if it is detected.
-	 */
-	//do {
-		ATSE_TX_INTR_DISABLE(sc);
-		sc->atse_watchdog_timer = 0;
-		atse_start_locked(ifp);
-		ATSE_TX_EVENT_CLEAR(sc);
-
-		/* Disable interrupts if interface is down. */
-		if (ifp->if_drv_flags & IFF_DRV_RUNNING)
-			ATSE_TX_INTR_ENABLE(sc);
-	//} while (ATSE_TX_PENDING(sc) &&
-	//    !(ATSE_TX_STATUS_READ(sc) & A_ONCHIP_FIFO_MEM_CORE_STATUS_FULL));
-	ATSE_UNLOCK(sc);
-}
-#endif /* if 0 */
 
 static struct atse_mac_stats_regs {
 	const char *name;
@@ -1601,20 +1453,8 @@ atse_detach(device_t dev)
 	if (sc->atse_miibus != NULL)
 		device_delete_child(dev, sc->atse_miibus);
 
-#if 0
-	if (sc->atse_tx_intrhand)
-		bus_teardown_intr(dev, sc->atse_tx_irq_res,
-		    sc->atse_tx_intrhand);
-	if (sc->atse_rx_intrhand)
-		bus_teardown_intr(dev, sc->atse_rx_irq_res,
-		    sc->atse_rx_intrhand);
-#endif
-
 	if (ifp != NULL)
 		if_free(ifp);
-
-	//if (sc->atse_tx_buf != NULL)
-	//	free(sc->atse_tx_buf, M_DEVBUF);
 
 	mtx_destroy(&sc->atse_mtx);
 
@@ -1629,38 +1469,6 @@ atse_detach_resources(device_t dev)
 
 	sc = device_get_softc(dev);
 
-#if 0
-	if (sc->atse_txc_mem_res != NULL) {
-		bus_release_resource(dev, SYS_RES_MEMORY, sc->atse_txc_mem_rid,
-		    sc->atse_txc_mem_res);
-		sc->atse_txc_mem_res = NULL;
-	}
-	if (sc->atse_tx_mem_res != NULL) {
-		bus_release_resource(dev, SYS_RES_MEMORY, sc->atse_tx_mem_rid,
-		    sc->atse_tx_mem_res);
-		sc->atse_tx_mem_res = NULL;
-	}
-	if (sc->atse_tx_irq_res != NULL) {
-		bus_release_resource(dev, SYS_RES_IRQ, sc->atse_tx_irq_rid,
-		    sc->atse_tx_irq_res);
-		sc->atse_tx_irq_res = NULL;
-	}
-	if (sc->atse_rxc_mem_res != NULL) {
-		bus_release_resource(dev, SYS_RES_MEMORY, sc->atse_rxc_mem_rid,
-		    sc->atse_rxc_mem_res);
-		sc->atse_rxc_mem_res = NULL;
-	}
-	if (sc->atse_rx_mem_res != NULL) {
-		bus_release_resource(dev, SYS_RES_MEMORY, sc->atse_rx_mem_rid,
-		    sc->atse_rx_mem_res);
-		sc->atse_rx_mem_res = NULL;
-	}
-	if (sc->atse_rx_irq_res != NULL) {
-		bus_release_resource(dev, SYS_RES_IRQ, sc->atse_rx_irq_rid,
-		    sc->atse_rx_irq_res);
-		sc->atse_rx_irq_res = NULL;
-	}
-#endif
 	if (sc->atse_mem_res != NULL) {
 		bus_release_resource(dev, SYS_RES_MEMORY, sc->atse_mem_rid,
 		    sc->atse_mem_res);
