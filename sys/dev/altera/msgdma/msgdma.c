@@ -48,11 +48,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/resource.h>
 #include <sys/rman.h>
 
-//#include <vm/vm.h>
-//#include <vm/vm_extern.h>
-//#include <vm/vm_kern.h>
-//#include <vm/pmap.h>
-
 #include <machine/bus.h>
 #include <machine/fdt.h>
 #include <machine/cache.h>
@@ -91,9 +86,7 @@ struct msgdma_softc {
 	bus_space_handle_t	bsh_d;
 	void			*ih;
 	struct msgdma_desc	desc;
-	struct msgdma_desc	*curdesc;
-	struct msgdma_channel	*curchan;
-	struct msgdma_channel	msgdma_channels[MSGDMA_NCHANNELS];
+	struct msgdma_channel	channels[MSGDMA_NCHANNELS];
 };
 
 static inline uint32_t
@@ -130,40 +123,32 @@ static void
 msgdma_intr(void *arg)
 {
 	xdma_transfer_status_t status;
+	struct xdma_desc_status st;
 	struct msgdma_desc *desc;
 	struct msgdma_channel *chan;
 	struct xdma_channel *xchan;
-	xdma_config_t *conf;
 	struct msgdma_softc *sc;
-	//uint32_t len;
-	//int i;
+	xdma_config_t *conf;
+	uint32_t tot_copied;
+	uint32_t cnt_done;
 
 	sc = arg;
-	chan = sc->curchan;
-	//desc = sc->curdesc;
+	chan = &sc->channels[0];
+	xchan = chan->xchan;
+	conf = &xchan->conf;
 
 	//TAILQ_INIT(&sg_queue);
-
 	//printf("%s(%d): status 0x%08x next_descr 0x%08x, control 0x%08x\n", __func__,
 	//    device_get_unit(sc->dev),
 	//	READ4_DESC(sc, PF_STATUS),
 	//	READ4_DESC(sc, PF_NEXT_LO),
 	//	READ4_DESC(sc, PF_CONTROL));
-
 	//len = le32toh(desc->transferred);
 	//if (desc->read_lo == 0) {
 	//	printf("%s: rx 0x%08x, transferred %d\n", __func__, READ4_DESC(sc, PF_STATUS), len);
 	//} else {
 	//	printf("%s: tx 0x%08x, transferred %d\n", __func__, READ4_DESC(sc, PF_STATUS), len);
 	//}
-
-	xchan = chan->xchan;
-	conf = &xchan->conf;
-
-	//descs = (struct msgdma_desc *)xchan->descs;
-
-	uint32_t cnt_done;
-	uint32_t tot_copied;
 
 	cnt_done = 0;
 	tot_copied = 0;
@@ -179,7 +164,6 @@ msgdma_intr(void *arg)
 
 		tot_copied += le32toh(desc->transferred);
 		cnt_done++;
-		struct xdma_desc_status st;
 		st.error = 0;
 		st.transferred = le32toh(desc->transferred);
 		xdma_desc_done(xchan, chan->idx_tail, &st);
@@ -307,7 +291,7 @@ msgdma_channel_alloc(device_t dev, struct xdma_channel *xchan)
 	xdma_assert_locked();
 
 	for (i = 0; i < MSGDMA_NCHANNELS; i++) {
-		chan = &sc->msgdma_channels[i];
+		chan = &sc->channels[i];
 		if (chan->used == 0) {
 			chan->xchan = xchan;
 			xchan->chan = (void *)chan;
@@ -361,7 +345,6 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct xdma_s
 
 	conf = &xchan->conf;
 	chan = (struct msgdma_channel *)xchan->chan;
-	sc->curchan = chan;
 
 	//printf("%s(%d)\n", __func__, device_get_unit(dev));
 	//printf("%s(%d): nseg %d\n", __func__, device_get_unit(dev), (uint32_t)sg->sg_nseg);
