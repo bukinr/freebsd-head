@@ -354,7 +354,7 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct xdma_s
 		//desc = &descs[chan->idx_head];
 
 		desc = xchan->descs[chan->idx_head].desc;
-		if (conf->direction == XDMA_MEM_TO_DEV) {
+		if (sg->direction == XDMA_MEM_TO_DEV) {
 			desc->read_lo = htole32(addr);
 			desc->write_lo = 0;
 		} else {
@@ -366,7 +366,7 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct xdma_s
 		desc->status = 0;
 		desc->reserved = 0;
 
-		if (conf->direction == XDMA_MEM_TO_DEV) {
+		if (sg->direction == XDMA_MEM_TO_DEV) {
 			desc->control = htole32(CONTROL_GEN_SOP | CONTROL_GEN_EOP);
 		} else {
 			desc->control = htole32(CONTROL_END_ON_EOP | (1 << 13));

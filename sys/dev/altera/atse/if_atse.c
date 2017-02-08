@@ -208,7 +208,7 @@ atse_rx_enqueue(struct atse_softc *sc, uint32_t n)
 			return (-1);
 		m->m_pkthdr.len = m->m_len = m->m_ext.ext_size;
 		//m->m_len = m->m_pkthdr.len = MCLBYTES;
-		xdma_enqueue_mbuf(sc->xchan_rx, &m);
+		xdma_enqueue_mbuf(sc->xchan_rx, &m, 0, 0, XDMA_DEV_TO_MEM);
 	}
 
 	return (0);
@@ -356,7 +356,7 @@ atse_start_locked(struct ifnet *ifp)
 		/* If anyone is interested give them a copy first. */
 		BPF_MTAP(sc->atse_ifp, m);
 
-		xdma_enqueue_mbuf(sc->xchan_tx, &m);
+		xdma_enqueue_mbuf(sc->xchan_tx, &m, 0, 0, XDMA_MEM_TO_DEV);
 
 		sc->txcount++;
 
@@ -1303,7 +1303,7 @@ atse_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	xdma_prep_sg(sc->xchan_tx, 0, 0, NUM_TX_DESC, XDMA_MEM_TO_DEV);
+	xdma_prep_sg(sc->xchan_tx, NUM_TX_DESC);
 
 	/* Get RX xDMA controller */
 	sc->xdma_rx = xdma_ofw_get(sc->dev, "rx");
@@ -1327,7 +1327,7 @@ atse_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	xdma_prep_sg(sc->xchan_rx, 0, 0, NUM_RX_DESC, XDMA_DEV_TO_MEM);
+	xdma_prep_sg(sc->xchan_rx, NUM_RX_DESC);
 
 	atse_ethernet_option_bits_read(dev);
 

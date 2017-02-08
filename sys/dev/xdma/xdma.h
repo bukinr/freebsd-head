@@ -81,6 +81,9 @@ typedef struct xdma_controller xdma_controller_t;
 struct xdma_mbuf_entry {
 	struct mbuf			*m;
 	TAILQ_ENTRY(xdma_mbuf_entry)	xm_next;
+	enum xdma_direction		direction;
+	uintptr_t			src_addr;	/* Physical address. */
+	uintptr_t			dst_addr;	/* Physical address. */
 };
 
 struct xdma_channel_config {
@@ -109,14 +112,15 @@ typedef struct xdma_descriptor xdma_descriptor_t;
 struct xdma_sg {
 	vm_paddr_t			paddr;
 	size_t				len;
+	enum xdma_direction		direction;
 	TAILQ_ENTRY(xdma_sg)		sg_next;
 };
 
 TAILQ_HEAD(xdma_sg_queue, xdma_sg);
 
 struct xchan_bufmap {
-	bus_dmamap_t	map;
-	struct mbuf	*m;
+	bus_dmamap_t			map;
+	struct xdma_mbuf_entry		*xm;
 };
 
 struct xdma_channel {
@@ -173,7 +177,7 @@ int xdma_channel_free(xdma_channel_t *);
 int xdma_prep_cyclic(xdma_channel_t *, enum xdma_direction,
     uintptr_t, uintptr_t, int, int, int, int);
 int xdma_prep_memcpy(xdma_channel_t *, uintptr_t, uintptr_t, size_t len);
-int xdma_prep_sg(xdma_channel_t *xchan, uintptr_t, uintptr_t, uint32_t, enum xdma_direction);
+int xdma_prep_sg(xdma_channel_t *xchan, uint32_t);
 int xdma_desc_alloc(xdma_channel_t *, uint32_t, uint32_t);
 int xdma_desc_free(xdma_channel_t *xchan);
 int xdma_desc_done(xdma_channel_t *xchan, uint32_t idx, struct xdma_desc_status *);
@@ -181,7 +185,7 @@ uint32_t xchan_next_idx(xdma_channel_t *xchan, uint32_t curidx);
 
 /* xchan queues operations */
 int xdma_dequeue(xdma_channel_t *xchan, struct mbuf **m);
-int xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **m);
+int xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **m, uintptr_t src_addr, uintptr_t dst_addr, enum xdma_direction dir);
 int xdma_enqueue_submit(xdma_channel_t *xchan);
 int xdma_enqueue_sync_pre(xdma_channel_t *xchan, uint32_t);
 int xdma_enqueue_sync_post(xdma_channel_t *xchan, uint32_t);

@@ -487,8 +487,7 @@ xdma_prep_memcpy(xdma_channel_t *xchan, uintptr_t src_addr,
 }
 
 int
-xdma_prep_sg(xdma_channel_t *xchan, uintptr_t src_addr,
-    uintptr_t dst_addr, uint32_t ndesc, enum xdma_direction dir)
+xdma_prep_sg(xdma_channel_t *xchan, uint32_t ndesc)
 {
 	xdma_controller_t *xdma;
 	xdma_config_t *conf;
@@ -505,7 +504,6 @@ xdma_prep_sg(xdma_channel_t *xchan, uintptr_t src_addr,
 	}
 
 	conf = &xchan->conf;
-	conf->direction = dir;
 	conf->block_num = ndesc;
 
 	TAILQ_INIT(&xchan->queue_out);
@@ -574,7 +572,8 @@ xdma_dequeue(xdma_channel_t *xchan, struct mbuf **mp)
 }
 
 int
-xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp)
+xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
+    uintptr_t src_addr, uintptr_t dst_addr, enum xdma_direction dir)
 {
 	struct xdma_mbuf_entry *xm;
 	xdma_controller_t *xdma;
@@ -594,6 +593,9 @@ xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp)
 
 	xm = malloc(sizeof(struct xdma_mbuf_entry), M_XDMA, M_WAITOK | M_ZERO);
 	xm->m = m;
+	xm->src_addr = src_addr;
+	xm->dst_addr = dst_addr;
+	xm->direction = dir;
 
 	//XCHAN_LOCK(xchan);
 	//XCHAN_UNLOCK(xchan);
@@ -660,13 +662,14 @@ xdma_sg_queue_destroy(struct xdma_sg_queue *sg_queue)
 
 static int
 xdma_sg_queue_add(struct xdma_sg_queue *sg_queue,
-    struct bus_dma_segment *seg)
+    struct bus_dma_segment *seg, enum xdma_direction dir)
 {
 	struct xdma_sg *sg;
 
 	sg = malloc(sizeof(struct xdma_sg), M_XDMA, M_WAITOK | M_ZERO);
 	sg->paddr = seg->ds_addr;
 	sg->len = seg->ds_len;
+	sg->direction = dir;
 	TAILQ_INSERT_TAIL(sg_queue, sg, sg_next);
 
 	return (0);
@@ -722,7 +725,7 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 
 		KASSERT(nsegs == 1, ("%s: %d segments returned!", __func__, nsegs));
 
-		if (conf->direction == XDMA_MEM_TO_DEV) {
+		if (xm->direction == XDMA_MEM_TO_DEV) {
 			bus_dmamap_sync(xchan->dma_buf_tag, xchan->dma_buf_map[i].map,
 			    BUS_DMASYNC_PREWRITE);
 		} else {
@@ -730,18 +733,18 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 			    BUS_DMASYNC_PREREAD);
 		}
 
-		xchan->dma_buf_map[i].m = xm->m;
+		xchan->dma_buf_map[i].xm = xm;
 
+		//xchan->dma_buf_map[i].m = xm->m;
 		//printf("%s(%d): sglist_append_phys 0x%x %d bytes\n", __func__,
 		//    device_get_unit(xdma->dma_dev), (uint32_t)seg.ds_addr, (uint32_t)seg.ds_len);
 
-		xdma_sg_queue_add(&sg_queue, &seg);
-	
+		xdma_sg_queue_add(&sg_queue, &seg, xm->direction);
+
 		xchan->idx_head = xchan_next_idx(xchan, xchan->idx_head);
 		atomic_add_int(&xchan->idx_count, 1);
 
 		TAILQ_REMOVE(&xchan->queue_in, xm, xm_next);
-		free(xm, M_XDMA);
 	}
 
 	QUEUE_IN_UNLOCK(xchan);
@@ -895,7 +898,9 @@ xdma_desc_done(xdma_channel_t *xchan, uint32_t idx,
 	//    device_get_unit(xdma->dma_dev), xchan->idx_tail);
 
 	bmap = &xchan->dma_buf_map[xchan->idx_tail];
-	if (conf->direction == XDMA_MEM_TO_DEV) {
+	xm = bmap->xm;
+
+	if (xm->direction == XDMA_MEM_TO_DEV) {
 		bus_dmamap_sync(xchan->dma_buf_tag, bmap->map, 
 		    BUS_DMASYNC_POSTWRITE);
 	} else {
@@ -904,11 +909,9 @@ xdma_desc_done(xdma_channel_t *xchan, uint32_t idx,
 	}
 	bus_dmamap_unload(xchan->dma_buf_tag, bmap->map);
 
-	m = bmap->m;
+	m = xm->m;
 	m->m_pkthdr.len = m->m_len = status->transferred;
 
-	xm = malloc(sizeof(struct xdma_mbuf_entry), M_XDMA, M_WAITOK | M_ZERO);
-	xm->m = m;
 	TAILQ_INSERT_TAIL(&xchan->queue_out, xm, xm_next);
 
 	xchan->idx_tail = xchan_next_idx(xchan, xchan->idx_tail);
