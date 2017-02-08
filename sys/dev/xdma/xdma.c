@@ -521,7 +521,7 @@ xdma_prep_sg(xdma_channel_t *xchan, uintptr_t src_addr,
 	ret = XDMA_CHANNEL_PREP_SG(xdma->dma_dev, xchan);
 	if (ret != 0) {
 		device_printf(xdma->dev,
-		    "%s: Can't prepare fifo transfer.\n", __func__);
+		    "%s: Can't prepare SG transfer.\n", __func__);
 		XCHAN_UNLOCK(xchan);
 
 		return (-1);
@@ -751,7 +751,7 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 	ret = XDMA_CHANNEL_SUBMIT_SG(xdma->dma_dev, xchan, &sg_queue);
 	if (ret != 0) {
 		device_printf(xdma->dev,
-		    "%s: Can't prepare fifo transfer.\n", __func__);
+		    "%s: Can't submit SG transfer.\n", __func__);
 
 		XCHAN_UNLOCK(xchan);
 
@@ -761,45 +761,6 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 	XCHAN_UNLOCK(xchan);
 
 	xdma_sg_queue_destroy(&sg_queue);
-
-	return (0);
-}
-
-int
-xdma_prep_fifo(xdma_channel_t *xchan, uintptr_t src_addr,
-    uintptr_t dst_addr, size_t len, enum xdma_direction dir)
-{
-	xdma_controller_t *xdma;
-	xdma_config_t *conf;
-	int ret;
-
-	xdma = xchan->xdma;
-	KASSERT(xdma != NULL, ("xdma is NULL"));
-
-	conf = &xchan->conf;
-	conf->direction = dir;
-	conf->src_addr = src_addr;
-	conf->dst_addr = dst_addr;
-	conf->block_len = len;
-	conf->block_num = 1;
-
-	xchan->flags |= (XCHAN_CONFIGURED | XCHAN_TYPE_FIFO);
-
-	XCHAN_LOCK(xchan);
-
-	/* Deallocate old descriptors, if any. */
-	xdma_desc_free(xchan);
-
-	ret = XDMA_CHANNEL_PREP_FIFO(xdma->dma_dev, xchan);
-	if (ret != 0) {
-		device_printf(xdma->dev,
-		    "%s: Can't prepare fifo transfer.\n", __func__);
-		XCHAN_UNLOCK(xchan);
-
-		return (-1);
-	}
-
-	XCHAN_UNLOCK(xchan);
 
 	return (0);
 }

@@ -48,10 +48,10 @@ __FBSDID("$FreeBSD$");
 #include <sys/resource.h>
 #include <sys/rman.h>
 
-#include <vm/vm.h>
-#include <vm/vm_extern.h>
-#include <vm/vm_kern.h>
-#include <vm/pmap.h>
+//#include <vm/vm.h>
+//#include <vm/vm_extern.h>
+//#include <vm/vm_kern.h>
+//#include <vm/pmap.h>
 
 #include <machine/bus.h>
 #include <machine/fdt.h>
@@ -63,50 +63,12 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus_subr.h>
 #endif
 
-#define	READ4(_sc, _reg)	\
-	le32toh(bus_space_read_4(_sc->bst, _sc->bsh, _reg))
-#define	WRITE4(_sc, _reg, _val)	\
-	bus_space_write_4(_sc->bst, _sc->bsh, _reg, htole32(_val))
-
-#define	READ4_DESC(_sc, _reg)	\
-	le32toh(bus_space_read_4(_sc->bst_d, _sc->bsh_d, _reg))
-#define	WRITE4_DESC(_sc, _reg, _val)	\
-	bus_space_write_4(_sc->bst_d, _sc->bsh_d, _reg, htole32(_val))
-
-#define	DMA_STATUS		0x00
-#define	 STATUS_RESETTING	(1 << 6)
-#define	DMA_CONTROL		0x04
-#define	 CONTROL_GIEM		(1 << 4) /* Global Interrupt Enable Mask */
-#define	 CONTROL_RESET		(1 << 1) /* Reset Dispatcher */
-
-#define	CONTROL_GO		(1 << 31)	/* Commit all the descriptor info */
-#define	CONTROL_OWN		(1 << 30)	/* Owned by hardware (prefetcher-enabled only) */
-#define	CONTROL_EDE		(1 << 24)	/* Early done enable */
-#define	CONTROL_ERR_S		16		/* Transmit Error, Error IRQ Enable */
-#define	CONTROL_ERR_M		(0xff << CONTROL_ERR_S)
-#define	CONTROL_ET_IRQ_EN	(1 << 15)	/* Early Termination IRQ Enable */
-#define	CONTROL_TC_IRQ_EN	(1 << 14)	/* Transfer Complete IRQ Enable */
-#define	CONTROL_END_ON_EOP	(1 << 12)	/* End on EOP */
-#define	CONTROL_PARK_WR		(1 << 11)	/* Park Writes */
-#define	CONTROL_PARK_RD		(1 << 10)	/* Park Reads */
-#define	CONTROL_GEN_EOP		(1 << 9)	/* Generate EOP */
-#define	CONTROL_GEN_SOP		(1 << 8)	/* Generate SOP */
-#define	CONTROL_TX_CHANNEL_S	0		/* Transmit Channel */
-#define	CONTROL_TX_CHANNEL_M	(0xff << CONTROL_TRANSMIT_CH_S)
-
-#define	PF_CONTROL			0x00
-#define	 PF_CONTROL_GIEM		(1 << 3)
-#define	 PF_CONTROL_RESET		(1 << 2)
-#define	 PF_CONTROL_DESC_POLL_EN	(1 << 1)
-#define	 PF_CONTROL_RUN			(1 << 0)
-#define	PF_NEXT_LO			0x04
-#define	PF_NEXT_HI			0x08
-#define	PF_POLL_FREQ			0x0C
-#define	PF_STATUS			0x10
-#define	 PF_STATUS_IRQ			(1 << 0)
-
 #include <dev/xdma/xdma.h>
 #include "xdma_if.h"
+
+#include <dev/altera/msgdma/msgdma.h>
+
+#define	MSGDMA_NCHANNELS	1
 
 struct msgdma_channel {
 	struct msgdma_softc	*sc;
@@ -116,34 +78,9 @@ struct msgdma_channel {
 	int			used;
 	int			index;
 	int			run;
-
 	int			idx_head;
 	int			idx_tail;
 };
-
-//#define	PREFETCHER_DISABLED	1
-
-#ifdef PREFETCHER_DISABLED
-struct msgdma_desc {
-	uint32_t src_addr;
-	uint32_t dst_addr;
-	uint32_t length;
-	uint32_t control;
-};
-#else
-struct msgdma_desc {
-	uint32_t read_lo;
-	uint32_t write_lo;
-	uint32_t length;
-	uint32_t next;
-	uint32_t transferred;
-	uint32_t status;
-	uint32_t reserved;
-	uint32_t control;
-};
-#endif
-
-#define	MSGDMA_NCHANNELS	1
 
 struct msgdma_softc {
 	device_t		dev;
@@ -188,36 +125,6 @@ static struct ofw_compat_data compat_data[] = {
 static int msgdma_probe(device_t dev);
 static int msgdma_attach(device_t dev);
 static int msgdma_detach(device_t dev);
-
-#if 0
-static uint32_t
-process_desc(uint32_t n)
-{
-
-	xdma_enqueue_sync_post(xchan, chan->idx_tail);
-
-	//desc = &descs[chan->idx_tail];
-	desc = xchan->descs[chan->idx_tail].desc;
-	if ((le32toh(desc->control) & CONTROL_OWN) != 0) {
-		break;
-	}
-	//printf("%s(%d): marking desc %d done\n", __func__, device_get_unit(sc->dev), chan->idx_tail);
-	tot_copied += le32toh(desc->transferred);
-	cnt_done++;
-
-	xdma_desc_done(xchan, chan->idx_tail, le32toh(desc->transferred));
-
-	chan->idx_tail = next_idx(xchan, chan->idx_tail);
-
-	//xdma_sglist_append(&sg_queue, paddr, len);
-	//sg = malloc(sizeof(struct xdma_sg), M_XDMA, M_WAITOK | M_ZERO);
-	//sg->paddr = 0;
-	//sg->len = le32toh(desc->transferred);
-	//TAILQ_INSERT_TAIL(&sg_queue, sg, sg_next);
-
-	return (0);
-}
-#endif
 
 static void
 msgdma_intr(void *arg)
@@ -389,104 +296,6 @@ msgdma_detach(device_t dev)
 }
 
 static int
-msgdma_process_desc(struct msgdma_channel *chan, struct msgdma_desc *desc)
-{
-	struct msgdma_softc *sc;
-	uint32_t addr;
-	uint32_t reg;
-
-	sc = chan->sc;
-
-	printf("%s\n", __func__);
-
-	//printf("%s: read status before GO: %x\n", __func__, READ4(sc, DMA_STATUS));
-
-#ifdef PREFETCHER_DISABLED
-	desc->src_addr = desc->src_addr;
-	desc->dst_addr = 0;
-	desc->length = desc->len;
-	desc->control = (CONTROL_GO | CONTROL_GEN_SOP | CONTROL_GEN_EOP);
-	desc->control |= (CONTROL_TC_IRQ_EN | CONTROL_ET_IRQ_EN);
-	//desc->control |= CONTROL_ERR_M;
-	//desc->control |= CONTROL_END_ON_EOP;
-	//desc->control |= (1 << 13);
-
-	uint32_t *tmp;
-	tmp = (uint32_t *)desc;
-	for (i = 0; i<4; i++) {
-		printf("write 0x%08x to 0x%08x\n", tmp[i], (uint32_t)(rman_get_start(sc->res[1]) + 4*i));
-		WRITE4_DESC(sc, 4*i, tmp[i]);
-	}
-#else
-	//desc = &sc->desc;
-	sc->curdesc = desc;
-
-	//uint32_t *tmp;
-	//tmp = (uint32_t *)desc;
-	//for (i = 0; i < 8; i++) {
-	//	printf("desc[%d] == %08x\n", i, tmp[i]);
-	//}
-
-	addr = (uint32_t)vtophys(desc);
-	printf("writing desc addr 0x%08x\n", addr);
-
-	sc->curchan = chan;
-
-	WRITE4_DESC(sc, PF_NEXT_LO, addr);
-	WRITE4_DESC(sc, PF_NEXT_HI, 0);
-	WRITE4_DESC(sc, PF_POLL_FREQ, 10000);
-	reg = (PF_CONTROL_GIEM | PF_CONTROL_RUN);
-	//reg |= PF_CONTROL_DESC_POLL_EN);
-
-	WRITE4_DESC(sc, PF_CONTROL, reg);
-#endif
-
-	//printf("%s: read status after GO: %x\n", __func__, READ4(sc, DMA_STATUS));
-
-	return (0); //desc->len);
-}
-
-static uint32_t
-msgdma_process_descriptors(struct msgdma_channel *chan, xdma_transfer_status_t *status)
-{
-	struct xdma_channel *xchan;
-	struct msgdma_desc *desc;
-	struct msgdma_softc *sc;
-	int ret;
-
-	sc = chan->sc;
-
-	xchan = chan->xchan;
-	//conf = &xchan->conf;
-
-	desc = (struct msgdma_desc *)xchan->descs;
-
-	while (desc != NULL) {
-		//if (desc->direction == XDMA_MEM_TO_DEV) {
-		//	ret = msgdma_process_tx(chan, desc);
-		//} else {
-		//	ret = msgdma_process_rx(chan, desc);
-		//}
-		//}
-
-		ret = msgdma_process_desc(chan, desc);
-
-		if (ret >= 0) {
-			status->total_copied += ret;
-		} else {
-			status->error = 1;
-			break;
-		}
-
-		/* Process next descriptor, if any. */
-		//desc = desc->next;
-		break;
-	}
-
-	return (0);
-}
-
-static int
 msgdma_channel_alloc(device_t dev, struct xdma_channel *xchan)
 {
 	struct msgdma_channel *chan;
@@ -528,52 +337,6 @@ msgdma_channel_free(device_t dev, struct xdma_channel *xchan)
 	chan = (struct msgdma_channel *)xchan->chan;
 	//mtx_destroy(&chan->mtx);
 	chan->used = 0;
-
-	return (0);
-}
-
-static int
-msgdma_channel_prep_cyclic(device_t dev, struct xdma_channel *xchan)
-{
-
-	return (0);
-}
-
-static int
-msgdma_channel_prep_memcpy(device_t dev, struct xdma_channel *xchan)
-{
-	struct msgdma_channel *chan;
-	struct msgdma_desc *desc;
-	struct msgdma_softc *sc;
-	xdma_config_t *conf;
-	int ret;
-
-	sc = device_get_softc(dev);
-
-	chan = (struct msgdma_channel *)xchan->chan;
-
-	/* Ensure we are not in operation */
-	//chan_stop(sc, chan);
-
-	ret = xdma_desc_alloc(xchan, sizeof(struct msgdma_desc), 8);
-	if (ret != 0) {
-		device_printf(sc->dev,
-		    "%s: Can't allocate descriptors.\n", __func__);
-		return (-1);
-	}
-
-	conf = &xchan->conf;
-	desc = (struct msgdma_desc *)xchan->descs;
-
-#if 0
-	desc[0].src_addr = conf->src_addr;
-	desc[0].dst_addr = conf->dst_addr;
-	desc[0].access_width = 4;
-	desc[0].count = (conf->block_len / 4);
-	desc[0].src_incr = 1;
-	desc[0].dst_incr = 1;
-	desc[0].next = NULL;
-#endif
 
 	return (0);
 }
@@ -721,96 +484,6 @@ msgdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 }
 
 static int
-msgdma_channel_prep_fifo(device_t dev, struct xdma_channel *xchan)
-{
-	struct msgdma_channel *chan;
-	struct msgdma_desc *desc;
-	struct msgdma_softc *sc;
-	xdma_config_t *conf;
-	int ret;
-
-	conf = &xchan->conf;
-	if (conf->direction == XDMA_MEM_TO_DEV) {
-		//printf("%s: TX\n", __func__);
-	} else {
-		//printf("%s: RX\n", __func__);
-	}
-
-	sc = device_get_softc(dev);
-
-	chan = (struct msgdma_channel *)xchan->chan;
-
-	ret = xdma_desc_alloc(xchan, sizeof(struct msgdma_desc), 8);
-	if (ret != 0) {
-		device_printf(sc->dev,
-		    "%s: Can't allocate descriptors.\n", __func__);
-		return (-1);
-	}
-
-	desc = (struct msgdma_desc *)xchan->descs;
-
-	desc->read_lo = htole32(conf->src_addr);
-	desc->write_lo = htole32(conf->dst_addr);
-	desc->length = htole32(conf->block_len);
-	desc->next = 0;
-	desc->transferred = 0;
-	desc->status = 0;
-	desc->reserved = 0;
-	desc->control = htole32(CONTROL_GO | CONTROL_OWN);
-	desc->control |= htole32(CONTROL_TC_IRQ_EN | CONTROL_ET_IRQ_EN | CONTROL_ERR_M);
-	if (conf->direction == XDMA_MEM_TO_DEV) {
-		desc->control |= htole32(CONTROL_GEN_SOP | CONTROL_GEN_EOP);
-	} else {
-		desc->control |= htole32(CONTROL_END_ON_EOP | (0 << 13));
-	}
-
-#ifdef PREFETCHER_DISABLED
-	desc->control = (CONTROL_GO);
-	desc->control |= (CONTROL_TC_IRQ_EN | CONTROL_ET_IRQ_EN);
-	desc->control |= CONTROL_ERR_M;
-	desc->control |= CONTROL_END_ON_EOP;
-	desc->control |= (1 << 13);
-#endif
-
-#if 0
-	desc[0].src_addr = conf->src_addr;
-	desc[0].dst_addr = conf->dst_addr;
-	desc[0].access_width = 4;
-	desc[0].len = conf->block_len;
-	desc[0].count = (conf->block_len / 4);
-
-	if (conf->direction == XDMA_MEM_TO_DEV) {
-		desc[0].src_incr = 1;
-		desc[0].dst_incr = 0;
-	} else {
-		desc[0].src_incr = 0;
-		desc[0].dst_incr = 1;
-	}
-	desc[0].direction = conf->direction;
-	desc[0].next = NULL;
-#endif
-
-	return (0);
-}
-
-static int
-chan_start(struct msgdma_channel *chan)
-{
-	xdma_transfer_status_t status;
-	//struct msgdma_softc *sc;
-
-	//sc = chan->sc;
-
-	chan->run = 1;
-
-	status.error = 0;
-	status.total_copied = 0;
-	msgdma_process_descriptors(chan, &status);
-
-	return (0);
-}
-
-static int
 msgdma_channel_control(device_t dev, xdma_channel_t *xchan, int cmd)
 {
 	struct msgdma_channel *chan;
@@ -822,11 +495,7 @@ msgdma_channel_control(device_t dev, xdma_channel_t *xchan, int cmd)
 
 	switch (cmd) {
 	case XDMA_CMD_BEGIN:
-		chan_start(chan);
-		break;
 	case XDMA_CMD_TERMINATE:
-		//chan_stop(sc, chan);
-		break;
 	case XDMA_CMD_PAUSE:
 		/* TODO: implement me */
 		return (-1);
@@ -853,9 +522,6 @@ static device_method_t msgdma_methods[] = {
 	/* xDMA Interface */
 	DEVMETHOD(xdma_channel_alloc,		msgdma_channel_alloc),
 	DEVMETHOD(xdma_channel_free,		msgdma_channel_free),
-	DEVMETHOD(xdma_channel_prep_cyclic,	msgdma_channel_prep_cyclic),
-	DEVMETHOD(xdma_channel_prep_memcpy,	msgdma_channel_prep_memcpy),
-	DEVMETHOD(xdma_channel_prep_fifo,	msgdma_channel_prep_fifo),
 	DEVMETHOD(xdma_channel_control,		msgdma_channel_control),
 
 	DEVMETHOD(xdma_channel_prep_sg,		msgdma_channel_prep_sg),

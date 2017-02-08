@@ -795,62 +795,6 @@ softdma_channel_prep_memcpy(device_t dev, struct xdma_channel *xchan)
 }
 
 static int
-softdma_channel_prep_fifo(device_t dev, struct xdma_channel *xchan)
-{
-	struct softdma_channel *chan;
-	struct softdma_desc *desc;
-	struct softdma_softc *sc;
-	xdma_config_t *conf;
-	int ret;
-
-	conf = &xchan->conf;
-	if (conf->direction == XDMA_MEM_TO_DEV) {
-		//printf("%s: TX\n", __func__);
-	} else {
-		//printf("%s: RX\n", __func__);
-	}
-
-	sc = device_get_softc(dev);
-
-	chan = (struct softdma_channel *)xchan->chan;
-
-	ret = xdma_desc_alloc(xchan, sizeof(struct softdma_desc), 8);
-	if (ret != 0) {
-		device_printf(sc->dev,
-		    "%s: Can't allocate descriptors.\n", __func__);
-		return (-1);
-	}
-
-	desc = (struct softdma_desc *)xchan->descs;
-	desc[0].src_addr = conf->src_addr;
-	desc[0].dst_addr = conf->dst_addr;
-	desc[0].len = conf->block_len;
-	desc[0].access_width = 4;
-	desc[0].count = (conf->block_len / 4);
-	if (conf->direction == XDMA_MEM_TO_DEV) {
-		desc[0].src_incr = 1;
-		desc[0].dst_incr = 0;
-	} else {
-		desc[0].src_incr = 0;
-		desc[0].dst_incr = 1;
-	}
-	desc[0].direction = conf->direction;
-	desc[0].next = NULL;
-
-	return (0);
-}
-
-static int
-chan_start(struct softdma_channel *chan)
-{
-
-	chan->run = 1;
-	wakeup(chan);
-
-	return (0);
-}
-
-static int
 softdma_channel_control(device_t dev, xdma_channel_t *xchan, int cmd)
 {
 	struct softdma_channel *chan;
@@ -862,11 +806,7 @@ softdma_channel_control(device_t dev, xdma_channel_t *xchan, int cmd)
 
 	switch (cmd) {
 	case XDMA_CMD_BEGIN:
-		chan_start(chan);
-		break;
 	case XDMA_CMD_TERMINATE:
-		//chan_stop(sc, chan);
-		break;
 	case XDMA_CMD_PAUSE:
 		/* TODO: implement me */
 		return (-1);
@@ -895,7 +835,6 @@ static device_method_t softdma_methods[] = {
 	DEVMETHOD(xdma_channel_free,		softdma_channel_free),
 	DEVMETHOD(xdma_channel_prep_cyclic,	softdma_channel_prep_cyclic),
 	DEVMETHOD(xdma_channel_prep_memcpy,	softdma_channel_prep_memcpy),
-	DEVMETHOD(xdma_channel_prep_fifo,	softdma_channel_prep_fifo),
 	DEVMETHOD(xdma_channel_control,		softdma_channel_control),
 
 	DEVMETHOD(xdma_channel_prep_sg,		softdma_channel_prep_sg),

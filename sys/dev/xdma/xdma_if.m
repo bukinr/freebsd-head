@@ -61,14 +61,6 @@ METHOD int channel_prep_memcpy {
 #
 #
 #
-METHOD int channel_prep_fifo {
-	device_t		dev;
-	struct xdma_channel	*xchan;
-};
-
-#
-#
-#
 METHOD int channel_prep_sg {
 	device_t		dev;
 	struct xdma_channel	*xchan;
