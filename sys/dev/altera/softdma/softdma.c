@@ -110,7 +110,7 @@ struct softdma_softc {
 	bus_space_tag_t		bst_c;
 	bus_space_handle_t	bsh_c;
 	void			*ih;
-	struct softdma_channel softdma_channels[SOFTDMA_NCHANNELS];
+	struct softdma_channel	channels[SOFTDMA_NCHANNELS];
 };
 
 static struct resource_spec softdma_spec[] = {
@@ -178,7 +178,7 @@ softdma_intr(void *arg)
 
 	sc = arg;
 
-	chan = &sc->softdma_channels[0];
+	chan = &sc->channels[0];
 
 	//printf("%s(%d)\n", __func__, device_get_unit(sc->dev));
 
@@ -393,7 +393,6 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 
 	len = desc->len;
 	bus_space_map(bst, desc->dst_addr, len, 0, &bsh_dst);
-	mips_dcache_wbinv_all();
 
 	sop_rcvd = 0;
 	while (fill_level) {
@@ -600,7 +599,7 @@ softdma_channel_alloc(device_t dev, struct xdma_channel *xchan)
 	xdma_assert_locked();
 
 	for (i = 0; i < SOFTDMA_NCHANNELS; i++) {
-		chan = &sc->softdma_channels[i];
+		chan = &sc->channels[i];
 		if (chan->used == 0) {
 			chan->xchan = xchan;
 			xchan->chan = (void *)chan;
