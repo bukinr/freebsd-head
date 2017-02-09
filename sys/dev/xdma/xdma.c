@@ -629,7 +629,7 @@ xdma_dequeue(xdma_channel_t *xchan, struct mbuf **mp)
 
 int
 xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
-    uintptr_t src_addr, uintptr_t dst_addr, enum xdma_direction dir)
+    uintptr_t addr, enum xdma_direction dir)
 {
 	struct xdma_mbuf_entry *xm;
 	xdma_controller_t *xdma;
@@ -646,10 +646,13 @@ xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 	}
 
 	xm = malloc(sizeof(struct xdma_mbuf_entry), M_XDMA, M_WAITOK | M_ZERO);
-	xm->m = m;
-	xm->src_addr = src_addr;
-	xm->dst_addr = dst_addr;
 	xm->direction = dir;
+	xm->m = m;
+	if (dir == XDMA_MEM_TO_DEV) {
+		xm->dst_addr = addr;
+	} else {
+		xm->src_addr = addr;
+	}
 
 	QUEUE_IN_LOCK(xchan);
 	TAILQ_INSERT_TAIL(&xchan->queue_in, xm, xm_next);

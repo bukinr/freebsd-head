@@ -190,7 +190,7 @@ int xdma_bufs_free(xdma_channel_t *xchan);
 
 /* xchan queues operations */
 int xdma_dequeue(xdma_channel_t *xchan, struct mbuf **m);
-int xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **m, uintptr_t src_addr, uintptr_t dst_addr, enum xdma_direction dir);
+int xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **m, uintptr_t addr, enum xdma_direction dir);
 int xdma_enqueue_submit(xdma_channel_t *xchan);
 int xdma_enqueue_sync_pre(xdma_channel_t *xchan, uint32_t);
 int xdma_enqueue_sync_post(xdma_channel_t *xchan, uint32_t);

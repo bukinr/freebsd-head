@@ -208,7 +208,7 @@ atse_rx_enqueue(struct atse_softc *sc, uint32_t n)
 			return (-1);
 		m->m_pkthdr.len = m->m_len = m->m_ext.ext_size;
 		//m->m_len = m->m_pkthdr.len = MCLBYTES;
-		xdma_enqueue_mbuf(sc->xchan_rx, &m, 0, 0, XDMA_DEV_TO_MEM);
+		xdma_enqueue_mbuf(sc->xchan_rx, &m, 0, XDMA_DEV_TO_MEM);
 	}
 
 	return (0);
@@ -356,7 +356,7 @@ atse_start_locked(struct ifnet *ifp)
 		/* If anyone is interested give them a copy first. */
 		BPF_MTAP(sc->atse_ifp, m);
 
-		xdma_enqueue_mbuf(sc->xchan_tx, &m, 0, 0, XDMA_MEM_TO_DEV);
+		xdma_enqueue_mbuf(sc->xchan_tx, &m, 0, XDMA_MEM_TO_DEV);
 
 		sc->txcount++;
 
