@@ -233,7 +233,7 @@ atse_xdma_tx_intr(void *arg, xdma_transfer_status_t *status)
 	//    status->cnt_done, status->total_copied);
 
 	for (i = 0; i < status->cnt_done; i++) {
-		err = xdma_dequeue(sc->xchan_tx, &m);
+		err = xdma_dequeue_mbuf(sc->xchan_tx, &m);
 		if (err != 0) {
 			break;
 		}
@@ -271,7 +271,7 @@ atse_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 	//if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
 
 	for (i = 0; i < status->cnt_done; i++) {
-		err = xdma_dequeue(sc->xchan_rx, &m);
+		err = xdma_dequeue_mbuf(sc->xchan_rx, &m);
 		if (err != 0) {
 			break;
 		}

@@ -602,7 +602,7 @@ xchan_next_idx(xdma_channel_t *xchan, uint32_t curidx)
 }
 
 int
-xdma_dequeue(xdma_channel_t *xchan, struct mbuf **mp)
+xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **mp)
 {
 	struct xdma_mbuf_entry *xm_tmp;
 	struct xdma_mbuf_entry *xm;

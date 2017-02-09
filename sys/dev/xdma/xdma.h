@@ -90,8 +90,8 @@ struct xdma_channel_config {
 	enum xdma_direction	direction;
 	uintptr_t		src_addr;	/* Physical address. */
 	uintptr_t		dst_addr;	/* Physical address. */
-	uint8_t			src_incr;
-	uint8_t			dst_incr;
+	bool			src_incr;	/* Address increment. */
+	bool			dst_incr;	/* Address increment. */
 	int			block_len;	/* In bytes. */
 	int			block_num;	/* Count of blocks. */
 	int			src_width;	/* In bytes. */
@@ -181,15 +181,15 @@ int xdma_prep_cyclic(xdma_channel_t *, enum xdma_direction,
     uintptr_t, uintptr_t, int, int, int, int);
 int xdma_prep_memcpy(xdma_channel_t *, uintptr_t, uintptr_t, size_t len);
 int xdma_prep_sg(xdma_channel_t *xchan, uint32_t);
+
 int xdma_desc_alloc(xdma_channel_t *, uint32_t, uint32_t);
 int xdma_desc_free(xdma_channel_t *xchan);
 int xdma_desc_done(xdma_channel_t *xchan, uint32_t idx, struct xdma_desc_status *);
+int xdma_bufs_free(xdma_channel_t *xchan);
 uint32_t xchan_next_idx(xdma_channel_t *xchan, uint32_t curidx);
 
-int xdma_bufs_free(xdma_channel_t *xchan);
-
 /* xchan queues operations */
-int xdma_dequeue(xdma_channel_t *xchan, struct mbuf **m);
+int xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **m);
 int xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **m, uintptr_t addr, enum xdma_direction dir);
 int xdma_enqueue_submit(xdma_channel_t *xchan);
 int xdma_enqueue_sync_pre(xdma_channel_t *xchan, uint32_t);
