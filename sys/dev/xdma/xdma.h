@@ -123,17 +123,20 @@ struct xchan_bufmap {
 	struct xdma_mbuf_entry		*xm;
 };
 
+typedef struct xchan_bufmap xdma_buf_t;
+
 struct xdma_channel {
 	xdma_controller_t		*xdma;
 	xdma_config_t			conf;
 
-	uint8_t				flags;
+	uint16_t			flags;
 #define	XCHAN_DESC_ALLOCATED		(1 << 0)
-#define	XCHAN_CONFIGURED		(1 << 1)
-#define	XCHAN_TYPE_CYCLIC		(1 << 2)
-#define	XCHAN_TYPE_MEMCPY		(1 << 3)
-#define	XCHAN_TYPE_FIFO			(1 << 4)
-#define	XCHAN_TYPE_SG			(1 << 5)
+#define	XCHAN_BUFS_ALLOCATED		(1 << 1)
+#define	XCHAN_CONFIGURED		(1 << 2)
+#define	XCHAN_TYPE_CYCLIC		(1 << 3)
+#define	XCHAN_TYPE_MEMCPY		(1 << 4)
+#define	XCHAN_TYPE_FIFO			(1 << 5)
+#define	XCHAN_TYPE_SG			(1 << 6)
 
 	/* A real hardware driver channel. */
 	void				*chan;
@@ -182,6 +185,8 @@ int xdma_desc_alloc(xdma_channel_t *, uint32_t, uint32_t);
 int xdma_desc_free(xdma_channel_t *xchan);
 int xdma_desc_done(xdma_channel_t *xchan, uint32_t idx, struct xdma_desc_status *);
 uint32_t xchan_next_idx(xdma_channel_t *xchan, uint32_t curidx);
+
+int xdma_bufs_free(xdma_channel_t *xchan);
 
 /* xchan queues operations */
 int xdma_dequeue(xdma_channel_t *xchan, struct mbuf **m);

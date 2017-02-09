@@ -470,6 +470,7 @@ static device_method_t msgdma_methods[] = {
 	DEVMETHOD(xdma_channel_free,		msgdma_channel_free),
 	DEVMETHOD(xdma_channel_control,		msgdma_channel_control),
 
+	/* xDMA SG Interface */
 	DEVMETHOD(xdma_channel_prep_sg,		msgdma_channel_prep_sg),
 	DEVMETHOD(xdma_channel_submit_sg,	msgdma_channel_submit_sg),
 
