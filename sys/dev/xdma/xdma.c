@@ -604,20 +604,20 @@ xchan_next_idx(xdma_channel_t *xchan, uint32_t curidx)
 int
 xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **mp)
 {
-	struct xdma_mbuf_entry *xm_tmp;
-	struct xdma_mbuf_entry *xm;
+	struct xdma_request *xr_tmp;
+	struct xdma_request *xr;
 	xdma_config_t *conf;
 
 	conf = &xchan->conf;
 
 	QUEUE_OUT_LOCK(xchan);
 
-	TAILQ_FOREACH_SAFE(xm, &xchan->queue_out, xm_next, xm_tmp) {
-		*mp = xm->m;
-		TAILQ_REMOVE(&xchan->queue_out, xm, xm_next);
+	TAILQ_FOREACH_SAFE(xr, &xchan->queue_out, xr_next, xr_tmp) {
+		*mp = xr->m;
+		TAILQ_REMOVE(&xchan->queue_out, xr, xr_next);
 		QUEUE_OUT_UNLOCK(xchan);
 
-		free(xm, M_XDMA);
+		free(xr, M_XDMA);
 
 		return (0);
 	}
@@ -631,7 +631,7 @@ int
 xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
     uintptr_t addr, enum xdma_direction dir)
 {
-	struct xdma_mbuf_entry *xm;
+	struct xdma_request *xr;
 	xdma_controller_t *xdma;
 	xdma_config_t *conf;
 	struct mbuf *m;
@@ -645,17 +645,17 @@ xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 		return (ENOMEM);
 	}
 
-	xm = malloc(sizeof(struct xdma_mbuf_entry), M_XDMA, M_WAITOK | M_ZERO);
-	xm->direction = dir;
-	xm->m = m;
+	xr = malloc(sizeof(struct xdma_request), M_XDMA, M_WAITOK | M_ZERO);
+	xr->direction = dir;
+	xr->m = m;
 	if (dir == XDMA_MEM_TO_DEV) {
-		xm->dst_addr = addr;
+		xr->dst_addr = addr;
 	} else {
-		xm->src_addr = addr;
+		xr->src_addr = addr;
 	}
 
 	QUEUE_IN_LOCK(xchan);
-	TAILQ_INSERT_TAIL(&xchan->queue_in, xm, xm_next);
+	TAILQ_INSERT_TAIL(&xchan->queue_in, xr, xr_next);
 	QUEUE_IN_UNLOCK(xchan);
 
 	return (0);
@@ -733,8 +733,8 @@ int
 xdma_enqueue_submit(xdma_channel_t *xchan)
 {
 	struct xdma_sg_queue sg_queue;
-	struct xdma_mbuf_entry *xm_tmp;
-	struct xdma_mbuf_entry *xm;
+	struct xdma_request *xr_tmp;
+	struct xdma_request *xr;
 	struct mbuf *m;
 	xdma_controller_t *xdma;
 	xdma_config_t *conf;
@@ -757,8 +757,8 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 
 	xdma_sg_queue_init(&sg_queue);
 
-	TAILQ_FOREACH_SAFE(xm, &xchan->queue_in, xm_next, xm_tmp) {
-		m = xm->m;
+	TAILQ_FOREACH_SAFE(xr, &xchan->queue_in, xr_next, xr_tmp) {
+		m = xr->m;
 
 		if (xchan->idx_count == (conf->block_num - 1)) {
 			break;
@@ -775,7 +775,7 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 
 		KASSERT(nsegs == 1, ("%s: %d segments returned!", __func__, nsegs));
 
-		if (xm->direction == XDMA_MEM_TO_DEV) {
+		if (xr->direction == XDMA_MEM_TO_DEV) {
 			bus_dmamap_sync(xchan->dma_tag_bufs, xchan->bufs[i].map,
 			    BUS_DMASYNC_PREWRITE);
 		} else {
@@ -783,13 +783,13 @@ xdma_enqueue_submit(xdma_channel_t *xchan)
 			    BUS_DMASYNC_PREREAD);
 		}
 
-		xchan->bufs[i].xm = xm;
-		xdma_sg_queue_add(&sg_queue, &seg, xm->direction);
+		xchan->bufs[i].xr = xr;
+		xdma_sg_queue_add(&sg_queue, &seg, xr->direction);
 
 		xchan->idx_head = xchan_next_idx(xchan, xchan->idx_head);
 		atomic_add_int(&xchan->idx_count, 1);
 
-		TAILQ_REMOVE(&xchan->queue_in, xm, xm_next);
+		TAILQ_REMOVE(&xchan->queue_in, xr, xr_next);
 	}
 
 	QUEUE_IN_UNLOCK(xchan);
@@ -919,8 +919,8 @@ int
 xdma_desc_done(xdma_channel_t *xchan, uint32_t idx,
     struct xdma_desc_status *status)
 {
-	struct xdma_mbuf_entry *xm;
-	struct xchan_buf *b;
+	struct xdma_request *xr;
+	xdma_buf_t *b;
 	xdma_controller_t *xdma;
 	xdma_config_t *conf;
 	struct mbuf *m;
@@ -939,9 +939,9 @@ xdma_desc_done(xdma_channel_t *xchan, uint32_t idx,
 	xdma = xchan->xdma;
 
 	b = &xchan->bufs[xchan->idx_tail];
-	xm = b->xm;
+	xr = b->xr;
 
-	if (xm->direction == XDMA_MEM_TO_DEV) {
+	if (xr->direction == XDMA_MEM_TO_DEV) {
 		bus_dmamap_sync(xchan->dma_tag_bufs, b->map, 
 		    BUS_DMASYNC_POSTWRITE);
 	} else {
@@ -950,10 +950,10 @@ xdma_desc_done(xdma_channel_t *xchan, uint32_t idx,
 	}
 	bus_dmamap_unload(xchan->dma_tag_bufs, b->map);
 
-	m = xm->m;
+	m = xr->m;
 	m->m_pkthdr.len = m->m_len = status->transferred;
 
-	TAILQ_INSERT_TAIL(&xchan->queue_out, xm, xm_next);
+	TAILQ_INSERT_TAIL(&xchan->queue_out, xr, xr_next);
 
 	xchan->idx_tail = xchan_next_idx(xchan, xchan->idx_tail);
 	atomic_subtract_int(&xchan->idx_count, 1);

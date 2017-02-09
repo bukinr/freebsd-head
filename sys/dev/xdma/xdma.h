@@ -78,9 +78,9 @@ struct xdma_controller {
 
 typedef struct xdma_controller xdma_controller_t;
 
-struct xdma_mbuf_entry {
+struct xdma_request {
 	struct mbuf			*m;
-	TAILQ_ENTRY(xdma_mbuf_entry)	xm_next;
+	TAILQ_ENTRY(xdma_request)	xr_next;
 	enum xdma_direction		direction;
 	uintptr_t			src_addr;	/* Physical address. */
 	uintptr_t			dst_addr;	/* Physical address. */
@@ -120,7 +120,7 @@ TAILQ_HEAD(xdma_sg_queue, xdma_sg);
 
 struct xchan_buf {
 	bus_dmamap_t			map;
-	struct xdma_mbuf_entry		*xm;
+	struct xdma_request		*xr;
 };
 
 typedef struct xchan_buf xdma_buf_t;
@@ -163,8 +163,8 @@ struct xdma_channel {
 	struct mtx			mtx_qin_lock;
 	struct mtx			mtx_qout_lock;
 
-	TAILQ_HEAD(, xdma_mbuf_entry)	queue_in;
-	TAILQ_HEAD(, xdma_mbuf_entry)	queue_out;
+	TAILQ_HEAD(, xdma_request)	queue_in;
+	TAILQ_HEAD(, xdma_request)	queue_out;
 };
 
 typedef struct xdma_channel xdma_channel_t;
