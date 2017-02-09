@@ -154,7 +154,7 @@ msgdma_intr(void *arg)
 	tot_copied = 0;
 
 	while (chan->idx_tail != chan->idx_head) {
-		xdma_enqueue_sync_post(xchan, chan->idx_tail);
+		xdma_desc_sync_post(xchan, chan->idx_tail);
 		desc = xchan->descs[chan->idx_tail].desc;
 		if ((le32toh(desc->control) & CONTROL_OWN) != 0) {
 			break;
@@ -375,7 +375,7 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct xdma_s
 		tmp = chan->idx_head;
 		chan->idx_head = next_idx(xchan, chan->idx_head);
 		desc->control |= htole32(CONTROL_OWN | CONTROL_GO);
-		xdma_enqueue_sync_pre(xchan, tmp);
+		xdma_desc_sync_pre(xchan, tmp);
 	}
 
 	return (0);

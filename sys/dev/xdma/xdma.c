@@ -646,6 +646,11 @@ xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 	}
 
 	xr = malloc(sizeof(struct xdma_request), M_XDMA, M_WAITOK | M_ZERO);
+	if (xr == NULL) {
+		device_printf(xdma->dma_dev,
+		    "%s: Can't allocate memory for request\n", __func__);
+		return (ENOMEM);
+	}
 	xr->direction = dir;
 	xr->m = m;
 	if (dir == XDMA_MEM_TO_DEV) {
@@ -662,7 +667,7 @@ xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 }
 
 int
-xdma_enqueue_sync_post(xdma_channel_t *xchan, uint32_t i)
+xdma_desc_sync_post(xdma_channel_t *xchan, uint32_t i)
 {
 	xdma_config_t *conf;
 
@@ -677,7 +682,7 @@ xdma_enqueue_sync_post(xdma_channel_t *xchan, uint32_t i)
 }
 
 int
-xdma_enqueue_sync_pre(xdma_channel_t *xchan, uint32_t i)
+xdma_desc_sync_pre(xdma_channel_t *xchan, uint32_t i)
 {
 	xdma_config_t *conf;
 
@@ -730,7 +735,7 @@ xdma_sg_queue_add(struct xdma_sg_queue *sg_queue,
 }
 
 int
-xdma_enqueue_submit(xdma_channel_t *xchan)
+xdma_queue_submit(xdma_channel_t *xchan)
 {
 	struct xdma_sg_queue sg_queue;
 	struct xdma_request *xr_tmp;
@@ -976,8 +981,8 @@ xdma_callback(xdma_channel_t *xchan, xdma_transfer_status_t *status)
 	}
 
 	if (xchan->flags & XCHAN_TYPE_SG) {
-		/* Check if more entries available in queue. */
-		xdma_enqueue_submit(xchan);
+		/* Check if more entries available in queue to submit. */
+		xdma_queue_submit(xchan);
 		return (0);
 	};
 
@@ -1000,7 +1005,8 @@ xdma_ofw_md_data(xdma_controller_t *xdma, pcell_t *cells, int ncells)
 {
 	uint32_t ret;
 
-	ret = XDMA_OFW_MD_DATA(xdma->dma_dev, cells, ncells, (void **)&xdma->data);
+	ret = XDMA_OFW_MD_DATA(xdma->dma_dev,
+	    cells, ncells, (void **)&xdma->data);
 
 	return (ret);
 }

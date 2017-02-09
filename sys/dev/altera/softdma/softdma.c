@@ -503,7 +503,7 @@ softdma_process_descriptors(struct softdma_channel *chan, xdma_transfer_status_t
 				/* No new data available. */
 				break;
 			}
-			xdma_enqueue_sync_post(xchan, chan->idx_tail);
+			xdma_desc_sync_post(xchan, chan->idx_tail);
 		}
 
 		desc->control = 0;
@@ -734,7 +734,7 @@ softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 		tmp = chan->idx_head;
 		chan->idx_head = xchan_next_idx(xchan, chan->idx_head);
 		desc->control = CONTROL_OWN;
-		xdma_enqueue_sync_pre(xchan, tmp);
+		xdma_desc_sync_pre(xchan, tmp);
 
 		enqueued += 1;
 	}

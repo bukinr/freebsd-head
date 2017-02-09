@@ -365,7 +365,7 @@ atse_start_locked(struct ifnet *ifp)
 
 	if (enqueued > 0) {
 		sc->atse_watchdog_timer = ATSE_WATCHDOG_TIME;
-		xdma_enqueue_submit(sc->xchan_tx);
+		xdma_queue_submit(sc->xchan_tx);
 	}
 }
 
@@ -1397,7 +1397,7 @@ err:
 		atse_sysctl_stats_attach(dev);
 
 	atse_rx_enqueue(sc, (NUM_RX_DESC * 2));
-	xdma_enqueue_submit(sc->xchan_rx);
+	xdma_queue_submit(sc->xchan_rx);
 
 	return (error);
 }
