@@ -63,6 +63,13 @@ __FBSDID("$FreeBSD$");
 MALLOC_DEFINE(M_XDMA, "xdma", "xDMA framework");
 
 /*
+ * Maximum number of segments per mbuf chain supported,
+ * bigger will be merged using m_defrag().
+ * TODO: dehardcode. Not all DMA engines can do >1 segs.
+ */
+#define	MAX_NSEGS	1
+
+/*
  * Multiple xDMA controllers may work with single DMA device,
  * so we have global lock for physical channel management.
  */
@@ -372,7 +379,7 @@ xdma_bufs_alloc_bus_dma(xdma_channel_t *xchan, uint32_t align)
 	    BUS_SPACE_MAXADDR_32BIT,	/* lowaddr */
 	    BUS_SPACE_MAXADDR,		/* highaddr */
 	    NULL, NULL,			/* filter, filterarg */
-	    MCLBYTES, 1, 		/* maxsize, nsegments */
+	    MCLBYTES, MAX_NSEGS, 	/* maxsize, nsegments */
 	    MCLBYTES,			/* maxsegsize */
 	    0,				/* flags */
 	    NULL, NULL,			/* lockfunc, lockarg */
@@ -639,11 +646,17 @@ xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 	xdma = xchan->xdma;
 	conf = &xchan->conf;
 
+	//printf("%s(%d)\n", __func__, device_get_unit(xdma->dma_dev));
+
+#if 0
 	if ((m = m_defrag(*mp, M_NOWAIT)) == NULL) {
 		device_printf(xdma->dma_dev,
 		    "%s: Can't defrag mbuf\n", __func__);
 		return (ENOMEM);
 	}
+#else
+	m = *mp;
+#endif
 
 	xr = malloc(sizeof(struct xdma_request), M_XDMA, M_WAITOK | M_ZERO);
 	if (xr == NULL) {
@@ -721,15 +734,26 @@ xdma_sg_queue_destroy(struct xdma_sg_queue *sg_queue)
 
 static int
 xdma_sg_queue_add(struct xdma_sg_queue *sg_queue,
-    struct bus_dma_segment *seg, enum xdma_direction dir)
+    struct bus_dma_segment *seg, uint32_t nsegs, enum xdma_direction dir)
 {
 	struct xdma_sg *sg;
+	int i;
 
-	sg = malloc(sizeof(struct xdma_sg), M_XDMA, M_WAITOK | M_ZERO);
-	sg->paddr = seg->ds_addr;
-	sg->len = seg->ds_len;
-	sg->direction = dir;
-	TAILQ_INSERT_TAIL(sg_queue, sg, sg_next);
+	for (i = 0; i < nsegs; i++) {
+		sg = malloc(sizeof(struct xdma_sg), M_XDMA, M_WAITOK | M_ZERO);
+		sg->paddr = seg[i].ds_addr;
+		sg->len = seg[i].ds_len;
+		sg->first = 0;
+		sg->last = 0;
+		if (i == 0) {
+			sg->first = 1;
+		}
+		if (i == (nsegs - 1)) {
+			sg->last = 1;
+		}
+		sg->direction = dir;
+		TAILQ_INSERT_TAIL(sg_queue, sg, sg_next);
+	}
 
 	return (0);
 }
@@ -745,7 +769,8 @@ xdma_queue_submit(xdma_channel_t *xchan)
 	xdma_config_t *conf;
 	int ret;
 	int i;
-	struct bus_dma_segment seg;
+	int c;
+	struct bus_dma_segment seg[MAX_NSEGS];
 	int error, nsegs;
 
 	conf = &xchan->conf;
@@ -763,22 +788,55 @@ xdma_queue_submit(xdma_channel_t *xchan)
 	xdma_sg_queue_init(&sg_queue);
 
 	TAILQ_FOREACH_SAFE(xr, &xchan->queue_in, xr_next, xr_tmp) {
+
+		c = 0;
+		/* How many mbufs in the chain ? */
+		for (m = xr->m; m != NULL; m = m->m_next) {
+			c++;
+		}
+
+		if (c > MAX_NSEGS) {
+			if ((m = m_defrag(xr->m, M_NOWAIT)) == NULL) {
+				device_printf(xdma->dma_dev,
+				    "%s: Can't defrag mbuf\n", __func__);
+				break;
+			}
+			xr->m = m;
+			c = 1;
+		}
+
 		m = xr->m;
 
-		if (xchan->idx_count == (conf->block_num - 1)) {
+		/* At least one descriptor must be left empty. */
+		if (xchan->idx_count >= (conf->block_num - c)) {
+			/*
+			 * No space yet available for entire
+			 * mbuf chain in the descriptor ring.
+			 */
 			break;
 		}
 
 		i = xchan->idx_head;
 
 		error = bus_dmamap_load_mbuf_sg(xchan->dma_tag_bufs,
-		    xchan->bufs[i].map, m, &seg, &nsegs, 0);
+		    xchan->bufs[i].map, m, seg, &nsegs, 0);
 		if (error != 0) {
 			printf("ERROR: nomem\n");
 			break;
 		}
 
-		KASSERT(nsegs == 1, ("%s: %d segments returned!", __func__, nsegs));
+		if ((xr->direction == XDMA_DEV_TO_MEM) && (nsegs != 1)) {
+			panic("here\n");
+		}
+
+		uint32_t s;
+		//printf("nsegs %d: ", nsegs);
+		for (s = 0; s < nsegs; s++) {
+			//printf("%lx(%d), ", seg[s].ds_addr, (uint32_t)seg[s].ds_len);
+		}
+		//printf("\n");
+
+		//KASSERT(nsegs == 1, ("%s: %d segments returned!", __func__, nsegs));
 
 		if (xr->direction == XDMA_MEM_TO_DEV) {
 			bus_dmamap_sync(xchan->dma_tag_bufs, xchan->bufs[i].map,
@@ -789,7 +847,10 @@ xdma_queue_submit(xdma_channel_t *xchan)
 		}
 
 		xchan->bufs[i].xr = xr;
-		xdma_sg_queue_add(&sg_queue, &seg, xr->direction);
+		xchan->bufs[i].nsegs = nsegs;
+		xchan->bufs[i].nsegs_orig = nsegs;
+
+		xdma_sg_queue_add(&sg_queue, seg, nsegs, xr->direction);
 
 		xchan->idx_head = xchan_next_idx(xchan, xchan->idx_head);
 		atomic_add_int(&xchan->idx_count, 1);
@@ -798,6 +859,8 @@ xdma_queue_submit(xdma_channel_t *xchan)
 	}
 
 	QUEUE_IN_UNLOCK(xchan);
+
+	/* Now submit sg_queue to DMA engine driver. */
 
 	XCHAN_LOCK(xchan);
 
@@ -930,15 +993,15 @@ xdma_desc_done(xdma_channel_t *xchan, uint32_t idx,
 	xdma_config_t *conf;
 	struct mbuf *m;
 
-	if (mtx_owned(&xchan->mtx_lock) != 0) {
-		printf("o\n");
-	}
+	//if (mtx_owned(&xchan->mtx_lock) != 0) {
+	//	printf("o\n");
+	//}
 
 	QUEUE_OUT_LOCK(xchan);
 
-	if (mtx_recursed(&xchan->mtx_lock) != 0) {
-		printf("r\n");
-	}
+	//if (mtx_recursed(&xchan->mtx_lock) != 0) {
+	//	printf("r\n");
+	//}
 
 	conf = &xchan->conf;
 	xdma = xchan->xdma;
@@ -946,22 +1009,38 @@ xdma_desc_done(xdma_channel_t *xchan, uint32_t idx,
 	b = &xchan->bufs[xchan->idx_tail];
 	xr = b->xr;
 
-	if (xr->direction == XDMA_MEM_TO_DEV) {
-		bus_dmamap_sync(xchan->dma_tag_bufs, b->map, 
-		    BUS_DMASYNC_POSTWRITE);
+	atomic_subtract_int(&b->nsegs, 1);
+
+	if (b->nsegs == 0) {
+		if (xr->direction == XDMA_MEM_TO_DEV) {
+			//printf("%s: %d segs transmitted\n", __func__, b->nsegs_orig);
+			bus_dmamap_sync(xchan->dma_tag_bufs, b->map, 
+			    BUS_DMASYNC_POSTWRITE);
+		} else {
+			//printf("%s: %d segs received\n", __func__, b->nsegs_orig);
+			bus_dmamap_sync(xchan->dma_tag_bufs, b->map, 
+			    BUS_DMASYNC_POSTREAD);
+		}
+
+		bus_dmamap_unload(xchan->dma_tag_bufs, b->map);
+
+		m = xr->m;
+		m->m_pkthdr.len = m->m_len = status->transferred;
+
+		TAILQ_INSERT_TAIL(&xchan->queue_out, xr, xr_next);
+
+		xchan->idx_tail = xchan_next_idx(xchan, xchan->idx_tail);
+		atomic_subtract_int(&xchan->idx_count, 1);
 	} else {
-		bus_dmamap_sync(xchan->dma_tag_bufs, b->map, 
-		    BUS_DMASYNC_POSTREAD);
+		if (xr->direction == XDMA_MEM_TO_DEV) {
+			//printf("%s: %d segs left to transmit\n", __func__, b->nsegs);
+		} else {
+			//printf("%s: %d segs left to receive\n", __func__, b->nsegs);
+		}
+		QUEUE_OUT_UNLOCK(xchan);
+
+		return (1);
 	}
-	bus_dmamap_unload(xchan->dma_tag_bufs, b->map);
-
-	m = xr->m;
-	m->m_pkthdr.len = m->m_len = status->transferred;
-
-	TAILQ_INSERT_TAIL(&xchan->queue_out, xr, xr_next);
-
-	xchan->idx_tail = xchan_next_idx(xchan, xchan->idx_tail);
-	atomic_subtract_int(&xchan->idx_count, 1);
 
 	QUEUE_OUT_UNLOCK(xchan);
 

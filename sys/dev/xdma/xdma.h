@@ -110,6 +110,8 @@ struct xdma_descriptor {
 typedef struct xdma_descriptor xdma_descriptor_t;
 
 struct xdma_sg {
+	bool				first;
+	bool				last;
 	vm_paddr_t			paddr;
 	size_t				len;
 	enum xdma_direction		direction;
@@ -121,6 +123,8 @@ TAILQ_HEAD(xdma_sg_queue, xdma_sg);
 struct xchan_buf {
 	bus_dmamap_t			map;
 	struct xdma_request		*xr;
+	uint32_t			nsegs;
+	uint32_t			nsegs_orig;
 };
 
 typedef struct xchan_buf xdma_buf_t;

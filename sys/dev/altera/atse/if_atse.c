@@ -221,7 +221,7 @@ atse_xdma_tx_intr(void *arg, xdma_transfer_status_t *status)
 	struct ifnet *ifp;
 	struct mbuf *m;
 	int err;
-	int i;
+	//int i;
 
 	sc = arg;
 
@@ -232,7 +232,8 @@ atse_xdma_tx_intr(void *arg, xdma_transfer_status_t *status)
 	//printf("%s: %d pkts sent (%d bytes)\n", __func__,
 	//    status->cnt_done, status->total_copied);
 
-	for (i = 0; i < status->cnt_done; i++) {
+	//for (i = 0; i < status->cnt_done; i++) {
+	for (;;) {
 		err = xdma_dequeue_mbuf(sc->xchan_tx, &m);
 		if (err != 0) {
 			break;
@@ -242,7 +243,7 @@ atse_xdma_tx_intr(void *arg, xdma_transfer_status_t *status)
 	}
 
 	ifp->if_drv_flags &= ~IFF_DRV_OACTIVE;
-	atse_start_locked(ifp);
+	//atse_start_locked(ifp);
 
 	ATSE_UNLOCK(sc);
 
@@ -256,7 +257,7 @@ atse_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 	struct ifnet *ifp;
 	struct mbuf *m;
 	int err;
-	int i;
+	//int i;
 	uint32_t cnt_processed;
 
 	sc = arg;
@@ -270,7 +271,9 @@ atse_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 
 	//if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
 
-	for (i = 0; i < status->cnt_done; i++) {
+	cnt_processed = 0;
+	//for (i = 0; i < status->cnt_done; i++) {
+	for (;;) {
 		err = xdma_dequeue_mbuf(sc->xchan_rx, &m);
 		if (err != 0) {
 			break;
@@ -379,6 +382,48 @@ atse_start(struct ifnet *ifp)
 	ATSE_LOCK(sc);
 	atse_start_locked(ifp);
 	ATSE_UNLOCK(sc);
+}
+
+static int
+atse_transmit_locked(struct ifnet *ifp, struct mbuf *m)
+{
+	struct atse_softc *sc;
+
+	sc = ifp->if_softc;
+
+	if ((ifp->if_drv_flags & (IFF_DRV_RUNNING | IFF_DRV_OACTIVE)) != IFF_DRV_RUNNING) {
+		return (-1);
+	}
+
+	if ((sc->atse_flags & ATSE_FLAGS_LINK) == 0) {
+		return (-1);
+	}
+
+	/* If anyone is interested give them a copy first. */
+	BPF_MTAP(sc->atse_ifp, m);
+
+	xdma_enqueue_mbuf(sc->xchan_tx, &m, 0, XDMA_MEM_TO_DEV);
+
+	sc->txcount++;
+
+	sc->atse_watchdog_timer = ATSE_WATCHDOG_TIME;
+	xdma_queue_submit(sc->xchan_tx);
+
+	return (0);
+}
+
+static int
+atse_transmit(struct ifnet *ifp, struct mbuf *m)
+{
+	struct atse_softc *sc;
+
+	sc = ifp->if_softc;
+
+	ATSE_LOCK(sc);
+	atse_transmit_locked(ifp, m);
+	ATSE_UNLOCK(sc);
+
+	return (0);
 }
 
 static int
@@ -1367,7 +1412,10 @@ atse_attach(device_t dev)
 	if_initname(ifp, device_get_name(dev), device_get_unit(dev));
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ifp->if_ioctl = atse_ioctl;
-	ifp->if_start = atse_start;
+	if (1 == 0) {
+		ifp->if_start = atse_start;
+	}
+	ifp->if_transmit = atse_transmit;
 	ifp->if_init = atse_init;
 	IFQ_SET_MAXLEN(&ifp->if_snd, ATSE_TX_LIST_CNT - 1);
 	ifp->if_snd.ifq_drv_maxlen = ATSE_TX_LIST_CNT - 1;

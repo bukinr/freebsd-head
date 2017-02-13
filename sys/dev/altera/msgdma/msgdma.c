@@ -163,10 +163,11 @@ msgdma_intr(void *arg)
 		//printf("%s(%d) p %d\n", __func__, device_get_unit(sc->dev), chan->idx_tail);
 
 		tot_copied += le32toh(desc->transferred);
-		cnt_done++;
 		st.error = 0;
 		st.transferred = le32toh(desc->transferred);
-		xdma_desc_done(xchan, chan->idx_tail, &st);
+		if (xdma_desc_done(xchan, chan->idx_tail, &st) == 0) {
+			cnt_done++;
+		}
 		chan->idx_tail = next_idx(xchan, chan->idx_tail);
 	}
 
@@ -351,7 +352,6 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct xdma_s
 
 		//printf("%s(%d): descr %d segment 0x%x (%d bytes)\n", __func__,
 		//    device_get_unit(dev), chan->idx_head, addr, len);
-		//desc = &descs[chan->idx_head];
 
 		desc = xchan->descs[chan->idx_head].desc;
 		if (sg->direction == XDMA_MEM_TO_DEV) {
@@ -365,13 +365,23 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct xdma_s
 		desc->transferred = 0;
 		desc->status = 0;
 		desc->reserved = 0;
+		desc->control = 0;
 
 		if (sg->direction == XDMA_MEM_TO_DEV) {
-			desc->control = htole32(CONTROL_GEN_SOP | CONTROL_GEN_EOP);
+			if (sg->first == 1) {
+				//printf("SOP set\n");
+				desc->control |= htole32(CONTROL_GEN_SOP);
+			}
+
+			if (sg->last == 1) {
+				//printf("EOP set\n");
+				desc->control |= htole32(CONTROL_GEN_EOP);
+				desc->control |= htole32(CONTROL_TC_IRQ_EN | CONTROL_ET_IRQ_EN | CONTROL_ERR_M);
+			}
 		} else {
-			desc->control = htole32(CONTROL_END_ON_EOP | (1 << 13));
+			desc->control |= htole32(CONTROL_END_ON_EOP | (1 << 13));
+			desc->control |= htole32(CONTROL_TC_IRQ_EN | CONTROL_ET_IRQ_EN | CONTROL_ERR_M);
 		}
-		desc->control |= htole32(CONTROL_TC_IRQ_EN | CONTROL_ET_IRQ_EN | CONTROL_ERR_M);
 		tmp = chan->idx_head;
 		chan->idx_head = next_idx(xchan, chan->idx_head);
 		desc->control |= htole32(CONTROL_OWN | CONTROL_GO);
@@ -398,7 +408,7 @@ msgdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 
 	//printf("%s(%d)\n", __func__, device_get_unit(dev));
 
-	ret = xdma_desc_alloc(xchan, sizeof(struct msgdma_desc), 16);
+	ret = xdma_desc_alloc(xchan, sizeof(struct msgdma_desc), 32);
 	if (ret != 0) {
 		device_printf(sc->dev,
 		    "%s: Can't allocate descriptors.\n", __func__);
