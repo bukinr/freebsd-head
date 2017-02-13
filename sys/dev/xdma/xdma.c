@@ -745,39 +745,26 @@ xdma_sg_queue_add(struct xdma_sg_queue *sg_queue,
 	return (0);
 }
 
-int
-xdma_queue_submit(xdma_channel_t *xchan)
+static int
+xdma_sg_queue_prepare(xdma_channel_t *xchan, struct xdma_sg_queue *sg_queue)
 {
-	struct xdma_sg_queue sg_queue;
+	struct bus_dma_segment seg[MAX_NSEGS];
 	struct xdma_request *xr_tmp;
 	struct xdma_request *xr;
-	struct mbuf *m;
 	xdma_controller_t *xdma;
 	xdma_config_t *conf;
-	int ret;
-	int i;
-	int c;
-	struct bus_dma_segment seg[MAX_NSEGS];
+	struct mbuf *m;
 	int error, nsegs;
+	uint32_t c;
+	int i;
 
-	conf = &xchan->conf;
 	xdma = xchan->xdma;
-	KASSERT(xdma != NULL, ("xdma is NULL"));
+	conf = &xchan->conf;
 
 	QUEUE_IN_LOCK(xchan);
 
-	if (TAILQ_EMPTY(&xchan->queue_in)) {
-
-		QUEUE_IN_UNLOCK(xchan);
-		return (0);
-	}
-
-	xdma_sg_queue_init(&sg_queue);
-
 	TAILQ_FOREACH_SAFE(xr, &xchan->queue_in, xr_next, xr_tmp) {
-
 		c = 0;
-		/* How many mbufs in the chain ? */
 		for (m = xr->m; m != NULL; m = m->m_next) {
 			c++;
 		}
@@ -791,7 +778,6 @@ xdma_queue_submit(xdma_channel_t *xchan)
 			xr->m = m;
 			c = 1;
 		}
-
 		m = xr->m;
 
 		/* At least one descriptor must be left empty. */
@@ -826,15 +812,41 @@ xdma_queue_submit(xdma_channel_t *xchan)
 		xchan->bufs[i].nsegs = nsegs;
 		xchan->bufs[i].nsegs_orig = nsegs;
 
-		xdma_sg_queue_add(&sg_queue, seg, nsegs, xr->direction);
-
+		xdma_sg_queue_add(sg_queue, seg, nsegs, xr->direction);
 		xchan->idx_head = xchan_next_idx(xchan, xchan->idx_head);
 		atomic_add_int(&xchan->idx_count, 1);
-
 		TAILQ_REMOVE(&xchan->queue_in, xr, xr_next);
 	}
 
 	QUEUE_IN_UNLOCK(xchan);
+
+	return (0);
+}
+
+int
+xdma_queue_submit(xdma_channel_t *xchan)
+{
+	struct xdma_sg_queue sg_queue;
+	xdma_controller_t *xdma;
+	xdma_config_t *conf;
+	int ret;
+
+	conf = &xchan->conf;
+	xdma = xchan->xdma;
+	KASSERT(xdma != NULL, ("xdma is NULL"));
+
+	QUEUE_IN_LOCK(xchan);
+	if (TAILQ_EMPTY(&xchan->queue_in)) {
+		QUEUE_IN_UNLOCK(xchan);
+		return (0);
+	}
+	QUEUE_IN_UNLOCK(xchan);
+
+	xdma_sg_queue_init(&sg_queue);
+	ret = xdma_sg_queue_prepare(xchan, &sg_queue);
+	if (ret != 0) {
+		return (ret);
+	}
 
 	/* Now submit sg_queue to DMA engine driver. */
 
