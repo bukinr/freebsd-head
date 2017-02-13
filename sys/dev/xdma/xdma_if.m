@@ -72,7 +72,8 @@ METHOD int channel_prep_sg {
 METHOD int channel_submit_sg {
 	device_t			dev;
 	struct xdma_channel		*xchan;
-	struct xdma_sg_queue		*sg_queue;
+	struct xdma_sglist		*sg;
+	uint32_t			sg_n;
 };
 
 #

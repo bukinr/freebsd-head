@@ -702,18 +702,17 @@ softdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 
 static int
 softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
-    struct xdma_sg_queue *sg_queue)
+    struct xdma_sglist *sg, uint32_t sg_n)
 {
 	struct softdma_channel *chan;
 	struct softdma_desc *desc;
 	struct softdma_softc *sc;
-	struct xdma_sg *sg_tmp;
-	struct xdma_sg *sg;
 	xdma_config_t *conf;
 	uint32_t enqueued;
 	uint32_t tmp;
 	uint32_t addr;
 	uint32_t len;
+	int i;
 
 	sc = device_get_softc(dev);
 
@@ -728,16 +727,16 @@ softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 
 	uint32_t saved_dir;
 
-	TAILQ_FOREACH_SAFE(sg, sg_queue, sg_next, sg_tmp) {
-		addr = (uint32_t)sg->paddr;
-		len = (uint32_t)sg->len;
+	for (i = 0; i < sg_n; i++) {
+		addr = (uint32_t)sg[i].paddr;
+		len = (uint32_t)sg[i].len;
 
 		//printf("%s(%d): descr %d segment 0x%x (%d bytes)\n", __func__,
 		//    device_get_unit(dev), chan->idx_head, addr, len);
 
 		//desc = &descs[chan->idx_head];
 		desc = xchan->descs[chan->idx_head].desc;
-		if (sg->direction == XDMA_MEM_TO_DEV) {
+		if (sg[i].direction == XDMA_MEM_TO_DEV) {
 			desc->src_addr = addr;
 			desc->src_incr = 1;
 
@@ -750,19 +749,19 @@ softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 			desc->dst_addr = addr;
 			desc->dst_incr = 1;
 		}
-		desc->direction = sg->direction;
-		saved_dir = sg->direction;
+		desc->direction = sg[i].direction;
+		saved_dir = sg[i].direction;
 		desc->len = len;
 		desc->transfered = 0;
 		desc->status = 0;
 		desc->reserved = 0;
 		desc->control = 0;
 
-		if (sg->first == 1) {
+		if (sg[i].first == 1) {
 			desc->control |= CONTROL_GEN_SOP;
 		}
 
-		if (sg->last == 1) {
+		if (sg[i].last == 1) {
 			desc->control |= CONTROL_GEN_EOP;
 		}
 

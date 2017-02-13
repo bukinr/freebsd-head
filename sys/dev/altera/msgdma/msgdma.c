@@ -322,7 +322,8 @@ msgdma_channel_free(device_t dev, struct xdma_channel *xchan)
 }
 
 static int
-msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct xdma_sg_queue *sg_queue)
+msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
+    struct xdma_sglist *sg, uint32_t sg_n)
 {
 	struct msgdma_channel *chan;
 	//struct msgdma_desc *descs;
@@ -332,24 +333,23 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct xdma_s
 	xdma_config_t *conf;
 	uint32_t addr;
 	uint32_t len;
-	struct xdma_sg *sg;
-	struct xdma_sg *sg_tmp;
 	uint32_t tmp;
+	int i;
 
 	sc = device_get_softc(dev);
 
 	conf = &xchan->conf;
 	chan = (struct msgdma_channel *)xchan->chan;
 
-	TAILQ_FOREACH_SAFE(sg, sg_queue, sg_next, sg_tmp) {
-		addr = (uint32_t)sg->paddr;
-		len = (uint32_t)sg->len;
+	for (i = 0; i < sg_n; i++) {
+		addr = (uint32_t)sg[i].paddr;
+		len = (uint32_t)sg[i].len;
 
 		//printf("%s(%d): descr %d segment 0x%x (%d bytes)\n", __func__,
 		//    device_get_unit(dev), chan->idx_head, addr, len);
 
 		desc = xchan->descs[chan->idx_head].desc;
-		if (sg->direction == XDMA_MEM_TO_DEV) {
+		if (sg[i].direction == XDMA_MEM_TO_DEV) {
 			desc->read_lo = htole32(addr);
 			desc->write_lo = 0;
 		} else {
@@ -362,13 +362,13 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan, struct xdma_s
 		desc->reserved = 0;
 		desc->control = 0;
 
-		if (sg->direction == XDMA_MEM_TO_DEV) {
-			if (sg->first == 1) {
+		if (sg[i].direction == XDMA_MEM_TO_DEV) {
+			if (sg[i].first == 1) {
 				//printf("SOP set\n");
 				desc->control |= htole32(CONTROL_GEN_SOP);
 			}
 
-			if (sg->last == 1) {
+			if (sg[i].last == 1) {
 				//printf("EOP set\n");
 				desc->control |= htole32(CONTROL_GEN_EOP);
 				desc->control |= htole32(CONTROL_TC_IRQ_EN | CONTROL_ET_IRQ_EN | CONTROL_ERR_M);
