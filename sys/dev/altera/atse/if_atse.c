@@ -90,8 +90,8 @@ __FBSDID("$FreeBSD$");
 
 #define	ATSE_WATCHDOG_TIME	5
 
-#define	NUM_TX_DESC		512
-#define	NUM_RX_DESC		512
+#define	NUM_TX_DESC		256
+#define	NUM_RX_DESC		256
 
 #include <machine/cache.h>
 
