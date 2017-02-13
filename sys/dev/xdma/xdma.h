@@ -62,7 +62,6 @@ struct xdma_desc_status {
 struct xdma_transfer_status {
 	int	error;
 	int	total_copied;
-	int	cnt_done;
 };
 
 typedef struct xdma_transfer_status xdma_transfer_status_t;

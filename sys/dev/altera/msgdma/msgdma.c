@@ -130,7 +130,6 @@ msgdma_intr(void *arg)
 	struct msgdma_softc *sc;
 	xdma_config_t *conf;
 	uint32_t tot_copied;
-	uint32_t cnt_done;
 
 	sc = arg;
 	chan = &sc->channels[0];
@@ -150,7 +149,6 @@ msgdma_intr(void *arg)
 	//	printf("%s: tx 0x%08x, transferred %d\n", __func__, READ4_DESC(sc, PF_STATUS), len);
 	//}
 
-	cnt_done = 0;
 	tot_copied = 0;
 
 	while (chan->idx_tail != chan->idx_head) {
@@ -165,9 +163,7 @@ msgdma_intr(void *arg)
 		tot_copied += le32toh(desc->transferred);
 		st.error = 0;
 		st.transferred = le32toh(desc->transferred);
-		if (xdma_desc_done(xchan, chan->idx_tail, &st) == 0) {
-			cnt_done++;
-		}
+		xdma_desc_done(xchan, chan->idx_tail, &st);
 		chan->idx_tail = next_idx(xchan, chan->idx_tail);
 	}
 
@@ -177,7 +173,6 @@ msgdma_intr(void *arg)
 	//chan->run = 0;
 	status.error = 0;
 	status.total_copied = tot_copied;
-	status.cnt_done = cnt_done;
 	xdma_callback(chan->xchan, &status);
 }
 

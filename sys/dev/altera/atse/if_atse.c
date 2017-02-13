@@ -229,10 +229,6 @@ atse_xdma_tx_intr(void *arg, xdma_transfer_status_t *status)
 
 	ifp = sc->atse_ifp;
 
-	//printf("%s: %d pkts sent (%d bytes)\n", __func__,
-	//    status->cnt_done, status->total_copied);
-
-	//for (i = 0; i < status->cnt_done; i++) {
 	for (;;) {
 		err = xdma_dequeue_mbuf(sc->xchan_tx, &m);
 		if (err != 0) {
@@ -266,13 +262,9 @@ atse_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 
 	ifp = sc->atse_ifp;
 
-	//printf("%s: %d pkts rcvd (%d bytes)\n", __func__,
-	//    status->cnt_done, status->total_copied);
-
 	//if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
 
 	cnt_processed = 0;
-	//for (i = 0; i < status->cnt_done; i++) {
 	for (;;) {
 		err = xdma_dequeue_mbuf(sc->xchan_rx, &m);
 		if (err != 0) {
