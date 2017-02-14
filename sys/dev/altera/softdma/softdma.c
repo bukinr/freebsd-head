@@ -530,11 +530,17 @@ softdma_process_descriptors(struct softdma_channel *chan, xdma_transfer_status_t
 			xchan_desc_sync_post(xchan, chan->idx_tail);
 		}
 
-		//printf("%s done\n", __func__);
-
+		/* Descriptor processed. */
 		desc->control = 0;
-		st.error = 0;
-		st.transferred = ret;
+
+		if (ret >= 0) {
+			st.error = 0;
+			st.transferred = ret;
+		} else {
+			st.error = ret;
+			st.transferred = 0;
+		}
+
 		xchan_desc_done(xchan, chan->idx_tail, &st);
 
 		if (ret >= 0) {

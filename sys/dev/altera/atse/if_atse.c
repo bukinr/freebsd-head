@@ -199,10 +199,11 @@ atse_rx_enqueue(struct atse_softc *sc, uint32_t n)
 
 	for (i = 0; i < n; i++) {
 		m = m_getcl(M_NOWAIT, MT_DATA, M_PKTHDR);
-		if (m == NULL)
+		if (m == NULL) {
 			return (-1);
-		//m->m_pkthdr.len = m->m_len = m->m_ext.ext_size;
-		m->m_len = m->m_pkthdr.len = MCLBYTES;
+		}
+
+		m->m_pkthdr.len = m->m_len = m->m_ext.ext_size;
 		xdma_enqueue_mbuf(sc->xchan_rx, &m, 0, XDMA_DEV_TO_MEM);
 	}
 

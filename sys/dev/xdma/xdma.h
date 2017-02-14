@@ -55,8 +55,8 @@ enum xdma_command {
 };
 
 struct xdma_transfer_status {
-	uint32_t transferred;
-	uint32_t error;
+	uint32_t	transferred;
+	int		error;
 };
 
 typedef struct xdma_transfer_status xdma_transfer_status_t;
