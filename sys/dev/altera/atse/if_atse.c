@@ -100,7 +100,6 @@ __FBSDID("$FreeBSD$");
 #define	ATSE_ETHERNET_OPTION_BITS_READ	1
 static int atse_ethernet_option_bits_flag = ATSE_ETHERNET_OPTION_BITS_UNDEF;
 static uint8_t atse_ethernet_option_bits[ALTERA_ETHERNET_OPTION_BITS_LEN];
-static void atse_start_locked(struct ifnet *ifp);
 
 /*
  * Softc and critical resource locking.
@@ -169,10 +168,6 @@ pxx_read_2(struct atse_softc *sc, bus_addr_t bmcr, uint32_t reg, const char *f,
 	DPRINTF("[%s:%d] %s R %s 0x%08x (0x%08jx) = 0x%04x\n", f, l, s,
 	    "atse_mem_res", reg, (bmcr + reg) * 4, val);
 
-	//printf("%s: reg %lx (base %lx, bmcr %lx reg %x), val4 %x\n",
-	//    __func__, (rman_get_start(sc->atse_mem_res) + ((bmcr + reg) * 4)),
-	//	rman_get_start(sc->atse_mem_res), bmcr, reg, val4);
-
 	return (val);
 }
 
@@ -206,8 +201,8 @@ atse_rx_enqueue(struct atse_softc *sc, uint32_t n)
 		m = m_getcl(M_NOWAIT, MT_DATA, M_PKTHDR);
 		if (m == NULL)
 			return (-1);
-		m->m_pkthdr.len = m->m_len = m->m_ext.ext_size;
-		//m->m_len = m->m_pkthdr.len = MCLBYTES;
+		//m->m_pkthdr.len = m->m_len = m->m_ext.ext_size;
+		m->m_len = m->m_pkthdr.len = MCLBYTES;
 		xdma_enqueue_mbuf(sc->xchan_rx, &m, 0, XDMA_DEV_TO_MEM);
 	}
 
@@ -217,6 +212,7 @@ atse_rx_enqueue(struct atse_softc *sc, uint32_t n)
 static int
 atse_xdma_tx_intr(void *arg, xdma_transfer_status_t *status)
 {
+	xdma_transfer_status_t st;
 	struct atse_softc *sc;
 	struct ifnet *ifp;
 	struct mbuf *m;
@@ -229,16 +225,20 @@ atse_xdma_tx_intr(void *arg, xdma_transfer_status_t *status)
 	ifp = sc->atse_ifp;
 
 	for (;;) {
-		err = xdma_dequeue_mbuf(sc->xchan_tx, &m);
+		err = xdma_dequeue_mbuf(sc->xchan_tx, &m, &st);
 		if (err != 0) {
 			break;
 		}
+
+		if (st.error != 0) {
+			if_inc_counter(ifp, IFCOUNTER_OERRORS, 1);
+		}
+
 		m_freem(m);
 		sc->txcount--;
 	}
 
 	ifp->if_drv_flags &= ~IFF_DRV_OACTIVE;
-	atse_start_locked(ifp);
 
 	ATSE_UNLOCK(sc);
 
@@ -248,11 +248,11 @@ atse_xdma_tx_intr(void *arg, xdma_transfer_status_t *status)
 static int
 atse_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 {
+	xdma_transfer_status_t st;
 	struct atse_softc *sc;
 	struct ifnet *ifp;
 	struct mbuf *m;
 	int err;
-	//int i;
 	uint32_t cnt_processed;
 
 	sc = arg;
@@ -261,24 +261,27 @@ atse_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 
 	ifp = sc->atse_ifp;
 
-	//if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
 
 	cnt_processed = 0;
 	for (;;) {
-		err = xdma_dequeue_mbuf(sc->xchan_rx, &m);
+		err = xdma_dequeue_mbuf(sc->xchan_rx, &m, &st);
 		if (err != 0) {
 			break;
 		}
-		//printf("dequeued mbuf len %d\n", m->m_len);
+		cnt_processed++;
 
+		if (st.error != 0) {
+			if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
+			m_freem(m);
+			continue;
+		}
+
+		m->m_pkthdr.len = m->m_len = st.transferred;
 		m->m_pkthdr.rcvif = ifp;
-		//m->m_pkthdr.len = m->m_len;
-		//m->m_pkthdr.len = m->m_len = status->total_copied;
 		m_adj(m, ETHER_ALIGN);
 		ATSE_UNLOCK(sc);
 		(*ifp->if_input)(ifp, m);
 		ATSE_LOCK(sc);
-		cnt_processed++;
 	}
 
 	atse_rx_enqueue(sc, cnt_processed);
@@ -286,93 +289,6 @@ atse_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 	ATSE_UNLOCK(sc);
 
 	return (0);
-}
-
-static void
-atse_start_locked(struct ifnet *ifp)
-{
-	struct atse_softc *sc;
-	struct mbuf *m;
-	//int error;
-	int enqueued;
-
-	sc = ifp->if_softc;
-	ATSE_LOCK_ASSERT(sc);
-
-	//printf("%s\n", __func__);
-
-	if ((ifp->if_drv_flags & (IFF_DRV_RUNNING | IFF_DRV_OACTIVE)) != IFF_DRV_RUNNING) {
-		return;
-	}
-
-	//printf("%s 0\n", __func__);
-
-	if ((sc->atse_flags & ATSE_FLAGS_LINK) == 0) {
-		return;
-	}
-
-	//printf("%s 1\n", __func__);
-
-	if (ifp->if_drv_flags & IFF_DRV_OACTIVE)
-		return;
-
-	//printf("%s 2\n", __func__);
-
-#if 1
-	/*
-	 * Disable the watchdog while sending, we are batching packets.
-	 * Though we should never reach 5 seconds, and are holding the lock,
-	 * but who knows.
-	 */
-	sc->atse_watchdog_timer = 0;
-#endif
-
-	enqueued = 0;
-
-	/* We have more space to send so continue ... */
-	for (; !IFQ_DRV_IS_EMPTY(&ifp->if_snd); ) {
-
-#ifdef TX_QUEUE_LIMIT
-		if (sc->txcount > (NUM_TX_DESC - 1)) {
-			ifp->if_drv_flags |= IFF_DRV_OACTIVE;
-			break;
-		}
-#endif
-
-		IFQ_DRV_DEQUEUE(&ifp->if_snd, m);
-		if (m == NULL) {
-			break;
-		}
-
-		//uint32_t dst;
-		//dst = (rman_get_start(sc->atse_tx_mem_res) + A_ONCHIP_FIFO_MEM_CORE_DATA);
-
-		/* If anyone is interested give them a copy first. */
-		BPF_MTAP(sc->atse_ifp, m);
-
-		xdma_enqueue_mbuf(sc->xchan_tx, &m, 0, XDMA_MEM_TO_DEV);
-
-		sc->txcount++;
-
-		enqueued++;
-	}
-
-	if (enqueued > 0) {
-		sc->atse_watchdog_timer = ATSE_WATCHDOG_TIME;
-		xdma_queue_submit(sc->xchan_tx);
-	}
-}
-
-static void
-atse_start(struct ifnet *ifp)
-{
-	struct atse_softc *sc;
-
-	sc = ifp->if_softc;
-
-	ATSE_LOCK(sc);
-	atse_start_locked(ifp);
-	ATSE_UNLOCK(sc);
 }
 
 static int
@@ -859,7 +775,6 @@ atse_reset(struct atse_softc *sc)
 	 */
 	val4 = CSR_READ_4(sc, TX_CMD_STAT);
 	val4 &= ~(TX_CMD_STAT_OMIT_CRC|TX_CMD_STAT_TX_SHIFT16);
-	//val4 |= TX_CMD_STAT_TX_SHIFT16;
 	CSR_WRITE_4(sc, TX_CMD_STAT, val4);
 
 	val4 = CSR_READ_4(sc, RX_CMD_STAT);
@@ -1029,14 +944,8 @@ atse_watchdog(struct atse_softc *sc)
 	device_printf(sc->atse_dev, "watchdog timeout\n");
 	if_inc_counter(sc->atse_ifp, IFCOUNTER_OERRORS, 1);
 
-	//atse_intr_debug(sc, "poll");
-
 	sc->atse_ifp->if_drv_flags &= ~IFF_DRV_RUNNING;
 	atse_init_locked(sc);
-
-	//atse_rx_locked(sc);
-	if (!IFQ_DRV_IS_EMPTY(&sc->atse_ifp->if_snd))
-		atse_start_locked(sc->atse_ifp);
 }
 
 static void
@@ -1045,8 +954,6 @@ atse_tick(void *xsc)
 	struct atse_softc *sc;
 	struct mii_data *mii;
 	struct ifnet *ifp;
-
-	//printf(".");
 
 	sc = (struct atse_softc *)xsc;
 	ATSE_LOCK_ASSERT(sc);
@@ -1057,11 +964,6 @@ atse_tick(void *xsc)
 	atse_watchdog(sc);
 	if ((sc->atse_flags & ATSE_FLAGS_LINK) == 0)
 		atse_miibus_statchg(sc->atse_dev);
-
-	//atse_rx_locked(sc);
-	if ((sc->atse_flags & ATSE_FLAGS_LINK) != 0) {
-		atse_start_locked(sc->atse_ifp);
-	}
 
 	callout_reset(&sc->atse_tick, hz, atse_tick, sc);
 }
@@ -1377,8 +1279,6 @@ atse_attach(device_t dev)
 
 	callout_init_mtx(&sc->atse_tick, &sc->atse_mtx, 0);
 
-	//sc->atse_tx_buf = malloc(ETHER_MAX_LEN_JUMBO, M_DEVBUF, M_WAITOK);
-
 	/*
 	 * We are only doing single-PHY with this driver currently.  The
 	 * defaults would be right so that BASE_CFG_MDIO_ADDR0 points to the
@@ -1408,9 +1308,6 @@ atse_attach(device_t dev)
 	if_initname(ifp, device_get_name(dev), device_get_unit(dev));
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ifp->if_ioctl = atse_ioctl;
-	if (1 == 0) {
-		ifp->if_start = atse_start;
-	}
 	ifp->if_transmit = atse_transmit;
 	ifp->if_init = atse_init;
 	IFQ_SET_MAXLEN(&ifp->if_snd, ATSE_TX_LIST_CNT - 1);
@@ -1524,8 +1421,6 @@ atse_miibus_readreg(device_t dev, int phy, int reg)
 		return (0);
 
 	val = PHY_READ_2(sc, reg);
-
-	//printf("%s: phy %d reg %d val 0x%x\n", __func__, phy, reg, val);
 
 	return (val);
 }

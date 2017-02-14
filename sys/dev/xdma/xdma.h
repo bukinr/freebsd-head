@@ -54,14 +54,9 @@ enum xdma_command {
 	XDMA_CMD_TERMINATE_ALL,
 };
 
-struct xdma_desc_status {
+struct xdma_transfer_status {
 	uint32_t transferred;
 	uint32_t error;
-};
-
-struct xdma_transfer_status {
-	int	error;
-	int	total_copied;
 };
 
 typedef struct xdma_transfer_status xdma_transfer_status_t;
@@ -82,7 +77,8 @@ struct xdma_request {
 	enum xdma_direction		direction;
 	uintptr_t			src_addr;	/* Physical address. */
 	uintptr_t			dst_addr;	/* Physical address. */
-	int				done;
+	xdma_transfer_status_t		status;
+	bool				done;
 };
 
 struct xdma_channel_config {
@@ -132,11 +128,12 @@ struct xdma_channel {
 	uint16_t			flags;
 #define	XCHAN_DESC_ALLOCATED		(1 << 0)
 #define	XCHAN_BUFS_ALLOCATED		(1 << 1)
-#define	XCHAN_CONFIGURED		(1 << 2)
-#define	XCHAN_TYPE_CYCLIC		(1 << 3)
-#define	XCHAN_TYPE_MEMCPY		(1 << 4)
-#define	XCHAN_TYPE_FIFO			(1 << 5)
-#define	XCHAN_TYPE_SG			(1 << 6)
+#define	XCHAN_SGLIST_ALLOCATED		(1 << 2)
+#define	XCHAN_CONFIGURED		(1 << 3)
+#define	XCHAN_TYPE_CYCLIC		(1 << 4)
+#define	XCHAN_TYPE_MEMCPY		(1 << 5)
+#define	XCHAN_TYPE_FIFO			(1 << 6)
+#define	XCHAN_TYPE_SG			(1 << 7)
 
 	/* A real hardware driver channel. */
 	void				*chan;
@@ -185,16 +182,16 @@ int xdma_prep_cyclic(xdma_channel_t *, enum xdma_direction,
 int xdma_prep_memcpy(xdma_channel_t *, uintptr_t, uintptr_t, size_t len);
 int xdma_prep_sg(xdma_channel_t *xchan, uint32_t);
 
-int xdma_desc_alloc(xdma_channel_t *, uint32_t, uint32_t);
-int xdma_desc_free(xdma_channel_t *xchan);
-int xdma_desc_done(xdma_channel_t *xchan, uint32_t idx, struct xdma_desc_status *);
-int xdma_desc_sync_pre(xdma_channel_t *xchan, uint32_t);
-int xdma_desc_sync_post(xdma_channel_t *xchan, uint32_t);
-int xdma_bufs_free(xdma_channel_t *xchan);
+int xchan_desc_alloc(xdma_channel_t *, uint32_t, uint32_t);
+int xchan_desc_free(xdma_channel_t *xchan);
+int xchan_desc_done(xdma_channel_t *xchan, uint32_t idx, xdma_transfer_status_t *);
+int xchan_desc_sync_pre(xdma_channel_t *xchan, uint32_t);
+int xchan_desc_sync_post(xdma_channel_t *xchan, uint32_t);
+int xchan_bufs_free(xdma_channel_t *xchan);
 uint32_t xchan_next_idx(xdma_channel_t *xchan, uint32_t curidx);
 
 /* xchan queues operations */
-int xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **m);
+int xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **m, xdma_transfer_status_t *);
 int xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **m, uintptr_t addr, enum xdma_direction dir);
 int xdma_queue_submit(xdma_channel_t *xchan);
 

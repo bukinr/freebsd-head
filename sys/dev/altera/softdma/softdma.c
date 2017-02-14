@@ -494,6 +494,7 @@ softdma_process_descriptors(struct softdma_channel *chan, xdma_transfer_status_t
 	struct softdma_desc *desc;
 	struct softdma_softc *sc;
 	xdma_descriptor_t *descs;
+	xdma_transfer_status_t st;
 	int ret;
 
 	sc = chan->sc;
@@ -526,20 +527,18 @@ softdma_process_descriptors(struct softdma_channel *chan, xdma_transfer_status_t
 				/* No new data available. */
 				break;
 			}
-			xdma_desc_sync_post(xchan, chan->idx_tail);
+			xchan_desc_sync_post(xchan, chan->idx_tail);
 		}
 
 		//printf("%s done\n", __func__);
 
 		desc->control = 0;
-
-		struct xdma_desc_status st;
 		st.error = 0;
 		st.transferred = ret;
-		xdma_desc_done(xchan, chan->idx_tail, &st);
+		xchan_desc_done(xchan, chan->idx_tail, &st);
 
 		if (ret >= 0) {
-			status->total_copied += ret;
+			status->transferred += ret;
 		} else {
 			status->error = 1;
 			break;
@@ -573,7 +572,7 @@ softdma_worker(void *arg)
 		} while (chan->run == 0);
 
 		status.error = 0;
-		status.total_copied = 0;
+		status.transferred = 0;
 
 		softdma_process_descriptors(chan, &status);
 
@@ -676,7 +675,7 @@ softdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 
 	//printf("%s\n", __func__);
 
-	ret = xdma_desc_alloc(xchan, sizeof(struct softdma_desc), 4);
+	ret = xchan_desc_alloc(xchan, sizeof(struct softdma_desc), 4);
 	if (ret != 0) {
 		device_printf(sc->dev,
 		    "%s: Can't allocate descriptors.\n", __func__);
@@ -768,7 +767,7 @@ softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 		tmp = chan->idx_head;
 		chan->idx_head = xchan_next_idx(xchan, chan->idx_head);
 		desc->control |= CONTROL_OWN;
-		xdma_desc_sync_pre(xchan, tmp);
+		xchan_desc_sync_pre(xchan, tmp);
 
 		enqueued += 1;
 	}
@@ -808,7 +807,7 @@ softdma_channel_prep_memcpy(device_t dev, struct xdma_channel *xchan)
 
 	chan = (struct softdma_channel *)xchan->chan;
 
-	ret = xdma_desc_alloc(xchan, sizeof(struct softdma_desc), 8);
+	ret = xchan_desc_alloc(xchan, sizeof(struct softdma_desc), 8);
 	if (ret != 0) {
 		device_printf(sc->dev,
 		    "%s: Can't allocate descriptors.\n", __func__);

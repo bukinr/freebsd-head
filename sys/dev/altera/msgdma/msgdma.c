@@ -123,7 +123,7 @@ static void
 msgdma_intr(void *arg)
 {
 	xdma_transfer_status_t status;
-	struct xdma_desc_status st;
+	struct xdma_transfer_status st;
 	struct msgdma_desc *desc;
 	struct msgdma_channel *chan;
 	struct xdma_channel *xchan;
@@ -152,7 +152,7 @@ msgdma_intr(void *arg)
 	tot_copied = 0;
 
 	while (chan->idx_tail != chan->idx_head) {
-		xdma_desc_sync_post(xchan, chan->idx_tail);
+		xchan_desc_sync_post(xchan, chan->idx_tail);
 		desc = xchan->descs[chan->idx_tail].desc;
 		if ((le32toh(desc->control) & CONTROL_OWN) != 0) {
 			break;
@@ -163,7 +163,7 @@ msgdma_intr(void *arg)
 		tot_copied += le32toh(desc->transferred);
 		st.error = 0;
 		st.transferred = le32toh(desc->transferred);
-		xdma_desc_done(xchan, chan->idx_tail, &st);
+		xchan_desc_done(xchan, chan->idx_tail, &st);
 		chan->idx_tail = next_idx(xchan, chan->idx_tail);
 	}
 
@@ -172,7 +172,7 @@ msgdma_intr(void *arg)
 	/* Finish operation */
 	//chan->run = 0;
 	status.error = 0;
-	status.total_copied = tot_copied;
+	status.transferred = tot_copied;
 	xdma_callback(chan->xchan, &status);
 }
 
@@ -380,7 +380,7 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 		tmp = chan->idx_head;
 		chan->idx_head = next_idx(xchan, chan->idx_head);
 		desc->control |= htole32(CONTROL_OWN | CONTROL_GO);
-		xdma_desc_sync_pre(xchan, tmp);
+		xchan_desc_sync_pre(xchan, tmp);
 	}
 
 	return (0);
@@ -403,7 +403,7 @@ msgdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 
 	//printf("%s(%d)\n", __func__, device_get_unit(dev));
 
-	ret = xdma_desc_alloc(xchan, sizeof(struct msgdma_desc), 32);
+	ret = xchan_desc_alloc(xchan, sizeof(struct msgdma_desc), 32);
 	if (ret != 0) {
 		device_printf(sc->dev,
 		    "%s: Can't allocate descriptors.\n", __func__);
