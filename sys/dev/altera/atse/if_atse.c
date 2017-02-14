@@ -361,8 +361,9 @@ atse_stop_locked(struct atse_softc *sc)
 	/* Wait for bits to be cleared; i=100 is excessive. */
 	for (i = 0; i < 100; i++) {
 		val4 = CSR_READ_4(sc, BASE_CFG_COMMAND_CONFIG);
-		if ((val4 & mask) == 0)
+		if ((val4 & mask) == 0) {
 			break;
+		}
 		DELAY(10);
 	}
 
@@ -372,8 +373,6 @@ atse_stop_locked(struct atse_softc *sc)
 	}
 
 	sc->atse_flags &= ~ATSE_FLAGS_LINK;
-
-	/* XXX-BZ free the RX/TX rings. */
 
 	return (0);
 }
@@ -458,22 +457,26 @@ atse_ethernet_option_bits_read_fdt(device_t dev)
 	device_t fdev;
 	int i, rid;
 
-	if (atse_ethernet_option_bits_flag & ATSE_ETHERNET_OPTION_BITS_READ)
+	if (atse_ethernet_option_bits_flag & ATSE_ETHERNET_OPTION_BITS_READ) {
 		return (0);
+	}
 
 	fdev = device_find_child(device_get_parent(dev), "cfi", 0);
-	if (fdev == NULL)
+	if (fdev == NULL) {
 		return (ENOENT);
+	}
 
 	rid = 0;
 	res = bus_alloc_resource_any(fdev, SYS_RES_MEMORY, &rid,
 	    RF_ACTIVE | RF_SHAREABLE);
-	if (res == NULL)
+	if (res == NULL) {
 		return (ENXIO);
+	}
 
-	for (i = 0; i < ALTERA_ETHERNET_OPTION_BITS_LEN; i++)
+	for (i = 0; i < ALTERA_ETHERNET_OPTION_BITS_LEN; i++) {
 		atse_ethernet_option_bits[i] = bus_read_1(res,
 		    ALTERA_ETHERNET_OPTION_BITS_OFF + i);
+	}
 
 	bus_release_resource(fdev, SYS_RES_MEMORY, rid, res);
 	atse_ethernet_option_bits_flag |= ATSE_ETHERNET_OPTION_BITS_READ;
@@ -507,12 +510,14 @@ atse_get_eth_address(struct atse_softc *sc)
 	 * possibly change our ethernet address, which is not good at all.
 	 */
 	if (sc->atse_eth_addr[0] != 0x00 || sc->atse_eth_addr[1] != 0x00 ||
-	    sc->atse_eth_addr[2] != 0x00)
+	    sc->atse_eth_addr[2] != 0x00) {
 		return (0);
+	}
 
 	if ((atse_ethernet_option_bits_flag &
-	    ATSE_ETHERNET_OPTION_BITS_READ) == 0)
+	    ATSE_ETHERNET_OPTION_BITS_READ) == 0) {
 		goto get_random;
+	}
 
 	val4 = atse_ethernet_option_bits[0] << 24;
 	val4 |= atse_ethernet_option_bits[1] << 16;
@@ -567,8 +572,9 @@ atse_get_eth_address(struct atse_softc *sc)
 	 * Ethernet, go to random.
 	 */
 	unit = device_get_unit(sc->atse_dev);
-	if (unit == 0x00)
+	if (unit == 0x00) {
 		return (0);
+	}
 
 	if (unit > 0x0f) {
 		device_printf(sc->atse_dev, "We do not support Ethernet "
@@ -680,8 +686,9 @@ atse_reset(struct atse_softc *sc)
 	/* Wait for reset bit to clear; i=100 is excessive. */
 	for (i = 0; i < 100; i++) {
 		val = PCS_READ_2(sc, PCS_CONTROL);
-		if ((val & PCS_CONTROL_RESET) == 0)
+		if ((val & PCS_CONTROL_RESET) == 0) {
 			break;
+		}
 		DELAY(10);
 	}
 
@@ -700,8 +707,9 @@ atse_reset(struct atse_softc *sc)
 	/* Wait for bits to be cleared; i=100 is excessive. */
 	for (i = 0; i < 100; i++) {
 		val4 = CSR_READ_4(sc, BASE_CFG_COMMAND_CONFIG);
-		if ((val4 & mask) == 0)
+		if ((val4 & mask) == 0) {
 			break;
+		}
 		DELAY(10);
 	}
 	if ((val4 & mask) != 0) {
@@ -788,8 +796,9 @@ atse_reset(struct atse_softc *sc)
 	/* Wait for bits to be cleared; i=100 is excessive. */
 	for (i = 0; i < 100; i++) {
 		val4 = CSR_READ_4(sc, BASE_CFG_COMMAND_CONFIG);
-		if ((val4 & BASE_CFG_COMMAND_CONFIG_SW_RESET) == 0)
+		if ((val4 & BASE_CFG_COMMAND_CONFIG_SW_RESET) == 0) {
 			break;
+		}
 		DELAY(10);
 	}
 	if ((val4 & BASE_CFG_COMMAND_CONFIG_SW_RESET) != 0) {
@@ -805,8 +814,9 @@ atse_reset(struct atse_softc *sc)
 	/* Wait for bits to be cleared; i=100 is excessive. */
 	for (i = 0; i < 100; i++) {
 		val4 = CSR_READ_4(sc, BASE_CFG_COMMAND_CONFIG);
-		if ((val4 & mask) == mask)
+		if ((val4 & mask) == mask) {
 			break;
+		}
 		DELAY(10);
 	}
 	if ((val4 & mask) != mask) {
@@ -827,8 +837,9 @@ atse_init_locked(struct atse_softc *sc)
 	ATSE_LOCK_ASSERT(sc);
 	ifp = sc->atse_ifp;
 
-	if ((ifp->if_drv_flags & IFF_DRV_RUNNING) != 0)
+	if ((ifp->if_drv_flags & IFF_DRV_RUNNING) != 0) {
 		return;
+	}
 
 	/*
 	 * Must update the ether address if changed.  Given we do not handle
@@ -944,8 +955,9 @@ atse_tick(void *xsc)
 
 	mii = device_get_softc(sc->atse_miibus);
 	mii_tick(mii);
-	if ((sc->atse_flags & ATSE_FLAGS_LINK) == 0)
+	if ((sc->atse_flags & ATSE_FLAGS_LINK) == 0) {
 		atse_miibus_statchg(sc->atse_dev);
+	}
 
 	callout_reset(&sc->atse_tick, hz, atse_tick, sc);
 }
@@ -965,8 +977,9 @@ atse_ifmedia_upd(struct ifnet *ifp)
 
 	ATSE_LOCK(sc);
 	mii = device_get_softc(sc->atse_miibus);
-	LIST_FOREACH(miisc, &mii->mii_phys, mii_list)
+	LIST_FOREACH(miisc, &mii->mii_phys, mii_list) {
 		PHY_RESET(miisc);
+	}
 	error = mii_mediachg(mii);
 	ATSE_UNLOCK(sc);
 
@@ -1107,8 +1120,9 @@ sysctl_atse_mac_stats_proc(SYSCTL_HANDLER_ARGS)
 
 	s = CSR_READ_4(sc, offset);
 	error = sysctl_handle_int(oidp, &s, 0, req);
-	if (error || !req->newptr)
+	if (error || !req->newptr) {
 		return (error);
+	}
 
 	return (0);
 }
@@ -1150,8 +1164,9 @@ sysctl_atse_rx_err_stats_proc(SYSCTL_HANDLER_ARGS)
 
 	s = sc->atse_rx_err[offset];
 	error = sysctl_handle_int(oidp, &s, 0, req);
-	if (error || !req->newptr)
+	if (error || !req->newptr) {
 		return (error);
+	}
 
 	return (0);
 }
@@ -1171,8 +1186,9 @@ atse_sysctl_stats_attach(device_t dev)
 	/* MAC statistics. */
 	for (i = 0; i < nitems(atse_mac_stats_regs); i++) {
 		if (atse_mac_stats_regs[i].name == NULL ||
-		    atse_mac_stats_regs[i].descr == NULL)
+		    atse_mac_stats_regs[i].descr == NULL) {
 			continue;
+		}
 
 		SYSCTL_ADD_PROC(sctx, SYSCTL_CHILDREN(soid), OID_AUTO,
 		    atse_mac_stats_regs[i].name, CTLTYPE_UINT|CTLFLAG_RD,
@@ -1183,8 +1199,9 @@ atse_sysctl_stats_attach(device_t dev)
 	/* rx_err[]. */
 	for (i = 0; i < ATSE_RX_ERR_MAX; i++) {
 		if (atse_rx_err_stats_regs[i].name == NULL ||
-		    atse_rx_err_stats_regs[i].descr == NULL)
+		    atse_rx_err_stats_regs[i].descr == NULL) {
 			continue;
+		}
 
 		SYSCTL_ADD_PROC(sctx, SYSCTL_CHILDREN(soid), OID_AUTO,
 		    atse_rx_err_stats_regs[i].name, CTLTYPE_UINT|CTLFLAG_RD,
@@ -1313,11 +1330,13 @@ atse_attach(device_t dev)
 	ifp->if_capenable = ifp->if_capabilities;
 
 err:
-	if (error != 0)
+	if (error != 0) {
 		atse_detach(dev);
+	}
 
-	if (error == 0)
+	if (error == 0) {
 		atse_sysctl_stats_attach(dev);
+	}
 
 	atse_rx_enqueue(sc, (NUM_RX_DESC * 2));
 	xdma_queue_submit(sc->xchan_rx);
@@ -1344,11 +1363,13 @@ atse_detach(device_t dev)
 		callout_drain(&sc->atse_tick);
 		ether_ifdetach(ifp);
 	}
-	if (sc->atse_miibus != NULL)
+	if (sc->atse_miibus != NULL) {
 		device_delete_child(dev, sc->atse_miibus);
+	}
 
-	if (ifp != NULL)
+	if (ifp != NULL) {
 		if_free(ifp);
+	}
 
 	mtx_destroy(&sc->atse_mtx);
 
@@ -1399,8 +1420,9 @@ atse_miibus_readreg(device_t dev, int phy, int reg)
 	 * We currently do not support re-mapping of MDIO space on-the-fly
 	 * but de-facto hard-code the phy#.
 	 */
-	if (phy != sc->atse_phy_addr)
+	if (phy != sc->atse_phy_addr) {
 		return (0);
+	}
 
 	val = PHY_READ_2(sc, reg);
 
@@ -1418,8 +1440,9 @@ atse_miibus_writereg(device_t dev, int phy, int reg, int data)
 	 * We currently do not support re-mapping of MDIO space on-the-fly
 	 * but de-facto hard-code the phy#.
 	 */
-	if (phy != sc->atse_phy_addr)
+	if (phy != sc->atse_phy_addr) {
 		return (0);
+	}
 
 	PHY_WRITE_2(sc, reg, data);
 	return (0);
@@ -1439,8 +1462,9 @@ atse_miibus_statchg(device_t dev)
 	mii = device_get_softc(sc->atse_miibus);
 	ifp = sc->atse_ifp;
 	if (mii == NULL || ifp == NULL ||
-	    (ifp->if_drv_flags & IFF_DRV_RUNNING) == 0)
+	    (ifp->if_drv_flags & IFF_DRV_RUNNING) == 0) {
 		return;
+	}
 
 	val4 = CSR_READ_4(sc, BASE_CFG_COMMAND_CONFIG);
 
@@ -1472,15 +1496,17 @@ atse_miibus_statchg(device_t dev)
 	}
 
 	if ((sc->atse_flags & ATSE_FLAGS_LINK) == 0) {
-		/* XXX-BZ need to stop the MAC? */
+		/* Need to stop the MAC? */
 		return;
 	}
 
-	if (IFM_OPTIONS(mii->mii_media_active & IFM_FDX) != 0)
+	if (IFM_OPTIONS(mii->mii_media_active & IFM_FDX) != 0) {
 		val4 &= ~BASE_CFG_COMMAND_CONFIG_HD_ENA;
-	else
+	} else {
 		val4 |= BASE_CFG_COMMAND_CONFIG_HD_ENA;
-	/* XXX-BZ flow control? */
+	}
+
+	/* flow control? */
 
 	/* Make sure the MAC is activated. */
 	val4 |= BASE_CFG_COMMAND_CONFIG_TX_ENA;
