@@ -310,7 +310,7 @@ pdma_channel_prep_memcpy(device_t dev, struct xdma_channel *xchan)
 	/* Ensure we are not in operation */
 	chan_stop(sc, chan);
 
-	ret = xdma_desc_alloc(xchan, sizeof(struct pdma_hwdesc), 8);
+	ret = xchan_desc_alloc(xchan, sizeof(struct pdma_hwdesc), 8);
 	if (ret != 0) {
 		device_printf(sc->dev,
 		    "%s: Can't allocate descriptors.\n", __func__);
@@ -408,7 +408,7 @@ pdma_channel_prep_cyclic(device_t dev, struct xdma_channel *xchan)
 	xdma = xchan->xdma;
 	data = (struct pdma_fdt_data *)xdma->data;
 
-	ret = xdma_desc_alloc(xchan, sizeof(struct pdma_hwdesc), 8);
+	ret = xchan_desc_alloc(xchan, sizeof(struct pdma_hwdesc), 8);
 	if (ret != 0) {
 		device_printf(sc->dev,
 		    "%s: Can't allocate descriptors.\n", __func__);
@@ -452,7 +452,7 @@ pdma_channel_prep_cyclic(device_t dev, struct xdma_channel *xchan)
 		desc->dcm |= dcm | DCM_TIE;
 		desc->dtc = (conf->block_len / max_width);
 
-		xdma_enqueue_sync_pre(xchan, i);
+		xchan_desc_sync_pre(xchan, i);
 
 		/*
 		 * PDMA does not provide interrupt after processing each descriptor,
