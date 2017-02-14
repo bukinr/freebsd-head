@@ -427,7 +427,6 @@ struct atse_softc {
 #define	ATSE_ETH_ADDR_SUPP3	0x08
 #define	ATSE_ETH_ADDR_SUPP4	0x10
 #define	ATSE_ETH_ADDR_ALL	0x1f
-	uint16_t		atse_watchdog_timer;
 	int16_t			atse_rx_cycles;		/* POLLING */
 #define	RX_CYCLES_IN_INTR	5
 	uint32_t		atse_rx_err[6];

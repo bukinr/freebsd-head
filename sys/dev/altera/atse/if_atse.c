@@ -88,8 +88,6 @@ __FBSDID("$FreeBSD$");
 
 #include <dev/altera/atse/if_atsereg.h>
 
-#define	ATSE_WATCHDOG_TIME	5
-
 #define	RX_QUEUE_SIZE		1024
 #define	TX_QUEUE_SIZE		1024
 #define	NUM_TX_DESC		256
@@ -321,7 +319,6 @@ atse_transmit_locked(struct ifnet *ifp, struct mbuf *m)
 
 	sc->txcount++;
 
-	sc->atse_watchdog_timer = ATSE_WATCHDOG_TIME;
 	xdma_queue_submit(sc->xchan_tx);
 
 	return (0);
@@ -350,7 +347,6 @@ atse_stop_locked(struct atse_softc *sc)
 
 	ATSE_LOCK_ASSERT(sc);
 
-	sc->atse_watchdog_timer = 0;
 	callout_stop(&sc->atse_tick);
 
 	ifp = sc->atse_ifp;
@@ -936,22 +932,6 @@ atse_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 }
 
 static void
-atse_watchdog(struct atse_softc *sc)
-{
-
-	ATSE_LOCK_ASSERT(sc);
-
-	if (sc->atse_watchdog_timer == 0 || --sc->atse_watchdog_timer > 0)
-		return;
-
-	device_printf(sc->atse_dev, "watchdog timeout\n");
-	if_inc_counter(sc->atse_ifp, IFCOUNTER_OERRORS, 1);
-
-	sc->atse_ifp->if_drv_flags &= ~IFF_DRV_RUNNING;
-	atse_init_locked(sc);
-}
-
-static void
 atse_tick(void *xsc)
 {
 	struct atse_softc *sc;
@@ -964,7 +944,6 @@ atse_tick(void *xsc)
 
 	mii = device_get_softc(sc->atse_miibus);
 	mii_tick(mii);
-	atse_watchdog(sc);
 	if ((sc->atse_flags & ATSE_FLAGS_LINK) == 0)
 		atse_miibus_statchg(sc->atse_dev);
 
