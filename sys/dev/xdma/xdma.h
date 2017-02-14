@@ -160,6 +160,7 @@ struct xdma_channel {
 
 	/* Request queue. */
 	struct xdma_request		*xr;
+	uint32_t			xr_num;
 	uint32_t			xr_count;
 	uint32_t			xr_head;
 	uint32_t			xr_tail;
@@ -180,7 +181,7 @@ int xdma_channel_free(xdma_channel_t *);
 int xdma_prep_cyclic(xdma_channel_t *, enum xdma_direction,
     uintptr_t, uintptr_t, int, int, int, int);
 int xdma_prep_memcpy(xdma_channel_t *, uintptr_t, uintptr_t, size_t len);
-int xdma_prep_sg(xdma_channel_t *xchan, uint32_t);
+int xdma_prep_sg(xdma_channel_t *xchan, uint32_t, uint32_t);
 
 int xchan_desc_alloc(xdma_channel_t *, uint32_t, uint32_t);
 int xchan_desc_free(xdma_channel_t *xchan);

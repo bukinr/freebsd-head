@@ -545,7 +545,7 @@ xdma_prep_memcpy(xdma_channel_t *xchan, uintptr_t src_addr,
 }
 
 int
-xdma_prep_sg(xdma_channel_t *xchan, uint32_t ndesc)
+xdma_prep_sg(xdma_channel_t *xchan, uint32_t ndesc, uint32_t xr_num)
 {
 	xdma_controller_t *xdma;
 	xdma_config_t *conf;
@@ -571,11 +571,9 @@ xdma_prep_sg(xdma_channel_t *xchan, uint32_t ndesc)
 	}
 
 	/* xchan request queue. */
-	xchan->xr = malloc(sizeof(struct xdma_request) * 1024,
+	xchan->xr = malloc(sizeof(struct xdma_request) * xr_num,
 	    M_XDMA, M_WAITOK | M_ZERO);
-	xchan->xr_head = 0;
-	xchan->xr_tail = 0;
-	xchan->xr_done = 0;
+	xchan->xr_num = xr_num;
 
 	xchan->flags |= (XCHAN_CONFIGURED | XCHAN_TYPE_SG);
 
@@ -630,7 +628,7 @@ xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 	*mp = xr->m;
 	status->error = xr->status.error;
 	status->transferred = xr->status.transferred;
-	xchan->xr_done = ((xchan->xr_done + 1) % 1024);
+	xchan->xr_done = ((xchan->xr_done + 1) % xchan->xr_num);
 	atomic_subtract_int(&xchan->xr_count, 1);
 
 	return (0);
@@ -647,7 +645,7 @@ xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 	xdma = xchan->xdma;
 	conf = &xchan->conf;
 
-	if (xchan->xr_count >= (1024 - 1)) {
+	if (xchan->xr_count >= (xchan->xr_num - 1)) {
 		/* No space is available yet. */
 		return (-1);
 	}
@@ -661,7 +659,7 @@ xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 		xr->src_addr = addr;
 	}
 	xr->done = 0;
-	xchan->xr_head = ((xchan->xr_head + 1) % 1024);
+	xchan->xr_head = ((xchan->xr_head + 1) % xchan->xr_num);
 	atomic_add_int(&xchan->xr_count, 1);
 
 	return (0);
@@ -838,7 +836,7 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 		xchan->idx_head = xchan_next_idx(xchan, xchan->idx_head);
 		atomic_add_int(&xchan->idx_count, 1);
 
-		xchan->xr_tail = ((xchan->xr_tail + 1) % 1024);
+		xchan->xr_tail = ((xchan->xr_tail + 1) % xchan->xr_num);
 	}
 
 	return (n);

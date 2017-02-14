@@ -90,6 +90,8 @@ __FBSDID("$FreeBSD$");
 
 #define	ATSE_WATCHDOG_TIME	5
 
+#define	RX_QUEUE_SIZE		1024
+#define	TX_QUEUE_SIZE		1024
 #define	NUM_TX_DESC		256
 #define	NUM_RX_DESC		256
 
@@ -1247,7 +1249,7 @@ atse_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	xdma_prep_sg(sc->xchan_tx, NUM_TX_DESC);
+	xdma_prep_sg(sc->xchan_tx, NUM_TX_DESC, TX_QUEUE_SIZE);
 
 	/* Get RX xDMA controller */
 	sc->xdma_rx = xdma_ofw_get(sc->dev, "rx");
@@ -1271,7 +1273,7 @@ atse_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	xdma_prep_sg(sc->xchan_rx, NUM_RX_DESC);
+	xdma_prep_sg(sc->xchan_rx, NUM_RX_DESC, RX_QUEUE_SIZE);
 
 	atse_ethernet_option_bits_read(dev);
 
