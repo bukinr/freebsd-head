@@ -72,7 +72,6 @@ struct msgdma_channel {
 	struct proc		*p;
 	int			used;
 	int			index;
-	int			run;
 	int			idx_head;
 	int			idx_tail;
 };
@@ -136,18 +135,14 @@ msgdma_intr(void *arg)
 	xchan = chan->xchan;
 	conf = &xchan->conf;
 
-	//TAILQ_INIT(&sg_queue);
-	//printf("%s(%d): status 0x%08x next_descr 0x%08x, control 0x%08x\n", __func__,
-	//    device_get_unit(sc->dev),
-	//	READ4_DESC(sc, PF_STATUS),
-	//	READ4_DESC(sc, PF_NEXT_LO),
-	//	READ4_DESC(sc, PF_CONTROL));
-	//len = le32toh(desc->transferred);
-	//if (desc->read_lo == 0) {
-	//	printf("%s: rx 0x%08x, transferred %d\n", __func__, READ4_DESC(sc, PF_STATUS), len);
-	//} else {
-	//	printf("%s: tx 0x%08x, transferred %d\n", __func__, READ4_DESC(sc, PF_STATUS), len);
-	//}
+#if 0
+	printf("%s(%d): status 0x%08x next_descr 0x%08x, control 0x%08x\n", __func__,
+	    device_get_unit(sc->dev),
+		READ4_DESC(sc, PF_STATUS),
+		READ4_DESC(sc, PF_NEXT_LO),
+		READ4_DESC(sc, PF_CONTROL));
+#endif
+
 
 	tot_copied = 0;
 
@@ -157,8 +152,6 @@ msgdma_intr(void *arg)
 		if ((le32toh(desc->control) & CONTROL_OWN) != 0) {
 			break;
 		}
-
-		//printf("%s(%d) p %d\n", __func__, device_get_unit(sc->dev), chan->idx_tail);
 
 		tot_copied += le32toh(desc->transferred);
 		st.error = 0;
@@ -170,7 +163,6 @@ msgdma_intr(void *arg)
 	WRITE4_DESC(sc, PF_STATUS, PF_STATUS_IRQ);
 
 	/* Finish operation */
-	//chan->run = 0;
 	status.error = 0;
 	status.transferred = tot_copied;
 	xdma_callback(chan->xchan, &status);
@@ -315,7 +307,6 @@ msgdma_channel_free(device_t dev, struct xdma_channel *xchan)
 	xdma_assert_locked();
 
 	chan = (struct msgdma_channel *)xchan->chan;
-	//mtx_destroy(&chan->mtx);
 	chan->used = 0;
 
 	return (0);
@@ -326,10 +317,8 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
     struct xdma_sglist *sg, uint32_t sg_n)
 {
 	struct msgdma_channel *chan;
-	//struct msgdma_desc *descs;
 	struct msgdma_desc *desc;
 	struct msgdma_softc *sc;
-	//struct sglist_seg *seg;
 	xdma_config_t *conf;
 	uint32_t addr;
 	uint32_t len;
@@ -344,9 +333,6 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	for (i = 0; i < sg_n; i++) {
 		addr = (uint32_t)sg[i].paddr;
 		len = (uint32_t)sg[i].len;
-
-		//printf("%s(%d): descr %d segment 0x%x (%d bytes)\n", __func__,
-		//    device_get_unit(dev), chan->idx_head, addr, len);
 
 		desc = xchan->descs[chan->idx_head].desc;
 		if (sg[i].direction == XDMA_MEM_TO_DEV) {
@@ -364,12 +350,10 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 
 		if (sg[i].direction == XDMA_MEM_TO_DEV) {
 			if (sg[i].first == 1) {
-				//printf("SOP set\n");
 				desc->control |= htole32(CONTROL_GEN_SOP);
 			}
 
 			if (sg[i].last == 1) {
-				//printf("EOP set\n");
 				desc->control |= htole32(CONTROL_GEN_EOP);
 				desc->control |= htole32(CONTROL_TC_IRQ_EN | CONTROL_ET_IRQ_EN | CONTROL_ERR_M);
 			}
@@ -401,9 +385,11 @@ msgdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 
 	conf = &xchan->conf;
 
-	//printf("%s(%d)\n", __func__, device_get_unit(dev));
+#if 0
+	printf("%s(%d)\n", __func__, device_get_unit(dev));
+#endif
 
-	ret = xchan_desc_alloc(xchan, sizeof(struct msgdma_desc), 32);
+	ret = xchan_desc_alloc(xchan, sizeof(struct msgdma_desc), 4);
 	if (ret != 0) {
 		device_printf(sc->dev,
 		    "%s: Can't allocate descriptors.\n", __func__);
@@ -418,8 +404,10 @@ msgdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 		} else {
 			desc->next = htole32(xchan->descs[i+1].ds_addr);
 		}
-		//printf("%s(%d): desc %d vaddr %lx next paddr %x\n", __func__,
-		//    device_get_unit(dev), i, (uint64_t)desc, le32toh(desc->next));
+#if 0
+		printf("%s(%d): desc %d vaddr %lx next paddr %x\n", __func__,
+		    device_get_unit(dev), i, (uint64_t)desc, le32toh(desc->next));
+#endif
 	}
 
 	addr = xchan->descs[0].ds_addr;
