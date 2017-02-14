@@ -140,20 +140,6 @@ struct xdma_channel {
 
 	/* Interrupt handlers. */
 	TAILQ_HEAD(, xdma_intr_handler)	ie_handlers;
-
-	/* Descriptors. */
-	xdma_descriptor_t		*descs;
-	bus_dma_tag_t			dma_tag;
-	uint32_t			map_descr;
-	uint8_t				map_err;
-
-	/* Bufs */
-	xdma_buf_t			*bufs;
-	bus_dma_tag_t			dma_tag_bufs;
-	uint32_t			idx_count;
-	uint32_t			idx_head;
-	uint32_t			idx_tail;
-
 	TAILQ_ENTRY(xdma_channel)	xchan_next;
 
 	struct mtx			mtx_lock;
@@ -166,6 +152,18 @@ struct xdma_channel {
 	uint32_t			xr_tail;
 	uint32_t			xr_done;
 
+	/* Bus dma bufs. */
+	xdma_buf_t			*bufs;
+	bus_dma_tag_t			dma_tag_bufs;
+	uint32_t			buf_head;
+	uint32_t			buf_tail;
+
+	/* Descriptors. */
+	xdma_descriptor_t		*descs;
+	uint32_t			desc_count;
+	bus_dma_tag_t			dma_tag;
+	uint32_t			map_descr;
+	uint8_t				map_err;
 	struct xdma_sglist		*sg;
 };
 

@@ -797,7 +797,7 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 		m = xr->m;
 
 		/* At least one descriptor must be left empty. */
-		if (xchan->idx_count >= (conf->block_num - c)) {
+		if (xchan->desc_count >= (conf->block_num - c)) {
 			/*
 			 * No space yet available for entire
 			 * mbuf chain in the descriptor ring.
@@ -805,7 +805,7 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 			break;
 		}
 
-		i = xchan->idx_head;
+		i = xchan->buf_head;
 
 		error = bus_dmamap_load_mbuf_sg(xchan->dma_tag_bufs,
 		    xchan->bufs[i].map, m, seg, &nsegs, 0);
@@ -833,8 +833,8 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 		xdma_sglist_add(&sg[n], seg, nsegs, xr->direction);
 		n += nsegs;
 
-		xchan->idx_head = xchan_next_idx(xchan, xchan->idx_head);
-		atomic_add_int(&xchan->idx_count, 1);
+		xchan->buf_head = xchan_next_idx(xchan, xchan->buf_head);
+		atomic_add_int(&xchan->desc_count, nsegs);
 
 		xchan->xr_tail = ((xchan->xr_tail + 1) % xchan->xr_num);
 	}
@@ -996,9 +996,8 @@ xchan_desc_done(xdma_channel_t *xchan, uint32_t idx,
 	conf = &xchan->conf;
 	xdma = xchan->xdma;
 
-	b = &xchan->bufs[xchan->idx_tail];
+	b = &xchan->bufs[xchan->buf_tail];
 	xr = b->xr;
-	//xr = &xchan->xr[xchan->xr_tail];
 
 	atomic_subtract_int(&b->nsegs, 1);
 
@@ -1012,14 +1011,14 @@ xchan_desc_done(xdma_channel_t *xchan, uint32_t idx,
 		}
 
 		bus_dmamap_unload(xchan->dma_tag_bufs, b->map);
-		///todo
 		xr->status.error = status->error;
 		xr->status.transferred = status->transferred;
 		xr->done = 1;
 
-		xchan->idx_tail = xchan_next_idx(xchan, xchan->idx_tail);
-		atomic_subtract_int(&xchan->idx_count, 1);
+		xchan->buf_tail = xchan_next_idx(xchan, xchan->buf_tail);
 	}
+
+	atomic_subtract_int(&xchan->desc_count, 1);
 
 	return (0);
 }
