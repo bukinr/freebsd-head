@@ -83,7 +83,6 @@ struct xdma_request {
 	uintptr_t			src_addr;	/* Physical address. */
 	uintptr_t			dst_addr;	/* Physical address. */
 	int				done;
-	int				ready;
 };
 
 struct xdma_channel_config {
@@ -164,6 +163,7 @@ struct xdma_channel {
 
 	/* Request queue. */
 	struct xdma_request		*xr;
+	uint32_t			xr_count;
 	uint32_t			xr_head;
 	uint32_t			xr_tail;
 	uint32_t			xr_done;

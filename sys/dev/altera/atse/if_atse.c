@@ -221,7 +221,6 @@ atse_xdma_tx_intr(void *arg, xdma_transfer_status_t *status)
 	struct ifnet *ifp;
 	struct mbuf *m;
 	int err;
-	//int i;
 
 	sc = arg;
 
@@ -239,7 +238,7 @@ atse_xdma_tx_intr(void *arg, xdma_transfer_status_t *status)
 	}
 
 	ifp->if_drv_flags &= ~IFF_DRV_OACTIVE;
-	//atse_start_locked(ifp);
+	atse_start_locked(ifp);
 
 	ATSE_UNLOCK(sc);
 
@@ -380,6 +379,7 @@ static int
 atse_transmit_locked(struct ifnet *ifp, struct mbuf *m)
 {
 	struct atse_softc *sc;
+	int ret;
 
 	sc = ifp->if_softc;
 
@@ -391,10 +391,14 @@ atse_transmit_locked(struct ifnet *ifp, struct mbuf *m)
 		return (-1);
 	}
 
-	/* If anyone is interested give them a copy first. */
-	BPF_MTAP(sc->atse_ifp, m);
+	ret = xdma_enqueue_mbuf(sc->xchan_tx, &m, 0, XDMA_MEM_TO_DEV);
+	if (ret != 0) {
+		/* No space in request queue available yet. */
+		return (-1);
+	}
 
-	xdma_enqueue_mbuf(sc->xchan_tx, &m, 0, XDMA_MEM_TO_DEV);
+	/* If anyone is interested give them a copy. */
+	BPF_MTAP(sc->atse_ifp, m);
 
 	sc->txcount++;
 

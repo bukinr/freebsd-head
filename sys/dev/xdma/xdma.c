@@ -571,7 +571,7 @@ xdma_prep_sg(xdma_channel_t *xchan, uint32_t ndesc)
 	xdma_sglist_init(xchan, &xchan->sg);
 
 	/* xchan request queue. */
-	xchan->xr = malloc(sizeof(struct xdma_request) * 4096,
+	xchan->xr = malloc(sizeof(struct xdma_request) * 1024,
 	    M_XDMA, M_WAITOK | M_ZERO);
 	xchan->xr_head = 0;
 	xchan->xr_tail = 0;
@@ -627,7 +627,8 @@ xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **mp)
 	}
 
 	*mp = xr->m;
-	xchan->xr_done = ((xchan->xr_done + 1) % 4096);
+	xchan->xr_done = ((xchan->xr_done + 1) % 1024);
+	atomic_subtract_int(&xchan->xr_count, 1);
 
 	return (0);
 }
@@ -643,12 +644,12 @@ xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 	xdma = xchan->xdma;
 	conf = &xchan->conf;
 
-	xr = &xchan->xr[xchan->xr_head];
-	if (xr == NULL) {
-		device_printf(xdma->dma_dev,
-		    "%s: Can't allocate memory for request\n", __func__);
-		return (ENOMEM);
+	if (xchan->xr_count >= (1024 - 1)) {
+		/* No space is available yet. */
+		return (-1);
 	}
+
+	xr = &xchan->xr[xchan->xr_head];
 	xr->direction = dir;
 	xr->m = *mp;
 	if (dir == XDMA_MEM_TO_DEV) {
@@ -657,8 +658,8 @@ xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 		xr->src_addr = addr;
 	}
 	xr->done = 0;
-	xr->ready = 1;
-	xchan->xr_head = ((xchan->xr_head + 1) % 4096);
+	xchan->xr_head = ((xchan->xr_head + 1) % 1024);
+	atomic_add_int(&xchan->xr_count, 1);
 
 	return (0);
 }
@@ -748,7 +749,6 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
     struct xdma_sglist *sg)
 {
 	struct bus_dma_segment seg[MAX_NSEGS];
-	//struct xdma_request *xr_tmp;
 	struct xdma_request *xr;
 	xdma_controller_t *xdma;
 	xdma_config_t *conf;
@@ -764,16 +764,11 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 	n = 0;
 
 	for (;;) {
-		//printf("xr_head %d xr_tail %d xr_done %d\n",
-		//    xchan->xr_head, xchan->xr_tail, xchan->xr_done);
 		if (xchan->xr_tail == xchan->xr_head) {
-			//printf("break\n");
+			/* No space available. */
 			break;
 		}
 		xr = &xchan->xr[xchan->xr_tail];
-		//if (xr->ready == 0) {
-		//	break;
-		//}
 		c = 0;
 		for (m = xr->m; m != NULL; m = m->m_next) {
 			c++;
@@ -830,7 +825,7 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 		xchan->idx_head = xchan_next_idx(xchan, xchan->idx_head);
 		atomic_add_int(&xchan->idx_count, 1);
 
-		xchan->xr_tail = ((xchan->xr_tail + 1) % 4096);
+		xchan->xr_tail = ((xchan->xr_tail + 1) % 1024);
 	}
 
 	return (n);
@@ -848,12 +843,6 @@ xdma_queue_submit(xdma_channel_t *xchan)
 	conf = &xchan->conf;
 	xdma = xchan->xdma;
 	KASSERT(xdma != NULL, ("xdma is NULL"));
-
-	//if (xchan->xr_tail == xchan->xr_head) {
-	//printf("nothing to submit\n");
-	/* Nothing to submit */
-	//	return (0);
-	//}
 
 	sg = xchan->sg;
 
@@ -1016,7 +1005,6 @@ xdma_desc_done(xdma_channel_t *xchan, uint32_t idx,
 
 		m = xr->m;
 		m->m_pkthdr.len = m->m_len = status->transferred;
-		xr->ready = 0;
 		xr->done = 1;
 
 		xchan->idx_tail = xchan_next_idx(xchan, xchan->idx_tail);
