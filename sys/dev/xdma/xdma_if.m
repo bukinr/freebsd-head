@@ -59,7 +59,7 @@ METHOD int channel_prep_memcpy {
 };
 
 #
-#
+# Prepare xDMA channel for a scatter-gather transfer.
 #
 METHOD int channel_prep_sg {
 	device_t		dev;
@@ -67,7 +67,7 @@ METHOD int channel_prep_sg {
 };
 
 #
-#
+# Submit scatter-gather list to DMA.
 #
 METHOD int channel_submit_sg {
 	device_t			dev;
