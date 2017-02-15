@@ -825,9 +825,16 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 		error = bus_dmamap_load_mbuf_sg(xchan->dma_tag_bufs,
 		    xchan->bufs[i].map, m, seg, &nsegs, 0);
 		if (error != 0) {
-			device_printf(xdma->dma_dev,
-			    "%s: bus_dmamap_load_mbuf_sg failed with err %d\n",
-			    __func__, error);
+			if (error == ENOMEM) {
+				/*
+				 * Out of memory. Try again later.
+				 * TODO: count errors.
+				 */
+			} else {
+				device_printf(xdma->dma_dev,
+				    "%s: bus_dmamap_load_mbuf_sg failed with err %d\n",
+				    __func__, error);
+			}
 			break;
 		}
 
