@@ -770,7 +770,7 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 
 	for (;;) {
 		if (xchan->xr_processed == xchan->xr_head) {
-			/* No space available. */
+			/* All the requests processed. */
 			break;
 		}
 		xr = &xchan->xr[xchan->xr_processed];
