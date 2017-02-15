@@ -177,23 +177,22 @@ softdma_intr(void *arg)
 	struct softdma_channel *chan;
 	struct softdma_softc *sc;
 	int reg;
+	int err;
 
 	sc = arg;
 
 	chan = &sc->channels[0];
-
-	//printf("%s(%d)\n", __func__, device_get_unit(sc->dev));
 
 	reg = softdma_memc_read(sc, A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_EVENT);
 
 	if (reg & (A_ONCHIP_FIFO_MEM_CORE_EVENT_OVERFLOW | 
 	    A_ONCHIP_FIFO_MEM_CORE_EVENT_UNDERFLOW)) {
 		/* Errors */
-		//(reg & A_ONCHIP_FIFO_MEM_CORE_ERROR_MASK) >> A_ONCHIP_FIFO_MEM_CORE_ERROR_SHIFT) & 0xff);
+		err = (((reg & A_ONCHIP_FIFO_MEM_CORE_ERROR_MASK) >> \
+		    A_ONCHIP_FIFO_MEM_CORE_ERROR_SHIFT) & 0xff);
 	}
 
 	if (reg != 0) {
-		//printf("%s(%d): 0x%x\n", __func__, device_get_unit(sc->dev), reg);
 		softdma_memc_write(sc, A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_EVENT, reg);
 		chan->run = 1;
 		wakeup(chan);
@@ -279,9 +278,6 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 
 	sc = chan->sc;
 
-	//printf("%s(%d)\n", __func__, device_get_unit(sc->dev));
-	//printf("%s(%d): len %d\n", __func__, device_get_unit(sc->dev), desc->len);
-
 	bst = fdtbus_bs_tag;
 	bus_space_map(bst, desc->src_addr, desc->len, 0, &bsh_src);
 
@@ -290,17 +286,12 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 		fill_level = softdma_fill_level(sc);
 	}
 
-	//printf("%s(%d): TX fill_level is %d\n", __func__, device_get_unit(sc->dev), fill_level);
-
 	/* Set start of packet. */
 	if (desc->control & CONTROL_GEN_SOP) {
 		reg = 0;
 		reg |= A_ONCHIP_FIFO_MEM_CORE_SOP;
 		softdma_mem_write(sc, A_ONCHIP_FIFO_MEM_CORE_METADATA, reg);
 	}
-
-	//printf("copy %x -> device (%d bytes, %d times)\n",
-	//    (uint32_t)bsh_src, desc->len, desc->count);
 
 	src_offs = dst_offs = 0;
 	c = 0;
@@ -321,13 +312,6 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 
 	val = 0;
 	leftm = (desc->len - c);
-
-	//if (leftm == 0 && ((desc->control & CONTROL_GEN_EOP) == 0)) {
-	//	bus_space_unmap(bst, bsh_src, desc->len);
-	//	return (dst_offs);
-	//}
-
-	//printf("%s(%d): len %d leftm %d\n", __func__, device_get_unit(sc->dev), desc->len, leftm);
 	switch (leftm) {
 	case 1:
 		val = bus_space_read_1(bst, bsh_src, src_offs);
@@ -395,16 +379,11 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 
 	bst = fdtbus_bs_tag;
 
-	//printf("%s(%d)\n", __func__, device_get_unit(sc->dev));
-
 	fill_level = softdma_fill_level(sc);
 	if (fill_level == 0) {
-		//printf("%s(%d): read level is 0\n", __func__, device_get_unit(sc->dev));
+		/* Nothing to receive. */
 		return (0);
 	}
-
-	//printf("%s(%d): RX fill_level is %d, desc->len %d\n", __func__,
-	//    device_get_unit(sc->dev), fill_level, desc->len);
 
 	len = desc->len;
 	bus_space_map(bst, desc->dst_addr, len, 0, &bsh_dst);
@@ -416,26 +395,22 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 		meta = softdma_mem_read(sc, A_ONCHIP_FIFO_MEM_CORE_METADATA);
 
 		if (meta & A_ONCHIP_FIFO_MEM_CORE_ERROR_MASK) {
-			printf("RX ERROR\n");
 			error = 1;
 			break;
 		}
 
 		if ((meta & A_ONCHIP_FIFO_MEM_CORE_CHANNEL_MASK) != 0) {
-			printf("RX ERR: channel mask != 0\n");
 			error = 1;
 			break;
 		}
 
 		if (meta & A_ONCHIP_FIFO_MEM_CORE_SOP) {
-			//printf("RX: SOP received\n");
 			sop_rcvd = 1;
 		}
 
 		if (meta & A_ONCHIP_FIFO_MEM_CORE_EOP) {
 			empty = (meta & A_ONCHIP_FIFO_MEM_CORE_EMPTY_MASK) >>
 			    A_ONCHIP_FIFO_MEM_CORE_EMPTY_SHIFT;
-			//printf("RX: EOP received, empty %d\n", empty);
 		}
 
 		if (sop_rcvd == 0) {
@@ -465,9 +440,7 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 		fill_level = softdma_fill_level(sc);
 		timeout = 100;
 		while (fill_level == 0 && timeout--) {
-			//mtx_sleep(sc, &chan->mtx, 0, "softdma_delay", hz);
 			fill_level = softdma_fill_level(sc);
-			printf(".");
 		}
 		if (timeout == 0) {
 			/* No EOP received. Broken packet. */
@@ -475,8 +448,6 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 			break;
 		}
 	}
-
-	//printf("%s finished: tot_rcvd %d\n", __func__, dst_offs);
 
 	bus_space_unmap(bst, bsh_dst, len);
 
@@ -499,29 +470,20 @@ softdma_process_descriptors(struct softdma_channel *chan, xdma_transfer_status_t
 
 	sc = chan->sc;
 
-	//printf("%s\n", __func__);
-
 	xchan = chan->xchan;
-	//conf = &xchan->conf;
 
 	descs = xchan->descs;
 	desc = (struct softdma_desc *)descs[chan->idx_tail].desc;
 
 	while (desc != NULL) {
 
-		//printf("%s_\n", __func__);
-
 		if ((desc->control & CONTROL_OWN) == 0) {
 			break;
 		}
 
-		//printf("%s__\n", __func__);
-
 		if (desc->direction == XDMA_MEM_TO_DEV) {
-			//printf("%s tx\n", __func__);
 			ret = softdma_process_tx(chan, desc);
 		} else {
-			//printf("%s rx\n", __func__);
 			ret = softdma_process_rx(chan, desc);
 			if (ret == 0) {
 				/* No new data available. */
@@ -660,7 +622,6 @@ softdma_channel_free(device_t dev, struct xdma_channel *xchan)
 	xdma_assert_locked();
 
 	chan = (struct softdma_channel *)xchan->chan;
-	//mtx_destroy(&chan->mtx);
 	chan->used = 0;
 
 	return (0);
@@ -679,8 +640,6 @@ softdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 
 	conf = &xchan->conf;
 
-	//printf("%s\n", __func__);
-
 	ret = xchan_desc_alloc(xchan, sizeof(struct softdma_desc), 4);
 	if (ret != 0) {
 		device_printf(sc->dev,
@@ -696,9 +655,6 @@ softdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 		} else {
 			desc->next = xchan->descs[i+1].desc;
 		}
-
-		//printf("%s(%d): desc %d vaddr %lx next vaddr %lx\n", __func__,
-		//    device_get_unit(dev), i, (uint64_t)desc, (uint64_t)desc->next);
 	}
 
 
@@ -714,6 +670,7 @@ softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	struct softdma_softc *sc;
 	xdma_config_t *conf;
 	uint32_t enqueued;
+	uint32_t saved_dir;
 	uint32_t tmp;
 	uint32_t addr;
 	uint32_t len;
@@ -722,24 +679,14 @@ softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	sc = device_get_softc(dev);
 
 	conf = &xchan->conf;
-
 	chan = (struct softdma_channel *)xchan->chan;
 
-	//printf("%s(%d)\n", __func__, device_get_unit(dev));
-	//printf("%s(%d): nseg %d\n", __func__, device_get_unit(dev), (uint32_t)sg->sg_nseg);
-
 	enqueued = 0;
-
-	uint32_t saved_dir;
 
 	for (i = 0; i < sg_n; i++) {
 		addr = (uint32_t)sg[i].paddr;
 		len = (uint32_t)sg[i].len;
 
-		//printf("%s(%d): descr %d segment 0x%x (%d bytes)\n", __func__,
-		//    device_get_unit(dev), chan->idx_head, addr, len);
-
-		//desc = &descs[chan->idx_head];
 		desc = xchan->descs[chan->idx_head].desc;
 		if (sg[i].direction == XDMA_MEM_TO_DEV) {
 			desc->src_addr = addr;
@@ -783,7 +730,6 @@ softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	}
 
 	if (saved_dir == XDMA_MEM_TO_DEV) {
-		//softdma_memc_write(sc, A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_INT_ENABLE, ATSE_TX_EVENTS);
 		chan->run = 1;
 		wakeup(chan);
 	} else {
