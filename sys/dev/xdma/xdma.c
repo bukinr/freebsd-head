@@ -636,11 +636,11 @@ xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 
 	conf = &xchan->conf;
 
-	if (xchan->xr_done == xchan->xr_tail) {
+	if (xchan->xr_tail == xchan->xr_processed) {
 		return (-1);
 	}
 
-	xr = &xchan->xr[xchan->xr_done];
+	xr = &xchan->xr[xchan->xr_tail];
 	if (xr->done == 0) {
 		return (-1);
 	}
@@ -648,7 +648,7 @@ xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 	*mp = xr->m;
 	status->error = xr->status.error;
 	status->transferred = xr->status.transferred;
-	xchan->xr_done = xchan_next_req(xchan, xchan->xr_done);
+	xchan->xr_tail = xchan_next_req(xchan, xchan->xr_tail);
 	atomic_subtract_int(&xchan->xr_count, 1);
 
 	return (0);
@@ -790,11 +790,11 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 	n = 0;
 
 	for (;;) {
-		if (xchan->xr_tail == xchan->xr_head) {
+		if (xchan->xr_processed == xchan->xr_head) {
 			/* No space available. */
 			break;
 		}
-		xr = &xchan->xr[xchan->xr_tail];
+		xr = &xchan->xr[xchan->xr_processed];
 		c = 0;
 		for (m = xr->m; m != NULL; m = m->m_next) {
 			c++;
@@ -851,7 +851,7 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 		xchan->buf_head = xchan_next_buf(xchan, xchan->buf_head);
 		atomic_add_int(&xchan->descs_used_count, nsegs);
 
-		xchan->xr_tail = xchan_next_req(xchan, xchan->xr_tail);
+		xchan->xr_processed = xchan_next_req(xchan, xchan->xr_processed);
 	}
 
 	return (n);

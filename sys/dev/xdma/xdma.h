@@ -149,8 +149,8 @@ struct xdma_channel {
 	uint32_t			xr_num;
 	uint32_t			xr_count;
 	uint32_t			xr_head;
+	uint32_t			xr_processed;
 	uint32_t			xr_tail;
-	uint32_t			xr_done;
 
 	/* Bus dma bufs. */
 	xdma_buf_t			*bufs;
