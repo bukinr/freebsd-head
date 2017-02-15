@@ -82,7 +82,11 @@ struct xdma_request {
 	bool				done;
 };
 
-/* Cyclic/memcpy type of transfer. */
+/*
+ * Cyclic/memcpy type of transfer.
+ * Legacy configuration struct
+ * TODO: replace with xdma_request.
+ */
 struct xdma_channel_config {
 	enum xdma_direction	direction;
 	uintptr_t		src_addr;	/* Physical address. */
