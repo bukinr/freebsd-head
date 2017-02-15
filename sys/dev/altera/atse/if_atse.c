@@ -200,6 +200,8 @@ atse_rx_enqueue(struct atse_softc *sc, uint32_t n)
 	for (i = 0; i < n; i++) {
 		m = m_getcl(M_NOWAIT, MT_DATA, M_PKTHDR);
 		if (m == NULL) {
+			device_printf(sc->dev,
+			    "%s: Can't alloc rx mbuf\n", __func__);
 			return (-1);
 		}
 
@@ -409,10 +411,11 @@ atse_rxfilter_locked(struct atse_softc *sc)
 		val4 &= ~BASE_CFG_COMMAND_CONFIG_MHASH_SEL;
 
 	ifp = sc->atse_ifp;
-	if (ifp->if_flags & IFF_PROMISC)
+	if (ifp->if_flags & IFF_PROMISC) {
 		val4 |= BASE_CFG_COMMAND_CONFIG_PROMIS_EN;
-	else
+	} else {
 		val4 &= ~BASE_CFG_COMMAND_CONFIG_PROMIS_EN;
+	}
 
 	CSR_WRITE_4(sc, BASE_CFG_COMMAND_CONFIG, val4);
 
@@ -435,16 +438,18 @@ atse_rxfilter_locked(struct atse_softc *sc)
 		 */
 		if_maddr_rlock(ifp);
 		TAILQ_FOREACH(ifma, &ifp->if_multiaddrs, ifma_link) {
-			if (ifma->ifma_addr->sa_family != AF_LINK)
+			if (ifma->ifma_addr->sa_family != AF_LINK) {
 				continue;
+			}
 
 			h |= (1 << atse_mchash(sc,
 			    LLADDR((struct sockaddr_dl *)ifma->ifma_addr)));
 		}
 		if_maddr_runlock(ifp);
-		for (i = 0; i <= MHASH_LEN; i++)
+		for (i = 0; i <= MHASH_LEN; i++) {
 			CSR_WRITE_4(sc, MHASH_START + i,
 			    (h & (1 << i)) ? 0x01 : 0x00);
+		}
 	}
 
 	return (0);
