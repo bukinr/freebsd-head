@@ -279,19 +279,13 @@ xdma_desc_alloc_bus_dma(xdma_channel_t *xchan, uint32_t desc_size,
 {
 	xdma_descriptor_t *desc;
 	xdma_controller_t *xdma;
-	xdma_config_t *conf;
 	int nsegments;
 	int err;
 	int i;
 
 	xdma = xchan->xdma;
-	conf = &xchan->conf;
 
-	if (xchan->flags & XCHAN_TYPE_SG) {
-		nsegments = xchan->descs_num;
-	} else {
-		nsegments = conf->block_num;
-	}
+	nsegments = xchan->descs_num;
 
 	err = bus_dma_tag_create(
 	    bus_get_dma_tag(xdma->dev),
@@ -407,7 +401,6 @@ int
 xchan_desc_alloc(xdma_channel_t *xchan, uint32_t desc_size, uint32_t align)
 {
 	xdma_controller_t *xdma;
-	xdma_config_t *conf;
 	int ret;
 
 	XCHAN_ASSERT_LOCKED(xchan);
@@ -430,8 +423,6 @@ xchan_desc_alloc(xdma_channel_t *xchan, uint32_t desc_size, uint32_t align)
 		    "%s: Channel has no configuration.\n", __func__);
 		return (-1);
 	}
-
-	conf = &xchan->conf;
 
 	ret = xdma_desc_alloc_bus_dma(xchan, desc_size, align);
 	if (ret != 0) {
@@ -460,10 +451,7 @@ int
 xchan_desc_free(xdma_channel_t *xchan)
 {
 	xdma_descriptor_t *desc;
-	xdma_config_t *conf;
 	int i;
-
-	conf = &xchan->conf;
 
 	if ((xchan->flags & XCHAN_DESC_ALLOCATED) == 0) {
 		/* No descriptors allocated. */
@@ -525,6 +513,8 @@ xdma_prep_memcpy(xdma_channel_t *xchan, uintptr_t src_addr,
 	conf->dst_addr = dst_addr;
 	conf->block_len = len;
 	conf->block_num = 1;
+
+	xchan->descs_num = conf->block_num;
 
 	xchan->flags |= (XCHAN_CONFIGURED | XCHAN_TYPE_MEMCPY);
 
@@ -632,9 +622,6 @@ xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
     xdma_transfer_status_t *status)
 {
 	struct xdma_request *xr;
-	xdma_config_t *conf;
-
-	conf = &xchan->conf;
 
 	if (xchan->xr_tail == xchan->xr_processed) {
 		return (-1);
@@ -686,9 +673,6 @@ xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 int
 xchan_desc_sync_post(xdma_channel_t *xchan, uint32_t i)
 {
-	xdma_config_t *conf;
-
-	conf = &xchan->conf;
 
 	if (xchan->flags & XCHAN_DESC_ALLOCATED) {
 		bus_dmamap_sync(xchan->dma_tag, xchan->descs[i].dma_map,
@@ -701,9 +685,6 @@ xchan_desc_sync_post(xdma_channel_t *xchan, uint32_t i)
 int
 xchan_desc_sync_pre(xdma_channel_t *xchan, uint32_t i)
 {
-	xdma_config_t *conf;
-
-	conf = &xchan->conf;
 
 	if (xchan->flags & XCHAN_DESC_ALLOCATED) {
 		bus_dmamap_sync(xchan->dma_tag, xchan->descs[i].dma_map,
@@ -777,7 +758,6 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 	struct bus_dma_segment seg[MAX_NSEGS];
 	struct xdma_request *xr;
 	xdma_controller_t *xdma;
-	xdma_config_t *conf;
 	struct mbuf *m;
 	int error, nsegs;
 	uint32_t c;
@@ -785,7 +765,6 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 	int i;
 
 	xdma = xchan->xdma;
-	conf = &xchan->conf;
 
 	n = 0;
 
@@ -869,11 +848,9 @@ xdma_queue_submit(xdma_channel_t *xchan)
 {
 	struct xdma_sglist *sg;
 	xdma_controller_t *xdma;
-	xdma_config_t *conf;
 	uint32_t sg_n;
 	int ret;
 
-	conf = &xchan->conf;
 	xdma = xchan->xdma;
 	KASSERT(xdma != NULL, ("xdma is NULL"));
 
@@ -924,6 +901,8 @@ xdma_prep_cyclic(xdma_channel_t *xchan, enum xdma_direction dir,
 	conf->block_num = block_num;
 	conf->src_width = src_width;
 	conf->dst_width = dst_width;
+
+	xchan->descs_num = conf->block_num;
 
 	xchan->flags |= (XCHAN_CONFIGURED | XCHAN_TYPE_CYCLIC);
 
@@ -1012,10 +991,8 @@ xchan_desc_done(xdma_channel_t *xchan, uint32_t idx,
 {
 	struct xdma_request *xr;
 	xdma_controller_t *xdma;
-	xdma_config_t *conf;
 	xdma_buf_t *b;
 
-	conf = &xchan->conf;
 	xdma = xchan->xdma;
 
 	b = &xchan->bufs[xchan->buf_tail];

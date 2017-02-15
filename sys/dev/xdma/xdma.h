@@ -190,6 +190,7 @@ int xchan_desc_done(xdma_channel_t *xchan, uint32_t idx, xdma_transfer_status_t 
 int xchan_desc_sync_pre(xdma_channel_t *xchan, uint32_t);
 int xchan_desc_sync_post(xdma_channel_t *xchan, uint32_t);
 int xchan_bufs_free(xdma_channel_t *xchan);
+
 uint32_t xchan_next_buf(xdma_channel_t *xchan, uint32_t curidx);
 uint32_t xchan_next_desc(xdma_channel_t *xchan, uint32_t curidx);
 uint32_t xchan_next_req(xdma_channel_t *xchan, uint32_t curidx);
