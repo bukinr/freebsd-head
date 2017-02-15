@@ -71,7 +71,7 @@ struct xdma_controller {
 
 typedef struct xdma_controller xdma_controller_t;
 
-/* SG type of transfer */
+/* SG type of transfer. */
 struct xdma_request {
 	struct mbuf			*m;
 	enum xdma_direction		direction;
@@ -82,7 +82,7 @@ struct xdma_request {
 	bool				done;
 };
 
-/* Cyclic/memcpy type of transfer */
+/* Cyclic/memcpy type of transfer. */
 struct xdma_channel_config {
 	enum xdma_direction	direction;
 	uintptr_t		src_addr;	/* Physical address. */
@@ -154,13 +154,15 @@ struct xdma_channel {
 
 	/* Bus dma bufs. */
 	xdma_buf_t			*bufs;
+	uint32_t			bufs_num;
 	bus_dma_tag_t			dma_tag_bufs;
 	uint32_t			buf_head;
 	uint32_t			buf_tail;
 
 	/* Descriptors. */
 	xdma_descriptor_t		*descs;
-	uint32_t			desc_count;
+	uint32_t			descs_num;
+	uint32_t			descs_used_count;
 	bus_dma_tag_t			dma_tag;
 	uint32_t			map_descr;
 	uint8_t				map_err;
@@ -169,10 +171,11 @@ struct xdma_channel {
 
 typedef struct xdma_channel xdma_channel_t;
 
-/* xDMA controller alloc/free */
+/* xDMA controller ops */
 xdma_controller_t *xdma_ofw_get(device_t dev, const char *prop);
 int xdma_put(xdma_controller_t *xdma);
 
+/* xDMA channel ops */
 xdma_channel_t * xdma_channel_alloc(xdma_controller_t *);
 int xdma_channel_free(xdma_channel_t *);
 
@@ -187,7 +190,9 @@ int xchan_desc_done(xdma_channel_t *xchan, uint32_t idx, xdma_transfer_status_t 
 int xchan_desc_sync_pre(xdma_channel_t *xchan, uint32_t);
 int xchan_desc_sync_post(xdma_channel_t *xchan, uint32_t);
 int xchan_bufs_free(xdma_channel_t *xchan);
-uint32_t xchan_next_idx(xdma_channel_t *xchan, uint32_t curidx);
+uint32_t xchan_next_buf(xdma_channel_t *xchan, uint32_t curidx);
+uint32_t xchan_next_desc(xdma_channel_t *xchan, uint32_t curidx);
+uint32_t xchan_next_req(xdma_channel_t *xchan, uint32_t curidx);
 
 /* xchan queues operations */
 int xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **m, xdma_transfer_status_t *);

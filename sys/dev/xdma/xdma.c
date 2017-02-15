@@ -287,7 +287,11 @@ xdma_desc_alloc_bus_dma(xdma_channel_t *xchan, uint32_t desc_size,
 	xdma = xchan->xdma;
 	conf = &xchan->conf;
 
-	nsegments = conf->block_num;
+	if (xchan->flags & XCHAN_TYPE_SG) {
+		nsegments = xchan->descs_num;
+	} else {
+		nsegments = conf->block_num;
+	}
 
 	err = bus_dma_tag_create(
 	    bus_get_dma_tag(xdma->dev),
@@ -349,15 +353,13 @@ static int
 xdma_bufs_alloc_bus_dma(xdma_channel_t *xchan, uint32_t align)
 {
 	xdma_controller_t *xdma;
-	xdma_config_t *conf;
 	int nsegments;
 	int err;
 	int i;
 
 	xdma = xchan->xdma;
-	conf = &xchan->conf;
 
-	nsegments = conf->block_num;
+	nsegments = xchan->bufs_num;
 
 	xchan->bufs = malloc(nsegments * sizeof(struct xchan_buf),
 	    M_XDMA, (M_WAITOK | M_ZERO));
@@ -468,7 +470,7 @@ xchan_desc_free(xdma_channel_t *xchan)
 		return (-1);
 	}
 
-	for (i = 0; i < conf->block_num; i++) {
+	for (i = 0; i < xchan->descs_num; i++) {
 		desc = &xchan->descs[i];
 		bus_dmamap_unload(xchan->dma_tag, desc->dma_map);
 		bus_dmamem_free(xchan->dma_tag, desc->desc, desc->dma_map);
@@ -485,18 +487,15 @@ xchan_desc_free(xdma_channel_t *xchan)
 int
 xchan_bufs_free(xdma_channel_t *xchan)
 {
-	xdma_config_t *conf;
 	xdma_buf_t *b;
 	int i;
-
-	conf = &xchan->conf;
 
 	if ((xchan->flags & XCHAN_BUFS_ALLOCATED) == 0) {
 		/* No bufs allocated. */
 		return (-1);
 	}
 
-	for (i = 0; i < conf->block_num; i++) {
+	for (i = 0; i < xchan->bufs_num; i++) {
 		b = &xchan->bufs[i];
 		bus_dmamap_destroy(xchan->dma_tag_bufs, b->map);
 	}
@@ -552,7 +551,6 @@ int
 xdma_prep_sg(xdma_channel_t *xchan, uint32_t ndesc, uint32_t xr_num)
 {
 	xdma_controller_t *xdma;
-	xdma_config_t *conf;
 	int ret;
 
 	xdma = xchan->xdma;
@@ -565,19 +563,26 @@ xdma_prep_sg(xdma_channel_t *xchan, uint32_t ndesc, uint32_t xr_num)
 		return (-1);
 	}
 
-	conf = &xchan->conf;
-	conf->block_num = ndesc;
+	xchan->descs_num = ndesc;
+	xchan->bufs_num = ndesc;
+	xchan->xr_num = xr_num;
 
+	/* Allocate sglist. */
 	ret = xchan_sglist_init(xchan);
 	if (ret != 0) {
 		device_printf(xdma->dev,
 		    "%s: Can't allocate sglist.\n", __func__);
+		return (-1);
 	}
 
-	/* xchan request queue. */
+	/* Allocate request queue. */
 	xchan->xr = malloc(sizeof(struct xdma_request) * xr_num,
 	    M_XDMA, M_WAITOK | M_ZERO);
-	xchan->xr_num = xr_num;
+	if (xchan->xr == NULL) {
+		device_printf(xdma->dev,
+		    "%s: Can't allocate request queue.\n", __func__);
+		return (-1);
+	}
 
 	xchan->flags |= (XCHAN_CONFIGURED | XCHAN_TYPE_SG);
 
@@ -602,13 +607,24 @@ xdma_prep_sg(xdma_channel_t *xchan, uint32_t ndesc, uint32_t xr_num)
 }
 
 inline uint32_t
-xchan_next_idx(xdma_channel_t *xchan, uint32_t curidx)
+xchan_next_req(xdma_channel_t *xchan, uint32_t curidx)
 {
-	xdma_config_t *conf;
 
-	conf = &xchan->conf;
+	return ((curidx + 1) % xchan->xr_num);
+}
 
-	return ((curidx + 1) % conf->block_num);
+inline uint32_t
+xchan_next_buf(xdma_channel_t *xchan, uint32_t curidx)
+{
+
+	return ((curidx + 1) % xchan->bufs_num);
+}
+
+inline uint32_t
+xchan_next_desc(xdma_channel_t *xchan, uint32_t curidx)
+{
+
+	return ((curidx + 1) % xchan->descs_num);
 }
 
 int
@@ -632,7 +648,7 @@ xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 	*mp = xr->m;
 	status->error = xr->status.error;
 	status->transferred = xr->status.transferred;
-	xchan->xr_done = ((xchan->xr_done + 1) % xchan->xr_num);
+	xchan->xr_done = xchan_next_req(xchan, xchan->xr_done);
 	atomic_subtract_int(&xchan->xr_count, 1);
 
 	return (0);
@@ -661,7 +677,7 @@ xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 		xr->src_addr = addr;
 	}
 	xr->done = 0;
-	xchan->xr_head = ((xchan->xr_head + 1) % xchan->xr_num);
+	xchan->xr_head = xchan_next_req(xchan, xchan->xr_head);
 	atomic_add_int(&xchan->xr_count, 1);
 
 	return (0);
@@ -700,16 +716,13 @@ xchan_desc_sync_pre(xdma_channel_t *xchan, uint32_t i)
 static int
 xchan_sglist_init(xdma_channel_t *xchan)
 {
-	xdma_config_t *conf;
 	uint32_t sz;
-
-	conf = &xchan->conf;
 
 	if (xchan->flags & XCHAN_SGLIST_ALLOCATED) {
 		return (-1);
 	}
 
-	sz = (sizeof(struct xdma_sglist) * conf->block_num);
+	sz = (sizeof(struct xdma_sglist) * xchan->descs_num);
 
 	xchan->sg = malloc(sz, M_XDMA, M_WAITOK | M_ZERO);
 	if (xchan->sg == NULL) {
@@ -799,7 +812,7 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 		m = xr->m;
 
 		/* At least one descriptor must be left empty. */
-		if (xchan->desc_count >= (conf->block_num - c)) {
+		if (xchan->descs_used_count >= (xchan->descs_num - c)) {
 			/*
 			 * No space yet available for entire
 			 * mbuf chain in the descriptor ring.
@@ -835,10 +848,10 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 		xdma_sglist_add(&sg[n], seg, nsegs, xr->direction);
 		n += nsegs;
 
-		xchan->buf_head = xchan_next_idx(xchan, xchan->buf_head);
-		atomic_add_int(&xchan->desc_count, nsegs);
+		xchan->buf_head = xchan_next_buf(xchan, xchan->buf_head);
+		atomic_add_int(&xchan->descs_used_count, nsegs);
 
-		xchan->xr_tail = ((xchan->xr_tail + 1) % xchan->xr_num);
+		xchan->xr_tail = xchan_next_req(xchan, xchan->xr_tail);
 	}
 
 	return (n);
@@ -1017,10 +1030,10 @@ xchan_desc_done(xdma_channel_t *xchan, uint32_t idx,
 		xr->status.transferred = status->transferred;
 		xr->done = 1;
 
-		xchan->buf_tail = xchan_next_idx(xchan, xchan->buf_tail);
+		xchan->buf_tail = xchan_next_buf(xchan, xchan->buf_tail);
 	}
 
-	atomic_subtract_int(&xchan->desc_count, 1);
+	atomic_subtract_int(&xchan->descs_used_count, 1);
 
 	return (0);
 }

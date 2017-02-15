@@ -88,16 +88,6 @@ struct msgdma_softc {
 	struct msgdma_channel	channels[MSGDMA_NCHANNELS];
 };
 
-static inline uint32_t
-next_idx(xdma_channel_t *xchan, uint32_t curidx)
-{
-	xdma_config_t *conf;
-
-	conf = &xchan->conf;
-
-	return ((curidx + 1) % conf->block_num);
-}
-
 static struct resource_spec msgdma_spec[] = {
 	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },
 	{ SYS_RES_MEMORY,	1,	RF_ACTIVE },
@@ -127,13 +117,11 @@ msgdma_intr(void *arg)
 	struct msgdma_channel *chan;
 	struct xdma_channel *xchan;
 	struct msgdma_softc *sc;
-	xdma_config_t *conf;
 	uint32_t tot_copied;
 
 	sc = arg;
 	chan = &sc->channels[0];
 	xchan = chan->xchan;
-	conf = &xchan->conf;
 
 #if 0
 	printf("%s(%d): status 0x%08x next_descr 0x%08x, control 0x%08x\n", __func__,
@@ -157,7 +145,7 @@ msgdma_intr(void *arg)
 		st.error = 0;
 		st.transferred = le32toh(desc->transferred);
 		xchan_desc_done(xchan, chan->idx_tail, &st);
-		chan->idx_tail = next_idx(xchan, chan->idx_tail);
+		chan->idx_tail = xchan_next_desc(xchan, chan->idx_tail);
 	}
 
 	WRITE4_DESC(sc, PF_STATUS, PF_STATUS_IRQ);
@@ -319,7 +307,6 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	struct msgdma_channel *chan;
 	struct msgdma_desc *desc;
 	struct msgdma_softc *sc;
-	xdma_config_t *conf;
 	uint32_t addr;
 	uint32_t len;
 	uint32_t tmp;
@@ -327,7 +314,6 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 
 	sc = device_get_softc(dev);
 
-	conf = &xchan->conf;
 	chan = (struct msgdma_channel *)xchan->chan;
 
 	for (i = 0; i < sg_n; i++) {
@@ -362,7 +348,7 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 			desc->control |= htole32(CONTROL_TC_IRQ_EN | CONTROL_ET_IRQ_EN | CONTROL_ERR_M);
 		}
 		tmp = chan->idx_head;
-		chan->idx_head = next_idx(xchan, chan->idx_head);
+		chan->idx_head = xchan_next_desc(xchan, chan->idx_head);
 		desc->control |= htole32(CONTROL_OWN | CONTROL_GO);
 		xchan_desc_sync_pre(xchan, tmp);
 	}
@@ -375,15 +361,12 @@ msgdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 {
 	struct msgdma_desc *desc;
 	struct msgdma_softc *sc;
-	xdma_config_t *conf;
 	uint32_t addr;
 	uint32_t reg;
 	int ret;
 	int i;
 
 	sc = device_get_softc(dev);
-
-	conf = &xchan->conf;
 
 #if 0
 	printf("%s(%d)\n", __func__, device_get_unit(dev));
@@ -396,10 +379,10 @@ msgdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 		return (-1);
 	}
 
-	for (i = 0; i < conf->block_num; i++) {
+	for (i = 0; i < xchan->descs_num; i++) {
 		desc = xchan->descs[i].desc;
 
-		if (i == (conf->block_num - 1)) {
+		if (i == (xchan->descs_num - 1)) {
 			desc->next = htole32(xchan->descs[0].ds_addr);
 		} else {
 			desc->next = htole32(xchan->descs[i+1].ds_addr);

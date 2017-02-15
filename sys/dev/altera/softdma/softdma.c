@@ -512,7 +512,7 @@ softdma_process_descriptors(struct softdma_channel *chan, xdma_transfer_status_t
 			break;
 		}
 
-		chan->idx_tail = xchan_next_idx(xchan, chan->idx_tail);
+		chan->idx_tail = xchan_next_desc(xchan, chan->idx_tail);
 
 		/* Process next descriptor, if any. */
 		desc = desc->next;
@@ -632,13 +632,10 @@ softdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 {
 	struct softdma_desc *desc;
 	struct softdma_softc *sc;
-	xdma_config_t *conf;
 	int ret;
 	int i;
 
 	sc = device_get_softc(dev);
-
-	conf = &xchan->conf;
 
 	ret = xchan_desc_alloc(xchan, sizeof(struct softdma_desc), 4);
 	if (ret != 0) {
@@ -647,10 +644,10 @@ softdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 		return (-1);
 	}
 
-	for (i = 0; i < conf->block_num; i++) {
+	for (i = 0; i < xchan->descs_num; i++) {
 		desc = xchan->descs[i].desc;
 
-		if (i == (conf->block_num - 1)) {
+		if (i == (xchan->descs_num - 1)) {
 			desc->next = xchan->descs[0].desc;
 		} else {
 			desc->next = xchan->descs[i+1].desc;
@@ -668,7 +665,6 @@ softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	struct softdma_channel *chan;
 	struct softdma_desc *desc;
 	struct softdma_softc *sc;
-	xdma_config_t *conf;
 	uint32_t enqueued;
 	uint32_t saved_dir;
 	uint32_t tmp;
@@ -678,7 +674,6 @@ softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 
 	sc = device_get_softc(dev);
 
-	conf = &xchan->conf;
 	chan = (struct softdma_channel *)xchan->chan;
 
 	enqueued = 0;
@@ -718,7 +713,7 @@ softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 		}
 
 		tmp = chan->idx_head;
-		chan->idx_head = xchan_next_idx(xchan, chan->idx_head);
+		chan->idx_head = xchan_next_desc(xchan, chan->idx_head);
 		desc->control |= CONTROL_OWN;
 		xchan_desc_sync_pre(xchan, tmp);
 
