@@ -155,6 +155,10 @@ xdma_channel_free(xdma_channel_t *xchan)
 	xchan_bufs_free(xchan);
 	xchan_sglist_free(xchan);
 
+	if (xchan->flags & XCHAN_TYPE_SG) {
+		free(xchan->xr, M_XDMA);
+	}
+
 	mtx_destroy(&xchan->mtx_lock);
 
 	TAILQ_REMOVE(&xdma->channels, xchan, xchan_next);
