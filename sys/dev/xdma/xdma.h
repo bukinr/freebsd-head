@@ -71,21 +71,22 @@ struct xdma_controller {
 
 typedef struct xdma_controller xdma_controller_t;
 
+/* SG type of transfer */
 struct xdma_request {
 	struct mbuf			*m;
 	enum xdma_direction		direction;
-	uintptr_t			src_addr;	/* Physical address. */
-	uintptr_t			dst_addr;	/* Physical address. */
+	bus_addr_t			src_addr;	/* Physical address. */
+	bus_addr_t			dst_addr;	/* Physical address. */
+	bus_size_t			len;
 	xdma_transfer_status_t		status;
 	bool				done;
 };
 
+/* Cyclic/memcpy type of transfer */
 struct xdma_channel_config {
 	enum xdma_direction	direction;
 	uintptr_t		src_addr;	/* Physical address. */
 	uintptr_t		dst_addr;	/* Physical address. */
-	bool			src_incr;	/* Address increment. */
-	bool			dst_incr;	/* Address increment. */
 	int			block_len;	/* In bytes. */
 	int			block_num;	/* Count of blocks. */
 	int			src_width;	/* In bytes. */
@@ -115,7 +116,7 @@ struct xchan_buf {
 	bus_dmamap_t			map;
 	struct xdma_request		*xr;
 	uint32_t			nsegs;
-	uint32_t			nsegs_orig;
+	uint32_t			nsegs_left;
 };
 
 typedef struct xchan_buf xdma_buf_t;

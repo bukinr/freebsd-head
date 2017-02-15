@@ -644,10 +644,8 @@ xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 {
 	struct xdma_request *xr;
 	xdma_controller_t *xdma;
-	xdma_config_t *conf;
 
 	xdma = xchan->xdma;
-	conf = &xchan->conf;
 
 	if (xchan->xr_count >= (xchan->xr_num - 1)) {
 		/* No space is available yet. */
@@ -832,7 +830,7 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 
 		xchan->bufs[i].xr = xr;
 		xchan->bufs[i].nsegs = nsegs;
-		xchan->bufs[i].nsegs_orig = nsegs;
+		xchan->bufs[i].nsegs_left = nsegs;
 
 		xdma_sglist_add(&sg[n], seg, nsegs, xr->direction);
 		n += nsegs;
@@ -1003,9 +1001,9 @@ xchan_desc_done(xdma_channel_t *xchan, uint32_t idx,
 	b = &xchan->bufs[xchan->buf_tail];
 	xr = b->xr;
 
-	atomic_subtract_int(&b->nsegs, 1);
+	atomic_subtract_int(&b->nsegs_left, 1);
 
-	if (b->nsegs == 0) {
+	if (b->nsegs_left == 0) {
 		if (xr->direction == XDMA_MEM_TO_DEV) {
 			bus_dmamap_sync(xchan->dma_tag_bufs, b->map, 
 			    BUS_DMASYNC_POSTWRITE);
