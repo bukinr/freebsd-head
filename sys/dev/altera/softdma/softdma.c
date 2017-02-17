@@ -48,9 +48,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/rman.h>
 
 #include <machine/bus.h>
-#include <machine/fdt.h>
-
-#include <machine/cache.h>
 
 #ifdef FDT
 #include <dev/fdt/fdt_common.h>
@@ -89,8 +86,8 @@ struct softdma_channel {
 };
 
 struct softdma_desc {
-	uint32_t		src_addr;
-	uint32_t		dst_addr;
+	uint64_t		src_addr;
+	uint64_t		dst_addr;
 	uint32_t		len;
 	uint32_t		access_width;
 	uint32_t		count;
@@ -265,10 +262,8 @@ softdma_detach(device_t dev)
 static int
 softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 {
-	uint32_t src_offs, dst_offs;
-	bus_space_handle_t bsh_src;
 	struct softdma_softc *sc;
-	bus_space_tag_t bst;
+	uint32_t src_offs, dst_offs;
 	uint32_t reg;
 	uint32_t fill_level;
 	uint32_t leftm;
@@ -277,9 +272,6 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 	uint32_t c;
 
 	sc = chan->sc;
-
-	bst = fdtbus_bs_tag;
-	bus_space_map(bst, desc->src_addr, desc->len, 0, &bsh_src);
 
 	fill_level = softdma_fill_level(sc);
 	while (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
@@ -296,7 +288,7 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 	src_offs = dst_offs = 0;
 	c = 0;
 	while ((desc->len - c) >= 4) {
-		val = bus_space_read_4(bst, bsh_src, src_offs);
+		val = *(uint32_t *)(desc->src_addr + src_offs);
 		bus_write_4(sc->res[0], A_ONCHIP_FIFO_MEM_CORE_DATA, val);
 		if (desc->src_incr)
 			src_offs += 4;
@@ -312,20 +304,21 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 
 	val = 0;
 	leftm = (desc->len - c);
+
 	switch (leftm) {
 	case 1:
-		val = bus_space_read_1(bst, bsh_src, src_offs);
+		val = *(uint8_t *)(desc->src_addr + src_offs);
 		val <<= 24;
 		src_offs += 1;
 		break;
 	case 2:
 	case 3:
-		val = bus_space_read_2(bst, bsh_src, src_offs);
+		val = *(uint16_t *)(desc->src_addr + src_offs);
 		val <<= 16;
 		src_offs += 2;
 
 		if (leftm == 3) {
-			tmp = bus_space_read_1(bst, bsh_src, src_offs);
+			tmp = *(uint8_t *)(desc->src_addr + src_offs);
 			val |= (tmp << 8);
 			src_offs += 1;
 		}
@@ -351,7 +344,6 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 
 	/* Final write */
 	bus_write_4(sc->res[0], A_ONCHIP_FIFO_MEM_CORE_DATA, val);
-	bus_space_unmap(bst, bsh_src, desc->len);
 
 	return (dst_offs);
 }
@@ -360,9 +352,7 @@ static int
 softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 {
 	uint32_t src_offs, dst_offs;
-	bus_space_handle_t bsh_dst;
 	struct softdma_softc *sc;
-	bus_space_tag_t bst;
 	uint32_t fill_level;
 	uint32_t empty;
 	uint32_t meta;
@@ -377,8 +367,6 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 	src_offs = dst_offs = 0;
 	error = 0;
 
-	bst = fdtbus_bs_tag;
-
 	fill_level = softdma_fill_level(sc);
 	if (fill_level == 0) {
 		/* Nothing to receive. */
@@ -386,7 +374,6 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 	}
 
 	len = desc->len;
-	bus_space_map(bst, desc->dst_addr, len, 0, &bsh_dst);
 
 	sop_rcvd = 0;
 	while (fill_level) {
@@ -418,16 +405,14 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 			break;
 		}
 
-		bus_space_write_2(bst, bsh_dst, dst_offs, ((data >> 16) & 0xffff));
-		dst_offs += 2;
-
 		if (empty == 0) {
-			bus_space_write_2(bst, bsh_dst, dst_offs,
-			    ((data >> 0) & 0xffff));
-			dst_offs += 2;
+			*(uint32_t *)(desc->dst_addr + dst_offs) = data;
+			dst_offs += 4;
 		} else if (empty == 1) {
-			bus_space_write_1(bst, bsh_dst, dst_offs,
-			    ((data >> 8) & 0xff));
+			*(uint16_t *)(desc->dst_addr + dst_offs) = ((data >> 16) & 0xffff);
+			dst_offs += 2;
+
+			*(uint8_t *)(desc->dst_addr + dst_offs) = ((data >> 8) & 0xff);
 			dst_offs += 1;
 		} else {
 			panic("empty %d\n", empty);
@@ -448,8 +433,6 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 			break;
 		}
 	}
-
-	bus_space_unmap(bst, bsh_dst, len);
 
 	if (error) {
 		return (-1);
@@ -593,6 +576,7 @@ softdma_channel_alloc(device_t dev, struct xdma_channel *xchan)
 		if (chan->used == 0) {
 			chan->xchan = xchan;
 			xchan->chan = (void *)chan;
+			xchan->caps = XCHAN_CAP_VADDR;
 			chan->index = i;
 			chan->idx_head = 0;
 			chan->idx_tail = 0;

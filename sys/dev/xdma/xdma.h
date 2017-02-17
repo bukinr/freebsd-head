@@ -122,6 +122,7 @@ struct xchan_buf {
 	struct xdma_request		*xr;
 	uint32_t			nsegs;
 	uint32_t			nsegs_left;
+	void				*cbuf;
 };
 
 typedef struct xchan_buf xdma_buf_t;
@@ -130,7 +131,7 @@ struct xdma_channel {
 	xdma_controller_t		*xdma;
 	xdma_config_t			conf;
 
-	uint16_t			flags;
+	uint32_t			flags;
 #define	XCHAN_DESC_ALLOCATED		(1 << 0)
 #define	XCHAN_BUFS_ALLOCATED		(1 << 1)
 #define	XCHAN_SGLIST_ALLOCATED		(1 << 2)
@@ -139,6 +140,11 @@ struct xdma_channel {
 #define	XCHAN_TYPE_MEMCPY		(1 << 5)
 #define	XCHAN_TYPE_FIFO			(1 << 6)
 #define	XCHAN_TYPE_SG			(1 << 7)
+
+	uint32_t			caps;
+#define	XCHAN_CAP_VADDR			(1 << 0)
+#define	XCHAN_CAP_SEGS			(1 << 1)
+#define	XCHAN_CAP_BUSDMA		(1 << 2)
 
 	/* A real hardware driver channel. */
 	void				*chan;
