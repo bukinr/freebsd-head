@@ -668,7 +668,6 @@ softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	uint32_t enqueued;
 	uint32_t saved_dir;
 	uint32_t tmp;
-	uint32_t addr;
 	uint32_t len;
 	int i;
 
@@ -679,21 +678,16 @@ softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	enqueued = 0;
 
 	for (i = 0; i < sg_n; i++) {
-		addr = (uint32_t)sg[i].paddr;
 		len = (uint32_t)sg[i].len;
 
 		desc = xchan->descs[chan->idx_head].desc;
+		desc->src_addr = sg[i].src_paddr;
+		desc->dst_addr = sg[i].dst_paddr;
 		if (sg[i].direction == XDMA_MEM_TO_DEV) {
-			desc->src_addr = addr;
 			desc->src_incr = 1;
-
-			desc->dst_addr = 0;
 			desc->dst_incr = 0;
 		} else {
-			desc->src_addr = 0;
 			desc->src_incr = 0;
-
-			desc->dst_addr = addr;
 			desc->dst_incr = 1;
 		}
 		desc->direction = sg[i].direction;

@@ -307,7 +307,6 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	struct msgdma_channel *chan;
 	struct msgdma_desc *desc;
 	struct msgdma_softc *sc;
-	uint32_t addr;
 	uint32_t len;
 	uint32_t tmp;
 	int i;
@@ -317,17 +316,11 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	chan = (struct msgdma_channel *)xchan->chan;
 
 	for (i = 0; i < sg_n; i++) {
-		addr = (uint32_t)sg[i].paddr;
 		len = (uint32_t)sg[i].len;
 
 		desc = xchan->descs[chan->idx_head].desc;
-		if (sg[i].direction == XDMA_MEM_TO_DEV) {
-			desc->read_lo = htole32(addr);
-			desc->write_lo = 0;
-		} else {
-			desc->read_lo = 0;
-			desc->write_lo = htole32(addr);
-		}
+		desc->read_lo = htole32(sg[i].src_paddr);
+		desc->write_lo = htole32(sg[i].dst_paddr);
 		desc->length = htole32(len);
 		desc->transferred = 0;
 		desc->status = 0;

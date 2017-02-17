@@ -730,14 +730,20 @@ xchan_sglist_free(xdma_channel_t *xchan)
 
 static int
 xdma_sglist_add(struct xdma_sglist *sg, struct bus_dma_segment *seg,
-    uint32_t nsegs, enum xdma_direction dir)
+    uint32_t nsegs, struct xdma_request *xr)
 {
 	int i;
 
 	for (i = 0; i < nsegs; i++) {
-		sg[i].paddr = seg[i].ds_addr;
+		if (xr->direction == XDMA_MEM_TO_DEV) {
+			sg[i].src_paddr = seg[i].ds_addr;
+			sg[i].dst_paddr = xr->dst_addr;
+		} else {
+			sg[i].src_paddr = xr->src_addr;
+			sg[i].dst_paddr = seg[i].ds_addr;
+		}
 		sg[i].len = seg[i].ds_len;
-		sg[i].direction = dir;
+		sg[i].direction = xr->direction;
 		sg[i].first = 0;
 		sg[i].last = 0;
 		if (i == 0) {
@@ -831,7 +837,7 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 		xchan->bufs[i].nsegs = nsegs;
 		xchan->bufs[i].nsegs_left = nsegs;
 
-		xdma_sglist_add(&sg[n], seg, nsegs, xr->direction);
+		xdma_sglist_add(&sg[n], seg, nsegs, xr);
 		n += nsegs;
 
 		xchan->buf_head = xchan_next_buf(xchan, xchan->buf_head);
@@ -855,6 +861,14 @@ xdma_queue_submit(xdma_channel_t *xchan)
 	KASSERT(xdma != NULL, ("xdma is NULL"));
 
 	sg = xchan->sg;
+
+	if ((xchan->flags & XCHAN_DESC_ALLOCATED) == 0) {
+		return (-1);
+	}
+
+	if ((xchan->flags & XCHAN_BUFS_ALLOCATED) == 0) {
+		return (-1);
+	}
 
 	sg_n = xdma_sglist_prepare(xchan, sg);
 	if (sg_n == 0) {

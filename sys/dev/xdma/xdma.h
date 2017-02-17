@@ -109,11 +109,12 @@ struct xdma_descriptor {
 typedef struct xdma_descriptor xdma_descriptor_t;
 
 struct xdma_sglist {
-	bool				first;
-	bool				last;
-	vm_paddr_t			paddr;
+	vm_paddr_t			src_paddr;
+	vm_paddr_t			dst_paddr;
 	size_t				len;
 	enum xdma_direction		direction;
+	bool				first;
+	bool				last;
 };
 
 struct xchan_buf {

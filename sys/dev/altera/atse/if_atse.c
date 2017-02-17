@@ -87,6 +87,7 @@ __FBSDID("$FreeBSD$");
 #include <dev/mii/miivar.h>
 
 #include <dev/altera/atse/if_atsereg.h>
+#include <dev/xdma/xdma.h>
 
 #define	RX_QUEUE_SIZE		1024
 #define	TX_QUEUE_SIZE		1024
