@@ -576,7 +576,6 @@ softdma_channel_alloc(device_t dev, struct xdma_channel *xchan)
 		if (chan->used == 0) {
 			chan->xchan = xchan;
 			xchan->chan = (void *)chan;
-			xchan->caps = XCHAN_CAP_NOSEG;
 			chan->index = i;
 			chan->idx_head = 0;
 			chan->idx_tail = 0;

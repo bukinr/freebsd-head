@@ -92,7 +92,7 @@ static int xchan_sglist_free(xdma_channel_t *xchan);
  * Allocate virtual xDMA channel.
  */
 xdma_channel_t *
-xdma_channel_alloc(xdma_controller_t *xdma)
+xdma_channel_alloc(xdma_controller_t *xdma, uint32_t caps)
 {
 	xdma_channel_t *xchan;
 	int ret;
@@ -104,6 +104,7 @@ xdma_channel_alloc(xdma_controller_t *xdma)
 		return (NULL);
 	}
 	xchan->xdma = xdma;
+	xchan->caps = caps;
 
 	XDMA_LOCK();
 
@@ -812,19 +813,24 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 			break;
 		}
 		xr = &xchan->xr[xchan->xr_processed];
+
 		c = 0;
 		for (m = xr->m; m != NULL; m = m->m_next) {
 			c++;
 		}
 
-		if ((xchan->caps & XCHAN_CAP_NOSEG) || (c > MAX_NSEGS)) {
-			if ((m = m_defrag(xr->m, M_NOWAIT)) == NULL) {
-				device_printf(xdma->dma_dev,
-				    "%s: Can't defrag mbuf\n", __func__);
-				break;
+		if (xchan->caps & XCHAN_CAP_BUSDMA) {
+			if ((xchan->caps & XCHAN_CAP_BUSDMA_NOSEG) || \
+			    (c > MAX_NSEGS)) {
+				if ((m = m_defrag(xr->m, M_NOWAIT)) == NULL) {
+					device_printf(xdma->dma_dev,
+					    "%s: Can't defrag mbuf\n",
+					    __func__);
+					break;
+				}
+				xr->m = m;
+				c = 1;
 			}
-			xr->m = m;
-			c = 1;
 		}
 
 		m = xr->m;

@@ -143,7 +143,7 @@ struct xdma_channel {
 
 	uint32_t			caps;
 #define	XCHAN_CAP_BUSDMA		(1 << 0)
-#define	XCHAN_CAP_NOSEG			(1 << 1)
+#define	XCHAN_CAP_BUSDMA_NOSEG		(1 << 1)
 
 	/* A real hardware driver channel. */
 	void				*chan;
@@ -186,7 +186,7 @@ xdma_controller_t *xdma_ofw_get(device_t dev, const char *prop);
 int xdma_put(xdma_controller_t *xdma);
 
 /* xDMA channel ops */
-xdma_channel_t * xdma_channel_alloc(xdma_controller_t *);
+xdma_channel_t * xdma_channel_alloc(xdma_controller_t *, uint32_t caps);
 int xdma_channel_free(xdma_channel_t *);
 
 int xdma_prep_cyclic(xdma_channel_t *, enum xdma_direction,
