@@ -1072,8 +1072,6 @@ xchan_desc_done(xdma_channel_t *xchan, uint32_t idx,
 			}
 
 			bus_dmamap_unload(xchan->dma_tag_bufs, b->map);
-		} else {
-			//m_copydata(b->cbuf, 0, st->transferred, xr->m);
 		}
 		xr->status.error = st->error;
 		xr->status.transferred = st->transferred;
