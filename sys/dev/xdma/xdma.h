@@ -125,7 +125,7 @@ struct xchan_buf {
 	void				*cbuf;
 };
 
-typedef struct xchan_buf xdma_buf_t;
+typedef struct xchan_buf xchan_buf_t;
 
 struct xdma_channel {
 	xdma_controller_t		*xdma;
@@ -163,7 +163,7 @@ struct xdma_channel {
 	uint32_t			xr_tail;
 
 	/* Bus dma bufs. */
-	xdma_buf_t			*bufs;
+	xchan_buf_t			*bufs;
 	uint32_t			bufs_num;
 	bus_dma_tag_t			dma_tag_bufs;
 	uint32_t			buf_head;
