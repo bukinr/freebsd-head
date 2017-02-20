@@ -131,7 +131,6 @@ msgdma_intr(void *arg)
 		READ4_DESC(sc, PF_CONTROL));
 #endif
 
-
 	tot_copied = 0;
 
 	while (chan->idx_tail != chan->idx_head) {
@@ -271,7 +270,7 @@ msgdma_channel_alloc(device_t dev, struct xdma_channel *xchan)
 		if (chan->used == 0) {
 			chan->xchan = xchan;
 			xchan->chan = (void *)chan;
-			xchan->caps = XCHAN_CAP_BUSDMA;
+			xchan->caps = (XCHAN_CAP_BUSDMA | XCHAN_CAP_NOSEG);
 			chan->index = i;
 			chan->sc = sc;
 			chan->used = 1;
@@ -308,6 +307,8 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	struct msgdma_channel *chan;
 	struct msgdma_desc *desc;
 	struct msgdma_softc *sc;
+	uint32_t src_addr_lo;
+	uint32_t dst_addr_lo;
 	uint32_t len;
 	uint32_t tmp;
 	int i;
@@ -317,11 +318,18 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	chan = (struct msgdma_channel *)xchan->chan;
 
 	for (i = 0; i < sg_n; i++) {
+		src_addr_lo = (uint32_t)sg[i].src_addr;
+		dst_addr_lo = (uint32_t)sg[i].dst_addr;
 		len = (uint32_t)sg[i].len;
 
+#if 0
+		printf("%s: src %x dst %x len %d\n", __func__,
+		    src_addr_lo, dst_addr_lo, len);
+#endif
+
 		desc = xchan->descs[chan->idx_head].desc;
-		desc->read_lo = htole32(sg[i].src_paddr);
-		desc->write_lo = htole32(sg[i].dst_paddr);
+		desc->read_lo = htole32(src_addr_lo);
+		desc->write_lo = htole32(dst_addr_lo);
 		desc->length = htole32(len);
 		desc->transferred = 0;
 		desc->status = 0;
@@ -366,7 +374,7 @@ msgdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 	printf("%s(%d)\n", __func__, device_get_unit(dev));
 #endif
 
-	ret = xchan_desc_alloc(xchan, sizeof(struct msgdma_desc), 4);
+	ret = xchan_desc_alloc(xchan, sizeof(struct msgdma_desc), 16);
 	if (ret != 0) {
 		device_printf(sc->dev,
 		    "%s: Can't allocate descriptors.\n", __func__);
