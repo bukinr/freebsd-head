@@ -109,8 +109,8 @@ struct xdma_descriptor {
 typedef struct xdma_descriptor xdma_descriptor_t;
 
 struct xdma_sglist {
-	vm_paddr_t			src_paddr;
-	vm_paddr_t			dst_paddr;
+	bus_addr_t			src_addr;
+	bus_addr_t			dst_addr;
 	size_t				len;
 	enum xdma_direction		direction;
 	bool				first;
@@ -142,9 +142,8 @@ struct xdma_channel {
 #define	XCHAN_TYPE_SG			(1 << 7)
 
 	uint32_t			caps;
-#define	XCHAN_CAP_VADDR			(1 << 0)
-#define	XCHAN_CAP_SEGS			(1 << 1)
-#define	XCHAN_CAP_BUSDMA		(1 << 2)
+#define	XCHAN_CAP_BUSDMA		(1 << 0)
+#define	XCHAN_CAP_NOSEG			(1 << 1)
 
 	/* A real hardware driver channel. */
 	void				*chan;

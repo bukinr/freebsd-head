@@ -63,11 +63,10 @@ __FBSDID("$FreeBSD$");
 MALLOC_DEFINE(M_XDMA, "xdma", "xDMA framework");
 
 /*
- * Maximum number of segments per mbuf chain supported,
- * bigger will be merged using m_defrag().
- * TODO: dehardcode. Not all DMA engines can do >1 segs.
+ * Maximum number of busdma segments per mbuf chain supported.
+ * Bigger mbuf chains will be merged to single using m_defrag().
  */
-#define	MAX_NSEGS	1
+#define	MAX_NSEGS	8
 
 /*
  * Multiple xDMA controllers may work with single DMA device,
@@ -691,8 +690,10 @@ xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 	xr->m = *mp;
 	if (dir == XDMA_MEM_TO_DEV) {
 		xr->dst_addr = addr;
+		xr->src_addr = 0;
 	} else {
 		xr->src_addr = addr;
+		xr->dst_addr = 0;
 	}
 	xr->done = 0;
 	xchan->xr_head = xchan_next_req(xchan, xchan->xr_head);
@@ -767,11 +768,11 @@ xdma_sglist_add(struct xdma_sglist *sg, struct bus_dma_segment *seg,
 
 	for (i = 0; i < nsegs; i++) {
 		if (xr->direction == XDMA_MEM_TO_DEV) {
-			sg[i].src_paddr = seg[i].ds_addr;
-			sg[i].dst_paddr = xr->dst_addr;
+			sg[i].src_addr = seg[i].ds_addr;
+			sg[i].dst_addr = xr->dst_addr;
 		} else {
-			sg[i].src_paddr = xr->src_addr;
-			sg[i].dst_paddr = seg[i].ds_addr;
+			sg[i].src_addr = xr->src_addr;
+			sg[i].dst_addr = seg[i].ds_addr;
 		}
 		sg[i].len = seg[i].ds_len;
 		sg[i].direction = xr->direction;
@@ -816,16 +817,14 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 			c++;
 		}
 
-		if (xchan->caps & XCHAN_CAP_BUSDMA) {
-			if (c > MAX_NSEGS) {
-				if ((m = m_defrag(xr->m, M_NOWAIT)) == NULL) {
-					device_printf(xdma->dma_dev,
-					    "%s: Can't defrag mbuf\n", __func__);
-					break;
-				}
-				xr->m = m;
-				c = 1;
+		if ((xchan->caps & XCHAN_CAP_NOSEG) || (c > MAX_NSEGS)) {
+			if ((m = m_defrag(xr->m, M_NOWAIT)) == NULL) {
+				device_printf(xdma->dma_dev,
+				    "%s: Can't defrag mbuf\n", __func__);
+				break;
 			}
+			xr->m = m;
+			c = 1;
 		}
 
 		m = xr->m;
@@ -876,7 +875,7 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 				seg[0].ds_addr = (bus_addr_t)xchan->bufs[i].cbuf;
 				seg[0].ds_len = m->m_pkthdr.len;
 			} else {
-				seg[0].ds_addr = mtod(m, uint64_t);
+				seg[0].ds_addr = mtod(m, bus_addr_t);
 				seg[0].ds_len = m->m_pkthdr.len;
 			}
 		}

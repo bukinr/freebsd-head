@@ -576,7 +576,7 @@ softdma_channel_alloc(device_t dev, struct xdma_channel *xchan)
 		if (chan->used == 0) {
 			chan->xchan = xchan;
 			xchan->chan = (void *)chan;
-			xchan->caps = XCHAN_CAP_VADDR;
+			xchan->caps = XCHAN_CAP_NOSEG;
 			chan->index = i;
 			chan->idx_head = 0;
 			chan->idx_tail = 0;
@@ -665,8 +665,8 @@ softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 		len = (uint32_t)sg[i].len;
 
 		desc = xchan->descs[chan->idx_head].desc;
-		desc->src_addr = sg[i].src_paddr;
-		desc->dst_addr = sg[i].dst_paddr;
+		desc->src_addr = sg[i].src_addr;
+		desc->dst_addr = sg[i].dst_addr;
 		if (sg[i].direction == XDMA_MEM_TO_DEV) {
 			desc->src_incr = 1;
 			desc->dst_incr = 0;
