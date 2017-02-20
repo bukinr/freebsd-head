@@ -767,6 +767,10 @@ xdma_sglist_add(struct xdma_sglist *sg, struct bus_dma_segment *seg,
 {
 	int i;
 
+	if (nsegs == 0) {
+		return (-1);
+	}
+
 	for (i = 0; i < nsegs; i++) {
 		if (xr->direction == XDMA_MEM_TO_DEV) {
 			sg[i].src_addr = seg[i].ds_addr;
@@ -777,15 +781,10 @@ xdma_sglist_add(struct xdma_sglist *sg, struct bus_dma_segment *seg,
 		}
 		sg[i].len = seg[i].ds_len;
 		sg[i].direction = xr->direction;
-		sg[i].first = 0;
-		sg[i].last = 0;
-		if (i == 0) {
-			sg[i].first = 1;
-		}
-		if (i == (nsegs - 1)) {
-			sg[i].last = 1;
-		}
 	}
+
+	sg[0].first = 1;
+	sg[nsegs - 1].last = 1;
 
 	return (0);
 }
@@ -848,7 +847,7 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 
 		if (xchan->caps & XCHAN_CAP_BUSDMA) {
 			error = bus_dmamap_load_mbuf_sg(xchan->dma_tag_bufs,
-			    xchan->bufs[i].map, m, seg, &nsegs, 0);
+			    xchan->bufs[i].map, m, seg, &nsegs, BUS_DMA_NOWAIT);
 			if (error != 0) {
 				if (error == ENOMEM) {
 					/*
