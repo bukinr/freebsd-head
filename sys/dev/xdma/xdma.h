@@ -99,15 +99,6 @@ struct xdma_channel_config {
 
 typedef struct xdma_channel_config xdma_config_t;
 
-struct xdma_descriptor {
-	bus_addr_t			ds_addr;
-	bus_size_t			ds_len;
-	bus_dmamap_t			dma_map;
-	void				*desc;
-};
-
-typedef struct xdma_descriptor xdma_descriptor_t;
-
 struct xdma_sglist {
 	bus_addr_t			src_addr;
 	bus_addr_t			dst_addr;
@@ -132,14 +123,13 @@ struct xdma_channel {
 	xdma_config_t			conf;
 
 	uint32_t			flags;
-#define	XCHAN_DESC_ALLOCATED		(1 << 0)
-#define	XCHAN_BUFS_ALLOCATED		(1 << 1)
-#define	XCHAN_SGLIST_ALLOCATED		(1 << 2)
-#define	XCHAN_CONFIGURED		(1 << 3)
-#define	XCHAN_TYPE_CYCLIC		(1 << 4)
-#define	XCHAN_TYPE_MEMCPY		(1 << 5)
-#define	XCHAN_TYPE_FIFO			(1 << 6)
-#define	XCHAN_TYPE_SG			(1 << 7)
+#define	XCHAN_BUFS_ALLOCATED		(1 << 0)
+#define	XCHAN_SGLIST_ALLOCATED		(1 << 1)
+#define	XCHAN_CONFIGURED		(1 << 2)
+#define	XCHAN_TYPE_CYCLIC		(1 << 3)
+#define	XCHAN_TYPE_MEMCPY		(1 << 4)
+#define	XCHAN_TYPE_FIFO			(1 << 5)
+#define	XCHAN_TYPE_SG			(1 << 6)
 
 	uint32_t			caps;
 #define	XCHAN_CAP_BUSDMA		(1 << 0)
@@ -170,12 +160,9 @@ struct xdma_channel {
 	uint32_t			buf_tail;
 
 	/* Descriptors. */
-	xdma_descriptor_t		*descs;
 	uint32_t			descs_num;
 	uint32_t			descs_used_count;
-	bus_dma_tag_t			dma_tag;
-	uint32_t			map_descr;
-	uint8_t				map_err;
+
 	struct xdma_sglist		*sg;
 };
 
@@ -194,15 +181,8 @@ int xdma_prep_cyclic(xdma_channel_t *, enum xdma_direction,
 int xdma_prep_memcpy(xdma_channel_t *, uintptr_t, uintptr_t, size_t len);
 int xdma_prep_sg(xdma_channel_t *xchan, uint32_t, uint32_t);
 
-int xchan_desc_alloc(xdma_channel_t *, uint32_t, uint32_t);
-int xchan_desc_free(xdma_channel_t *xchan);
 int xchan_desc_done(xdma_channel_t *xchan, uint32_t idx, xdma_transfer_status_t *);
-int xchan_desc_sync_pre(xdma_channel_t *xchan, uint32_t);
-int xchan_desc_sync_post(xdma_channel_t *xchan, uint32_t);
-int xchan_bufs_free(xdma_channel_t *xchan);
-
 uint32_t xchan_next_buf(xdma_channel_t *xchan, uint32_t curidx);
-uint32_t xchan_next_desc(xdma_channel_t *xchan, uint32_t curidx);
 uint32_t xchan_next_req(xdma_channel_t *xchan, uint32_t curidx);
 
 /* xchan queues operations */

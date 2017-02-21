@@ -74,6 +74,14 @@ struct msgdma_channel {
 	int			index;
 	int			idx_head;
 	int			idx_tail;
+
+	struct msgdma_desc	**descs;
+	bus_dma_segment_t	*descs_phys;
+	uint32_t		descs_num;
+	bus_dma_tag_t		dma_tag;
+	bus_dmamap_t		*dma_map;
+	uint32_t		map_descr;
+	uint8_t			map_err;
 };
 
 struct msgdma_softc {
@@ -108,6 +116,13 @@ static int msgdma_probe(device_t dev);
 static int msgdma_attach(device_t dev);
 static int msgdma_detach(device_t dev);
 
+static inline uint32_t
+msgdma_next_desc(xdma_channel_t *xchan, uint32_t curidx)
+{
+
+	return ((curidx + 1) % xchan->descs_num);
+}
+
 static void
 msgdma_intr(void *arg)
 {
@@ -134,8 +149,13 @@ msgdma_intr(void *arg)
 	tot_copied = 0;
 
 	while (chan->idx_tail != chan->idx_head) {
-		xchan_desc_sync_post(xchan, chan->idx_tail);
-		desc = xchan->descs[chan->idx_tail].desc;
+#if 0
+		printf("%s: idx_tail %d idx_head %d\n", __func__, chan->idx_tail, chan->idx_head);
+#endif
+		bus_dmamap_sync(chan->dma_tag, chan->dma_map[chan->idx_tail],
+		    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
+
+		desc = chan->descs[chan->idx_tail];
 		if ((le32toh(desc->control) & CONTROL_OWN) != 0) {
 			break;
 		}
@@ -144,7 +164,7 @@ msgdma_intr(void *arg)
 		st.error = 0;
 		st.transferred = le32toh(desc->transferred);
 		xchan_desc_done(xchan, chan->idx_tail, &st);
-		chan->idx_tail = xchan_next_desc(xchan, chan->idx_tail);
+		chan->idx_tail = msgdma_next_desc(xchan, chan->idx_tail);
 	}
 
 	WRITE4_DESC(sc, PF_STATUS, PF_STATUS_IRQ);
@@ -254,6 +274,130 @@ msgdma_detach(device_t dev)
 	return (0);
 }
 
+static void
+msgdma_dmamap_cb(void *arg, bus_dma_segment_t *segs, int nseg, int err)
+{
+	struct msgdma_channel *chan;
+
+	chan = (struct msgdma_channel *)arg;
+	KASSERT(chan != NULL, ("xchan is NULL"));
+
+	if (err) {
+		chan->map_err = 1;
+		return;
+	}
+
+	chan->descs_phys[chan->map_descr].ds_addr = segs[0].ds_addr;
+	chan->descs_phys[chan->map_descr].ds_len = segs[0].ds_len;
+
+#if 0
+	printf("map desc %d: descs phys %lx len %ld\n", chan->map_descr, segs[0].ds_addr, segs[0].ds_len);
+#endif
+}
+
+static int
+msgdma_desc_free(struct msgdma_softc *sc, xdma_channel_t *xchan)
+{
+	struct msgdma_channel *chan;
+	struct msgdma_desc *desc;
+	int nsegments;
+	int i;
+
+	nsegments = xchan->descs_num;
+
+	chan = (struct msgdma_channel *)xchan->chan;
+
+	for (i = 0; i < nsegments; i++) {
+		desc = chan->descs[i];
+		bus_dmamap_unload(chan->dma_tag, chan->dma_map[i]);
+		bus_dmamem_free(chan->dma_tag, desc, chan->dma_map[i]);
+	}
+
+	bus_dma_tag_destroy(chan->dma_tag);
+	free(chan->descs, M_DEVBUF);
+	free(chan->dma_map, M_DEVBUF);
+	free(chan->descs_phys, M_DEVBUF);
+
+	return (0);
+}
+
+static int
+msgdma_desc_alloc(struct msgdma_softc *sc, xdma_channel_t *xchan,
+    uint32_t desc_size, uint32_t align)
+{
+	struct msgdma_channel *chan;
+	int nsegments;
+	int err;
+	int i;
+
+	nsegments = xchan->descs_num;
+
+#if 0
+	printf("%s: nseg %d\n", __func__, nsegments);
+#endif
+
+	chan = (struct msgdma_channel *)xchan->chan;
+
+	err = bus_dma_tag_create(
+	    bus_get_dma_tag(sc->dev),
+	    align, 0,			/* alignment, boundary */
+	    BUS_SPACE_MAXADDR_32BIT,	/* lowaddr */
+	    BUS_SPACE_MAXADDR,		/* highaddr */
+	    NULL, NULL,			/* filter, filterarg */
+	    desc_size, 1,		/* maxsize, nsegments*/
+	    desc_size, 0,		/* maxsegsize, flags */
+	    NULL, NULL,			/* lockfunc, lockarg */
+	    &chan->dma_tag);
+	if (err) {
+		device_printf(sc->dev,
+		    "%s: Can't create bus_dma tag.\n", __func__);
+		return (-1);
+	}
+
+	/* Descriptors. */
+	chan->descs = malloc(nsegments * sizeof(struct msgdma_desc *),
+	    M_DEVBUF, (M_WAITOK | M_ZERO));
+	if (chan->descs == NULL) {
+		device_printf(sc->dev,
+		    "%s: Can't allocate memory.\n", __func__);
+		return (-1);
+	}
+	chan->dma_map = malloc(nsegments * sizeof(bus_dmamap_t),
+	    M_DEVBUF, (M_WAITOK | M_ZERO));
+	chan->descs_phys = malloc(nsegments * sizeof(bus_dma_segment_t),
+	    M_DEVBUF, (M_WAITOK | M_ZERO));
+
+	/* Allocate bus_dma memory for each descriptor. */
+	for (i = 0; i < nsegments; i++) {
+		err = bus_dmamem_alloc(chan->dma_tag, (void **)&chan->descs[i],
+		    BUS_DMA_WAITOK | BUS_DMA_ZERO, &chan->dma_map[i]);
+		if (err) {
+			device_printf(sc->dev,
+			    "%s: Can't allocate memory for descriptors.\n", __func__);
+			return (-1);
+		}
+
+		chan->map_err = 0;
+		chan->map_descr = i;
+		err = bus_dmamap_load(chan->dma_tag, chan->dma_map[i], chan->descs[i],
+		    desc_size, msgdma_dmamap_cb, chan, BUS_DMA_WAITOK);
+		if (err) {
+			device_printf(sc->dev,
+			    "%s: Can't load DMA map.\n", __func__);
+			return (-1);
+		}
+
+		if (chan->map_err != 0) {
+			device_printf(sc->dev,
+			    "%s: Can't load DMA map.\n", __func__);
+			return (-1);
+		}
+	}
+
+	return (0);
+}
+
+
 static int
 msgdma_channel_alloc(device_t dev, struct xdma_channel *xchan)
 {
@@ -294,6 +438,8 @@ msgdma_channel_free(device_t dev, struct xdma_channel *xchan)
 
 	xdma_assert_locked();
 
+	msgdma_desc_free(sc, xchan);
+
 	chan = (struct msgdma_channel *)xchan->chan;
 	chan->used = 0;
 
@@ -327,7 +473,7 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 		    src_addr_lo, dst_addr_lo, len);
 #endif
 
-		desc = xchan->descs[chan->idx_head].desc;
+		desc = chan->descs[chan->idx_head];
 		desc->read_lo = htole32(src_addr_lo);
 		desc->write_lo = htole32(dst_addr_lo);
 		desc->length = htole32(len);
@@ -350,9 +496,11 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 			desc->control |= htole32(CONTROL_TC_IRQ_EN | CONTROL_ET_IRQ_EN | CONTROL_ERR_M);
 		}
 		tmp = chan->idx_head;
-		chan->idx_head = xchan_next_desc(xchan, chan->idx_head);
+		chan->idx_head = msgdma_next_desc(xchan, chan->idx_head);
 		desc->control |= htole32(CONTROL_OWN | CONTROL_GO);
-		xchan_desc_sync_pre(xchan, tmp);
+
+		bus_dmamap_sync(chan->dma_tag, chan->dma_map[tmp],
+		    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 	}
 
 	return (0);
@@ -361,6 +509,7 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 static int
 msgdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 {
+	struct msgdma_channel *chan;
 	struct msgdma_desc *desc;
 	struct msgdma_softc *sc;
 	uint32_t addr;
@@ -374,7 +523,9 @@ msgdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 	printf("%s(%d)\n", __func__, device_get_unit(dev));
 #endif
 
-	ret = xchan_desc_alloc(xchan, sizeof(struct msgdma_desc), 16);
+	chan = (struct msgdma_channel *)xchan->chan;
+
+	ret = msgdma_desc_alloc(sc, xchan, sizeof(struct msgdma_desc), 16);
 	if (ret != 0) {
 		device_printf(sc->dev,
 		    "%s: Can't allocate descriptors.\n", __func__);
@@ -382,12 +533,12 @@ msgdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 	}
 
 	for (i = 0; i < xchan->descs_num; i++) {
-		desc = xchan->descs[i].desc;
+		desc = chan->descs[i];
 
 		if (i == (xchan->descs_num - 1)) {
-			desc->next = htole32(xchan->descs[0].ds_addr);
+			desc->next = htole32(chan->descs_phys[0].ds_addr);
 		} else {
-			desc->next = htole32(xchan->descs[i+1].ds_addr);
+			desc->next = htole32(chan->descs_phys[i+1].ds_addr);
 		}
 #if 0
 		printf("%s(%d): desc %d vaddr %lx next paddr %x\n", __func__,
@@ -395,7 +546,7 @@ msgdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 #endif
 	}
 
-	addr = xchan->descs[0].ds_addr;
+	addr = chan->descs_phys[0].ds_addr;
 	WRITE4_DESC(sc, PF_NEXT_LO, addr);
 	WRITE4_DESC(sc, PF_NEXT_HI, 0);
 	WRITE4_DESC(sc, PF_POLL_FREQ, 1000);

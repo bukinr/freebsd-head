@@ -83,6 +83,7 @@ struct softdma_channel {
 	int			run;
 	uint32_t		idx_tail;
 	uint32_t		idx_head;
+	struct softdma_desc	*descs;
 };
 
 struct softdma_desc {
@@ -122,6 +123,13 @@ static struct resource_spec softdma_spec[] = {
 static int softdma_probe(device_t dev);
 static int softdma_attach(device_t dev);
 static int softdma_detach(device_t dev);
+
+static inline uint32_t
+softdma_next_desc(xdma_channel_t *xchan, uint32_t curidx)
+{
+
+	return ((curidx + 1) % xchan->descs_num);
+}
 
 static void
 softdma_mem_write(struct softdma_softc *sc, uint32_t reg, uint32_t val)
@@ -447,7 +455,6 @@ softdma_process_descriptors(struct softdma_channel *chan, xdma_transfer_status_t
 	struct xdma_channel *xchan;
 	struct softdma_desc *desc;
 	struct softdma_softc *sc;
-	xdma_descriptor_t *descs;
 	xdma_transfer_status_t st;
 	int ret;
 
@@ -455,8 +462,7 @@ softdma_process_descriptors(struct softdma_channel *chan, xdma_transfer_status_t
 
 	xchan = chan->xchan;
 
-	descs = xchan->descs;
-	desc = (struct softdma_desc *)descs[chan->idx_tail].desc;
+	desc = &chan->descs[chan->idx_tail];
 
 	while (desc != NULL) {
 
@@ -472,7 +478,6 @@ softdma_process_descriptors(struct softdma_channel *chan, xdma_transfer_status_t
 				/* No new data available. */
 				break;
 			}
-			xchan_desc_sync_post(xchan, chan->idx_tail);
 		}
 
 		/* Descriptor processed. */
@@ -495,7 +500,7 @@ softdma_process_descriptors(struct softdma_channel *chan, xdma_transfer_status_t
 			break;
 		}
 
-		chan->idx_tail = xchan_next_desc(xchan, chan->idx_tail);
+		chan->idx_tail = softdma_next_desc(xchan, chan->idx_tail);
 
 		/* Process next descriptor, if any. */
 		desc = desc->next;
@@ -605,7 +610,28 @@ softdma_channel_free(device_t dev, struct xdma_channel *xchan)
 	xdma_assert_locked();
 
 	chan = (struct softdma_channel *)xchan->chan;
+
+	if (chan->descs != NULL) {
+		free(chan->descs, M_DEVBUF);
+	}
+
 	chan->used = 0;
+
+	return (0);
+}
+
+static int
+softdma_desc_alloc(struct xdma_channel *xchan)
+{
+	struct softdma_channel *chan;
+	uint32_t nsegments;
+
+	nsegments = xchan->descs_num;
+
+	chan = (struct softdma_channel *)xchan->chan;
+
+	chan->descs = malloc(nsegments * sizeof(struct softdma_desc),
+	    M_DEVBUF, (M_WAITOK | M_ZERO));
 
 	return (0);
 }
@@ -613,6 +639,7 @@ softdma_channel_free(device_t dev, struct xdma_channel *xchan)
 static int
 softdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 {
+	struct softdma_channel *chan;
 	struct softdma_desc *desc;
 	struct softdma_softc *sc;
 	int ret;
@@ -620,7 +647,9 @@ softdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 
 	sc = device_get_softc(dev);
 
-	ret = xchan_desc_alloc(xchan, sizeof(struct softdma_desc), 4);
+	chan = (struct softdma_channel *)xchan->chan;
+
+	ret = softdma_desc_alloc(xchan);
 	if (ret != 0) {
 		device_printf(sc->dev,
 		    "%s: Can't allocate descriptors.\n", __func__);
@@ -628,15 +657,14 @@ softdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 	}
 
 	for (i = 0; i < xchan->descs_num; i++) {
-		desc = xchan->descs[i].desc;
+		desc = &chan->descs[i];
 
 		if (i == (xchan->descs_num - 1)) {
-			desc->next = xchan->descs[0].desc;
+			desc->next = &chan->descs[0];
 		} else {
-			desc->next = xchan->descs[i+1].desc;
+			desc->next = &chan->descs[i+1];
 		}
 	}
-
 
 	return (0);
 }
@@ -663,7 +691,7 @@ softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	for (i = 0; i < sg_n; i++) {
 		len = (uint32_t)sg[i].len;
 
-		desc = xchan->descs[chan->idx_head].desc;
+		desc = &chan->descs[chan->idx_head];
 		desc->src_addr = sg[i].src_addr;
 		desc->dst_addr = sg[i].dst_addr;
 		if (sg[i].direction == XDMA_MEM_TO_DEV) {
@@ -690,10 +718,8 @@ softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 		}
 
 		tmp = chan->idx_head;
-		chan->idx_head = xchan_next_desc(xchan, chan->idx_head);
+		chan->idx_head = softdma_next_desc(xchan, chan->idx_head);
 		desc->control |= CONTROL_OWN;
-		xchan_desc_sync_pre(xchan, tmp);
-
 		enqueued += 1;
 	}
 
@@ -731,7 +757,7 @@ softdma_channel_prep_memcpy(device_t dev, struct xdma_channel *xchan)
 
 	chan = (struct softdma_channel *)xchan->chan;
 
-	ret = xchan_desc_alloc(xchan, sizeof(struct softdma_desc), 8);
+	ret = softdma_desc_alloc(xchan);
 	if (ret != 0) {
 		device_printf(sc->dev,
 		    "%s: Can't allocate descriptors.\n", __func__);
@@ -739,14 +765,15 @@ softdma_channel_prep_memcpy(device_t dev, struct xdma_channel *xchan)
 	}
 
 	conf = &xchan->conf;
-	desc = (struct softdma_desc *)xchan->descs;
 
-	desc[0].src_addr = conf->src_addr;
-	desc[0].dst_addr = conf->dst_addr;
-	desc[0].len = conf->block_len;
-	desc[0].src_incr = 1;
-	desc[0].dst_incr = 1;
-	desc[0].next = NULL;
+	desc = &chan->descs[0];
+
+	desc->src_addr = conf->src_addr;
+	desc->dst_addr = conf->dst_addr;
+	desc->len = conf->block_len;
+	desc->src_incr = 1;
+	desc->dst_incr = 1;
+	desc->next = NULL;
 
 	return (0);
 }
