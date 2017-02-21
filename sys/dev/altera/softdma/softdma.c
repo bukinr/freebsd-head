@@ -84,6 +84,9 @@ struct softdma_channel {
 	uint32_t		idx_tail;
 	uint32_t		idx_head;
 	struct softdma_desc	*descs;
+
+	uint32_t		descs_num;
+	uint32_t		descs_used_count;
 };
 
 struct softdma_desc {
@@ -125,10 +128,10 @@ static int softdma_attach(device_t dev);
 static int softdma_detach(device_t dev);
 
 static inline uint32_t
-softdma_next_desc(xdma_channel_t *xchan, uint32_t curidx)
+softdma_next_desc(struct softdma_channel *chan, uint32_t curidx)
 {
 
-	return ((curidx + 1) % xchan->descs_num);
+	return ((curidx + 1) % chan->descs_num);
 }
 
 static void
@@ -491,7 +494,8 @@ softdma_process_descriptors(struct softdma_channel *chan, xdma_transfer_status_t
 			st.transferred = 0;
 		}
 
-		xchan_desc_done(xchan, chan->idx_tail, &st);
+		xchan_seg_done(xchan, chan->idx_tail, &st);
+		atomic_subtract_int(&chan->descs_used_count, 1);
 
 		if (ret >= 0) {
 			status->transferred += ret;
@@ -500,7 +504,7 @@ softdma_process_descriptors(struct softdma_channel *chan, xdma_transfer_status_t
 			break;
 		}
 
-		chan->idx_tail = softdma_next_desc(xchan, chan->idx_tail);
+		chan->idx_tail = softdma_next_desc(chan, chan->idx_tail);
 
 		/* Process next descriptor, if any. */
 		desc = desc->next;
@@ -584,6 +588,8 @@ softdma_channel_alloc(device_t dev, struct xdma_channel *xchan)
 			chan->index = i;
 			chan->idx_head = 0;
 			chan->idx_tail = 0;
+			chan->descs_used_count = 0;
+			chan->descs_num = 1024;
 			chan->sc = sc;
 
 			if (softdma_proc_create(chan) != 0) {
@@ -626,9 +632,9 @@ softdma_desc_alloc(struct xdma_channel *xchan)
 	struct softdma_channel *chan;
 	uint32_t nsegments;
 
-	nsegments = xchan->descs_num;
-
 	chan = (struct softdma_channel *)xchan->chan;
+
+	nsegments = chan->descs_num;
 
 	chan->descs = malloc(nsegments * sizeof(struct softdma_desc),
 	    M_DEVBUF, (M_WAITOK | M_ZERO));
@@ -656,15 +662,32 @@ softdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 		return (-1);
 	}
 
-	for (i = 0; i < xchan->descs_num; i++) {
+	for (i = 0; i < chan->descs_num; i++) {
 		desc = &chan->descs[i];
 
-		if (i == (xchan->descs_num - 1)) {
+		if (i == (chan->descs_num - 1)) {
 			desc->next = &chan->descs[0];
 		} else {
 			desc->next = &chan->descs[i+1];
 		}
 	}
+
+	return (0);
+}
+
+static int
+softdma_channel_capacity(device_t dev, xdma_channel_t *xchan,
+    uint32_t *capacity)
+{
+	struct softdma_channel *chan;
+	uint32_t c;
+
+	chan = (struct softdma_channel *)xchan->chan;
+
+	/* At least one descriptor must be left empty. */
+	c = (chan->descs_num - chan->descs_used_count - 1);
+
+	*capacity = c;
 
 	return (0);
 }
@@ -718,7 +741,8 @@ softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 		}
 
 		tmp = chan->idx_head;
-		chan->idx_head = softdma_next_desc(xchan, chan->idx_head);
+		chan->idx_head = softdma_next_desc(chan, chan->idx_head);
+		atomic_add_int(&chan->descs_used_count, 1);
 		desc->control |= CONTROL_OWN;
 		enqueued += 1;
 	}
@@ -823,6 +847,7 @@ static device_method_t softdma_methods[] = {
 
 	DEVMETHOD(xdma_channel_prep_sg,		softdma_channel_prep_sg),
 	DEVMETHOD(xdma_channel_submit_sg,	softdma_channel_submit_sg),
+	DEVMETHOD(xdma_channel_capacity,	softdma_channel_capacity),
 #ifdef FDT
 	DEVMETHOD(xdma_ofw_md_data,		softdma_ofw_md_data),
 #endif

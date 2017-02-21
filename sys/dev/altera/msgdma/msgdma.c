@@ -82,6 +82,7 @@ struct msgdma_channel {
 	bus_dmamap_t		*dma_map;
 	uint32_t		map_descr;
 	uint8_t			map_err;
+	uint32_t		descs_used_count;
 };
 
 struct msgdma_softc {
@@ -117,10 +118,10 @@ static int msgdma_attach(device_t dev);
 static int msgdma_detach(device_t dev);
 
 static inline uint32_t
-msgdma_next_desc(xdma_channel_t *xchan, uint32_t curidx)
+msgdma_next_desc(struct msgdma_channel *chan, uint32_t curidx)
 {
 
-	return ((curidx + 1) % xchan->descs_num);
+	return ((curidx + 1) % chan->descs_num);
 }
 
 static void
@@ -163,8 +164,10 @@ msgdma_intr(void *arg)
 		tot_copied += le32toh(desc->transferred);
 		st.error = 0;
 		st.transferred = le32toh(desc->transferred);
-		xchan_desc_done(xchan, chan->idx_tail, &st);
-		chan->idx_tail = msgdma_next_desc(xchan, chan->idx_tail);
+		xchan_seg_done(xchan, chan->idx_tail, &st);
+
+		chan->idx_tail = msgdma_next_desc(chan, chan->idx_tail);
+		atomic_subtract_int(&chan->descs_used_count, 1);
 	}
 
 	WRITE4_DESC(sc, PF_STATUS, PF_STATUS_IRQ);
@@ -296,16 +299,13 @@ msgdma_dmamap_cb(void *arg, bus_dma_segment_t *segs, int nseg, int err)
 }
 
 static int
-msgdma_desc_free(struct msgdma_softc *sc, xdma_channel_t *xchan)
+msgdma_desc_free(struct msgdma_softc *sc, struct msgdma_channel *chan)
 {
-	struct msgdma_channel *chan;
 	struct msgdma_desc *desc;
 	int nsegments;
 	int i;
 
-	nsegments = xchan->descs_num;
-
-	chan = (struct msgdma_channel *)xchan->chan;
+	nsegments = chan->descs_num;
 
 	for (i = 0; i < nsegments; i++) {
 		desc = chan->descs[i];
@@ -322,21 +322,18 @@ msgdma_desc_free(struct msgdma_softc *sc, xdma_channel_t *xchan)
 }
 
 static int
-msgdma_desc_alloc(struct msgdma_softc *sc, xdma_channel_t *xchan,
+msgdma_desc_alloc(struct msgdma_softc *sc, struct msgdma_channel *chan,
     uint32_t desc_size, uint32_t align)
 {
-	struct msgdma_channel *chan;
 	int nsegments;
 	int err;
 	int i;
 
-	nsegments = xchan->descs_num;
+	nsegments = chan->descs_num;
 
 #if 0
 	printf("%s: nseg %d\n", __func__, nsegments);
 #endif
-
-	chan = (struct msgdma_channel *)xchan->chan;
 
 	err = bus_dma_tag_create(
 	    bus_get_dma_tag(sc->dev),
@@ -420,6 +417,8 @@ msgdma_channel_alloc(device_t dev, struct xdma_channel *xchan)
 			chan->used = 1;
 			chan->idx_head = 0;
 			chan->idx_tail = 0;
+			chan->descs_used_count = 0;
+			chan->descs_num = 1024;
 
 			return (0);
 		}
@@ -438,10 +437,28 @@ msgdma_channel_free(device_t dev, struct xdma_channel *xchan)
 
 	xdma_assert_locked();
 
-	msgdma_desc_free(sc, xchan);
+	chan = (struct msgdma_channel *)xchan->chan;
+
+	msgdma_desc_free(sc, chan);
+
+	chan->used = 0;
+
+	return (0);
+}
+
+static int
+msgdma_channel_capacity(device_t dev, xdma_channel_t *xchan,
+    uint32_t *capacity)
+{
+	struct msgdma_channel *chan;
+	uint32_t c;
 
 	chan = (struct msgdma_channel *)xchan->chan;
-	chan->used = 0;
+
+	/* At least one descriptor must be left empty. */
+	c = (chan->descs_num - chan->descs_used_count - 1);
+
+	*capacity = c;
 
 	return (0);
 }
@@ -495,8 +512,12 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 			desc->control |= htole32(CONTROL_END_ON_EOP | (1 << 13));
 			desc->control |= htole32(CONTROL_TC_IRQ_EN | CONTROL_ET_IRQ_EN | CONTROL_ERR_M);
 		}
+
 		tmp = chan->idx_head;
-		chan->idx_head = msgdma_next_desc(xchan, chan->idx_head);
+
+		atomic_add_int(&chan->descs_used_count, 1);
+		chan->idx_head = msgdma_next_desc(chan, chan->idx_head);
+
 		desc->control |= htole32(CONTROL_OWN | CONTROL_GO);
 
 		bus_dmamap_sync(chan->dma_tag, chan->dma_map[tmp],
@@ -525,17 +546,17 @@ msgdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 
 	chan = (struct msgdma_channel *)xchan->chan;
 
-	ret = msgdma_desc_alloc(sc, xchan, sizeof(struct msgdma_desc), 16);
+	ret = msgdma_desc_alloc(sc, chan, sizeof(struct msgdma_desc), 16);
 	if (ret != 0) {
 		device_printf(sc->dev,
 		    "%s: Can't allocate descriptors.\n", __func__);
 		return (-1);
 	}
 
-	for (i = 0; i < xchan->descs_num; i++) {
+	for (i = 0; i < chan->descs_num; i++) {
 		desc = chan->descs[i];
 
-		if (i == (xchan->descs_num - 1)) {
+		if (i == (chan->descs_num - 1)) {
 			desc->next = htole32(chan->descs_phys[0].ds_addr);
 		} else {
 			desc->next = htole32(chan->descs_phys[i+1].ds_addr);
@@ -600,6 +621,7 @@ static device_method_t msgdma_methods[] = {
 	DEVMETHOD(xdma_channel_control,		msgdma_channel_control),
 
 	/* xDMA SG Interface */
+	DEVMETHOD(xdma_channel_capacity,	msgdma_channel_capacity),
 	DEVMETHOD(xdma_channel_prep_sg,		msgdma_channel_prep_sg),
 	DEVMETHOD(xdma_channel_submit_sg,	msgdma_channel_submit_sg),
 

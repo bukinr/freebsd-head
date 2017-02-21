@@ -91,8 +91,7 @@ __FBSDID("$FreeBSD$");
 
 #define	RX_QUEUE_SIZE		1024
 #define	TX_QUEUE_SIZE		1024
-#define	NUM_TX_DESC		256
-#define	NUM_RX_DESC		256
+#define	NUM_RX_REQ		512
 
 #include <machine/cache.h>
 
@@ -1260,7 +1259,7 @@ atse_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	xdma_prep_sg(sc->xchan_tx, NUM_TX_DESC, TX_QUEUE_SIZE);
+	xdma_prep_sg(sc->xchan_tx, TX_QUEUE_SIZE);
 
 	/* Get RX xDMA controller */
 	sc->xdma_rx = xdma_ofw_get(sc->dev, "rx");
@@ -1284,7 +1283,7 @@ atse_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	xdma_prep_sg(sc->xchan_rx, NUM_RX_DESC, RX_QUEUE_SIZE);
+	xdma_prep_sg(sc->xchan_rx, RX_QUEUE_SIZE);
 
 	atse_ethernet_option_bits_read(dev);
 
@@ -1353,7 +1352,7 @@ err:
 		atse_sysctl_stats_attach(dev);
 	}
 
-	atse_rx_enqueue(sc, (NUM_RX_DESC * 2));
+	atse_rx_enqueue(sc, NUM_RX_REQ);
 	xdma_queue_submit(sc->xchan_rx);
 
 	return (error);

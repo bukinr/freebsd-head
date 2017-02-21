@@ -67,6 +67,15 @@ METHOD int channel_prep_sg {
 };
 
 #
+# Check the amount of free entries for requests.
+#
+METHOD int channel_capacity {
+	device_t			dev;
+	struct xdma_channel		*xchan;
+	uint32_t			*capacity;
+};
+
+#
 # Submit scatter-gather list to DMA.
 #
 METHOD int channel_submit_sg {
@@ -95,7 +104,7 @@ METHOD int channel_alloc {
 };
 
 #
-# Free the channel, including descriptors.
+# Free the channel.
 #
 METHOD int channel_free {
 	device_t dev;

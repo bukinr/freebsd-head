@@ -159,10 +159,6 @@ struct xdma_channel {
 	uint32_t			buf_head;
 	uint32_t			buf_tail;
 
-	/* Descriptors. */
-	uint32_t			descs_num;
-	uint32_t			descs_used_count;
-
 	struct xdma_sglist		*sg;
 };
 
@@ -179,9 +175,9 @@ int xdma_channel_free(xdma_channel_t *);
 int xdma_prep_cyclic(xdma_channel_t *, enum xdma_direction,
     uintptr_t, uintptr_t, int, int, int, int);
 int xdma_prep_memcpy(xdma_channel_t *, uintptr_t, uintptr_t, size_t len);
-int xdma_prep_sg(xdma_channel_t *xchan, uint32_t, uint32_t);
+int xdma_prep_sg(xdma_channel_t *xchan, uint32_t);
 
-int xchan_desc_done(xdma_channel_t *xchan, uint32_t idx, xdma_transfer_status_t *);
+int xchan_seg_done(xdma_channel_t *xchan, uint32_t idx, xdma_transfer_status_t *);
 uint32_t xchan_next_buf(xdma_channel_t *xchan, uint32_t curidx);
 uint32_t xchan_next_req(xdma_channel_t *xchan, uint32_t curidx);
 

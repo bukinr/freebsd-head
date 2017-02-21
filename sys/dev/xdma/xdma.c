@@ -323,7 +323,7 @@ xdma_bufs_alloc_busdma(xdma_channel_t *xchan)
 	}
 
 	for (i = 0; i < nsegments; i++) {
-		err = bus_dmamap_create(xchan->dma_tag_bufs, BUS_DMA_COHERENT,
+		err = bus_dmamap_create(xchan->dma_tag_bufs, 0,
 		    &xchan->bufs[i].map);
 		if (err != 0) {
 			device_printf(xdma->dev,
@@ -407,8 +407,6 @@ xdma_prep_memcpy(xdma_channel_t *xchan, uintptr_t src_addr,
 	conf->block_len = len;
 	conf->block_num = 1;
 
-	xchan->descs_num = conf->block_num;
-
 	xchan->flags |= (XCHAN_CONFIGURED | XCHAN_TYPE_MEMCPY);
 
 	XCHAN_LOCK(xchan);
@@ -428,7 +426,7 @@ xdma_prep_memcpy(xdma_channel_t *xchan, uintptr_t src_addr,
 }
 
 int
-xdma_prep_sg(xdma_channel_t *xchan, uint32_t ndesc, uint32_t xr_num)
+xdma_prep_sg(xdma_channel_t *xchan, uint32_t xr_num)
 {
 	xdma_controller_t *xdma;
 	int ret;
@@ -443,8 +441,7 @@ xdma_prep_sg(xdma_channel_t *xchan, uint32_t ndesc, uint32_t xr_num)
 		return (-1);
 	}
 
-	xchan->descs_num = ndesc;
-	xchan->bufs_num = ndesc;
+	xchan->bufs_num = xr_num;
 	xchan->xr_num = xr_num;
 
 	/* Allocate sglist. */
@@ -571,7 +568,8 @@ xchan_sglist_init(xdma_channel_t *xchan)
 		return (-1);
 	}
 
-	sz = (sizeof(struct xdma_sglist) * xchan->descs_num);
+	/* TODO: dehardcore */
+	sz = (sizeof(struct xdma_sglist) * 2048);
 
 	xchan->sg = malloc(sz, M_XDMA, M_WAITOK | M_ZERO);
 	if (xchan->sg == NULL) {
@@ -636,8 +634,10 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 	xdma_controller_t *xdma;
 	struct mbuf *m;
 	int error, nsegs;
+	uint32_t capacity;
 	uint32_t c;
 	uint32_t n;
+	int ret;
 	int i;
 
 	xdma = xchan->xdma;
@@ -672,11 +672,17 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 
 		m = xr->m;
 
-		/* At least one descriptor must be left empty. */
-		if (xchan->descs_used_count >= (xchan->descs_num - c)) {
+		ret = XDMA_CHANNEL_CAPACITY(xdma->dma_dev, xchan, &capacity);
+		if (ret != 0) {
+			device_printf(xdma->dev,
+			    "%s: Can't get DMA controller capacity.\n", __func__);
+			break;
+		}
+
+		if (capacity <= (c + n)) {
 			/*
-			 * No space yet available for entire
-			 * mbuf chain in the descriptor ring.
+			 * No space yet available for the entire
+			 * mbuf chain.
 			 */
 			break;
 		}
@@ -731,8 +737,6 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 		n += nsegs;
 
 		xchan->buf_head = xchan_next_buf(xchan, xchan->buf_head);
-		atomic_add_int(&xchan->descs_used_count, nsegs);
-
 		xchan->xr_processed = xchan_next_req(xchan, xchan->xr_processed);
 	}
 
@@ -804,8 +808,6 @@ xdma_prep_cyclic(xdma_channel_t *xchan, enum xdma_direction dir,
 	conf->block_num = block_num;
 	conf->src_width = src_width;
 	conf->dst_width = dst_width;
-
-	xchan->descs_num = conf->block_num;
 
 	xchan->flags |= (XCHAN_CONFIGURED | XCHAN_TYPE_CYCLIC);
 
@@ -888,7 +890,7 @@ xdma_pause(xdma_channel_t *xchan)
 }
 
 int
-xchan_desc_done(xdma_channel_t *xchan, uint32_t idx,
+xchan_seg_done(xdma_channel_t *xchan, uint32_t idx,
     struct xdma_transfer_status *st)
 {
 	struct xdma_request *xr;
@@ -925,8 +927,6 @@ xchan_desc_done(xdma_channel_t *xchan, uint32_t idx,
 		xchan->buf_tail = xchan_next_buf(xchan, xchan->buf_tail);
 	}
 
-	atomic_subtract_int(&xchan->descs_used_count, 1);
-
 	return (0);
 }
 
@@ -951,7 +951,7 @@ xdma_callback(xdma_channel_t *xchan, xdma_transfer_status_t *status)
 	return (0);
 }
 
-void
+inline void
 xdma_assert_locked(void)
 {
 
