@@ -625,6 +625,21 @@ xdma_sglist_add(struct xdma_sglist *sg, struct bus_dma_segment *seg,
 	return (0);
 }
 
+static uint32_t
+xdma_mbuf_chain_count(struct mbuf *m0)
+{
+	struct mbuf *m;
+	uint32_t c;
+
+	c = 0;
+
+	for (m = m0; m != NULL; m = m->m_next) {
+		c++;
+	}
+
+	return (c);
+}
+
 static int
 xdma_sglist_prepare(xdma_channel_t *xchan,
     struct xdma_sglist *sg)
@@ -650,11 +665,7 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 			break;
 		}
 		xr = &xchan->xr[xchan->xr_processed];
-
-		c = 0;
-		for (m = xr->m; m != NULL; m = m->m_next) {
-			c++;
-		}
+		c = xdma_mbuf_chain_count(xr->m);
 
 		if (xchan->caps & XCHAN_CAP_BUSDMA) {
 			if ((xchan->caps & XCHAN_CAP_BUSDMA_NOSEG) || \
@@ -669,7 +680,6 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 				c = 1;
 			}
 		}
-
 		m = xr->m;
 
 		ret = XDMA_CHANNEL_CAPACITY(xdma->dma_dev, xchan, &capacity);
@@ -682,7 +692,7 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 		if (capacity <= (c + n)) {
 			/*
 			 * No space yet available for the entire
-			 * mbuf chain.
+			 * mbuf chain in the DMA engine.
 			 */
 			break;
 		}
