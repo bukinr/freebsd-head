@@ -490,14 +490,14 @@ xdma_prep_sg(xdma_channel_t *xchan, uint32_t xr_num)
 	return (0);
 }
 
-inline uint32_t
+static __inline uint32_t
 xchan_next_req(xdma_channel_t *xchan, uint32_t curidx)
 {
 
 	return ((curidx + 1) % xchan->xr_num);
 }
 
-inline uint32_t
+static __inline uint32_t
 xchan_next_buf(xdma_channel_t *xchan, uint32_t curidx)
 {
 
@@ -949,13 +949,6 @@ xdma_callback(xdma_channel_t *xchan, xdma_transfer_status_t *status)
 	};
 
 	return (0);
-}
-
-inline void
-xdma_assert_locked(void)
-{
-
-	XDMA_ASSERT_LOCKED();
 }
 
 #ifdef FDT

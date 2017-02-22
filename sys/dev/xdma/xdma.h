@@ -178,8 +178,6 @@ int xdma_prep_memcpy(xdma_channel_t *, uintptr_t, uintptr_t, size_t len);
 int xdma_prep_sg(xdma_channel_t *xchan, uint32_t);
 
 int xchan_seg_done(xdma_channel_t *xchan, uint32_t idx, xdma_transfer_status_t *);
-uint32_t xchan_next_buf(xdma_channel_t *xchan, uint32_t curidx);
-uint32_t xchan_next_req(xdma_channel_t *xchan, uint32_t curidx);
 
 /* xchan queues operations */
 int xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **m, xdma_transfer_status_t *);
@@ -196,7 +194,6 @@ int xdma_setup_intr(xdma_channel_t *xchan, int (*cb)(void *, xdma_transfer_statu
 int xdma_teardown_intr(xdma_channel_t *xchan, struct xdma_intr_handler *ih);
 int xdma_teardown_all_intr(xdma_channel_t *xchan);
 int xdma_callback(struct xdma_channel *xchan, xdma_transfer_status_t *status);
-void xdma_assert_locked(void);
 
 struct xdma_intr_handler {
 	int				(*cb)(void *cb_user, xdma_transfer_status_t *status);

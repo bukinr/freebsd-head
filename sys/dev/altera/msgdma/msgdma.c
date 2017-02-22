@@ -404,8 +404,6 @@ msgdma_channel_alloc(device_t dev, struct xdma_channel *xchan)
 
 	sc = device_get_softc(dev);
 
-	xdma_assert_locked();
-
 	for (i = 0; i < MSGDMA_NCHANNELS; i++) {
 		chan = &sc->channels[i];
 		if (chan->used == 0) {
@@ -434,8 +432,6 @@ msgdma_channel_free(device_t dev, struct xdma_channel *xchan)
 	struct msgdma_softc *sc;
 
 	sc = device_get_softc(dev);
-
-	xdma_assert_locked();
 
 	chan = (struct msgdma_channel *)xchan->chan;
 

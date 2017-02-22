@@ -578,8 +578,6 @@ softdma_channel_alloc(device_t dev, struct xdma_channel *xchan)
 
 	sc = device_get_softc(dev);
 
-	xdma_assert_locked();
-
 	for (i = 0; i < SOFTDMA_NCHANNELS; i++) {
 		chan = &sc->channels[i];
 		if (chan->used == 0) {
@@ -612,8 +610,6 @@ softdma_channel_free(device_t dev, struct xdma_channel *xchan)
 	struct softdma_softc *sc;
 
 	sc = device_get_softc(dev);
-
-	xdma_assert_locked();
 
 	chan = (struct softdma_channel *)xchan->chan;
 

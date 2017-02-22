@@ -340,6 +340,14 @@ atse_transmit(struct ifnet *ifp, struct mbuf *m)
 	return (0);
 }
 
+static void
+atse_qflush(struct ifnet *ifp)
+{
+	struct atse_softc *sc;
+
+	sc = ifp->if_softc;
+}
+
 static int
 atse_stop_locked(struct atse_softc *sc)
 {
@@ -1322,6 +1330,7 @@ atse_attach(device_t dev)
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ifp->if_ioctl = atse_ioctl;
 	ifp->if_transmit = atse_transmit;
+	ifp->if_qflush = atse_qflush;
 	ifp->if_init = atse_init;
 	IFQ_SET_MAXLEN(&ifp->if_snd, ATSE_TX_LIST_CNT - 1);
 	ifp->if_snd.ifq_drv_maxlen = ATSE_TX_LIST_CNT - 1;
