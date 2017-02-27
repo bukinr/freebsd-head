@@ -68,6 +68,7 @@
 	cap-sd-highspeed;
 	broken-cd;
 	bus-width = <4>;
+	bus-frequency = <200000000>;
 };
 
 &i2c1 {
