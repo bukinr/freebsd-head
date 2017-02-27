@@ -1,0 +1,50 @@
+/*
+ *
+ */
+
+/dts-v1/;
+#include "socfpga_arria10_socdk.dtsi"
+
+/ {
+	model = "Altera SOCFPGA Arria 10";
+	compatible = "altr,socfpga-arria10", "altr,socfpga";
+
+	soc {
+		/* Private timer */
+		timer@ffffc600 {
+			clock-frequency = <200000000>;
+		};
+
+		/* Global timer */
+		global_timer: timer@ffffc200 {
+			compatible = "arm,cortex-a9-global-timer";
+			reg = <0xffffc200 0x20>;
+			interrupts = <1 11 0x301>;
+			clock-frequency = <200000000>;
+		};
+	};
+
+	chosen {
+		stdin = "serial1";
+		stdout = "serial1";
+	};
+};
+
+&uart1 {
+	clock-frequency = < 50000000 >;
+};
+
+&mmc {
+	status = "okay";
+	num-slots = <1>;
+	cap-sd-highspeed;
+	broken-cd;
+	bus-width = <4>;
+};
+
+&i2c1 {
+	lcd@28 {
+		compatible = "newhaven,nhd-0216k3z-nsw-bbw";
+		reg = <0x28>;
+	};
+};
