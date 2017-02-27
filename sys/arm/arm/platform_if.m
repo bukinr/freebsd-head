@@ -50,6 +50,10 @@
 
 INTERFACE platform;
 
+HEADER {
+	void platform_default_mp_setmaxid(platform_t);
+};
+
 #
 # Default implementations
 #
@@ -62,12 +66,6 @@ CODE {
 	static vm_offset_t platform_default_lastaddr(platform_t plat)
 	{
 		return (devmap_lastaddr());
-	}
-
-	static void platform_default_mp_setmaxid(platform_t plat)
-	{
-		mp_ncpus = 1;
-		mp_maxid = 0;
 	}
 };
 

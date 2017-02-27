@@ -58,6 +58,9 @@ __FBSDID("$FreeBSD$");
 #include <machine/platformvar.h>
 #include <machine/smp.h>
 
+#include <dev/ofw/openfirm.h>
+#include <dev/ofw/ofw_cpu.h>
+
 #include "platform_if.h"
 
 static platform_def_t	*plat_def_impl;
@@ -219,6 +222,27 @@ platform_delay(int usec, void *arg __unused)
 #endif
 
 #if defined(SMP) && defined(PLATFORM_SMP)
+static boolean_t
+platform_maxid(u_int id, phandle_t node, u_int addr_cells, pcell_t *reg)
+{
+
+	if (mp_maxid < id)
+		mp_maxid = id;
+
+	return (true);
+}
+
+void
+platform_default_mp_setmaxid(platform_t plat)
+{
+
+	mp_maxid = PCPU_GET(cpuid);
+	mp_ncpus = ofw_cpu_early_foreach(platform_maxid, true);
+	if (mp_ncpus < 1)
+		mp_ncpus = 1;
+	mp_ncpus = MIN(mp_ncpus, MAXCPU);
+}
+
 void
 platform_mp_setmaxid(void)
 {
