@@ -37,8 +37,11 @@
 	model = "Altera SOCFPGA Arria 10";
 	compatible = "altr,socfpga-arria10", "altr,socfpga";
 
+	/* Reserve first page for secondary CPU trampoline code */
+	memreserve = < 0x00000000 0x1000 >;
+
 	soc {
-		/* Private timer */
+		/* Local timer */
 		timer@ffffc600 {
 			clock-frequency = <200000000>;
 		};
