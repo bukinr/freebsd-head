@@ -106,25 +106,6 @@ socfpga_a10_devmap_init(platform_t plat)
 }
 #endif
 
-static int
-socfpga_a10_devmap_init(platform_t plat)
-{
-
-	/* UART */
-	devmap_add_entry(0xffc00000, 0x100000);
-
-	/* USB OTG */
-	devmap_add_entry(0xffb00000, 0x100000);
-
-	/* dwmmc */
-	devmap_add_entry(0xff800000, 0x100000);
-
-	/* scu */
-	devmap_add_entry(0xfff00000, 0x100000);
-
-	return (0);
-}
-
 static void
 _socfpga_cpu_reset(bus_size_t reg)
 {
