@@ -75,8 +75,8 @@ __FBSDID("$FreeBSD$");
 #define	RAM_PHYSBASE			0x0
 #define	RAM_SIZE			0x1000
 
-#define	SOCFPGA_CYCLONE5		1
-#define	SOCFPGA_ARRIA10			2
+#define	SOCFPGA_ARRIA10			1
+#define	SOCFPGA_CYCLONE5		2
 
 extern char	*mpentry_addr;
 static void	socfpga_trampoline(void);
