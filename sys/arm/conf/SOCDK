@@ -18,87 +18,13 @@
 #
 # $FreeBSD$
 
-include 	"std.armv6"
-include 	"../altera/socfpga/std.socfpga"
-
-ident		SOCDK
-
 #NO_UNIVERSE
 
-makeoptions	MODULES_OVERRIDE=""
+ident		SOCDK
+include 	"SOCFPGA"
 
-makeoptions	WERROR="-Werror"
-
-options 	SCHED_ULE		# ULE scheduler
-options 	PLATFORM		# Platform based SoC
-options 	PLATFORM_SMP
-options 	SMP			# Enable multiple cores
-
-options 	MULTIDELAY
 options		ROOTDEVNAME=\"ufs:/dev/mmcsd0s4\"
 
-# NFS root from boopt/dhcp
-#options 	BOOTP
-#options 	BOOTP_NFSROOT
-#options 	BOOTP_COMPAT
-#options 	BOOTP_NFSV3
-#options 	BOOTP_WIRED_TO=ue0
-
-# Interrupt controller
-device		gic
-options 	INTRNG
-
-# ARM MPCore timer
-device		mpcore_timer
-
-# MMC/SD/SDIO Card slot support
-device		mmc			# mmc/sd bus
-device		mmcsd			# mmc/sd flash cards
-device		dwmmc
-
-# Pseudo devices
-
-device		loop
-device		random
-device		pty
-device		md
-device		gpio
-
-# USB support
-options 	USB_HOST_ALIGN=64	# Align usb buffers to cache line size.
-device		usb
-device		dwcotg
-
-device		umass
-device		scbus			# SCSI bus (required for ATA/SCSI)
-device		da			# Direct Access (disks)
-device		pass
-
-# Serial ports
-device		uart
-device		uart_snps
-
-# I2C (TWSI)
-device		iic
-device		iicbus
-
-# SPI
-device		spibus
-
-# Ethernet
-device		ether
-device		mii
-device		smsc
-device		smscphy
-device		dwc
-device		micphy
-
-# USB ethernet support, requires miibus
-device		miibus
-device		axe			# ASIX Electronics USB Ethernet
-device		bpf			# Berkeley packet filter
-
 # Flattened Device Tree
-options 	FDT			# Configure using FDT/DTB data
 options		FDT_DTB_STATIC
 makeoptions	FDT_DTS_FILE=socfpga_arria10_socdk_sdmmc.dts
