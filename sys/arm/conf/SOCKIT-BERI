@@ -20,8 +20,8 @@
 
 #NO_UNIVERSE
 
-ident		SOCKIT-BERI
 include 	"SOCFPGA"
+ident		SOCKIT-BERI
 
 options 	ROOTDEVNAME=\"ufs:/dev/mmcsd0s4\"
 

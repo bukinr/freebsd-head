@@ -20,8 +20,8 @@
 
 #NO_UNIVERSE
 
-ident		SOCDK
 include 	"SOCFPGA"
+ident		SOCDK
 
 options		ROOTDEVNAME=\"ufs:/dev/mmcsd0s4\"
 

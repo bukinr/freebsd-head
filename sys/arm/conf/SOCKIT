@@ -20,8 +20,8 @@
 
 #NO_UNIVERSE
 
-ident		SOCKIT
 include 	"SOCFPGA"
+ident		SOCKIT
 
 options 	ROOTDEVNAME=\"ufs:/dev/mmcsd0s4\"
 
