@@ -31,6 +31,9 @@ options 	PLATFORM_SMP
 options 	SMP			# Enable multiple cores
 options 	MULTIDELAY
 
+options 	SOC_ALTERA_CYCLONE5
+options 	SOC_ALTERA_ARRIA10
+
 # NFS root from boopt/dhcp
 #options 	BOOTP
 #options 	BOOTP_NFSROOT
