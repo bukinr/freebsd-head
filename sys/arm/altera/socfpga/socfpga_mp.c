@@ -92,6 +92,27 @@ socfpga_trampoline(void)
 			"1: .space 4\n");
 }
 
+void
+socfpga_mp_setmaxid(platform_t plat)
+{
+	int hwcpu, ncpu;
+
+	/* If we've already set this don't bother to do it again. */
+	if (mp_ncpus != 0)
+		return;
+
+	hwcpu = 2;
+
+	ncpu = hwcpu;
+	TUNABLE_INT_FETCH("hw.ncpu", &ncpu);
+	if (ncpu < 1 || ncpu > hwcpu)
+		ncpu = hwcpu;
+
+	mp_ncpus = ncpu;
+	mp_maxid = ncpu - 1;
+}
+
+
 static void
 _socfpga_mp_start_ap(platform_t plat, uint32_t platid)
 {

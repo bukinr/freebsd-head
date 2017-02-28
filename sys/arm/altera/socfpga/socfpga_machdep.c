@@ -145,6 +145,7 @@ static platform_method_t socfpga_methods[] = {
 	PLATFORMMETHOD(platform_devmap_init,	socfpga_devmap_init),
 	PLATFORMMETHOD(platform_cpu_reset,	socfpga_cpu_reset),
 #ifdef SMP
+	PLATFORMMETHOD(platform_mp_setmaxid,	socfpga_mp_setmaxid),
 	PLATFORMMETHOD(platform_mp_start_ap,	socfpga_mp_start_ap),
 #endif
 	PLATFORMMETHOD_END,
@@ -155,6 +156,7 @@ static platform_method_t socfpga_a10_methods[] = {
 	PLATFORMMETHOD(platform_devmap_init,	socfpga_a10_devmap_init),
 	PLATFORMMETHOD(platform_cpu_reset,	socfpga_a10_cpu_reset),
 #ifdef SMP
+	PLATFORMMETHOD(platform_mp_setmaxid,	socfpga_mp_setmaxid),
 	PLATFORMMETHOD(platform_mp_start_ap,	socfpga_a10_mp_start_ap),
 #endif
 	PLATFORMMETHOD_END,
