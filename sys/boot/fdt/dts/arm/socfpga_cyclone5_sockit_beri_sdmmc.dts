@@ -65,7 +65,6 @@
 			compatible = "altr,pio";
 			reg = <0xc0020000 0x1000>; /* recv */
 			interrupts = < 76 >;
-			interrupt-parent = <&GIC>;
 			status = "okay";
 		};
 
@@ -73,7 +72,6 @@
 			compatible = "altr,pio";
 			reg = <0xc0021000 0x1000>; /* send */
 			interrupts = < 82 >; /* not in use on arm side */
-			interrupt-parent = <&GIC>;
 			status = "okay";
 		};
 
@@ -81,7 +79,6 @@
 			compatible = "altr,pio";
 			reg = <0xc0022000 0x1000>; /* recv */
 			interrupts = < 77 >;
-			interrupt-parent = <&GIC>;
 			status = "okay";
 		};
 
@@ -89,7 +86,6 @@
 			compatible = "altr,pio";
 			reg = <0xc0023000 0x1000>; /* send */
 			interrupts = < 83 >; /* not in use on arm side */
-			interrupt-parent = <&GIC>;
 			status = "okay";
 		};
 
@@ -115,7 +111,6 @@
 			compatible = "sri-cambridge,beri-ring";
 			reg = <0xc0000000 0x3000>;
 			interrupts = < 72 73 >;
-			interrupt-parent = <&GIC>;
 			device_name = "beri_debug";
 			data_size = <0x1000>;
 			data_read = <0x0>;
@@ -129,7 +124,6 @@
 			compatible = "sri-cambridge,beri-ring";
 			reg = <0xc0004000 0x3000>;
 			interrupts = < 74 75 >;
-			interrupt-parent = <&GIC>;
 			device_name = "beri_console";
 			data_size = <0x1000>;
 			data_read = <0x0>;
