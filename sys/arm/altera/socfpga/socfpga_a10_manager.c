@@ -70,6 +70,8 @@ __FBSDID("$FreeBSD$");
 #define	 F2S_PR_READY			(1 << 9)
 #define	 F2S_MSEL_S			16
 #define	 F2S_MSEL_M			(0x7 << F2S_MSEL_S)
+#define	 MSEL_PASSIVE_FAST		0
+#define	 MSEL_PASSIVE_SLOW		1
 #define	 F2S_NCONFIG_PIN		(1 << 12)
 #define	 F2S_CONDONE_OE			(1 << 7)
 #define	 F2S_NSTATUS_PIN		(1 << 4)
@@ -87,6 +89,8 @@ __FBSDID("$FreeBSD$");
 #define	 CTRL_01_S2F_PR_REQUEST		(1 << 16)
 #define	 CTRL_01_S2F_NENABLE_CONFIG	(1 << 0)
 #define	IMGCFG_CTRL_02			0x78
+#define	 CTRL_02_CDRATIO_S		16
+#define	 CTRL_02_CDRATIO_M		(0x3 << CTRL_02_CDRATIO_S)
 #define	 CTRL_02_CFGWIDTH_16		(0 << 24)
 #define	 CTRL_02_CFGWIDTH_32		(1 << 24)
 #define	 CTRL_02_EN_CFG_DATA		(1 << 8)
@@ -113,79 +117,41 @@ fpga_open(struct cdev *dev, int flags __unused,
     int fmt __unused, struct thread *td __unused)
 {
 	struct fpgamgr_a10_softc *sc;
+	int tout;
 	int msel;
 	int reg;
 
 	sc = dev->si_drv1;
 
-/* Step 1 */
+	/* Step 1 */
 	reg = READ4(sc, IMGCFG_STAT);
 	if ((reg & F2S_USERMODE) == 0) {
 		device_printf(sc->dev, "Invalid mode\n");
 		return (ENXIO);
 	};
 
-/* Step 2 */
+	/* Step 2 */
 	reg = READ4(sc, IMGCFG_STAT);
 	msel = (reg & F2S_MSEL_M) >> F2S_MSEL_S;
-	if ((msel != 0) && (msel != 1)) {
+	if ((msel != MSEL_PASSIVE_FAST) && \
+	    (msel != MSEL_PASSIVE_SLOW)) {
 		device_printf(sc->dev, "Invalid msel %d\n", msel);
 		return (ENXIO);
 	};
 
-	reg = READ4(sc, IMGCFG_STAT);
-	if ((reg & F2S_NCONFIG_PIN) == 0) {
-		device_printf(sc->dev, "nconfig is low\n");
-		return (ENXIO);
-	}
+	/*
+	 * Step 3.
+	 * TODO: add support for compressed, encrypted images.
+	 */
+	reg = READ4(sc, IMGCFG_CTRL_02);
+	reg &= ~(CTRL_02_CDRATIO_M);
+	WRITE4(sc, IMGCFG_CTRL_02, reg);
 
-	if ((reg & F2S_NSTATUS_PIN) == 0) {
-		device_printf(sc->dev, "nstatus is low\n");
-		return (ENXIO);
-	}
-
-/* Step 2 */
 	reg = READ4(sc, IMGCFG_CTRL_02);
 	reg &= ~CTRL_02_CFGWIDTH_32;
 	WRITE4(sc, IMGCFG_CTRL_02, reg);
 
-/* Step 3 */
-
-	reg = READ4(sc, IMGCFG_CTRL_02);
-	reg &= ~(0x3 << 16); //cdratio 1
-	//reg |= (0x1 << 16); //cdratio 2
-	//reg |= (0x2 << 16); //cdratio 4
-	//reg |= (0x3 << 16); //cdratio 8
-	WRITE4(sc, IMGCFG_CTRL_02, reg);
-
-/* Step 4 */
-
-	reg = READ4(sc, IMGCFG_CTRL_01);
-	reg |= CTRL_01_S2F_NENABLE_CONFIG;
-	WRITE4(sc, IMGCFG_CTRL_01, reg);
-
-	/* c */
-	reg = READ4(sc, IMGCFG_CTRL_02);
-	reg |= CTRL_02_EN_CFG_CTRL;
-	WRITE4(sc, IMGCFG_CTRL_02, reg);
-
-	/* d */
-	reg = READ4(sc, IMGCFG_CTRL_00);
-	//reg &= ~S2F_CONDONE_OE;
-	//reg &= ~S2F_NSTATUS_OE;
-	reg |= CTRL_00_NCONFIG;
-	reg |= CTRL_00_NENABLE_NSTATUS;
-	reg |= CTRL_00_NENABLE_CONDONE;
-	reg |= CTRL_00_NENABLE_NCONFIG;
-	WRITE4(sc, IMGCFG_CTRL_00, reg);
-
-/* Step 5 */
-	reg = READ4(sc, IMGCFG_CTRL_01);
-	reg &= ~CTRL_01_S2F_NENABLE_CONFIG;
-	WRITE4(sc, IMGCFG_CTRL_01, reg);
-
-#if 0
-	/* a */
+	/* Step 4. a */
 	reg = READ4(sc, IMGCFG_CTRL_01);
 	reg &= ~CTRL_01_S2F_PR_REQUEST;
 	WRITE4(sc, IMGCFG_CTRL_01, reg);
@@ -198,22 +164,39 @@ fpga_open(struct cdev *dev, int flags __unused,
 	reg = READ4(sc, IMGCFG_CTRL_01);
 	reg &= ~CTRL_01_S2F_NCE;
 	WRITE4(sc, IMGCFG_CTRL_01, reg);
-#endif
 
+	/* c */
+	reg = READ4(sc, IMGCFG_CTRL_02);
+	reg |= CTRL_02_EN_CFG_CTRL;
+	WRITE4(sc, IMGCFG_CTRL_02, reg);
+
+	/* d */
+	reg = READ4(sc, IMGCFG_CTRL_00);
+	reg &= ~S2F_CONDONE_OE;
+	reg &= ~S2F_NSTATUS_OE;
+	reg |= CTRL_00_NCONFIG;
+	reg |= CTRL_00_NENABLE_NSTATUS;
+	reg |= CTRL_00_NENABLE_CONDONE;
+	reg &= ~CTRL_00_NENABLE_NCONFIG;
+	WRITE4(sc, IMGCFG_CTRL_00, reg);
+
+	/* Step 5 */
+	reg = READ4(sc, IMGCFG_CTRL_01);
+	reg &= ~CTRL_01_S2F_NENABLE_CONFIG;
+	WRITE4(sc, IMGCFG_CTRL_01, reg);
+
+	/* Step 6 */
 	fpga_wait_dclk_pulses(sc, 0x100);
 
-
-/* Step 7 */
+	/* Step 7. a */
 	reg = READ4(sc, IMGCFG_CTRL_01);
 	reg |= CTRL_01_S2F_PR_REQUEST;
 	WRITE4(sc, IMGCFG_CTRL_01, reg);
 
-
-/* Step 6 */
-
+	/* b, c */
 	fpga_wait_dclk_pulses(sc, 0x7ff);
 
-	int tout;
+	/* Step 8 */
 	tout = 10;
 	while (tout--) {
 		reg = READ4(sc, IMGCFG_STAT);
@@ -229,11 +212,6 @@ fpga_open(struct cdev *dev, int flags __unused,
 		device_printf(sc->dev, "tout\n");
 		return (ENXIO);
 	}
-
-	printf("%s: done, imgcfg stat %x\n", __func__, READ4(sc, IMGCFG_STAT));
-	printf("%s: imgctrl00 %x\n", __func__, READ4(sc, IMGCFG_CTRL_00));
-	printf("%s: imgctrl01 %x\n", __func__, READ4(sc, IMGCFG_CTRL_01));
-	printf("%s: imgctrl02 %x\n", __func__, READ4(sc, IMGCFG_CTRL_02));
 
 	return (0);
 }
@@ -261,7 +239,8 @@ fpga_wait_dclk_pulses(struct fpgamgr_a10_softc *sc, int npulses)
 		DELAY(10);
 	}
 	if (tout == 0) {
-		printf("tout on dclkpulses\n");
+		device_printf(sc->dev,
+		    "dclkpulses wait timeout\n");
 		return (1);
 	}
 
@@ -278,10 +257,8 @@ fpga_close(struct cdev *dev, int flags __unused,
 
 	sc = dev->si_drv1;
 
-	printf("%s: imgcfg stat %x\n", __func__, READ4(sc, IMGCFG_STAT));
-
+	/* Step 10 */
 	tout = 10;
-
 	while (tout--) {
 		reg = READ4(sc, IMGCFG_STAT);
 		if (reg & F2S_PR_ERROR) {
@@ -294,37 +271,46 @@ fpga_close(struct cdev *dev, int flags __unused,
 		}
 	}
 
+	/* Step 11 */
 	reg = READ4(sc, IMGCFG_CTRL_01);
 	reg &= ~CTRL_01_S2F_PR_REQUEST;
 	WRITE4(sc, IMGCFG_CTRL_01, reg);
 
-	fpga_wait_dclk_pulses(sc, 256);
+	/* Step 12, 13 */
+	fpga_wait_dclk_pulses(sc, 0x100);
 
+	/* Step 14 */
 	reg = READ4(sc, IMGCFG_CTRL_02);
 	reg &= ~CTRL_02_EN_CFG_CTRL;
 	WRITE4(sc, IMGCFG_CTRL_02, reg);
 
+	/* Step 15 */
 	reg = READ4(sc, IMGCFG_CTRL_01);
 	reg |= CTRL_01_S2F_NCE;
 	WRITE4(sc, IMGCFG_CTRL_01, reg);
 
+	/* Step 16 */
 	reg = READ4(sc, IMGCFG_CTRL_01);
 	reg |= CTRL_01_S2F_NENABLE_CONFIG;
 	WRITE4(sc, IMGCFG_CTRL_01, reg);
 
+	/* Step 17 */
 	reg = READ4(sc, IMGCFG_STAT);
 	if ((reg & F2S_USERMODE) == 0) {
-		device_printf(sc->dev, "usermode\n");
+		device_printf(sc->dev,
+		    "Error: invalid mode\n");
 		return (ENXIO);
 	};
 
 	if ((reg & F2S_CONDONE_PIN) == 0) {
-		device_printf(sc->dev, "err 2\n");
+		device_printf(sc->dev,
+		    "Error: configuration not done\n");
 		return (ENXIO);
 	};
 
 	if ((reg & F2S_NSTATUS_PIN) == 0) {
-		device_printf(sc->dev, "err 3\n");
+		device_printf(sc->dev,
+		    "Error: nstatus pin\n");
 		return (ENXIO);
 	};
 
@@ -339,7 +325,10 @@ fpga_write(struct cdev *dev, struct uio *uio, int ioflag)
 
 	sc = dev->si_drv1;
 
-	/* Device supports 4-byte writes only. */
+	/*
+	 * Step 9.
+	 * Device supports 4-byte writes only.
+	 */
 
 	while (uio->uio_resid >= 4) {
 		uiomove(&buffer, 4, uio);
@@ -401,6 +390,7 @@ fpgamgr_a10_probe(device_t dev)
 		return (ENXIO);
 
 	device_set_desc(dev, "FPGA Manager");
+
 	return (BUS_PROBE_DEFAULT);
 }
 
