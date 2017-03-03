@@ -165,7 +165,8 @@ fpga_open(struct cdev *dev, int flags __unused,
 	msel = (reg & F2S_MSEL_M) >> F2S_MSEL_S;
 	if ((msel != MSEL_PASSIVE_FAST) && \
 	    (msel != MSEL_PASSIVE_SLOW)) {
-		device_printf(sc->dev, "Error: invalid msel %d\n", msel);
+		device_printf(sc->dev,
+		    "Error: invalid msel %d\n", msel);
 		return (ENXIO);
 	};
 
@@ -264,7 +265,7 @@ fpga_close(struct cdev *dev, int flags __unused,
 		reg = READ4(sc, IMGCFG_STAT);
 		if (reg & F2S_PR_ERROR) {
 			device_printf(sc->dev,
-			    "Error: partial reprogramming failed.\n");
+			    "Error: PR failed.\n");
 			return (ENXIO);
 		}
 		if (reg & F2S_PR_DONE) {
@@ -439,4 +440,5 @@ static driver_t fpgamgr_a10_driver = {
 
 static devclass_t fpgamgr_a10_devclass;
 
-DRIVER_MODULE(fpgamgr_a10, simplebus, fpgamgr_a10_driver, fpgamgr_a10_devclass, 0, 0);
+DRIVER_MODULE(fpgamgr_a10, simplebus, fpgamgr_a10_driver,
+    fpgamgr_a10_devclass, 0, 0);
