@@ -64,19 +64,6 @@ __FBSDID("$FreeBSD$");
 #define	FPGAMGR_GPO			0x10	/* General-Purpose Output Register */
 #define	FPGAMGR_GPI			0x14	/* General-Purpose Input Register */
 #define	FPGAMGR_MISCI			0x18	/* Miscellaneous Input Register */
-#define	IMGCFG_STAT			0x80
-#define	 F2S_PR_ERROR			(1 << 11)
-#define	 F2S_PR_DONE			(1 << 10)
-#define	 F2S_PR_READY			(1 << 9)
-#define	 F2S_MSEL_S			16
-#define	 F2S_MSEL_M			(0x7 << F2S_MSEL_S)
-#define	 MSEL_PASSIVE_FAST		0
-#define	 MSEL_PASSIVE_SLOW		1
-#define	 F2S_NCONFIG_PIN		(1 << 12)
-#define	 F2S_CONDONE_OE			(1 << 7)
-#define	 F2S_NSTATUS_PIN		(1 << 4)
-#define	 F2S_CONDONE_PIN		(1 << 6)
-#define	 F2S_USERMODE			(1 << 2)
 #define	IMGCFG_CTRL_00			0x70
 #define	 S2F_CONDONE_OE			(1 << 24)
 #define	 S2F_NSTATUS_OE			(1 << 16)
@@ -95,6 +82,19 @@ __FBSDID("$FreeBSD$");
 #define	 CTRL_02_CFGWIDTH_32		(1 << 24)
 #define	 CTRL_02_EN_CFG_DATA		(1 << 8)
 #define	 CTRL_02_EN_CFG_CTRL		(1 << 0)
+#define	IMGCFG_STAT			0x80
+#define	 F2S_PR_ERROR			(1 << 11)
+#define	 F2S_PR_DONE			(1 << 10)
+#define	 F2S_PR_READY			(1 << 9)
+#define	 F2S_MSEL_S			16
+#define	 F2S_MSEL_M			(0x7 << F2S_MSEL_S)
+#define	 MSEL_PASSIVE_FAST		0
+#define	 MSEL_PASSIVE_SLOW		1
+#define	 F2S_NCONFIG_PIN		(1 << 12)
+#define	 F2S_CONDONE_OE			(1 << 7)
+#define	 F2S_NSTATUS_PIN		(1 << 4)
+#define	 F2S_CONDONE_PIN		(1 << 6)
+#define	 F2S_USERMODE			(1 << 2)
 
 struct fpgamgr_a10_softc {
 	struct resource		*res[2];
