@@ -1,9 +1,9 @@
 /*-
- * Copyright (c) 2014 Ruslan Bukin <br@bsdpad.com>
+ * Copyright (c) 2017 Ruslan Bukin <br@bsdpad.com>
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
- * Cambridge Computer Laboratory under DARPA/AFRL contract (FA8750-10-C-0237)
+ * Cambridge Computer Laboratory under DARPA/AFRL contract FA8750-10-C-0237
  * ("CTSRD"), as part of the DARPA CRASH research programme.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,7 +30,7 @@
 
 /*
  * Altera FPGA Manager.
- * Chapter 4, Cyclone V Device Handbook (CV-5V2 2014.07.22)
+ * Chapter 4, Arria 10 Hard Processor System Technical Reference Manual
  */
 
 #include <sys/cdefs.h>
@@ -150,34 +150,10 @@ __FBSDID("$FreeBSD$");
 #define	FPGAMGR_MODE_INIT	0x3
 #define	FPGAMGR_MODE_USER	0x4
 
-struct cfgmgr_mode {
-	int msel;
-	int cfgwdth;
-	int cdratio;
-};
-
-#if 0
-static struct cfgmgr_mode cfgmgr_modes[] = {
-	{ MSEL_PP16_FAST_NOAES_NODC, CFGWDTH_16, CDRATIO_1 },
-	{ MSEL_PP16_FAST_AES_NODC,   CFGWDTH_16, CDRATIO_2 },
-	{ MSEL_PP16_FAST_AESOPT_DC,  CFGWDTH_16, CDRATIO_4 },
-	{ MSEL_PP16_SLOW_NOAES_NODC, CFGWDTH_16, CDRATIO_1 },
-	{ MSEL_PP16_SLOW_AES_NODC,   CFGWDTH_16, CDRATIO_2 },
-	{ MSEL_PP16_SLOW_AESOPT_DC,  CFGWDTH_16, CDRATIO_4 },
-	{ MSEL_PP32_FAST_NOAES_NODC, CFGWDTH_32, CDRATIO_1 },
-	{ MSEL_PP32_FAST_AES_NODC,   CFGWDTH_32, CDRATIO_4 },
-	{ MSEL_PP32_FAST_AESOPT_DC,  CFGWDTH_32, CDRATIO_8 },
-	{ MSEL_PP32_SLOW_NOAES_NODC, CFGWDTH_32, CDRATIO_1 },
-	{ MSEL_PP32_SLOW_AES_NODC,   CFGWDTH_32, CDRATIO_4 },
-	{ MSEL_PP32_SLOW_AESOPT_DC,  CFGWDTH_32, CDRATIO_8 },
-	{ -1, -1, -1 },
-};
-#endif
-
 int wcnt = 0;
 int nopf = 0;
 
-struct fpgamgr_softc {
+struct fpgamgr_a10_softc {
 	struct resource		*res[2];
 	bus_space_tag_t		bst_data;
 	bus_space_handle_t	bsh_data;
@@ -185,16 +161,16 @@ struct fpgamgr_softc {
 	device_t		dev;
 };
 
-static struct resource_spec fpgamgr_spec[] = {
+static struct resource_spec fpgamgr_a10_spec[] = {
 	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },
 	{ SYS_RES_MEMORY,	1,	RF_ACTIVE },
 	{ -1, 0 }
 };
 
-static int fpga_wait_dclk_pulses(struct fpgamgr_softc *sc, int npulses);
+static int fpga_wait_dclk_pulses(struct fpgamgr_a10_softc *sc, int npulses);
 
 static int
-fpgamgr_state_get(struct fpgamgr_softc *sc)
+fpgamgr_a10_state_get(struct fpgamgr_a10_softc *sc)
 {
 	int reg;
 
@@ -206,13 +182,13 @@ fpgamgr_state_get(struct fpgamgr_softc *sc)
 }
 
 static int
-fpgamgr_state_wait(struct fpgamgr_softc *sc, int state)
+fpgamgr_a10_state_wait(struct fpgamgr_a10_softc *sc, int state)
 {
 	int tout;
 
 	tout = 1000;
 	while (tout > 0) {
-		if (fpgamgr_state_get(sc) == state)
+		if (fpgamgr_a10_state_get(sc) == state)
 			break;
 		tout--;
 		DELAY(10);
@@ -224,83 +200,11 @@ fpgamgr_state_wait(struct fpgamgr_softc *sc, int state)
 	return (0);
 }
 
-#if 0
-static int
-socfpga_a10_gen_dclks(struct fpgamgr_softc *sc, int npulses)
-{
-	int tout;
-
-	
-
-	return (0);
-}
-#endif
-
-static int
-fpga_reset(struct fpgamgr_softc *sc)
-{
-	uint32_t reg;
-	uint32_t tout;
-
-	printf("%s\n", __func__);
-
-	reg = READ4(sc, IMGCFG_CTRL_00);
-	reg &= ~CTRL_00_NCONFIG;
-	WRITE4(sc, IMGCFG_CTRL_00, reg);
-
-	printf("%s: 1\n", __func__);
-
-	tout = 10000;
-	do {
-		reg = READ4(sc, IMGCFG_STAT);
-		if ((reg & F2S_NSTATUS_PIN) == 0) {
-			break;
-		}
-	} while (tout--);
-
-	if (tout == 0) {
-		printf("%s: failed 0\n", __func__);
-	}
-
-	printf("%s: 2\n", __func__);
-
-	reg = READ4(sc, IMGCFG_CTRL_00);
-	reg |= CTRL_00_NCONFIG;
-	WRITE4(sc, IMGCFG_CTRL_00, reg);
-
-	printf("%s: 3\n", __func__);
-
-	tout = 10000;
-	do {
-		reg = READ4(sc, IMGCFG_STAT);
-		if (reg & F2S_NSTATUS_PIN) {
-			break;
-		}
-	} while (tout--);
-
-	if (tout == 0) {
-		printf("%s: failed 1\n", __func__);
-	}
-
-	reg = READ4(sc, IMGCFG_STAT);
-	if ((reg & F2S_CONDONE_PIN) != 0) {
-		printf("%s failed 3\n", __func__);
-	}
-
-	if ((reg & F2S_CONDONE_OE) == 0) {
-		printf("%s failed 4\n", __func__);
-	}
-
-	printf("%s: done\n", __func__);
-
-	return (0);
-}
-
 static int
 fpga_open(struct cdev *dev, int flags __unused,
     int fmt __unused, struct thread *td __unused)
 {
-	struct fpgamgr_softc *sc;
+	struct fpgamgr_a10_softc *sc;
 	//struct cfgmgr_mode *mode;
 	int msel;
 	int reg;
@@ -539,7 +443,7 @@ fpga_open(struct cdev *dev, int flags __unused,
 	WRITE4(sc, FPGAMGR_CTRL, reg);
 
 	/* Wait reset state */
-	if (fpgamgr_state_wait(sc, FPGAMGR_MODE_RESET)) {
+	if (fpgamgr_a10_state_wait(sc, FPGAMGR_MODE_RESET)) {
 		device_printf(sc->dev, "Can't get RESET state\n");
 		return (ENXIO);
 	}
@@ -549,7 +453,7 @@ fpga_open(struct cdev *dev, int flags __unused,
 	reg &= ~(CTRL_NCONFIGPULL);
 	WRITE4(sc, FPGAMGR_CTRL, reg);
 
-	if (fpgamgr_state_wait(sc, FPGAMGR_MODE_CONFIG)) {
+	if (fpgamgr_a10_state_wait(sc, FPGAMGR_MODE_CONFIG)) {
 		device_printf(sc->dev, "Can't get CONFIG state\n");
 		return (ENXIO);
 	}
@@ -567,7 +471,7 @@ fpga_open(struct cdev *dev, int flags __unused,
 }
 
 static int
-fpga_wait_dclk_pulses(struct fpgamgr_softc *sc, int npulses)
+fpga_wait_dclk_pulses(struct fpgamgr_a10_softc *sc, int npulses)
 {
 	int tout;
 
@@ -602,7 +506,7 @@ static int
 fpga_close(struct cdev *dev, int flags __unused,
     int fmt __unused, struct thread *td __unused)
 {
-	struct fpgamgr_softc *sc;
+	struct fpgamgr_a10_softc *sc;
 	int reg;
 
 	sc = dev->si_drv1;
@@ -678,7 +582,7 @@ fpga_close(struct cdev *dev, int flags __unused,
 		return (ENXIO);
 	}
 
-	if (fpgamgr_state_wait(sc, FPGAMGR_MODE_USER)) {
+	if (fpgamgr_a10_state_wait(sc, FPGAMGR_MODE_USER)) {
 		device_printf(sc->dev, "Can't get USER mode\n");
 		return (ENXIO);
 	}
@@ -695,15 +599,12 @@ fpga_close(struct cdev *dev, int flags __unused,
 static int
 fpga_write(struct cdev *dev, struct uio *uio, int ioflag)
 {
-	struct fpgamgr_softc *sc;
+	struct fpgamgr_a10_softc *sc;
 	uint32_t buffer;
 
 	sc = dev->si_drv1;
 
-	/*
-	 * Device supports 4-byte copy only.
-	 * TODO: add padding for <4 bytes.
-	 */
+	/* Device supports 4-byte writes only. */
 
 	if (READ4(sc, IMGCFG_STAT) & F2S_PR_ERROR) {
 		if (nopf == 0) {
@@ -720,32 +621,27 @@ fpga_write(struct cdev *dev, struct uio *uio, int ioflag)
 	}
 
 	switch (uio->uio_resid) {
+	case 3:
+		uiomove(&buffer, 3, uio);
+		buffer &= 0xffffff;
+		bus_space_write_4(sc->bst_data, sc->bsh_data,
+		    0x0, buffer);
+		break;
 	case 2:
-		buffer = 0;
 		uiomove(&buffer, 2, uio);
-		//printf("buffer2 is %x\n", buffer);
 		buffer &= 0xffff;
-		//printf("buffer2 is %x\n", buffer);
 		bus_space_write_4(sc->bst_data, sc->bsh_data,
 		    0x0, buffer);
 		break;
 	case 1:
-		buffer = 0;
 		uiomove(&buffer, 1, uio);
-		//printf("buffer1 is %x\n", buffer);
 		buffer &= 0xff;
-		//printf("buffer1 is %x\n", buffer);
 		bus_space_write_4(sc->bst_data, sc->bsh_data,
 		    0x0, buffer);
 		break;
-	case 3:
-	case 4:
-		printf("case not 2: %d\n", uio->uio_resid);
 	default:
 		break;
 	};
-
-	//printf("%s: %x\n", __func__, READ4(sc, IMGCFG_STAT));
 
 	return (0);
 }
@@ -768,7 +664,7 @@ static struct cdevsw fpga_cdevsw = {
 };
 
 static int
-fpgamgr_probe(device_t dev)
+fpgamgr_a10_probe(device_t dev)
 {
 
 	if (!ofw_bus_status_okay(dev))
@@ -782,14 +678,14 @@ fpgamgr_probe(device_t dev)
 }
 
 static int
-fpgamgr_attach(device_t dev)
+fpgamgr_a10_attach(device_t dev)
 {
-	struct fpgamgr_softc *sc;
+	struct fpgamgr_a10_softc *sc;
 
 	sc = device_get_softc(dev);
 	sc->dev = dev;
 
-	if (bus_alloc_resources(dev, fpgamgr_spec, sc->res)) {
+	if (bus_alloc_resources(dev, fpgamgr_a10_spec, sc->res)) {
 		device_printf(dev, "could not allocate resources\n");
 		return (ENXIO);
 	}
@@ -811,18 +707,18 @@ fpgamgr_attach(device_t dev)
 	return (0);
 }
 
-static device_method_t fpgamgr_methods[] = {
-	DEVMETHOD(device_probe,		fpgamgr_probe),
-	DEVMETHOD(device_attach,	fpgamgr_attach),
+static device_method_t fpgamgr_a10_methods[] = {
+	DEVMETHOD(device_probe,		fpgamgr_a10_probe),
+	DEVMETHOD(device_attach,	fpgamgr_a10_attach),
 	{ 0, 0 }
 };
 
-static driver_t fpgamgr_driver = {
-	"fpgamgr",
-	fpgamgr_methods,
-	sizeof(struct fpgamgr_softc),
+static driver_t fpgamgr_a10_driver = {
+	"fpgamgr_a10",
+	fpgamgr_a10_methods,
+	sizeof(struct fpgamgr_a10_softc),
 };
 
-static devclass_t fpgamgr_devclass;
+static devclass_t fpgamgr_a10_devclass;
 
-DRIVER_MODULE(fpgamgr, simplebus, fpgamgr_driver, fpgamgr_devclass, 0, 0);
+DRIVER_MODULE(fpgamgr_a10, simplebus, fpgamgr_a10_driver, fpgamgr_a10_devclass, 0, 0);
