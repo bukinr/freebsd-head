@@ -201,7 +201,8 @@ fpga_open(struct cdev *dev, int flags __unused,
 	while (tout--) {
 		reg = READ4(sc, IMGCFG_STAT);
 		if (reg & F2S_PR_ERROR) {
-			device_printf(sc->dev, "pr error on open\n");
+			device_printf(sc->dev,
+			    "Error: PR failed on open\n");
 			return (ENXIO);
 		}
 		if (reg & F2S_PR_READY) {
