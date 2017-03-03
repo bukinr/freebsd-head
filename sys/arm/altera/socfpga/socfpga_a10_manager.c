@@ -29,8 +29,9 @@
  */
 
 /*
- * Altera FPGA Manager.
- * Chapter 4, Arria 10 Hard Processor System Technical Reference Manual
+ * Intel Arria 10 FPGA Manager.
+ * Chapter 4, Arria 10 Hard Processor System Technical Reference Manual.
+ * Chapter A, FPGA Reconfiguration.
  */
 
 #include <sys/cdefs.h>
@@ -58,6 +59,11 @@ __FBSDID("$FreeBSD$");
 
 #include <arm/altera/socfpga/socfpga_common.h>
 
+#define	FPGAMGR_DCLKCNT			0x8	/* DCLK Count Register */
+#define	FPGAMGR_DCLKSTAT		0xC	/* DCLK Status Register */
+#define	FPGAMGR_GPO			0x10	/* General-Purpose Output Register */
+#define	FPGAMGR_GPI			0x14	/* General-Purpose Input Register */
+#define	FPGAMGR_MISCI			0x18	/* Miscellaneous Input Register */
 #define	IMGCFG_STAT			0x80
 #define	 F2S_PR_ERROR			(1 << 11)
 #define	 F2S_PR_DONE			(1 << 10)
@@ -86,73 +92,6 @@ __FBSDID("$FreeBSD$");
 #define	 CTRL_02_EN_CFG_DATA		(1 << 8)
 #define	 CTRL_02_EN_CFG_CTRL		(1 << 0)
 
-/* FPGA Manager Module Registers */
-#define	FPGAMGR_STAT		0x0	/* Status Register */
-#define	 STAT_MSEL_MASK		0x1f
-#define	 STAT_MSEL_SHIFT	3
-#define	 STAT_MODE_SHIFT	0
-#define	 STAT_MODE_MASK		0x7
-#define	FPGAMGR_CTRL		0x4	/* Control Register */
-#define	 CTRL_AXICFGEN		(1 << 8)
-#define	 CTRL_CDRATIO_MASK	0x3
-#define	 CTRL_CDRATIO_SHIFT	6
-#define	 CTRL_CFGWDTH_MASK	1
-#define	 CTRL_CFGWDTH_SHIFT	9
-#define	 CTRL_NCONFIGPULL	(1 << 2)
-#define	 CTRL_NCE		(1 << 1)
-#define	 CTRL_EN		(1 << 0)
-#define	FPGAMGR_DCLKCNT		0x8	/* DCLK Count Register */
-#define	FPGAMGR_DCLKSTAT	0xC	/* DCLK Status Register */
-#define	FPGAMGR_GPO		0x10	/* General-Purpose Output Register */
-#define	FPGAMGR_GPI		0x14	/* General-Purpose Input Register */
-#define	FPGAMGR_MISCI		0x18	/* Miscellaneous Input Register */
-
-/* Configuration Monitor (MON) Registers */
-#define	GPIO_INTEN		0x830	/* Interrupt Enable Register */
-#define	GPIO_INTMASK		0x834	/* Interrupt Mask Register */
-#define	GPIO_INTTYPE_LEVEL	0x838	/* Interrupt Level Register */
-#define	GPIO_INT_POLARITY	0x83C	/* Interrupt Polarity Register */
-#define	GPIO_INTSTATUS		0x840	/* Interrupt Status Register */
-#define	GPIO_RAW_INTSTATUS	0x844	/* Raw Interrupt Status Register */
-#define	GPIO_PORTA_EOI		0x84C	/* Clear Interrupt Register */
-#define	 PORTA_EOI_NS		(1 << 0)
-#define	GPIO_EXT_PORTA		0x850	/* External Port A Register */
-#define	 EXT_PORTA_CDP		(1 << 10) /* Configuration done */
-#define	GPIO_LS_SYNC		0x860	/* Synchronization Level Register */
-#define	GPIO_VER_ID_CODE	0x86C	/* GPIO Version Register */
-#define	GPIO_CONFIG_REG2	0x870	/* Configuration Register 2 */
-#define	GPIO_CONFIG_REG1	0x874	/* Configuration Register 1 */
-
-#define	MSEL_PP16_FAST_NOAES_NODC	0x0
-#define	MSEL_PP16_FAST_AES_NODC		0x1
-#define	MSEL_PP16_FAST_AESOPT_DC	0x2
-#define	MSEL_PP16_SLOW_NOAES_NODC	0x4
-#define	MSEL_PP16_SLOW_AES_NODC		0x5
-#define	MSEL_PP16_SLOW_AESOPT_DC	0x6
-#define	MSEL_PP32_FAST_NOAES_NODC	0x8
-#define	MSEL_PP32_FAST_AES_NODC		0x9
-#define	MSEL_PP32_FAST_AESOPT_DC	0xa
-#define	MSEL_PP32_SLOW_NOAES_NODC	0xc
-#define	MSEL_PP32_SLOW_AES_NODC		0xd
-#define	MSEL_PP32_SLOW_AESOPT_DC	0xe
-
-#define	CFGWDTH_16	0
-#define	CFGWDTH_32	1
-
-#define	CDRATIO_1	0
-#define	CDRATIO_2	1
-#define	CDRATIO_4	2
-#define	CDRATIO_8	3
-
-#define	FPGAMGR_MODE_POWEROFF	0x0
-#define	FPGAMGR_MODE_RESET	0x1
-#define	FPGAMGR_MODE_CONFIG	0x2
-#define	FPGAMGR_MODE_INIT	0x3
-#define	FPGAMGR_MODE_USER	0x4
-
-int wcnt = 0;
-int nopf = 0;
-
 struct fpgamgr_a10_softc {
 	struct resource		*res[2];
 	bus_space_tag_t		bst_data;
@@ -170,51 +109,14 @@ static struct resource_spec fpgamgr_a10_spec[] = {
 static int fpga_wait_dclk_pulses(struct fpgamgr_a10_softc *sc, int npulses);
 
 static int
-fpgamgr_a10_state_get(struct fpgamgr_a10_softc *sc)
-{
-	int reg;
-
-	reg = READ4(sc, FPGAMGR_STAT);
-	reg >>= STAT_MODE_SHIFT;
-	reg &= STAT_MODE_MASK;
-
-	return reg;
-}
-
-static int
-fpgamgr_a10_state_wait(struct fpgamgr_a10_softc *sc, int state)
-{
-	int tout;
-
-	tout = 1000;
-	while (tout > 0) {
-		if (fpgamgr_a10_state_get(sc) == state)
-			break;
-		tout--;
-		DELAY(10);
-	}
-	if (tout == 0) {
-		return (1);
-	}
-
-	return (0);
-}
-
-static int
 fpga_open(struct cdev *dev, int flags __unused,
     int fmt __unused, struct thread *td __unused)
 {
 	struct fpgamgr_a10_softc *sc;
-	//struct cfgmgr_mode *mode;
 	int msel;
 	int reg;
 
 	sc = dev->si_drv1;
-
-	wcnt = 0;
-	nopf = 0;
-
-	printf("%s\n", __func__);
 
 /* Step 1 */
 	reg = READ4(sc, IMGCFG_STAT);
@@ -333,140 +235,6 @@ fpga_open(struct cdev *dev, int flags __unused,
 	printf("%s: imgctrl01 %x\n", __func__, READ4(sc, IMGCFG_CTRL_01));
 	printf("%s: imgctrl02 %x\n", __func__, READ4(sc, IMGCFG_CTRL_02));
 
-#if 0
-	/* step 5 */
-	reg = READ4(sc, IMGCFG_CTRL_01);
-	reg |= CTRL_01_S2F_NCE;
-	reg &= ~CTRL_01_S2F_PR_REQUEST;
-	WRITE4(sc, IMGCFG_CTRL_01, reg);
-
-	//reg = ~CTRL_01_S2F_NCE;
-	//reg |= CTRL_01_S2F_NENABLE_CONFIG;
-	//WRITE4(sc, IMGCFG_CTRL_01, reg);
-
-	reg = READ4(sc, IMGCFG_CTRL_02);
-	reg &= ~CTRL_02_EN_CFG_DATA;
-	reg &= ~CTRL_02_EN_CFG_CTRL;
-	WRITE4(sc, IMGCFG_CTRL_02, reg);
-
-	//reg = CTRL_00_NENABLE_NCONFIG | CTRL_00_NENABLE_NSTATUS;
-	//reg |= CTRL_00_NENABLE_CONDONE | CTRL_00_NCONFIG;
-
-	reg = READ4(sc, IMGCFG_CTRL_00);
-	reg |= CTRL_00_NCONFIG;
-	WRITE4(sc, IMGCFG_CTRL_00, reg);
-
-	reg = READ4(sc, IMGCFG_CTRL_00);
-	reg &= ~S2F_CONDONE_OE;
-	reg &= ~S2F_NSTATUS_OE;
-	WRITE4(sc, IMGCFG_CTRL_00, reg);
-
-	/* step 6 */
-	reg = READ4(sc, IMGCFG_CTRL_01);
-	reg &= ~CTRL_01_S2F_NENABLE_CONFIG;
-	WRITE4(sc, IMGCFG_CTRL_01, reg);
-
-	reg = READ4(sc, IMGCFG_CTRL_00);
-	reg &= ~CTRL_00_NENABLE_NCONFIG;
-	WRITE4(sc, IMGCFG_CTRL_00, reg);
-
-	/* step 7 */
-	reg = READ4(sc, IMGCFG_CTRL_00);
-	reg |= CTRL_00_NENABLE_NSTATUS;
-	reg |= CTRL_00_NENABLE_CONDONE;
-	WRITE4(sc, IMGCFG_CTRL_00, reg);
-
-	/* step 8 */
-	reg = READ4(sc, IMGCFG_CTRL_01);
-	reg &= ~CTRL_01_S2F_NCE;
-	WRITE4(sc, IMGCFG_CTRL_01, reg);
-
-	//socfpga_a10_gen_dclks(sc, 256);
-	//fpga_wait_dclk_pulses(sc, 256);
-
-	/* step 9 */
-	reg = READ4(sc, IMGCFG_STAT);
-	if ((reg & F2S_NCONFIG_PIN) == 0) {
-		device_printf(sc->dev, "nconfig is low\n");
-		return (ENXIO);
-	}
-
-	if ((reg & F2S_NSTATUS_PIN) == 0) {
-		device_printf(sc->dev, "nstatus is low\n");
-		return (ENXIO);
-	}
-
-	/* step 10 */
-	//fpga_reset(sc);
-
-	//socfpga_a10_gen_dclks(sc, 2047);
-	fpga_wait_dclk_pulses(sc, 0x7ff);
-
-	/* step 11 */
-	reg = READ4(sc, IMGCFG_CTRL_02);
-	reg |= CTRL_02_EN_CFG_DATA;
-	reg |= CTRL_02_EN_CFG_CTRL;
-	WRITE4(sc, IMGCFG_CTRL_02, reg);
-
-	msel = READ4(sc, FPGAMGR_STAT);
-	msel >>= STAT_MSEL_SHIFT;
-	msel &= STAT_MSEL_MASK;
-
-	mode = NULL;
-	for (i = 0; cfgmgr_modes[i].msel != -1; i++) {
-		if (msel == cfgmgr_modes[i].msel) {
-			mode = &cfgmgr_modes[i];
-			break;
-		}
-	}
-	if (mode == NULL) {
-		device_printf(sc->dev, "Can't configure: unknown mode\n");
-		return (ENXIO);
-	}
-
-	reg = READ4(sc, FPGAMGR_CTRL);
-	reg &= ~(CTRL_CDRATIO_MASK << CTRL_CDRATIO_SHIFT);
-	reg |= (mode->cdratio << CTRL_CDRATIO_SHIFT);
-	reg &= ~(CTRL_CFGWDTH_MASK << CTRL_CFGWDTH_SHIFT);
-	reg |= (mode->cfgwdth << CTRL_CFGWDTH_SHIFT);
-	reg &= ~(CTRL_NCE);
-	WRITE4(sc, FPGAMGR_CTRL, reg);
-
-	/* Enable configuration */
-	reg = READ4(sc, FPGAMGR_CTRL);
-	reg |= (CTRL_EN);
-	WRITE4(sc, FPGAMGR_CTRL, reg);
-
-	/* Reset FPGA */
-	reg = READ4(sc, FPGAMGR_CTRL);
-	reg |= (CTRL_NCONFIGPULL);
-	WRITE4(sc, FPGAMGR_CTRL, reg);
-
-	/* Wait reset state */
-	if (fpgamgr_a10_state_wait(sc, FPGAMGR_MODE_RESET)) {
-		device_printf(sc->dev, "Can't get RESET state\n");
-		return (ENXIO);
-	}
-
-	/* Release from reset */
-	reg = READ4(sc, FPGAMGR_CTRL);
-	reg &= ~(CTRL_NCONFIGPULL);
-	WRITE4(sc, FPGAMGR_CTRL, reg);
-
-	if (fpgamgr_a10_state_wait(sc, FPGAMGR_MODE_CONFIG)) {
-		device_printf(sc->dev, "Can't get CONFIG state\n");
-		return (ENXIO);
-	}
-
-	/* Clear nSTATUS edge interrupt */
-	WRITE4(sc, GPIO_PORTA_EOI, PORTA_EOI_NS);
-
-	/* Enter configuration state */
-	reg = READ4(sc, FPGAMGR_CTRL);
-	reg |= (CTRL_AXICFGEN);
-	WRITE4(sc, FPGAMGR_CTRL, reg);
-#endif
-
 	return (0);
 }
 
@@ -497,8 +265,6 @@ fpga_wait_dclk_pulses(struct fpgamgr_a10_softc *sc, int npulses)
 		return (1);
 	}
 
-	printf("no tout on dclkpulses: %d\n", tout);
-
 	return (0);
 }
 
@@ -507,27 +273,25 @@ fpga_close(struct cdev *dev, int flags __unused,
     int fmt __unused, struct thread *td __unused)
 {
 	struct fpgamgr_a10_softc *sc;
+	int tout;
 	int reg;
 
 	sc = dev->si_drv1;
 
 	printf("%s: imgcfg stat %x\n", __func__, READ4(sc, IMGCFG_STAT));
 
-	int tout;
 	tout = 10;
+
 	while (tout--) {
 		reg = READ4(sc, IMGCFG_STAT);
 		if (reg & F2S_PR_ERROR) {
-			device_printf(sc->dev, "pr error on close, tout %d\n", tout);
-			//return (ENXIO);
+			device_printf(sc->dev,
+			    "Error: partial reprogramming failed.\n");
+			return (ENXIO);
 		}
 		if (reg & F2S_PR_DONE) {
 			break;
 		}
-	}
-	if (tout == 0) {
-		device_printf(sc->dev, "tout on close\n");
-		//return (ENXIO);
 	}
 
 	reg = READ4(sc, IMGCFG_CTRL_01);
@@ -564,35 +328,6 @@ fpga_close(struct cdev *dev, int flags __unused,
 		return (ENXIO);
 	};
 
-#if 0
-	reg = READ4(sc, GPIO_EXT_PORTA);
-	if ((reg & EXT_PORTA_CDP) == 0) {
-		device_printf(sc->dev, "Err: configuration failed\n");
-		return (ENXIO);
-	}
-
-	/* Exit configuration state */
-	reg = READ4(sc, FPGAMGR_CTRL);
-	reg &= ~(CTRL_AXICFGEN);
-	WRITE4(sc, FPGAMGR_CTRL, reg);
-
-	/* Wait dclk pulses */
-	if (fpga_wait_dclk_pulses(sc, 4)) {
-		device_printf(sc->dev, "Can't proceed 4 dclk pulses\n");
-		return (ENXIO);
-	}
-
-	if (fpgamgr_a10_state_wait(sc, FPGAMGR_MODE_USER)) {
-		device_printf(sc->dev, "Can't get USER mode\n");
-		return (ENXIO);
-	}
-
-	/* Disable configuration */
-	reg = READ4(sc, FPGAMGR_CTRL);
-	reg &= ~(CTRL_EN);
-	WRITE4(sc, FPGAMGR_CTRL, reg);
-#endif
-
 	return (0);
 }
 
@@ -606,18 +341,10 @@ fpga_write(struct cdev *dev, struct uio *uio, int ioflag)
 
 	/* Device supports 4-byte writes only. */
 
-	if (READ4(sc, IMGCFG_STAT) & F2S_PR_ERROR) {
-		if (nopf == 0) {
-			printf("%s: err on write, wcnt %d\n", __func__, wcnt);
-			nopf = 1;
-		}
-	}
-
 	while (uio->uio_resid >= 4) {
 		uiomove(&buffer, 4, uio);
 		bus_space_write_4(sc->bst_data, sc->bsh_data,
 		    0x0, buffer);
-		wcnt++;
 	}
 
 	switch (uio->uio_resid) {
