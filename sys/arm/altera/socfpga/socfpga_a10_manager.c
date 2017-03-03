@@ -389,7 +389,7 @@ fpgamgr_a10_probe(device_t dev)
 	if (!ofw_bus_is_compatible(dev, "altr,socfpga-a10-fpga-mgr"))
 		return (ENXIO);
 
-	device_set_desc(dev, "FPGA Manager");
+	device_set_desc(dev, "Arria 10 FPGA Manager");
 
 	return (BUS_PROBE_DEFAULT);
 }
