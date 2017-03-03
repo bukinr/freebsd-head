@@ -110,7 +110,37 @@ static struct resource_spec fpgamgr_a10_spec[] = {
 	{ -1, 0 }
 };
 
-static int fpga_wait_dclk_pulses(struct fpgamgr_a10_softc *sc, int npulses);
+static int
+fpga_wait_dclk_pulses(struct fpgamgr_a10_softc *sc, int npulses)
+{
+	int tout;
+
+	/* Clear done bit, if any */
+	if (READ4(sc, FPGAMGR_DCLKSTAT) != 0)
+		WRITE4(sc, FPGAMGR_DCLKSTAT, 0x1);
+
+	/* Request DCLK pulses */
+	WRITE4(sc, FPGAMGR_DCLKCNT, npulses);
+
+	/* Wait finish */
+	tout = 1000;
+	while (tout > 0) {
+		if (READ4(sc, FPGAMGR_DCLKSTAT) == 1) {
+			WRITE4(sc, FPGAMGR_DCLKSTAT, 0x1);
+			break;
+		}
+		tout--;
+		DELAY(10);
+	}
+	if (tout == 0) {
+		device_printf(sc->dev,
+		    "Error: dclkpulses wait timeout\n");
+		return (1);
+	}
+
+	return (0);
+}
+
 
 static int
 fpga_open(struct cdev *dev, int flags __unused,
@@ -126,7 +156,7 @@ fpga_open(struct cdev *dev, int flags __unused,
 	/* Step 1 */
 	reg = READ4(sc, IMGCFG_STAT);
 	if ((reg & F2S_USERMODE) == 0) {
-		device_printf(sc->dev, "Invalid mode\n");
+		device_printf(sc->dev, "Error: invalid mode\n");
 		return (ENXIO);
 	};
 
@@ -135,7 +165,7 @@ fpga_open(struct cdev *dev, int flags __unused,
 	msel = (reg & F2S_MSEL_M) >> F2S_MSEL_S;
 	if ((msel != MSEL_PASSIVE_FAST) && \
 	    (msel != MSEL_PASSIVE_SLOW)) {
-		device_printf(sc->dev, "Invalid msel %d\n", msel);
+		device_printf(sc->dev, "Error: invalid msel %d\n", msel);
 		return (ENXIO);
 	};
 
@@ -202,7 +232,7 @@ fpga_open(struct cdev *dev, int flags __unused,
 		reg = READ4(sc, IMGCFG_STAT);
 		if (reg & F2S_PR_ERROR) {
 			device_printf(sc->dev,
-			    "Error: PR failed on open\n");
+			    "Error: PR failed on open.\n");
 			return (ENXIO);
 		}
 		if (reg & F2S_PR_READY) {
@@ -210,39 +240,9 @@ fpga_open(struct cdev *dev, int flags __unused,
 		}
 	}
 	if (tout == 0) {
-		device_printf(sc->dev, "tout\n");
-		return (ENXIO);
-	}
-
-	return (0);
-}
-
-static int
-fpga_wait_dclk_pulses(struct fpgamgr_a10_softc *sc, int npulses)
-{
-	int tout;
-
-	/* Clear done bit, if any */
-	if (READ4(sc, FPGAMGR_DCLKSTAT) != 0)
-		WRITE4(sc, FPGAMGR_DCLKSTAT, 0x1);
-
-	/* Request DCLK pulses */
-	WRITE4(sc, FPGAMGR_DCLKCNT, npulses);
-
-	/* Wait finish */
-	tout = 1000;
-	while (tout > 0) {
-		if (READ4(sc, FPGAMGR_DCLKSTAT) == 1) {
-			WRITE4(sc, FPGAMGR_DCLKSTAT, 0x1);
-			break;
-		}
-		tout--;
-		DELAY(10);
-	}
-	if (tout == 0) {
 		device_printf(sc->dev,
-		    "dclkpulses wait timeout\n");
-		return (1);
+		    "Error: Timeout waiting PR ready bit.\n");
+		return (ENXIO);
 	}
 
 	return (0);
@@ -404,7 +404,7 @@ fpgamgr_a10_attach(device_t dev)
 	sc->dev = dev;
 
 	if (bus_alloc_resources(dev, fpgamgr_a10_spec, sc->res)) {
-		device_printf(dev, "could not allocate resources\n");
+		device_printf(dev, "Could not allocate resources.\n");
 		return (ENXIO);
 	}
 
