@@ -3290,6 +3290,7 @@ wpi.fw			optional wpifw					\
 	compile-with	"${NORMAL_FW}"					\
 	no-obj no-implicit-rule						\
 	clean		"wpi.fw"
+dev/xdma/controller/pl330.c	optional xdma pl330
 dev/xdma/xdma.c			optional xdma
 dev/xdma/xdma_if.m		optional xdma
 dev/xdma/xdma_fdt_test.c	optional xdma xdma_test fdt
