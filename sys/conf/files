@@ -1723,6 +1723,7 @@ dev/ichsmb/ichsmb_pci.c		optional ichsmb pci
 dev/ida/ida.c			optional ida
 dev/ida/ida_disk.c		optional ida
 dev/ida/ida_pci.c		optional ida pci
+dev/iicbus/controller/snps_i2c.c	optional snps_i2c
 dev/iicbus/ad7418.c		optional ad7418
 dev/iicbus/ds1307.c		optional ds1307
 dev/iicbus/ds133x.c		optional ds133x
@@ -1741,6 +1742,7 @@ dev/iicbus/iicsmb.c		optional iicsmb				\
 	dependency	"iicbus_if.h"
 dev/iicbus/iicoc.c		optional iicoc
 dev/iicbus/lm75.c		optional lm75
+dev/iicbus/max1619.c		optional max1619
 dev/iicbus/ofw_iicbus.c		optional fdt iicbus
 dev/iicbus/pcf8563.c		optional pcf8563
 dev/iicbus/s35390a.c		optional s35390a
