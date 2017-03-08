@@ -28,7 +28,7 @@
  * SUCH DAMAGE.
  */
 
-/* Altera mSGDMA driver. */
+/* ARM PrimeCell DMA Controller (PL330) driver. */
 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
@@ -194,7 +194,7 @@ pl330_probe(device_t dev)
 	if (hwtype == HWTYPE_NONE)
 		return (ENXIO);
 
-	device_set_desc(dev, "Altera mSGDMA");
+	device_set_desc(dev, "ARM PrimeCell DMA Controller (PL330)");
 
 	return (BUS_PROBE_DEFAULT);
 }

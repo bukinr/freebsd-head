@@ -1743,6 +1743,7 @@ dev/iicbus/iicsmb.c		optional iicsmb				\
 dev/iicbus/iicoc.c		optional iicoc
 dev/iicbus/lm75.c		optional lm75
 dev/iicbus/max1619.c		optional max1619
+dev/iicbus/nhd_0216k3z.c	optional nhd_0216k3z
 dev/iicbus/ofw_iicbus.c		optional fdt iicbus
 dev/iicbus/pcf8563.c		optional pcf8563
 dev/iicbus/s35390a.c		optional s35390a

@@ -22,6 +22,7 @@
 
 include 	"SOCFPGA"
 ident		SOCDK
+hints		"SOCDK.hints"
 
 options		ROOTDEVNAME=\"ufs:/dev/mmcsd0s4\"
 

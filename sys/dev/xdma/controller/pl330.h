@@ -30,6 +30,9 @@
  * $FreeBSD$
  */
 
+/* pl330 registers */
+
+
 /* Altera mSGDMA registers. */
 #define	DMA_STATUS		0x00
 #define	 STATUS_RESETTING	(1 << 6)

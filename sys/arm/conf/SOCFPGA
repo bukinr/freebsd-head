@@ -83,6 +83,9 @@ device		uart_snps
 # I2C (TWSI)
 device		iic
 device		iicbus
+device		snps_i2c
+device		max1619
+device		nhd_0216k3z
 
 # SPI
 device		spibus
