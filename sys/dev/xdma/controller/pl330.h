@@ -31,7 +31,41 @@
  */
 
 /* pl330 registers */
+#define	DSR		0x000 /* DMA Manager Status */
+#define	DPC		0x004 /* DMA Program Counter */
+#define	INTEN		0x020 /* Interrupt Enable */
+#define	INT_EVENT_RIS	0x024 /* Event-Interrupt Raw Status */
+#define	INTMIS		0x028 /* Interrupt Status */
+#define	INTCLR		0x02C /* Interrupt Clear */
+#define	FSRD		0x030 /* Fault Status DMA Manager */
+#define	FSRC		0x034 /* Fault Status DMA Channel */
+#define	FTRD		0x038 /* Fault Type DMA Manager */
+#define	FTR(n)		(0x040 + 0x04 * n) /* Fault type for DMA channel n */
+#define	CSR(n)		(0x100 + 0x08 * n) /* Channel status for DMA channel n */
+#define	CPC(n)		(0x104 + 0x08 * n) /* Channel PC for DMA channel n */
+#define	SAR(n)		(0x400 + 0x20 * n) /* Source address for DMA channel n */
+#define	DAR(n)		(0x404 + 0x20 * n) /* Destination address for DMA channel n */
 
+#define	CCR(n)		(0x408 + 0x20 * n) /* Channel control for DMA channel n */
+#define	LC0(n)		(0x40C + 0x20 * n) /* Loop counter 0 for DMA channel n */
+#define	LC1(n)		(0x410 + 0x20 * n) /* Loop counter 1 for DMA channel n */
+
+#define	DBGSTATUS	0xD00 /* Debug Status */
+#define	DBGCMD		0xD04 /* Debug Command */
+#define	DBGINST0	0xD08 /* Debug Instruction-0 */
+#define	DBGINST1	0xD0C /* Debug Instruction-1 */
+#define	CR0		0xE00 /* Configuration Register 0 */
+#define	CR1		0xE04 /* Configuration Register 1 */
+#define	CR2		0xE08 /* Configuration Register 2 */
+#define	CR3		0xE0C /* Configuration Register 3 */
+#define	CR4		0xE10 /* Configuration Register 4 */
+#define	CRD		0xE14 /* DMA Configuration */
+#define	WD		0xE80 /* Watchdog Register */
+
+#if 0
+0xFE0- 0xFEC  periph_id_n RO  Configuration-dependent Peripheral Identification Registers
+0xFF0- 0xFFC  pcell_id_n RO   Configuration-dependent Component Identification Registers
+#endif
 
 /* Altera mSGDMA registers. */
 #define	DMA_STATUS		0x00
