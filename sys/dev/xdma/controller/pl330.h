@@ -67,6 +67,29 @@
 0xFF0- 0xFFC  pcell_id_n RO   Configuration-dependent Component Identification Registers
 #endif
 
+/* pl330 ISA */
+#define	DMAADDH		0x54
+#define	DMAADNH		0x5c
+#define	DMAEND		0x00
+#define	DMAFLUSHP	0x35
+#define	DMAGO		0xa0
+#define	DMAKILL		0x01
+#define	DMALD		0x04
+#define	DMALDP		0x25
+#define	DMALP		0x20
+#define	DMALPEND	0x28
+//#define	DMALPFE		0x
+#define	DMAMOV		0xbc
+#define	DMANOP		0x18
+#define	DMARMB		0x12
+#define	DMASEV		0x34
+#define	DMAST		0x08
+#define	DMASTP		0x29
+#define	DMASTZ		0x0c
+#define	DMAWFE		0x36
+#define	DMAWFP		0x30
+#define	DMAWMB		0x13
+
 /* Altera mSGDMA registers. */
 #define	DMA_STATUS		0x00
 #define	 STATUS_RESETTING	(1 << 6)
