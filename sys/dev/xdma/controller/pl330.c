@@ -48,6 +48,11 @@ __FBSDID("$FreeBSD$");
 #include <sys/resource.h>
 #include <sys/rman.h>
 
+#include <vm/vm.h>
+#include <vm/vm_extern.h>
+#include <vm/vm_kern.h>
+#include <vm/pmap.h>
+
 #include <machine/bus.h>
 #include <machine/fdt.h>
 //#include <machine/cache.h>
@@ -182,6 +187,167 @@ pl330_intr(void *arg)
 	xdma_callback(chan->xchan, &status);
 }
 
+static uint32_t
+emit_mov(uint8_t *buf, uint32_t reg, uint32_t val)
+{
+
+	buf[0] = DMAMOV;
+
+	buf[1] = reg;
+	buf[2] = val;
+	buf[3] = val >> 8;
+	buf[4] = val >> 16;
+	buf[5] = val >> 24;
+
+	return (6);
+}
+
+static uint32_t
+emit_ld(uint8_t *buf)
+{
+
+	buf[0] = DMALD;
+	//single
+	buf[0] |= (0 << 1) | (1 << 0);
+
+	return (1);
+}
+
+static uint32_t
+emit_st(uint8_t *buf)
+{
+
+	buf[0] = DMAST;
+	//single
+	buf[0] |= (0 << 1) | (1 << 0);
+
+	return (1);
+}
+
+static uint32_t
+emit_end(uint8_t *buf)
+{
+
+	buf[0] = DMAEND;
+
+	return (1);
+}
+
+static uint32_t
+emit_go(uint8_t *buf, uint32_t addr)
+{
+
+	buf[0] = DMAGO;
+	//buf[0] |= (1 << 1); //ns
+
+	buf[1] = 0; //chan
+	buf[2] = addr;
+	buf[3] = addr >> 8;
+	buf[4] = addr >> 16;
+	buf[5] = addr >> 24;
+
+	return (6);
+}
+
+static int
+pl330_test(struct pl330_softc *sc)
+{
+	uint8_t *ibuf;
+	uint8_t dbuf[6];
+	uint8_t *buf1;
+	uint8_t *buf2;
+	uint32_t offs;
+	uint32_t reg;
+
+	bus_space_handle_t sram;
+	if (bus_space_map(fdtbus_bs_tag, 0xFFE00000, 1024, 0, &sram) != 0) {
+		printf("failed\n");
+	}
+	bus_space_write_4(fdtbus_bs_tag, sram, 0, 0xab);
+
+	printf("CRD %x\n", READ4(sc, CRD));
+
+#if 0
+	dbuf = (void *)kmem_alloc_contig(kernel_arena,
+		PAGE_SIZE, M_ZERO, 0, ~0, PAGE_SIZE, 0,
+		VM_MEMATTR_UNCACHEABLE);
+#endif
+
+	ibuf = (void *)kmem_alloc_contig(kernel_arena,
+		PAGE_SIZE, M_ZERO, 0, ~0, PAGE_SIZE, 0,
+		VM_MEMATTR_UNCACHEABLE);
+	printf("ibuf is %x\n", (uint32_t)ibuf);
+
+	buf1 = (void *)kmem_alloc_contig(kernel_arena,
+		PAGE_SIZE, M_ZERO, 0, ~0, PAGE_SIZE, 0,
+		VM_MEMATTR_UNCACHEABLE);
+	buf1[0] = 0xaa;
+
+	buf2 = (void *)kmem_alloc_contig(kernel_arena,
+		PAGE_SIZE, M_ZERO, 0, ~0, PAGE_SIZE, 0,
+		VM_MEMATTR_UNCACHEABLE);
+
+	printf("buf1 %x\n", vtophys(buf1));
+	printf("buf2 %x\n", vtophys(buf2));
+	printf("ibuf %x\n", vtophys(ibuf));
+
+	reg = (1 << 8) | (1 << 9) | (1 << 10);
+	reg |= (1 << 22) | (1 << 23) | (1 << 24);
+
+	reg = (1 << 0) | (1 << 14);
+
+	//reg = 0;
+
+	//SS32, DS32
+	reg |= (2 << 1); //0b010 = reads 4 bytes per beat
+	reg |= (2 << 15); //0b010 = writes 4 bytes per beat
+
+	//SS64, DS64
+	//reg |= (3 << 1); //0b011 = reads 8 bytes per beat
+	//reg |= (3 << 15); //0b011 = writes 8 bytes per beat
+
+	offs = 0;
+	offs += emit_mov(&ibuf[offs], R_CCR, reg);
+
+	//offs += emit_mov(&ibuf[offs], R_SAR, 0xFFE00000); //sram
+	//offs += emit_mov(&ibuf[offs], R_DAR, 0xFFE00010); //sram
+	offs += emit_mov(&ibuf[offs], R_SAR, vtophys(buf1));
+	offs += emit_mov(&ibuf[offs], R_DAR, vtophys(buf2));
+
+	offs += emit_ld(&ibuf[offs]);
+	offs += emit_st(&ibuf[offs]);
+	offs += emit_end(&ibuf[offs]);
+
+	emit_go(dbuf, vtophys(ibuf));
+
+	reg = (dbuf[1] << 24) | (dbuf[0] << 16);
+	WRITE4(sc, DBGINST0, reg);
+	reg = (dbuf[5] << 24) | (dbuf[4] << 16) | (dbuf[3] << 8) | dbuf[2];
+	WRITE4(sc, DBGINST1, reg);
+
+	printf("DSR %x, DBGSTATUS %x FTRD %x FTR(0) %x\n",
+	    READ4(sc, DSR), READ4(sc, DBGSTATUS), READ4(sc, FTRD), READ4(sc, FTR(0)));
+	WRITE4(sc, DBGCMD, 0);
+	DELAY(100000);
+	DELAY(100000);
+	DELAY(100000);
+	DELAY(100000);
+	DELAY(100000);
+	DELAY(100000);
+	printf("DSR %x, DBGSTATUS %x FTRD %x FTR(0) %x\n",
+	    READ4(sc, DSR), READ4(sc, DBGSTATUS), READ4(sc, FTRD), READ4(sc, FTR(0)));
+	printf("CSR(0) %x\n", READ4(sc, CSR(0)));
+	printf("RESULT: buf2 is %x\n", buf2[0]);
+
+	printf("%s: SAR(0) %x\n", __func__, READ4(sc, SAR(0)));
+	printf("%s: DAR(0) %x\n", __func__, READ4(sc, DAR(0)));
+	printf("%s: CCR(0) %x\n", __func__, READ4(sc, CCR(0)));
+
+	printf("res %x\n", bus_space_read_4(fdtbus_bs_tag, sram, 0x10));
+
+	return (0);
+}
+
 static int
 pl330_probe(device_t dev)
 {
@@ -218,10 +384,6 @@ pl330_attach(device_t dev)
 	sc->bst = rman_get_bustag(sc->res[0]);
 	sc->bsh = rman_get_bushandle(sc->res[0]);
 
-	/* Descriptor memory interface */
-	//sc->bst_d = rman_get_bustag(sc->res[1]);
-	//sc->bsh_d = rman_get_bushandle(sc->res[1]);
-
 	/* Setup interrupt handler */
 	err = bus_setup_intr(dev, sc->res[1], INTR_TYPE_MISC | INTR_MPSAFE,
 	    NULL, pl330_intr, sc, &sc->ih);
@@ -234,6 +396,9 @@ pl330_attach(device_t dev)
 	xref = OF_xref_from_node(node);
 	OF_device_register_xref(xref, dev);
 
+	pl330_test(sc);
+
+#if 0
 	printf("%s: read status: %x\n", __func__, READ4(sc, 0x00));
 	printf("%s: read control: %x\n", __func__, READ4(sc, 0x04));
 	printf("%s: read 1: %x\n", __func__, READ4(sc, 0x08));
@@ -256,7 +421,6 @@ pl330_attach(device_t dev)
 
 	printf("%s: read control after reset: %x\n", __func__, READ4(sc, DMA_CONTROL));
 
-#if 0
 	int i;
 	for (i = 0; i < 10000; i++) {
 		printf("%s: read control after reset: %x\n", __func__, READ4(sc, DMA_CONTROL));

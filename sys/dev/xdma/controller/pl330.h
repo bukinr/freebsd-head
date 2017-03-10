@@ -62,6 +62,10 @@
 #define	CRD		0xE14 /* DMA Configuration */
 #define	WD		0xE80 /* Watchdog Register */
 
+#define	R_SAR	0
+#define	R_CCR	1
+#define	R_DAR	2
+
 #if 0
 0xFE0- 0xFEC  periph_id_n RO  Configuration-dependent Peripheral Identification Registers
 0xFF0- 0xFFC  pcell_id_n RO   Configuration-dependent Component Identification Registers
