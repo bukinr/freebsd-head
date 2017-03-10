@@ -612,8 +612,9 @@ struct mpt_softc {
 			unsigned int initiator_id;
 		} spi;
 		struct {
-			char wwnn[19];
-			char wwpn[19];
+			uint64_t wwnn;
+			uint64_t wwpn;
+			uint32_t portid;
 		} fc;
 	} scinfo;
 
@@ -948,24 +949,6 @@ void mpt_prtc(struct mpt_softc *, const char *, ...)
 	__printflike(2, 3);
 
 /**************************** Target Mode Related ***************************/
-static __inline int mpt_cdblen(uint8_t, int);
-static __inline int
-mpt_cdblen(uint8_t cdb0, int maxlen)
-{
-	int group = cdb0 >> 5;
-	switch (group) {
-	case 0:
-		return (6);
-	case 1:
-		return (10);
-	case 4:
-	case 5:
-		return (12);
-	default:
-		return (16);
-	}
-}
-
 #ifdef	INVARIANTS
 static __inline request_t * mpt_tag_2_req(struct mpt_softc *, uint32_t);
 static __inline request_t *

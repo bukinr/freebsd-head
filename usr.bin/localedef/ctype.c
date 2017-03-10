@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Nexenta Systems, Inc.
+ * Copyright 2011 Nexenta Systems, Inc.  All rights reserved.
  * Copyright 2012 Garrett D'Amore <garrett@damore.org>  All rights reserved.
  * Copyright 2015 John Marino <draco@marino.st>
  *
@@ -384,7 +384,7 @@ dump_ctype(void)
 			conflict++;
 		if ((ctn->ctype & _ISSPACE) && (ctn->ctype & _ISGRAPH))
 			conflict++;
-		if ((ctn->ctype & _ISCNTRL) && (ctn->ctype & _ISPRINT))
+		if ((ctn->ctype & _ISCNTRL) & _ISPRINT)
 			conflict++;
 		if ((wc == ' ') && (ctn->ctype & (_ISPUNCT|_ISGRAPH)))
 			conflict++;
@@ -412,10 +412,8 @@ dump_ctype(void)
 			ct[rl.runetype_ext_nranges-1].max = wc;
 		} else {
 			rl.runetype_ext_nranges++;
-			ct = realloc(ct, rl.runetype_ext_nranges *
-			    sizeof (*ct));
-			if (ct == NULL)
-			    goto fail;
+			ct = realloc(ct,
+			    sizeof (*ct) * rl.runetype_ext_nranges);
 			ct[rl.runetype_ext_nranges - 1].min = wc;
 			ct[rl.runetype_ext_nranges - 1].max = wc;
 			ct[rl.runetype_ext_nranges - 1].map = ctn->ctype;
@@ -429,10 +427,8 @@ dump_ctype(void)
 			last_lo = ctn;
 		} else {
 			rl.maplower_ext_nranges++;
-			lo = realloc(lo, rl.maplower_ext_nranges *
-			    sizeof (*lo));
-			if (lo == NULL)
-			    goto fail;
+			lo = realloc(lo,
+			    sizeof (*lo) * rl.maplower_ext_nranges);
 			lo[rl.maplower_ext_nranges - 1].min = wc;
 			lo[rl.maplower_ext_nranges - 1].max = wc;
 			lo[rl.maplower_ext_nranges - 1].map = ctn->tolower;
@@ -447,10 +443,8 @@ dump_ctype(void)
 			last_up = ctn;
 		} else {
 			rl.mapupper_ext_nranges++;
-			up = realloc(up, rl.mapupper_ext_nranges *
-			    sizeof (*up));
-			if (up == NULL)
-			    goto fail;
+			up = realloc(up,
+			    sizeof (*up) * rl.mapupper_ext_nranges);
 			up[rl.mapupper_ext_nranges - 1].min = wc;
 			up[rl.mapupper_ext_nranges - 1].max = wc;
 			up[rl.mapupper_ext_nranges - 1].map = ctn->toupper;
@@ -458,17 +452,12 @@ dump_ctype(void)
 		}
 	}
 
-	if ((wr_category(&rl, sizeof (rl), f) == 0) &&
-	    (wr_category(ct, sizeof (*ct) * rl.runetype_ext_nranges, f) == 0) &&
-	    (wr_category(lo, sizeof (*lo) * rl.maplower_ext_nranges, f) == 0) &&
-	    (wr_category(up, sizeof (*up) * rl.mapupper_ext_nranges, f) == 0)) {
-		close_category(f);
-		goto out;
+	if ((wr_category(&rl, sizeof (rl), f) < 0) ||
+	    (wr_category(ct, sizeof (*ct) * rl.runetype_ext_nranges, f) < 0) ||
+	    (wr_category(lo, sizeof (*lo) * rl.maplower_ext_nranges, f) < 0) ||
+	    (wr_category(up, sizeof (*up) * rl.mapupper_ext_nranges, f) < 0)) {
+		return;
 	}
 
-fail:
-	delete_category(f);
-out:
-	free(ct);
-	free(lo);
-	free(up);}
+	close_category(f);
+}
