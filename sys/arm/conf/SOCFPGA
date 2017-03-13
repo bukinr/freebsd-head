@@ -53,6 +53,9 @@ device		mpcore_timer
 device		xdma
 device		pl330
 
+# QSPI Flash
+device		cqspi
+
 # MMC/SD/SDIO Card slot support
 device		mmc			# mmc/sd bus
 device		mmcsd			# mmc/sd flash cards
