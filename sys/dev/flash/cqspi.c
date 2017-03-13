@@ -42,6 +42,8 @@ __FBSDID("$FreeBSD$");
 #include <sys/mutex.h>
 #include <geom/geom_disk.h>
 
+#include <machine/bus.h>
+
 #include <dev/fdt/fdt_common.h>
 #include <dev/ofw/ofw_bus_subr.h>
 #include <dev/ofw/openfirm.h>
@@ -64,8 +66,14 @@ __FBSDID("$FreeBSD$");
  */
 #define	MX25L_SECTORSIZE	512
 
-struct cqspi_flash_ident
-{
+#define READ4(_sc, _reg) bus_read_4((_sc)->res[0], _reg)
+#define READ2(_sc, _reg) bus_read_2((_sc)->res[0], _reg)
+#define READ1(_sc, _reg) bus_read_1((_sc)->res[0], _reg)
+#define WRITE4(_sc, _reg, _val) bus_write_4((_sc)->res[0], _reg, _val)
+#define WRITE2(_sc, _reg, _val) bus_write_2((_sc)->res[0], _reg, _val)
+#define WRITE1(_sc, _reg, _val) bus_write_1((_sc)->res[0], _reg, _val)
+
+struct cqspi_flash_ident {
 	const char	*name;
 	uint8_t		manufacturer_id;
 	uint16_t	device_id;
@@ -516,6 +524,9 @@ cqspi_attach(device_t dev)
 		device_printf(sc->dev, "Unable to setup intr\n");
 		return (ENXIO);
 	}
+
+	printf("Module ID %x\n", READ4(sc, CQSPI_MODULEID));
+	printf("cfg %x\n", READ4(sc, CQSPI_CFG));
 
 	CQSPI_LOCK_INIT(sc);
 

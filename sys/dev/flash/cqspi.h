@@ -1,13 +1,16 @@
 /*-
- * Copyright (c) 2009, Oleksandr Tymoshenko <gonzo@FreeBSD.org>
+ * Copyright (c) 2017 Ruslan Bukin <br@bsdpad.com>
  * All rights reserved.
+ *
+ * This software was developed by SRI International and the University of
+ * Cambridge Computer Laboratory under DARPA/AFRL contract FA8750-10-C-0237
+ * ("CTSRD"), as part of the DARPA CRASH research programme.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  * 1. Redistributions of source code must retain the above copyright
- *    notice unmodified, this list of conditions, and the following
- *    disclaimer.
+ *    notice, this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
@@ -27,9 +30,45 @@
  * $FreeBSD$
  */
 
-#ifndef __MX25LREG_H__
-#define __MX25LREG_H__
+#ifndef _CQSPI_H_
+#define _CQSPI_H_
 
+#define	CQSPI_CFG		0x00	/* QSPI Configuration */
+#define	CQSPI_DEVRD		0x04	/* Device Read Instruction Configuration */
+#define	CQSPI_DEVWR		0x08	/* Device Write Instruction Configuration */
+#define	CQSPI_DELAY		0x0C	/* QSPI Device Delay Register */
+#define	CQSPI_RDDATACAP		0x10	/* Read Data Capture Register */
+#define	CQSPI_DEVSZ		0x14	/* Device Size Configuration Register */
+#define	CQSPI_SRAMPART		0x18	/* SRAM Partition Configuration Register */
+#define	CQSPI_INDADDRTRIG	0x1C	/* Indirect AHB Address Trigger Register */
+#define	CQSPI_DMAPER		0x20	/* DMA Peripheral Configuration Register */
+#define	CQSPI_REMAPADDR		0x24	/* Remap Address Register */
+#define	CQSPI_MODEBIT		0x28	/* Mode Bit Configuration */
+#define	CQSPI_SRAMFILL		0x2C	/* SRAM Fill Register */
+#define	CQSPI_TXTHRESH		0x30	/* TX Threshold Register */
+#define	CQSPI_RXTHRESH		0x34	/* RX Threshold Register */
+#define	CQSPI_IRQSTAT		0x40	/* Interrupt Status Register */
+#define	CQSPI_IRQMASK		0x44	/* Interrupt Mask */
+#define	CQSPI_LOWWRPROT		0x50	/* Lower Write Protection */
+#define	CQSPI_UPPWRPROT		0x54	/* Upper Write Protection */
+#define	CQSPI_WRPROT		0x58	/* Write Protection Control Register */
+#define	CQSPI_INDRD		0x60	/* Indirect Read Transfer Control Register */
+#define	CQSPI_INDRDWATER	0x64	/* Indirect Read Transfer Watermark Register */
+#define	CQSPI_INDRDSTADDR	0x68	/* Indirect Read Transfer Start Address Register */
+#define	CQSPI_INDRDCNT		0x6C	/* Indirect Read Transfer Number Bytes Register */
+#define	CQSPI_INDWR		0x70	/* Indirect Write Transfer Control Register */
+#define	CQSPI_INDWRWATER	0x74	/* Indirect Write Transfer Watermark Register */
+#define	CQSPI_INDWRSTADDR	0x78	/* Indirect Write Transfer Start Address Register */
+#define	CQSPI_INDWRCNT		0x7C	/* Indirect Write Transfer Number Bytes Register */
+#define	CQSPI_FLASHCMD		0x90	/* Flash Command Control Register */
+#define	CQSPI_FLASHCMDADDR	0x94	/* Flash Command Address Registers */
+#define	CQSPI_FLASHCMDRDDATALO	0xA0	/* Flash Command Read Data Register (Lower) */
+#define	CQSPI_FLASHCMDRDDATAUP	0xA4	/* Flash Command Read Data Register (Upper) */
+#define	CQSPI_FLASHCMDWRDATALO	0xA8	/* Flash Command Write Data Register (Lower) */
+#define	CQSPI_FLASHCMDWRDATAUP	0xAC	/* Flash Command Write Data Register (Upper) */
+#define	CQSPI_MODULEID		0xFC	/* Module ID Register */
+
+//remove below
 /*
  * Commands 
  */
@@ -60,5 +99,4 @@
 
 #define	FLASH_PAGE_SIZE	256
 
-#endif /* __MX25LREG_H__ */
-
+#endif /* !_CQSPI_H_ */
