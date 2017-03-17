@@ -196,9 +196,30 @@ cqspi_attach(device_t dev)
 
 	printf("datardlo before %x\n", READ4(sc, CQSPI_FLASHCMDRDDATALO));
 
+	device_add_child(dev, "spibus", 0);
+
+	return (bus_generic_attach(dev));
+}
+
+static int
+cqspi_txrx(struct cqspi_softc *sc, uint8_t *out_buf,
+    uint8_t *in_buf, int bufsz, int cs)
+{
+	uint32_t reg;
+	//uint32_t i;
+
+	if (bufsz == 0) {
+		/* Nothing to transfer */
+		return (0);
+	}
+
+	printf("%s: bufsz %d\n", __func__, bufsz);
+	printf("inbuf[0] %x\n", in_buf[0]);
+	printf("outbuf[0] %x\n", out_buf[0]);
+
 	//reg = (CMD_READ_IDENT << FLASHCMD_CMDOPCODE_S);
-	reg = (0x9F << FLASHCMD_CMDOPCODE_S);
-	reg |= ((4 - 1) << FLASHCMD_NUMRDDATABYTES_S);
+	reg = (out_buf[0] << FLASHCMD_CMDOPCODE_S);
+	reg |= ((bufsz - 1) << FLASHCMD_NUMRDDATABYTES_S);
 	reg |= FLASHCMD_ENRDDATA;
 	WRITE4(sc, CQSPI_FLASHCMD, reg);
 
@@ -223,24 +244,15 @@ cqspi_attach(device_t dev)
 	printf("datardlo %x\n", READ4(sc, CQSPI_FLASHCMDRDDATALO));
 	printf("datardup %x\n", READ4(sc, CQSPI_FLASHCMDRDDATAUP));
 
+	uint32_t datardlo;
+	//uint32_t datardup;
 
-	device_add_child(dev, "spibus", 0);
+	datardlo = READ4(sc, CQSPI_FLASHCMDRDDATALO);
+	in_buf[1] = (datardlo >> 0) & 0xff;
+	in_buf[2] = (datardlo >> 8) & 0xff;
+	in_buf[3] = (datardlo >> 16) & 0xff;
 
-	return (bus_generic_attach(dev));
-}
-
-static int
-cqspi_txrx(struct cqspi_softc *sc, uint8_t *out_buf,
-    uint8_t *in_buf, int bufsz, int cs)
-{
-	uint32_t reg;
-	uint32_t i;
-
-	if (bufsz == 0) {
-		/* Nothing to transfer */
-		return (0);
-	}
-
+#if 0
 	/* Reset registers */
 	reg = READ4(sc, CH_CFG);
 	reg |= SW_RST;
@@ -276,6 +288,7 @@ cqspi_txrx(struct cqspi_softc *sc, uint8_t *out_buf,
 	reg = READ4(sc, CS_REG);
 	reg |= NSSOUT;
 	WRITE4(sc, CS_REG, reg);
+#endif
 
 	return (0);
 }
@@ -304,7 +317,7 @@ cqspi_transfer(device_t dev, device_t child, struct spi_command *cmd)
 	cqspi_txrx(sc, cmd->tx_cmd, cmd->rx_cmd, cmd->tx_cmd_sz, cs);
 
 	/* Data */
-	cqspi_txrx(sc, cmd->tx_data, cmd->rx_data, cmd->tx_data_sz, cs);
+	//cqspi_txrx(sc, cmd->tx_data, cmd->rx_data, cmd->tx_data_sz, cs);
 
 	return (0);
 }
