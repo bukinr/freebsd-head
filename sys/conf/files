@@ -1279,6 +1279,7 @@ dev/bwn/if_bwn_phy_lp.c		optional bwn siba_bwn \
 dev/bwn/if_bwn_phy_n.c		optional bwn siba_bwn
 dev/bwn/if_bwn_util.c		optional bwn siba_bwn
 dev/bwn/bwn_mac.c		optional bwn bhnd
+dev/cadence/cqspi.c		optional cqspi
 dev/cardbus/cardbus.c		optional cardbus
 dev/cardbus/cardbus_cis.c	optional cardbus
 dev/cardbus/cardbus_device.c	optional cardbus
@@ -1662,7 +1663,6 @@ dev/firewire/if_fwip.c		optional fwip
 dev/firewire/sbp.c		optional sbp
 dev/firewire/sbp_targ.c		optional sbp_targ
 dev/flash/at45d.c		optional at45d
-dev/flash/cqspi.c		optional cqspi
 dev/flash/mx25l.c		optional mx25l
 dev/fxp/if_fxp.c		optional fxp
 dev/fxp/inphy.c			optional fxp
