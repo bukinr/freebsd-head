@@ -1632,23 +1632,10 @@ isp_refire_notify_ack(void *arg)
 static void
 isp_target_putback_atio(union ccb *ccb)
 {
-	ispsoftc_t *isp;
-	struct ccb_scsiio *cso;
-	void *qe;
+	ispsoftc_t *isp = XS_ISP(ccb);
+	struct ccb_scsiio *cso = &ccb->csio;
 	at2_entry_t local, *at = &local;
 
-	isp = XS_ISP(ccb);
-
-	qe = isp_getrqentry(isp);
-	if (qe == NULL) {
-		xpt_print(ccb->ccb_h.path,
-		    "%s: Request Queue Overflow\n", __func__);
-		callout_reset(&PISP_PCMD(ccb)->wdog, 10,
-		    isp_refire_putback_atio, ccb);
-		return;
-	}
-	memset(qe, 0, QENTRY_LEN);
-	cso = &ccb->csio;
 	ISP_MEMZERO(at, sizeof (at2_entry_t));
 	at->at_header.rqs_entry_type = RQSTYPE_ATIO2;
 	at->at_header.rqs_entry_count = 1;
@@ -1660,10 +1647,11 @@ isp_target_putback_atio(union ccb *ccb)
 	at->at_status = CT_OK;
 	at->at_rxid = cso->tag_id;
 	at->at_iid = cso->ccb_h.target_id;
-	isp_put_atio2(isp, at, qe);
-	ISP_TDQE(isp, "isp_target_putback_atio", isp->isp_reqidx, qe);
-	ISP_SYNC_REQUEST(isp);
-	isp_complete_ctio(ccb);
+	if (isp_target_put_entry(isp, at)) {
+		callout_reset(&PISP_PCMD(ccb)->wdog, 10,
+		    isp_refire_putback_atio, ccb);
+	} else
+		isp_complete_ctio(ccb);
 }
 
 static void
@@ -2701,7 +2689,7 @@ isp_handle_platform_target_tmf(ispsoftc_t *isp, isp_notify_t *notify)
 	xpt_done((union ccb *)inot);
 	return;
 bad:
-	if (notify->nt_need_ack && notify->nt_lreserved) {
+	if (notify->nt_need_ack) {
 		if (((isphdr_t *)notify->nt_lreserved)->rqs_entry_type == RQSTYPE_ABTS_RCVD) {
 			if (isp_acknak_abts(isp, notify->nt_lreserved, ENOMEM)) {
 				isp_prt(isp, ISP_LOGWARN, "you lose- unable to send an ACKNAK");
@@ -3215,7 +3203,10 @@ isp_abort_inot(ispsoftc_t *isp, union ccb *ccb)
 	/* Search for the INOT among running. */
 	ntp = isp_find_ntpd(isp, XS_CHANNEL(accb), accb->cin1.tag_id, accb->cin1.seq_id);
 	if (ntp != NULL) {
-		isp_async(isp, ISPASYNC_TARGET_NOTIFY_ACK, ntp->data);
+		if (ntp->nt.nt_need_ack) {
+			isp_async(isp, ISPASYNC_TARGET_NOTIFY_ACK,
+			    ntp->nt.nt_lreserved);
+		}
 		isp_put_ntpd(isp, XS_CHANNEL(accb), ntp);
 		ccb->ccb_h.status = CAM_REQ_CMP;
 	} else {
@@ -4143,12 +4134,8 @@ changed:
 			isp_tna_t *tp = malloc(sizeof (*tp), M_DEVBUF, M_NOWAIT);
 			if (tp) {
 				tp->isp = isp;
-				if (inot) {
-					memcpy(tp->data, inot, sizeof (tp->data));
-					tp->not = tp->data;
-				} else {
-					tp->not = NULL;
-				}
+				memcpy(tp->data, inot, sizeof (tp->data));
+				tp->not = tp->data;
 				callout_init_mtx(&tp->timer, &isp->isp_lock, 0);
 				callout_reset(&tp->timer, 5,
 				    isp_refire_notify_ack, tp);
