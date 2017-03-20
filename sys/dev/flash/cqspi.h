@@ -34,10 +34,25 @@
 #define _CQSPI_H_
 
 #define	CQSPI_CFG		0x00	/* QSPI Configuration */
+#define	 CFG_ENDMA		(1 << 15)
+#define	 CFG_IDLE		(1 << 31)
+#define	 CFG_BAUD_S		19
+#define	 CFG_BAUD_M		(0xf << CFG_BAUD_S)
+#define	 CFG_BAUD2		(0 << CFG_BAUD_S)
+#define	 CFG_BAUD16		(7 << CFG_BAUD_S)
+#define	 CFG_BAUD32		(0xf << CFG_BAUD_S)
+#define	 CFG_EN			(1 << 0)
 #define	CQSPI_DEVRD		0x04	/* Device Read Instruction Configuration */
+#define	 DEVRD_RDOPCODE_S	0
 #define	CQSPI_DEVWR		0x08	/* Device Write Instruction Configuration */
 #define	CQSPI_DELAY		0x0C	/* QSPI Device Delay Register */
+#define	 DELAY_NSS_S		24
+#define	 DELAY_BTWN_S		16
+#define	 DELAY_AFTER_S		8
+#define	 DELAY_INIT_S		0
 #define	CQSPI_RDDATACAP		0x10	/* Read Data Capture Register */
+#define	 RDDATACAP_DELAY_S	1
+#define	 RDDATACAP_DELAY_M	(0xf << RDDATACAP_DELAY_S)
 #define	CQSPI_DEVSZ		0x14	/* Device Size Configuration Register */
 #define	CQSPI_SRAMPART		0x18	/* SRAM Partition Configuration Register */
 #define	CQSPI_INDADDRTRIG	0x1C	/* Indirect AHB Address Trigger Register */
@@ -53,6 +68,7 @@
 #define	CQSPI_UPPWRPROT		0x54	/* Upper Write Protection */
 #define	CQSPI_WRPROT		0x58	/* Write Protection Control Register */
 #define	CQSPI_INDRD		0x60	/* Indirect Read Transfer Control Register */
+#define	 INDRD_START		(1 << 0)
 #define	CQSPI_INDRDWATER	0x64	/* Indirect Read Transfer Watermark Register */
 #define	CQSPI_INDRDSTADDR	0x68	/* Indirect Read Transfer Start Address Register */
 #define	CQSPI_INDRDCNT		0x6C	/* Indirect Read Transfer Number Bytes Register */
@@ -61,6 +77,13 @@
 #define	CQSPI_INDWRSTADDR	0x78	/* Indirect Write Transfer Start Address Register */
 #define	CQSPI_INDWRCNT		0x7C	/* Indirect Write Transfer Number Bytes Register */
 #define	CQSPI_FLASHCMD		0x90	/* Flash Command Control Register */
+#define	 FLASHCMD_NUMRDDATABYTES_S	20
+#define	 FLASHCMD_NUMRDDATABYTES_M	(0x7 << FLASHCMD_NUMRDDATABYTES_S)
+#define	 FLASHCMD_ENRDDATA	(1 << 23)
+#define	 FLASHCMD_CMDOPCODE_S	24
+#define	 FLASHCMD_CMDOPCODE_M	(0xff << FLASHCMD_CMDOPCODE_S)
+#define	 FLASHCMD_CMDEXECSTAT	(1 << 1) /* Command execution in progress. */
+#define	 FLASHCMD_EXECCMD	(1 << 0) /* Execute the command. */
 #define	CQSPI_FLASHCMDADDR	0x94	/* Flash Command Address Registers */
 #define	CQSPI_FLASHCMDRDDATALO	0xA0	/* Flash Command Read Data Register (Lower) */
 #define	CQSPI_FLASHCMDRDDATAUP	0xA4	/* Flash Command Read Data Register (Upper) */
