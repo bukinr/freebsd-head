@@ -532,9 +532,8 @@ struct ispsoftc {
 	uint32_t		isp_maxluns;	/* maximum luns supported */
 
 	uint32_t		isp_clock	: 8,	/* input clock */
-						: 4,
+						: 5,
 				isp_port	: 1,	/* 23XX/24XX only */
-				isp_open	: 1,	/* opened (ioctl) */
 				isp_bustype	: 1,	/* SBus or PCI */
 				isp_loaded_fw	: 1,	/* loaded firmware */
 				isp_dblev	: 16;	/* debug log mask */
@@ -1012,7 +1011,7 @@ void isp_prt_endcmd(ispsoftc_t *, XS_T *);
  *	XS_CDBP(xs)		gets a pointer to the scsi CDB ""
  *	XS_CDBLEN(xs)		gets the CDB's length ""
  *	XS_XFRLEN(xs)		gets the associated data transfer length ""
- *	XS_TIME(xs)		gets the time (in milliseconds) for this command
+ *	XS_TIME(xs)		gets the time (in seconds) for this command
  *	XS_GET_RESID(xs)	gets the current residual count
  *	XS_GET_RESID(xs, resid)	sets the current residual count
  *	XS_STSP(xs)		gets a pointer to the SCSI status byte ""
