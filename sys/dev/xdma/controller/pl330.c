@@ -68,7 +68,7 @@ __FBSDID("$FreeBSD$");
 
 #include <dev/xdma/controller/pl330.h>
 
-#define	MSGDMA_NCHANNELS	1
+#define	MSGDMA_NCHANNELS	32
 
 struct pl330_channel {
 	struct pl330_softc	*sc;
@@ -143,11 +143,17 @@ pl330_intr(void *arg)
 	struct xdma_channel *xchan;
 	struct pl330_softc *sc;
 	uint32_t tot_copied;
+	uint32_t pending;
 
 	sc = arg;
 	chan = &sc->channels[0];
 	xchan = chan->xchan;
 
+	pending = READ4(sc, INTMIS);
+	printf("%s: 0x%x\n", __func__, pending);
+	//WRITE4(sc, INTCLR, pending);
+
+	return;
 #if 0
 	printf("%s(%d): status 0x%08x next_descr 0x%08x, control 0x%08x\n", __func__,
 	    device_get_unit(sc->dev),
@@ -234,6 +240,27 @@ emit_end(uint8_t *buf)
 }
 
 static uint32_t
+emit_sev(uint8_t *buf, uint32_t ev)
+{
+
+	buf[0] = DMASEV;
+	buf[1] |= (ev << 3);
+
+	return (2);
+}
+
+static uint32_t
+emit_wfp(uint8_t *buf, uint32_t p_id)
+{
+
+	buf[0] = DMAWFP;
+	buf[0] |= (1 << 0); //periph
+	buf[1] |= (p_id << 3);
+
+	return (2);
+}
+
+static uint32_t
 emit_go(uint8_t *buf, uint32_t addr)
 {
 
@@ -264,6 +291,8 @@ pl330_test(struct pl330_softc *sc)
 		printf("failed\n");
 	}
 	bus_space_write_4(fdtbus_bs_tag, sram, 0, 0xab);
+
+	WRITE4(sc, INTEN, (1 << 0));
 
 	printf("CRD %x\n", READ4(sc, CRD));
 
@@ -311,11 +340,13 @@ pl330_test(struct pl330_softc *sc)
 
 	//offs += emit_mov(&ibuf[offs], R_SAR, 0xFFE00000); //sram
 	//offs += emit_mov(&ibuf[offs], R_DAR, 0xFFE00010); //sram
-	offs += emit_mov(&ibuf[offs], R_SAR, vtophys(buf1));
+	offs += emit_mov(&ibuf[offs], R_SAR, 0xffa00000); //vtophys(buf1));
 	offs += emit_mov(&ibuf[offs], R_DAR, vtophys(buf2));
 
+	offs += emit_wfp(&ibuf[offs], 25); //25 -- qspi rx
 	offs += emit_ld(&ibuf[offs]);
 	offs += emit_st(&ibuf[offs]);
+	offs += emit_sev(&ibuf[offs], 0);
 	offs += emit_end(&ibuf[offs]);
 
 	emit_go(dbuf, vtophys(ibuf));
