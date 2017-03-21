@@ -438,11 +438,6 @@ cqspi_read(device_t dev, off_t offset, caddr_t data, off_t count)
 		return (EIO);
 	}
 
-	reg = READ4(sc, CQSPI_DEVSZ);
-	printf("devsz %x\n", reg);
-	reg |= 3;
-	WRITE4(sc, CQSPI_DEVSZ, reg);
-
 	WRITE4(sc, CQSPI_INDRD, INDRD_IND_OPS_DONE_STATUS);
 	WRITE4(sc, CQSPI_INDRD, 0);
 
@@ -461,13 +456,14 @@ cqspi_read(device_t dev, off_t offset, caddr_t data, off_t count)
 	//reg |= (CMD_FAST_READ << DEVRD_RDOPCODE_S);
 
 	reg = (0 << DEVRD_DUMMYRDCLKS_S);
-	reg |= (0 << 16); //data width
+	reg |= (2 << 16); //data width
 	reg |= (0 << 12); //addr width
 	reg |= (0 <<  8); //inst width
 	reg |= (1 << 20); //enmodebits
 	//reg |= (0x6b << DEVRD_RDOPCODE_S); //quad fast read
 	//reg |= (11 << DEVRD_RDOPCODE_S); //quad fast read
-	reg |= (0x0C << DEVRD_RDOPCODE_S); //4b fast read
+	//reg |= (0x0C << DEVRD_RDOPCODE_S); //4b fast read
+	reg |= (0x6C << DEVRD_RDOPCODE_S); //4b quad output fast read
 	WRITE4(sc, CQSPI_DEVRD, reg);
 
 	WRITE4(sc, CQSPI_MODEBIT, 0xff);
@@ -506,7 +502,7 @@ cqspi_read(device_t dev, off_t offset, caddr_t data, off_t count)
 			addr[n++] = READ_DATA_4(sc, 0);
 			if (offset == 0 && n == 1) {
 				//printf("addr0 %x %x %x %x\n", addr[0], addr[1], addr[2], addr[3]);
-				printf("addr0 %x\n", addr[0]);
+				//printf("addr0 %x\n", addr[0]);
 			}
 		}
 
@@ -645,11 +641,11 @@ cqspi_cmd(struct cqspi_softc *sc, uint8_t cmd, uint32_t len)
 	if (i == 0) {
 		printf("cmd timed out\n");
 	}
-	printf("i %d\n", i);
+	//printf("i %d\n", i);
 
-	printf("cmd %x\n", READ4(sc, CQSPI_FLASHCMD));
-	printf("datardlo %x\n", READ4(sc, CQSPI_FLASHCMDRDDATALO));
-	printf("datardup %x\n", READ4(sc, CQSPI_FLASHCMDRDDATAUP));
+	//printf("cmd %x\n", READ4(sc, CQSPI_FLASHCMD));
+	//printf("datardlo %x\n", READ4(sc, CQSPI_FLASHCMDRDDATALO));
+	//printf("datardup %x\n", READ4(sc, CQSPI_FLASHCMDRDDATAUP));
 
 	uint32_t data;
 
@@ -741,6 +737,11 @@ printf("0xFC: %x\n", READ4(sc, 0xFC));
 	reg = READ4(sc, CQSPI_CFG);
 	reg &= ~(CFG_EN);
 	WRITE4(sc, CQSPI_CFG, reg);
+
+	reg = READ4(sc, CQSPI_DEVSZ);
+	//printf("devsz %x\n", reg);
+	reg |= 3;
+	WRITE4(sc, CQSPI_DEVSZ, reg);
 
 	//WRITE4(sc, CQSPI_REMAPADDR, 0);
 	//WRITE4(sc, CQSPI_SRAMPART, 128/2);
