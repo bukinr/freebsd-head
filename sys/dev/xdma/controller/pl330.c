@@ -90,6 +90,10 @@ struct pl330_channel {
 	uint32_t		descs_used_count;
 };
 
+struct pl330_fdt_data {
+	uint32_t periph_id;
+};
+
 struct pl330_softc {
 	device_t		dev;
 	struct resource		*res[10];
@@ -799,6 +803,22 @@ pl330_channel_control(device_t dev, xdma_channel_t *xchan, int cmd)
 static int
 pl330_ofw_md_data(device_t dev, pcell_t *cells, int ncells, void **ptr)
 {
+	struct pl330_fdt_data *data;
+
+	if (ncells != 1) {
+		return (-1);
+	}
+
+	data = malloc(sizeof(struct pl330_fdt_data),
+	    M_DEVBUF, (M_WAITOK | M_ZERO));
+	if (data == NULL) {
+		device_printf(dev, "%s: Cant allocate memory\n", __func__);
+		return (-1);
+	}
+
+	data->periph_id = cells[0];
+
+	*ptr = data;
 
 	return (0);
 }
