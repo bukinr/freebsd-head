@@ -73,6 +73,9 @@ __FBSDID("$FreeBSD$");
 #define WRITE2(_sc, _reg, _val) bus_write_2((_sc)->res[0], _reg, _val)
 #define WRITE1(_sc, _reg, _val) bus_write_1((_sc)->res[0], _reg, _val)
 
+#define READ_DATA_4(_sc, _reg) bus_read_4((_sc)->res[1], _reg)
+#define READ_DATA_1(_sc, _reg) bus_read_1((_sc)->res[1], _reg)
+
 struct cqspi_flash_ident {
 	const char	*name;
 	uint8_t		manufacturer_id;
@@ -97,6 +100,7 @@ struct cqspi_softc {
 	bus_space_tag_t		bst;
 	bus_space_handle_t	bsh;
 	void			*ih;
+	uint8_t			op_done;
 };
 
 #define	CQSPI_LOCK(_sc)		mtx_lock(&(_sc)->sc_mtx)
@@ -136,6 +140,7 @@ struct cqspi_flash_ident flash_devices[] = {
 	{ "en25p64",	0x1c, 0x2017, 64 * 1024, 128, FL_NONE },
 	{ "en25q64",	0x1c, 0x3017, 64 * 1024, 128, FL_ERASE_4K },
 	{ "m25p64",	0x20, 0x2017, 64 * 1024, 128, FL_NONE },
+	{ "n25q00",	0x20, 0xbb21, 64 * 1024, 2048, FL_NONE },
 	{ "cqspil32",	0xc2, 0x2016, 64 * 1024, 64, FL_NONE },
 	{ "cqspil64",	0xc2, 0x2017, 64 * 1024, 128, FL_NONE },
 	{ "cqspil128",	0xc2, 0x2018, 64 * 1024, 256, FL_ERASE_4K | FL_ERASE_32K },
@@ -165,8 +170,19 @@ struct cqspi_flash_ident flash_devices[] = {
 static void
 cqspi_intr(void *arg)
 {
+	struct cqspi_softc *sc;
+	uint32_t pending;
 
-	printf("%s\n", __func__);
+	sc = arg;
+
+	pending = READ4(sc, CQSPI_IRQSTAT);
+
+	//printf("%s: IRQSTAT %x\n", __func__, pending);
+	if (pending & (IRQMASK_INDOPDONE | IRQMASK_INDXFRLVL | IRQMASK_INDSRAMFULL)) {
+		//printf("op_done\n");
+		sc->op_done = 1;
+	}
+	WRITE4(sc, CQSPI_IRQSTAT, pending);
 }
 
 static uint8_t
@@ -248,6 +264,8 @@ cqspi_set_writable(device_t dev, int writable)
 	struct spi_command cmd;
 	int err;
 
+	printf("%s\n", __func__);
+
 	memset(&cmd, 0, sizeof(cmd));
 	memset(txBuf, 0, sizeof(txBuf));
 	memset(rxBuf, 0, sizeof(rxBuf));
@@ -267,6 +285,8 @@ cqspi_erase_cmd(device_t dev, off_t sector, uint8_t ecmd)
 	uint8_t txBuf[5], rxBuf[5];
 	struct spi_command cmd;
 	int err;
+
+	printf("%s\n", __func__);
 
 	sc = device_get_softc(dev);
 
@@ -307,6 +327,8 @@ cqspi_write(device_t dev, off_t offset, caddr_t data, off_t count)
 	long bytes_to_write, bytes_writen;
 	device_t pdev;
 	int err = 0;
+
+	printf("%s\n", __func__);
 
 	pdev = device_get_parent(dev);
 	sc = device_get_softc(dev);
@@ -394,13 +416,16 @@ static int
 cqspi_read(device_t dev, off_t offset, caddr_t data, off_t count)
 {
 	struct cqspi_softc *sc;
-	uint8_t txBuf[8], rxBuf[8];
-	struct spi_command cmd;
+	//uint8_t txBuf[8], rxBuf[8];
+	//struct spi_command cmd;
 	device_t pdev;
-	int err = 0;
+	uint32_t reg;
+	//int err;
 
 	pdev = device_get_parent(dev);
 	sc = device_get_softc(dev);
+
+	//printf("%s: offset 0x%llx count %lld bytes\n", __func__, offset, count);
 
 	/*
 	 * Enforce the disk read sectorsize not the erase sectorsize.
@@ -408,9 +433,100 @@ cqspi_read(device_t dev, off_t offset, caddr_t data, off_t count)
 	 * speeding up filesystem/geom_compress access.
 	 */
 	if (count % sc->sc_disk->d_sectorsize != 0
-	    || offset % sc->sc_disk->d_sectorsize != 0)
+	    || offset % sc->sc_disk->d_sectorsize != 0) {
+		printf("EIO\n");
 		return (EIO);
+	}
 
+	reg = READ4(sc, CQSPI_DEVSZ);
+	printf("devsz %x\n", reg);
+	reg |= 3;
+	WRITE4(sc, CQSPI_DEVSZ, reg);
+
+	WRITE4(sc, CQSPI_INDRD, INDRD_IND_OPS_DONE_STATUS);
+	WRITE4(sc, CQSPI_INDRD, 0);
+
+	WRITE4(sc, CQSPI_INDRDWATER, 4);
+	WRITE4(sc, CQSPI_INDRDCNT, count);
+
+	reg = (CMD_FAST_READ << DEVRD_RDOPCODE_S);
+	reg |= (0 << DEVRD_DUMMYRDCLKS_S);
+	reg |= (0 << 16); //data width
+	reg |= (0 << 12); //addr width
+	reg |= (0 <<  8); //inst width
+	reg |= (0 << 20); //enmodebits
+
+	//reg = READ4(sc, CQSPI_DEVRD);
+	//reg &= ~(0xff << DEVRD_RDOPCODE_S);
+	//reg |= (CMD_FAST_READ << DEVRD_RDOPCODE_S);
+
+	reg = (0 << DEVRD_DUMMYRDCLKS_S);
+	reg |= (0 << 16); //data width
+	reg |= (0 << 12); //addr width
+	reg |= (0 <<  8); //inst width
+	reg |= (1 << 20); //enmodebits
+	//reg |= (0x6b << DEVRD_RDOPCODE_S); //quad fast read
+	//reg |= (11 << DEVRD_RDOPCODE_S); //quad fast read
+	reg |= (0x0C << DEVRD_RDOPCODE_S); //4b fast read
+	WRITE4(sc, CQSPI_DEVRD, reg);
+
+	WRITE4(sc, CQSPI_MODEBIT, 0xff);
+
+	reg = READ4(sc, CQSPI_IRQMASK);
+	reg |= (IRQMASK_INDOPDONE | IRQMASK_INDXFRLVL | IRQMASK_INDSRAMFULL);
+	//WRITE4(sc, CQSPI_IRQMASK, reg);
+
+	sc->op_done = 0;
+
+	WRITE4(sc, CQSPI_INDRDSTADDR, offset);
+	WRITE4(sc, CQSPI_INDRD, INDRD_START);
+
+	uint32_t *addr;
+	int i;
+	int n;
+	uint32_t cnt;
+	addr = (uint32_t *)data;
+
+	n = 0;
+	while (n < (count / 4)) {
+		//while (sc->op_done == 0) {
+		//	cpufunc_nullop();
+		//}
+		//DELAY(100000);
+
+		cnt = READ4(sc, CQSPI_SRAMFILL) & 0xffff;
+
+		//printf("cnt %d\n", cnt);
+		//if (cnt < 4) {
+		//	continue;
+		//}
+
+		for (i = 0; i < cnt; i++) {
+			//printf("addr0 %x\n", READ_DATA_4(sc, 4));
+			addr[n++] = READ_DATA_4(sc, 0);
+			if (offset == 0 && n == 1) {
+				//printf("addr0 %x %x %x %x\n", addr[0], addr[1], addr[2], addr[3]);
+				printf("addr0 %x\n", addr[0]);
+			}
+		}
+
+		//sc->op_done = 0;
+	}
+
+	while ((READ4(sc, CQSPI_INDRD) & INDRD_IND_OPS_DONE_STATUS) == 0)
+		;
+
+	WRITE4(sc, CQSPI_INDRD, INDRD_IND_OPS_DONE_STATUS);
+	WRITE4(sc, CQSPI_IRQSTAT, 0);
+
+	//while (1) {
+	//	printf("INDRD %x\n", READ_DATA_4(sc, 0));
+	//}
+	//printf("INDRD %x\n", READ4(sc, CQSPI_INDRD));
+
+	return (0);
+
+#if 0
 	txBuf[0] = CMD_FAST_READ;
 	if (sc->sc_flags & FL_ENABLE_4B_ADDR) {
 		cmd.tx_cmd_sz = 6;
@@ -443,6 +559,7 @@ cqspi_read(device_t dev, off_t offset, caddr_t data, off_t count)
 	err = 0; //SPIBUS_TRANSFER(pdev, dev, &cmd);
 
 	return (err);
+#endif
 }
 
 static int
@@ -501,6 +618,60 @@ found:
 }
 
 static int
+cqspi_cmd(struct cqspi_softc *sc, uint8_t cmd, uint32_t len)
+{
+	uint32_t reg;
+
+	printf("%s: %x\n", __func__, cmd);
+	//printf("datardlo before %x\n", READ4(sc, CQSPI_FLASHCMDRDDATALO));
+
+	reg = (cmd << FLASHCMD_CMDOPCODE_S);
+	reg |= ((len - 1) << FLASHCMD_NUMRDDATABYTES_S);
+	reg |= FLASHCMD_ENRDDATA;
+	WRITE4(sc, CQSPI_FLASHCMD, reg);
+
+	reg |= FLASHCMD_EXECCMD;
+	WRITE4(sc, CQSPI_FLASHCMD, reg);
+
+	int timeout;
+	int i;
+
+	timeout = 1000;
+	for (i = timeout; i > 0; i--) {
+		if ((READ4(sc, CQSPI_FLASHCMD) & FLASHCMD_CMDEXECSTAT) == 0) {
+			break;
+		}
+	}
+	if (i == 0) {
+		printf("cmd timed out\n");
+	}
+	printf("i %d\n", i);
+
+	printf("cmd %x\n", READ4(sc, CQSPI_FLASHCMD));
+	printf("datardlo %x\n", READ4(sc, CQSPI_FLASHCMDRDDATALO));
+	printf("datardup %x\n", READ4(sc, CQSPI_FLASHCMDRDDATAUP));
+
+	uint32_t data;
+
+	data = READ4(sc, CQSPI_FLASHCMDRDDATALO);
+
+	switch (len) {
+	case 4:
+		return (data);
+	case 3:
+		return (data & 0xffffff);
+	case 2:
+		return (data & 0xffff);
+	case 1:
+		return (data & 0xff);
+	default:
+		return (0);
+	}
+
+	return (0);
+}
+
+static int
 cqspi_attach(device_t dev)
 {
 	struct cqspi_softc *sc;
@@ -518,9 +689,45 @@ cqspi_attach(device_t dev)
 	sc->bst = rman_get_bustag(sc->res[0]);
 	sc->bsh = rman_get_bushandle(sc->res[0]);
 
+printf("0x00: %x\n", READ4(sc, 0x00));
+printf("0x04: %x\n", READ4(sc, 0x04));
+printf("0x08: %x\n", READ4(sc, 0x08));
+printf("0x0C: %x\n", READ4(sc, 0x0C));
+printf("0x10: %x\n", READ4(sc, 0x10));
+printf("0x14: %x\n", READ4(sc, 0x14));
+printf("0x18: %x\n", READ4(sc, 0x18));
+printf("0x1C: %x\n", READ4(sc, 0x1C));
+printf("0x20: %x\n", READ4(sc, 0x20));
+printf("0x24: %x\n", READ4(sc, 0x24));
+printf("0x28: %x\n", READ4(sc, 0x28));
+printf("0x2C: %x\n", READ4(sc, 0x2C));
+printf("0x30: %x\n", READ4(sc, 0x30));
+printf("0x34: %x\n", READ4(sc, 0x34));
+printf("0x40: %x\n", READ4(sc, 0x40));
+printf("0x44: %x\n", READ4(sc, 0x44));
+printf("0x50: %x\n", READ4(sc, 0x50));
+printf("0x54: %x\n", READ4(sc, 0x54));
+printf("0x58: %x\n", READ4(sc, 0x58));
+printf("0x60: %x\n", READ4(sc, 0x60));
+printf("0x64: %x\n", READ4(sc, 0x64));
+printf("0x68: %x\n", READ4(sc, 0x68));
+printf("0x6C: %x\n", READ4(sc, 0x6C));
+printf("0x70: %x\n", READ4(sc, 0x70));
+printf("0x74: %x\n", READ4(sc, 0x74));
+printf("0x78: %x\n", READ4(sc, 0x78));
+printf("0x7C: %x\n", READ4(sc, 0x7C));
+printf("0x90: %x\n", READ4(sc, 0x90));
+printf("0x94: %x\n", READ4(sc, 0x94));
+printf("0xA0: %x\n", READ4(sc, 0xA0));
+printf("0xA4: %x\n", READ4(sc, 0xA4));
+printf("0xA8: %x\n", READ4(sc, 0xA8));
+printf("0xAC: %x\n", READ4(sc, 0xAC));
+printf("0xFC: %x\n", READ4(sc, 0xFC));
+
+
 	/* Setup interrupt handlers */
 	if (bus_setup_intr(sc->dev, sc->res[2], INTR_TYPE_BIO | INTR_MPSAFE,
-		NULL, cqspi_intr, sc, &sc->ih)) {
+	    NULL, cqspi_intr, sc, &sc->ih)) {
 		device_printf(sc->dev, "Unable to setup intr\n");
 		return (ENXIO);
 	}
@@ -528,9 +735,79 @@ cqspi_attach(device_t dev)
 	printf("Module ID %x\n", READ4(sc, CQSPI_MODULEID));
 	printf("cfg %x\n", READ4(sc, CQSPI_CFG));
 
+	uint32_t reg;
+
+	/* Disable controller */
+	reg = READ4(sc, CQSPI_CFG);
+	reg &= ~(CFG_EN);
+	WRITE4(sc, CQSPI_CFG, reg);
+
+	//WRITE4(sc, CQSPI_REMAPADDR, 0);
+	//WRITE4(sc, CQSPI_SRAMPART, 128/2);
+
+	reg = READ4(sc, CQSPI_CFG);
+	/* Configure baud rate */
+	//reg &= ~(CFG_BAUD_M);
+	//reg |= CFG_BAUD32;
+	//reg |= (1 << 16) | (1 << 7); // DIRECT mode
+	//reg |= CFG_ENDMA;
+	//reg |= (1 << 2) | (1 << 1);
+	WRITE4(sc, CQSPI_CFG, reg);
+
+	reg = (3 << DELAY_NSS_S);
+	reg |= (3 << DELAY_BTWN_S);
+	reg |= (1 << DELAY_AFTER_S);
+	reg |= (1 << DELAY_INIT_S);
+
+	reg = (3 << DELAY_NSS_S);
+	reg |= (3  << DELAY_BTWN_S);
+	reg |= (1 << DELAY_AFTER_S);
+	reg |= (1 << DELAY_INIT_S);
+	WRITE4(sc, CQSPI_DELAY, reg);
+
+	READ4(sc, CQSPI_RDDATACAP);
+	reg &= ~(RDDATACAP_DELAY_M);
+	reg |= (1 << RDDATACAP_DELAY_S);
+	WRITE4(sc, CQSPI_RDDATACAP, reg);
+
+	/* Enable controller */
+	reg = READ4(sc, CQSPI_CFG);
+	reg |= (CFG_EN);
+	WRITE4(sc, CQSPI_CFG, reg);
+
+	reg = cqspi_cmd(sc, CMD_READ_IDENT, 4);
+	printf("Ident %x\n", reg);
+
+	reg = cqspi_cmd(sc, CMD_READ_STATUS, 2);
+	printf("Status %x\n", reg);
+
+	printf("Enter 4b mode\n");
+	cqspi_cmd(sc, CMD_ENTER_4B_MODE, 1);
+	cqspi_cmd(sc, CMD_ENTER_4B_MODE, 1);
+	cqspi_cmd(sc, CMD_ENTER_4B_MODE, 1);
+	cqspi_cmd(sc, CMD_ENTER_4B_MODE, 1);
+
+	//printf("Exit 4b mode\n");
+	//cqspi_cmd(sc, CMD_EXIT_4B_MODE, 1);
+
+	printf("Nvconf\n");
+	reg = cqspi_cmd(sc, CMD_READ_NVCONF_REG, 2);
+	printf("NVCONF %x\n", reg);
+
+	printf("Conf\n");
+	reg = cqspi_cmd(sc, CMD_READ_CONF_REG, 1);
+	printf("CONF %x\n", reg);
+
+	printf("FSR\n");
+	reg = cqspi_cmd(sc, CMD_READ_FSR, 1);
+	printf("FSR %x\n", reg);
+
 	CQSPI_LOCK_INIT(sc);
 
-	ident = cqspi_get_device_ident(sc);
+	if (0 == 1) {
+		ident = cqspi_get_device_ident(sc);
+	}
+	ident = &flash_devices[5];
 	if (ident == NULL)
 		return (ENXIO);
 

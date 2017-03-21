@@ -39,10 +39,24 @@
 #define	 CFG_BAUD_S		19
 #define	 CFG_BAUD_M		(0xf << CFG_BAUD_S)
 #define	 CFG_BAUD2		(0 << CFG_BAUD_S)
+#define	 CFG_BAUD4		(1 << CFG_BAUD_S)
+#define	 CFG_BAUD6		(2 << CFG_BAUD_S)
+#define	 CFG_BAUD8		(3 << CFG_BAUD_S)
+#define	 CFG_BAUD10		(4 << CFG_BAUD_S)
+#define	 CFG_BAUD12		(5 << CFG_BAUD_S)
+#define	 CFG_BAUD14		(6 << CFG_BAUD_S)
 #define	 CFG_BAUD16		(7 << CFG_BAUD_S)
+#define	 CFG_BAUD18		(8 << CFG_BAUD_S)
+#define	 CFG_BAUD20		(9 << CFG_BAUD_S)
+#define	 CFG_BAUD22		(10 << CFG_BAUD_S)
+#define	 CFG_BAUD24		(11 << CFG_BAUD_S)
+#define	 CFG_BAUD26		(12 << CFG_BAUD_S)
+#define	 CFG_BAUD28		(13 << CFG_BAUD_S)
+#define	 CFG_BAUD30		(14 << CFG_BAUD_S)
 #define	 CFG_BAUD32		(0xf << CFG_BAUD_S)
 #define	 CFG_EN			(1 << 0)
 #define	CQSPI_DEVRD		0x04	/* Device Read Instruction Configuration */
+#define	 DEVRD_DUMMYRDCLKS_S	24
 #define	 DEVRD_RDOPCODE_S	0
 #define	CQSPI_DEVWR		0x08	/* Device Write Instruction Configuration */
 #define	CQSPI_DELAY		0x0C	/* QSPI Device Delay Register */
@@ -64,10 +78,14 @@
 #define	CQSPI_RXTHRESH		0x34	/* RX Threshold Register */
 #define	CQSPI_IRQSTAT		0x40	/* Interrupt Status Register */
 #define	CQSPI_IRQMASK		0x44	/* Interrupt Mask */
+#define	 IRQMASK_INDSRAMFULL	(1 << 12)
+#define	 IRQMASK_INDXFRLVL	(1 << 6)
+#define	 IRQMASK_INDOPDONE	(1 << 2)
 #define	CQSPI_LOWWRPROT		0x50	/* Lower Write Protection */
 #define	CQSPI_UPPWRPROT		0x54	/* Upper Write Protection */
 #define	CQSPI_WRPROT		0x58	/* Write Protection Control Register */
 #define	CQSPI_INDRD		0x60	/* Indirect Read Transfer Control Register */
+#define	 INDRD_IND_OPS_DONE_STATUS	(1 << 5)
 #define	 INDRD_START		(1 << 0)
 #define	CQSPI_INDRDWATER	0x64	/* Indirect Read Transfer Watermark Register */
 #define	CQSPI_INDRDSTADDR	0x68	/* Indirect Read Transfer Start Address Register */
@@ -109,6 +127,10 @@
 #define	CMD_BLOCK_32K_ERASE	0x52
 #define	CMD_ENTER_4B_MODE	0xB7
 #define	CMD_EXIT_4B_MODE	0xE9
+
+#define	CMD_READ_NVCONF_REG	0xB5
+#define	CMD_READ_CONF_REG	0x85
+#define	CMD_READ_FSR		0x70
 
 /*
  * Status register flags
