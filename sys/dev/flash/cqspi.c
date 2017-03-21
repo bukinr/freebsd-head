@@ -1,6 +1,10 @@
 /*-
- * Copyright (c) 2006 M. Warner Losh.  All rights reserved.
- * Copyright (c) 2009 Oleksandr Tymoshenko.  All rights reserved.
+ * Copyright (c) 2017 Ruslan Bukin <br@bsdpad.com>
+ * All rights reserved.
+ *
+ * This software was developed by SRI International and the University of
+ * Cambridge Computer Laboratory under DARPA/AFRL contract FA8750-10-C-0237
+ * ("CTSRD"), as part of the DARPA CRASH research programme.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -11,17 +15,20 @@
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
  */
+
+/* Cadence Quad SPI Flash Controller driver. */
 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
@@ -48,9 +55,6 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus_subr.h>
 #include <dev/ofw/openfirm.h>
 
-//remove
-#include <dev/spibus/spi.h>
-
 #include <dev/flash/cqspi.h>
 
 #define	FL_NONE			0x00
@@ -59,20 +63,14 @@ __FBSDID("$FreeBSD$");
 #define	FL_ENABLE_4B_ADDR	0x04
 #define	FL_DISABLE_4B_ADDR	0x08
 
-/*
- * Define the sectorsize to be a smaller size rather than the flash
- * sector size. Trying to run FFS off of a 64k flash sector size
- * results in a completely un-usable system.
- */
-#define	MX25L_SECTORSIZE	512
+#define	CQSPI_SECTORSIZE	512
 
-#define READ4(_sc, _reg) bus_read_4((_sc)->res[0], _reg)
+#define	READ4(_sc, _reg) bus_read_4((_sc)->res[0], _reg)
 #define READ2(_sc, _reg) bus_read_2((_sc)->res[0], _reg)
 #define READ1(_sc, _reg) bus_read_1((_sc)->res[0], _reg)
 #define WRITE4(_sc, _reg, _val) bus_write_4((_sc)->res[0], _reg, _val)
 #define WRITE2(_sc, _reg, _val) bus_write_2((_sc)->res[0], _reg, _val)
 #define WRITE1(_sc, _reg, _val) bus_write_1((_sc)->res[0], _reg, _val)
-
 #define READ_DATA_4(_sc, _reg) bus_read_4((_sc)->res[1], _reg)
 #define READ_DATA_1(_sc, _reg) bus_read_1((_sc)->res[1], _reg)
 
@@ -135,36 +133,7 @@ static int cqspi_getattr(struct bio *bp);
 static void cqspi_task(void *arg);
 
 struct cqspi_flash_ident flash_devices[] = {
-	{ "en25f32",	0x1c, 0x3116, 64 * 1024, 64, FL_NONE },
-	{ "en25p32",	0x1c, 0x2016, 64 * 1024, 64, FL_NONE },
-	{ "en25p64",	0x1c, 0x2017, 64 * 1024, 128, FL_NONE },
-	{ "en25q64",	0x1c, 0x3017, 64 * 1024, 128, FL_ERASE_4K },
-	{ "m25p64",	0x20, 0x2017, 64 * 1024, 128, FL_NONE },
-	{ "n25q00",	0x20, 0xbb21, 64 * 1024, 2048, FL_NONE },
-	{ "cqspil32",	0xc2, 0x2016, 64 * 1024, 64, FL_NONE },
-	{ "cqspil64",	0xc2, 0x2017, 64 * 1024, 128, FL_NONE },
-	{ "cqspil128",	0xc2, 0x2018, 64 * 1024, 256, FL_ERASE_4K | FL_ERASE_32K },
-	{ "cqspil256",	0xc2, 0x2019, 64 * 1024, 512, FL_ERASE_4K | FL_ERASE_32K | FL_ENABLE_4B_ADDR },
-	{ "s25fl032",	0x01, 0x0215, 64 * 1024, 64, FL_NONE },
-	{ "s25fl064",	0x01, 0x0216, 64 * 1024, 128, FL_NONE },
-	{ "s25fl128",	0x01, 0x2018, 64 * 1024, 256, FL_NONE },
-	{ "s25fl256s",	0x01, 0x0219, 64 * 1024, 512, FL_NONE },
-	{ "SST25VF032B", 0xbf, 0x254a, 64 * 1024, 64, FL_ERASE_4K | FL_ERASE_32K },
-
-	/* Winbond -- w25x "blocks" are 64K, "sectors" are 4KiB */
-	{ "w25x32",	0xef, 0x3016, 64 * 1024, 64, FL_ERASE_4K },
-	{ "w25x64",	0xef, 0x3017, 64 * 1024, 128, FL_ERASE_4K },
-	{ "w25q32",	0xef, 0x4016, 64 * 1024, 64, FL_ERASE_4K },
-	{ "w25q64",	0xef, 0x4017, 64 * 1024, 128, FL_ERASE_4K },
-	{ "w25q64bv",	0xef, 0x4017, 64 * 1024, 128, FL_ERASE_4K },
-	{ "w25q128",	0xef, 0x4018, 64 * 1024, 256, FL_ERASE_4K },
-	{ "w25q256",	0xef, 0x4019, 64 * 1024, 512, FL_ERASE_4K },
-
-	 /* Atmel */
-	{ "at25df641",  0x1f, 0x4800, 64 * 1024, 128, FL_ERASE_4K },
-
-	/* GigaDevice */
-	{ "gd25q64",	0xc8, 0x4017, 64 * 1024, 128, FL_ERASE_4K },
+	{ "n25q00", 0x20, 0xbb21, (64 * 1024), 2048, FL_NONE },
 };
 
 static void
@@ -188,6 +157,7 @@ cqspi_intr(void *arg)
 static uint8_t
 cqspi_get_status(device_t dev)
 {
+#if 0
 	uint8_t txBuf[2], rxBuf[2];
 	struct spi_command cmd;
 	int err;
@@ -203,11 +173,14 @@ cqspi_get_status(device_t dev)
 	cmd.tx_cmd_sz = 2;
 	err = 0; //SPIBUS_TRANSFER(device_get_parent(dev), dev, &cmd);
 	return (rxBuf[1]);
+#endif
+	return (0);
 }
 
 static void
 cqspi_wait_for_device_ready(device_t dev)
 {
+
 	while ((cqspi_get_status(dev) & STATUS_WIP))
 		continue;
 }
@@ -215,6 +188,7 @@ cqspi_wait_for_device_ready(device_t dev)
 static struct cqspi_flash_ident*
 cqspi_get_device_ident(struct cqspi_softc *sc)
 {
+#if 0
 	device_t dev;
 	uint8_t txBuf[8], rxBuf[8];
 	struct spi_command cmd;
@@ -253,6 +227,7 @@ cqspi_get_device_ident(struct cqspi_softc *sc)
 
 	printf("Unknown SPI flash device. Vendor: %02x, device id: %04x\n",
 	    manufacturer_id, dev_id);
+#endif
 
 	return (NULL);
 }
@@ -260,6 +235,7 @@ cqspi_get_device_ident(struct cqspi_softc *sc)
 static void
 cqspi_set_writable(device_t dev, int writable)
 {
+#if 0
 	uint8_t txBuf[1], rxBuf[1];
 	struct spi_command cmd;
 	int err;
@@ -276,11 +252,13 @@ cqspi_set_writable(device_t dev, int writable)
 	cmd.rx_cmd_sz = 1;
 	cmd.tx_cmd_sz = 1;
 	err = 0; //SPIBUS_TRANSFER(device_get_parent(dev), dev, &cmd);
+#endif
 }
 
 static void
 cqspi_erase_cmd(device_t dev, off_t sector, uint8_t ecmd)
 {
+#if 0
 	struct cqspi_softc *sc;
 	uint8_t txBuf[5], rxBuf[5];
 	struct spi_command cmd;
@@ -315,11 +293,13 @@ cqspi_erase_cmd(device_t dev, off_t sector, uint8_t ecmd)
 		txBuf[3] = (sector & 0xff);
 	}
 	err = 0; //SPIBUS_TRANSFER(device_get_parent(dev), dev, &cmd);
+#endif
 }
 
 static int
 cqspi_write(device_t dev, off_t offset, caddr_t data, off_t count)
 {
+#if 0
 	struct cqspi_softc *sc;
 	uint8_t txBuf[8], rxBuf[8];
 	struct spi_command cmd;
@@ -410,17 +390,16 @@ cqspi_write(device_t dev, off_t offset, caddr_t data, off_t count)
 	}
 
 	return (err);
+#endif
+	return (0);
 }
 
 static int
 cqspi_read(device_t dev, off_t offset, caddr_t data, off_t count)
 {
 	struct cqspi_softc *sc;
-	//uint8_t txBuf[8], rxBuf[8];
-	//struct spi_command cmd;
 	device_t pdev;
 	uint32_t reg;
-	//int err;
 
 	pdev = device_get_parent(dev);
 	sc = device_get_softc(dev);
@@ -460,10 +439,7 @@ cqspi_read(device_t dev, off_t offset, caddr_t data, off_t count)
 	reg |= (0 << 12); //addr width
 	reg |= (0 <<  8); //inst width
 	reg |= (1 << 20); //enmodebits
-	//reg |= (0x6b << DEVRD_RDOPCODE_S); //quad fast read
-	//reg |= (11 << DEVRD_RDOPCODE_S); //quad fast read
-	//reg |= (0x0C << DEVRD_RDOPCODE_S); //4b fast read
-	reg |= (0x6C << DEVRD_RDOPCODE_S); //4b quad output fast read
+	reg |= (CMD_READ_4B_QUAD_OUTPUT << DEVRD_RDOPCODE_S);
 	WRITE4(sc, CQSPI_DEVRD, reg);
 
 	WRITE4(sc, CQSPI_MODEBIT, 0xff);
@@ -485,28 +461,10 @@ cqspi_read(device_t dev, off_t offset, caddr_t data, off_t count)
 
 	n = 0;
 	while (n < (count / 4)) {
-		//while (sc->op_done == 0) {
-		//	cpufunc_nullop();
-		//}
-		//DELAY(100000);
-
 		cnt = READ4(sc, CQSPI_SRAMFILL) & 0xffff;
-
-		//printf("cnt %d\n", cnt);
-		//if (cnt < 4) {
-		//	continue;
-		//}
-
 		for (i = 0; i < cnt; i++) {
-			//printf("addr0 %x\n", READ_DATA_4(sc, 4));
 			addr[n++] = READ_DATA_4(sc, 0);
-			if (offset == 0 && n == 1) {
-				//printf("addr0 %x %x %x %x\n", addr[0], addr[1], addr[2], addr[3]);
-				//printf("addr0 %x\n", addr[0]);
-			}
 		}
-
-		//sc->op_done = 0;
 	}
 
 	while ((READ4(sc, CQSPI_INDRD) & INDRD_IND_OPS_DONE_STATUS) == 0)
@@ -514,11 +472,6 @@ cqspi_read(device_t dev, off_t offset, caddr_t data, off_t count)
 
 	WRITE4(sc, CQSPI_INDRD, INDRD_IND_OPS_DONE_STATUS);
 	WRITE4(sc, CQSPI_IRQSTAT, 0);
-
-	//while (1) {
-	//	printf("INDRD %x\n", READ_DATA_4(sc, 0));
-	//}
-	//printf("INDRD %x\n", READ4(sc, CQSPI_INDRD));
 
 	return (0);
 
@@ -561,6 +514,7 @@ cqspi_read(device_t dev, off_t offset, caddr_t data, off_t count)
 static int
 cqspi_set_4b_mode(device_t dev, uint8_t command)
 {
+#if 0
 	uint8_t txBuf[1], rxBuf[1];
 	struct spi_command cmd;
 	device_t pdev;
@@ -584,6 +538,8 @@ cqspi_set_4b_mode(device_t dev, uint8_t command)
 	cqspi_wait_for_device_ready(dev);
 
 	return (err);
+#endif
+	return (0);
 }
 
 static int
@@ -685,42 +641,6 @@ cqspi_attach(device_t dev)
 	sc->bst = rman_get_bustag(sc->res[0]);
 	sc->bsh = rman_get_bushandle(sc->res[0]);
 
-printf("0x00: %x\n", READ4(sc, 0x00));
-printf("0x04: %x\n", READ4(sc, 0x04));
-printf("0x08: %x\n", READ4(sc, 0x08));
-printf("0x0C: %x\n", READ4(sc, 0x0C));
-printf("0x10: %x\n", READ4(sc, 0x10));
-printf("0x14: %x\n", READ4(sc, 0x14));
-printf("0x18: %x\n", READ4(sc, 0x18));
-printf("0x1C: %x\n", READ4(sc, 0x1C));
-printf("0x20: %x\n", READ4(sc, 0x20));
-printf("0x24: %x\n", READ4(sc, 0x24));
-printf("0x28: %x\n", READ4(sc, 0x28));
-printf("0x2C: %x\n", READ4(sc, 0x2C));
-printf("0x30: %x\n", READ4(sc, 0x30));
-printf("0x34: %x\n", READ4(sc, 0x34));
-printf("0x40: %x\n", READ4(sc, 0x40));
-printf("0x44: %x\n", READ4(sc, 0x44));
-printf("0x50: %x\n", READ4(sc, 0x50));
-printf("0x54: %x\n", READ4(sc, 0x54));
-printf("0x58: %x\n", READ4(sc, 0x58));
-printf("0x60: %x\n", READ4(sc, 0x60));
-printf("0x64: %x\n", READ4(sc, 0x64));
-printf("0x68: %x\n", READ4(sc, 0x68));
-printf("0x6C: %x\n", READ4(sc, 0x6C));
-printf("0x70: %x\n", READ4(sc, 0x70));
-printf("0x74: %x\n", READ4(sc, 0x74));
-printf("0x78: %x\n", READ4(sc, 0x78));
-printf("0x7C: %x\n", READ4(sc, 0x7C));
-printf("0x90: %x\n", READ4(sc, 0x90));
-printf("0x94: %x\n", READ4(sc, 0x94));
-printf("0xA0: %x\n", READ4(sc, 0xA0));
-printf("0xA4: %x\n", READ4(sc, 0xA4));
-printf("0xA8: %x\n", READ4(sc, 0xA8));
-printf("0xAC: %x\n", READ4(sc, 0xAC));
-printf("0xFC: %x\n", READ4(sc, 0xFC));
-
-
 	/* Setup interrupt handlers */
 	if (bus_setup_intr(sc->dev, sc->res[2], INTR_TYPE_BIO | INTR_MPSAFE,
 	    NULL, cqspi_intr, sc, &sc->ih)) {
@@ -748,8 +668,8 @@ printf("0xFC: %x\n", READ4(sc, 0xFC));
 
 	reg = READ4(sc, CQSPI_CFG);
 	/* Configure baud rate */
-	//reg &= ~(CFG_BAUD_M);
-	//reg |= CFG_BAUD32;
+	reg &= ~(CFG_BAUD_M);
+	reg |= CFG_BAUD4;
 	//reg |= (1 << 16) | (1 << 7); // DIRECT mode
 	//reg |= CFG_ENDMA;
 	//reg |= (1 << 2) | (1 << 1);
@@ -784,9 +704,6 @@ printf("0xFC: %x\n", READ4(sc, 0xFC));
 
 	printf("Enter 4b mode\n");
 	cqspi_cmd(sc, CMD_ENTER_4B_MODE, 1);
-	cqspi_cmd(sc, CMD_ENTER_4B_MODE, 1);
-	cqspi_cmd(sc, CMD_ENTER_4B_MODE, 1);
-	cqspi_cmd(sc, CMD_ENTER_4B_MODE, 1);
 
 	//printf("Exit 4b mode\n");
 	//cqspi_cmd(sc, CMD_EXIT_4B_MODE, 1);
@@ -808,7 +725,7 @@ printf("0xFC: %x\n", READ4(sc, 0xFC));
 	if (0 == 1) {
 		ident = cqspi_get_device_ident(sc);
 	}
-	ident = &flash_devices[5];
+	ident = &flash_devices[0];
 	if (ident == NULL)
 		return (ENXIO);
 
@@ -820,13 +737,13 @@ printf("0xFC: %x\n", READ4(sc, 0xFC));
 	sc->sc_disk->d_strategy = cqspi_strategy;
 	sc->sc_disk->d_getattr = cqspi_getattr;
 	sc->sc_disk->d_ioctl = cqspi_ioctl;
-	sc->sc_disk->d_name = "flash/spi";
+	sc->sc_disk->d_name = "flash/qspi";
 	sc->sc_disk->d_drv1 = sc;
 	sc->sc_disk->d_maxsize = DFLTPHYS;
-	sc->sc_disk->d_sectorsize = MX25L_SECTORSIZE;
-	sc->sc_disk->d_mediasize = ident->sectorsize * ident->sectorcount;
+	sc->sc_disk->d_sectorsize = CQSPI_SECTORSIZE;
+	sc->sc_disk->d_mediasize = (ident->sectorsize * ident->sectorcount);
 	sc->sc_disk->d_unit = device_get_unit(sc->dev);
-	sc->sc_disk->d_dump = NULL;		/* NB: no dumps */
+	sc->sc_disk->d_dump = NULL;
 	/* Sectorsize for erase operations */
 	sc->sc_sectorsize =  ident->sectorsize;
 	sc->sc_flags = ident->flags;
@@ -860,6 +777,7 @@ cqspi_detach(device_t dev)
 static int
 cqspi_open(struct disk *dp)
 {
+
 	return (0);
 }
 
@@ -871,8 +789,8 @@ cqspi_close(struct disk *dp)
 }
 
 static int
-cqspi_ioctl(struct disk *dp, u_long cmd, void *data, int fflag,
-	struct thread *td)
+cqspi_ioctl(struct disk *dp, u_long cmd, void *data,
+    int fflag, struct thread *td)
 {
 
 	return (EINVAL);
@@ -884,6 +802,7 @@ cqspi_strategy(struct bio *bp)
 	struct cqspi_softc *sc;
 
 	sc = (struct cqspi_softc *)bp->bio_disk->d_drv1;
+
 	CQSPI_LOCK(sc);
 	bioq_disksort(&sc->sc_bio_queue, bp);
 	wakeup(sc);
@@ -896,36 +815,44 @@ cqspi_getattr(struct bio *bp)
 	struct cqspi_softc *sc;
 	device_t dev;
 
-	if (bp->bio_disk == NULL || bp->bio_disk->d_drv1 == NULL)
+	if (bp->bio_disk == NULL || bp->bio_disk->d_drv1 == NULL) {
 		return (ENXIO);
+	}
 
 	sc = bp->bio_disk->d_drv1;
 	dev = sc->dev;
 
 	if (strcmp(bp->bio_attribute, "SPI::device") == 0) {
-		if (bp->bio_length != sizeof(dev))
+		if (bp->bio_length != sizeof(dev)) {
 			return (EFAULT);
+		}
 		bcopy(&dev, bp->bio_data, sizeof(dev));
-	} else
-		return (-1);
-	return (0);
+		return (0);
+	}
+
+	return (-1);
 }
 
 static void
 cqspi_task(void *arg)
 {
-	struct cqspi_softc *sc = (struct cqspi_softc*)arg;
+	struct cqspi_softc *sc;
 	struct bio *bp;
 	device_t dev;
 
+	sc = (struct cqspi_softc *)arg;
+
+	dev = sc->dev;
+
 	for (;;) {
-		dev = sc->dev;
 		CQSPI_LOCK(sc);
+
 		do {
 			bp = bioq_first(&sc->sc_bio_queue);
 			if (bp == NULL)
 				msleep(sc, &sc->sc_mtx, PRIBIO, "jobqueue", 0);
 		} while (bp == NULL);
+
 		bioq_remove(&sc->sc_bio_queue, bp);
 		CQSPI_UNLOCK(sc);
 
@@ -941,7 +868,6 @@ cqspi_task(void *arg)
 		default:
 			bp->bio_error = EINVAL;
 		}
-
 
 		biodone(bp);
 	}
