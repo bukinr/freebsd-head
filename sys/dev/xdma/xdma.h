@@ -74,6 +74,8 @@ typedef struct xdma_controller xdma_controller_t;
 /* SG type of transfer. */
 struct xdma_request {
 	struct mbuf			*m;
+	uint32_t			type;
+#define	XR_TYPE_MBUF			(1 << 0)
 	enum xdma_direction		direction;
 	bus_addr_t			src_addr;	/* Physical address. */
 	bus_addr_t			dst_addr;	/* Physical address. */
@@ -182,6 +184,7 @@ int xchan_seg_done(xdma_channel_t *xchan, uint32_t idx, xdma_transfer_status_t *
 /* xchan queues operations */
 int xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **m, xdma_transfer_status_t *);
 int xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **m, uintptr_t addr, enum xdma_direction dir);
+int xdma_enqueue(xdma_channel_t *xchan, uintptr_t src, uintptr_t dst, enum xdma_direction dir);
 int xdma_queue_submit(xdma_channel_t *xchan);
 
 /* Channel Control */

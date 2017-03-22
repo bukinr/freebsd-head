@@ -529,6 +529,42 @@ xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 }
 
 int
+xdma_enqueue(xdma_channel_t *xchan, uintptr_t src,
+    uintptr_t dst, enum xdma_direction dir)
+{
+	struct xdma_request *xr;
+	xdma_controller_t *xdma;
+
+	xdma = xchan->xdma;
+
+	if (xchan->xr_count >= (xchan->xr_num - 1)) {
+		/* No space is available yet. */
+		return (-1);
+	}
+
+	xr = &xchan->xr[xchan->xr_head];
+	xr->direction = dir;
+	xr->m = NULL;
+	xr->type = 0;
+	xr->src_addr = src;
+	xr->dst_addr = dst;
+#if 0
+	if (dir == XDMA_MEM_TO_DEV) {
+		xr->dst_addr = addr;
+		xr->src_addr = 0;
+	} else {
+		xr->src_addr = addr;
+		xr->dst_addr = 0;
+	}
+#endif
+	xr->done = 0;
+	xchan->xr_head = xchan_next_req(xchan, xchan->xr_head);
+	atomic_add_int(&xchan->xr_count, 1);
+
+	return (0);
+}
+
+int
 xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
     uintptr_t addr, enum xdma_direction dir)
 {
@@ -545,6 +581,7 @@ xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 	xr = &xchan->xr[xchan->xr_head];
 	xr->direction = dir;
 	xr->m = *mp;
+	xr->type = XR_TYPE_MBUF;
 	if (dir == XDMA_MEM_TO_DEV) {
 		xr->dst_addr = addr;
 		xr->src_addr = 0;
@@ -640,6 +677,108 @@ xdma_mbuf_chain_count(struct mbuf *m0)
 	return (c);
 }
 
+static uint32_t
+xdma_mbuf_defrag(xdma_channel_t *xchan, struct xdma_request *xr)
+{
+	xdma_controller_t *xdma;
+	struct mbuf *m;
+	uint32_t c;
+
+	xdma = xchan->xdma;
+
+	c = xdma_mbuf_chain_count(xr->m);
+
+	if (xchan->caps & XCHAN_CAP_BUSDMA) {
+		if ((xchan->caps & XCHAN_CAP_BUSDMA_NOSEG) || \
+		    (c > MAX_NSEGS)) {
+			if ((m = m_defrag(xr->m, M_NOWAIT)) == NULL) {
+				device_printf(xdma->dma_dev,
+				    "%s: Can't defrag mbuf\n",
+				    __func__);
+				return (c);
+			}
+			xr->m = m;
+			c = 1;
+		}
+	}
+
+	return (c);
+}
+
+static int
+xdma_sglist_prepare_one(xdma_channel_t *xchan,
+    struct xdma_request *xr, struct bus_dma_segment *seg)
+{
+
+	return (0);
+}
+
+static int
+xdma_sglist_prepare_one_mbuf(xdma_channel_t *xchan,
+    struct xdma_request *xr, struct bus_dma_segment *seg)
+{
+	xdma_controller_t *xdma;
+	struct mbuf *m;
+	int error;
+	int nsegs;
+	int i;
+
+	xdma = xchan->xdma;
+	nsegs = 0;
+
+	m = xr->m;
+
+	i = xchan->buf_head;
+
+	if (xchan->caps & XCHAN_CAP_BUSDMA) {
+		error = bus_dmamap_load_mbuf_sg(xchan->dma_tag_bufs,
+		    xchan->bufs[i].map, m, seg, &nsegs, BUS_DMA_NOWAIT);
+		if (error != 0) {
+			if (error == ENOMEM) {
+				/*
+				 * Out of memory. Try again later.
+				 * TODO: count errors.
+				 */
+			} else {
+				device_printf(xdma->dma_dev,
+				    "%s: bus_dmamap_load_mbuf_sg failed with err %d\n",
+				    __func__, error);
+			}
+			return (0);
+		}
+
+		KASSERT(nsegs < MAX_NSEGS, ("%s: %d segments returned!", __func__, nsegs));
+
+		if (xr->direction == XDMA_MEM_TO_DEV) {
+			bus_dmamap_sync(xchan->dma_tag_bufs, xchan->bufs[i].map,
+			    BUS_DMASYNC_PREWRITE);
+		} else {
+			bus_dmamap_sync(xchan->dma_tag_bufs, xchan->bufs[i].map,
+			    BUS_DMASYNC_PREREAD);
+		}
+	} else {
+		error = 0;
+		nsegs = 1;
+
+		if (xr->direction == XDMA_MEM_TO_DEV) {
+			m_copydata(m, 0, m->m_pkthdr.len, xchan->bufs[i].cbuf);
+			seg[0].ds_addr = (bus_addr_t)xchan->bufs[i].cbuf;
+			seg[0].ds_len = m->m_pkthdr.len;
+		} else {
+			seg[0].ds_addr = mtod(m, bus_addr_t);
+			seg[0].ds_len = m->m_pkthdr.len;
+		}
+	}
+
+	xchan->bufs[i].xr = xr;
+	xchan->bufs[i].nsegs = nsegs;
+	xchan->bufs[i].nsegs_left = nsegs;
+
+	xchan->buf_head = xchan_next_buf(xchan, xchan->buf_head);
+
+	return (nsegs);
+}
+
 static int
 xdma_sglist_prepare(xdma_channel_t *xchan,
     struct xdma_sglist *sg)
@@ -647,17 +786,22 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 	struct bus_dma_segment seg[MAX_NSEGS];
 	struct xdma_request *xr;
 	xdma_controller_t *xdma;
-	struct mbuf *m;
-	int error, nsegs;
 	uint32_t capacity;
-	uint32_t c;
 	uint32_t n;
+	uint32_t c;
+	int nsegs;
 	int ret;
-	int i;
 
 	xdma = xchan->xdma;
 
 	n = 0;
+
+	ret = XDMA_CHANNEL_CAPACITY(xdma->dma_dev, xchan, &capacity);
+	if (ret != 0) {
+		device_printf(xdma->dev,
+		    "%s: Can't get DMA controller capacity.\n", __func__);
+		return (-1);
+	}
 
 	for (;;) {
 		if (xchan->xr_processed == xchan->xr_head) {
@@ -665,88 +809,33 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 			break;
 		}
 		xr = &xchan->xr[xchan->xr_processed];
-		c = xdma_mbuf_chain_count(xr->m);
 
-		if (xchan->caps & XCHAN_CAP_BUSDMA) {
-			if ((xchan->caps & XCHAN_CAP_BUSDMA_NOSEG) || \
-			    (c > MAX_NSEGS)) {
-				if ((m = m_defrag(xr->m, M_NOWAIT)) == NULL) {
-					device_printf(xdma->dma_dev,
-					    "%s: Can't defrag mbuf\n",
-					    __func__);
-					break;
-				}
-				xr->m = m;
-				c = 1;
-			}
-		}
-		m = xr->m;
-
-		ret = XDMA_CHANNEL_CAPACITY(xdma->dma_dev, xchan, &capacity);
-		if (ret != 0) {
-			device_printf(xdma->dev,
-			    "%s: Can't get DMA controller capacity.\n", __func__);
-			break;
+		if (xr->type & XR_TYPE_MBUF) {
+			c = xdma_mbuf_defrag(xchan, xr);
+		} else {
+			c = 1;
 		}
 
 		if (capacity <= (c + n)) {
 			/*
 			 * No space yet available for the entire
-			 * mbuf chain in the DMA engine.
+			 * request in the DMA engine.
 			 */
 			break;
 		}
 
-		i = xchan->buf_head;
-
-		if (xchan->caps & XCHAN_CAP_BUSDMA) {
-			error = bus_dmamap_load_mbuf_sg(xchan->dma_tag_bufs,
-			    xchan->bufs[i].map, m, seg, &nsegs, BUS_DMA_NOWAIT);
-			if (error != 0) {
-				if (error == ENOMEM) {
-					/*
-					 * Out of memory. Try again later.
-					 * TODO: count errors.
-					 */
-				} else {
-					device_printf(xdma->dma_dev,
-					    "%s: bus_dmamap_load_mbuf_sg failed with err %d\n",
-					    __func__, error);
-				}
-				break;
-			}
-
-			KASSERT(nsegs < MAX_NSEGS, ("%s: %d segments returned!", __func__, nsegs));
-
-			if (xr->direction == XDMA_MEM_TO_DEV) {
-				bus_dmamap_sync(xchan->dma_tag_bufs, xchan->bufs[i].map,
-				    BUS_DMASYNC_PREWRITE);
-			} else {
-				bus_dmamap_sync(xchan->dma_tag_bufs, xchan->bufs[i].map,
-				    BUS_DMASYNC_PREREAD);
-			}
+		if (xr->type & XR_TYPE_MBUF) {
+			nsegs = xdma_sglist_prepare_one_mbuf(xchan, xr, seg);
 		} else {
-			error = 0;
-			nsegs = 1;
-
-			if (xr->direction == XDMA_MEM_TO_DEV) {
-				m_copydata(m, 0, m->m_pkthdr.len, xchan->bufs[i].cbuf);
-				seg[0].ds_addr = (bus_addr_t)xchan->bufs[i].cbuf;
-				seg[0].ds_len = m->m_pkthdr.len;
-			} else {
-				seg[0].ds_addr = mtod(m, bus_addr_t);
-				seg[0].ds_len = m->m_pkthdr.len;
-			}
+			nsegs = xdma_sglist_prepare_one(xchan, xr, seg);
 		}
-
-		xchan->bufs[i].xr = xr;
-		xchan->bufs[i].nsegs = nsegs;
-		xchan->bufs[i].nsegs_left = nsegs;
+		if (nsegs == 0) {
+			break;
+		}
 
 		xdma_sglist_add(&sg[n], seg, nsegs, xr);
 		n += nsegs;
 
-		xchan->buf_head = xchan_next_buf(xchan, xchan->buf_head);
 		xchan->xr_processed = xchan_next_req(xchan, xchan->xr_processed);
 	}
 
