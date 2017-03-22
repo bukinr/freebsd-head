@@ -529,8 +529,8 @@ xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 }
 
 int
-xdma_enqueue(xdma_channel_t *xchan, uintptr_t src,
-    uintptr_t dst, enum xdma_direction dir)
+xdma_enqueue(xdma_channel_t *xchan, uintptr_t src, uintptr_t dst,
+    bus_size_t len, enum xdma_direction dir)
 {
 	struct xdma_request *xr;
 	xdma_controller_t *xdma;
@@ -545,6 +545,7 @@ xdma_enqueue(xdma_channel_t *xchan, uintptr_t src,
 	xr = &xchan->xr[xchan->xr_head];
 	xr->direction = dir;
 	xr->m = NULL;
+	xr->len = len;
 	xr->type = 0;
 	xr->src_addr = src;
 	xr->dst_addr = dst;
@@ -709,8 +710,115 @@ static int
 xdma_sglist_prepare_one(xdma_channel_t *xchan,
     struct xdma_request *xr, struct bus_dma_segment *seg)
 {
+	xdma_controller_t *xdma;
+	int nsegs;
 
-	return (0);
+	xdma = xchan->xdma;
+
+	nsegs = 0;
+
+	return (nsegs);
+}
+
+struct seg_load_request {
+	struct bus_dma_segment *seg;
+	uint32_t nsegs;
+	uint32_t error;
+};
+
+static void
+xdma_get1paddr(void *arg, bus_dma_segment_t *segs, int nsegs, int error)
+{
+	struct seg_load_request *slr;
+	struct bus_dma_segment *seg;
+	int i;
+
+	seg = arg;
+
+	if (error != 0) {
+		slr->error = error;
+		return;
+	}
+
+	slr->nsegs = nsegs;
+	seg = slr->seg;
+
+	for (i = 0; i < nsegs; i++) {
+		seg[i].ds_addr = segs[i].ds_addr;
+		seg[i].ds_len = segs[i].ds_len;
+	}
+}
+
+static int
+xdma_load_busdma(xdma_channel_t *xchan, struct xdma_request *xr, struct bus_dma_segment *seg, uint32_t i)
+{
+	xdma_controller_t *xdma;
+	struct seg_load_request slr;
+	struct mbuf *m;
+	uint32_t nsegs;
+	void *addr;
+	int error;
+
+	xdma = xchan->xdma;
+
+	nsegs = 0;
+
+	m = xr->m;
+
+	if (xr->type & XR_TYPE_MBUF) {
+		error = bus_dmamap_load_mbuf_sg(xchan->dma_tag_bufs,
+		    xchan->bufs[i].map, m, seg, &nsegs, BUS_DMA_NOWAIT);
+	} else {
+		switch (xr->direction) {
+		case XDMA_MEM_TO_DEV:
+			addr = (void *)xr->src_addr;
+			break;
+		case XDMA_DEV_TO_MEM:
+			addr = (void *)xr->dst_addr;
+			break;
+		default:
+			printf("direction is unknown\n");
+			return (0);
+		}
+		slr.nsegs = 0;
+		slr.error = 0;
+		slr.seg = seg;
+		error = bus_dmamap_load(xchan->dma_tag_bufs, xchan->bufs[i].map,
+		    addr, xr->len, xdma_get1paddr, &slr, BUS_DMA_NOWAIT);
+		if (slr.error != 0) {
+			device_printf(xdma->dma_dev,
+			    "%s: bus_dmamap_load failed, err %d\n",
+			    __func__, slr.error);
+			return (0);
+		}
+		nsegs = slr.nsegs;
+	}
+
+	if (error != 0) {
+		if (error == ENOMEM) {
+			/*
+			 * Out of memory. Try again later.
+			 * TODO: count errors.
+			 */
+		} else {
+			device_printf(xdma->dma_dev,
+			    "%s: bus_dmamap_load_mbuf_sg failed with err %d\n",
+			    __func__, error);
+		}
+		return (0);
+	}
+
+	KASSERT(nsegs < MAX_NSEGS, ("%s: %d segments returned!", __func__, nsegs));
+
+	if (xr->direction == XDMA_MEM_TO_DEV) {
+		bus_dmamap_sync(xchan->dma_tag_bufs, xchan->bufs[i].map,
+		    BUS_DMASYNC_PREWRITE);
+	} else {
+		bus_dmamap_sync(xchan->dma_tag_bufs, xchan->bufs[i].map,
+		    BUS_DMASYNC_PREREAD);
+	}
+
+	return (nsegs);
 }
 
 static int
@@ -724,6 +832,8 @@ xdma_sglist_prepare_one_mbuf(xdma_channel_t *xchan,
 	int i;
 
 	xdma = xchan->xdma;
+
+	error = 0;
 	nsegs = 0;
 
 	m = xr->m;
@@ -731,33 +841,8 @@ xdma_sglist_prepare_one_mbuf(xdma_channel_t *xchan,
 	i = xchan->buf_head;
 
 	if (xchan->caps & XCHAN_CAP_BUSDMA) {
-		error = bus_dmamap_load_mbuf_sg(xchan->dma_tag_bufs,
-		    xchan->bufs[i].map, m, seg, &nsegs, BUS_DMA_NOWAIT);
-		if (error != 0) {
-			if (error == ENOMEM) {
-				/*
-				 * Out of memory. Try again later.
-				 * TODO: count errors.
-				 */
-			} else {
-				device_printf(xdma->dma_dev,
-				    "%s: bus_dmamap_load_mbuf_sg failed with err %d\n",
-				    __func__, error);
-			}
-			return (0);
-		}
-
-		KASSERT(nsegs < MAX_NSEGS, ("%s: %d segments returned!", __func__, nsegs));
-
-		if (xr->direction == XDMA_MEM_TO_DEV) {
-			bus_dmamap_sync(xchan->dma_tag_bufs, xchan->bufs[i].map,
-			    BUS_DMASYNC_PREWRITE);
-		} else {
-			bus_dmamap_sync(xchan->dma_tag_bufs, xchan->bufs[i].map,
-			    BUS_DMASYNC_PREREAD);
-		}
+		nsegs = xdma_load_busdma(xchan, xr, seg, i);
 	} else {
-		error = 0;
 		nsegs = 1;
 
 		if (xr->direction == XDMA_MEM_TO_DEV) {
