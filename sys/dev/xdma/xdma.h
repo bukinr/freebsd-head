@@ -76,12 +76,14 @@ struct xdma_request {
 	struct mbuf			*m;
 	uint32_t			type;
 #define	XR_TYPE_MBUF			(1 << 0)
+#define	XR_TYPE_BIO			(1 << 1)
 	enum xdma_direction		direction;
 	bus_addr_t			src_addr;	/* Physical address. */
 	bus_addr_t			dst_addr;	/* Physical address. */
 	bus_size_t			len;
 	xdma_transfer_status_t		status;
 	bool				done;
+	void				*user;
 };
 
 /*
@@ -184,8 +186,12 @@ int xchan_seg_done(xdma_channel_t *xchan, uint32_t idx, xdma_transfer_status_t *
 /* xchan queues operations */
 int xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **m, xdma_transfer_status_t *);
 int xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **m, uintptr_t addr, enum xdma_direction dir);
-int xdma_enqueue(xdma_channel_t *xchan, uintptr_t src, uintptr_t dst, bus_size_t, enum xdma_direction dir);
+
+int xdma_dequeue(xdma_channel_t *xchan, void **user, xdma_transfer_status_t *status);
+int xdma_enqueue(xdma_channel_t *xchan, uintptr_t src, uintptr_t dst, bus_size_t, enum xdma_direction dir, void *);
+
 int xdma_queue_submit(xdma_channel_t *xchan);
+int xdma_enqueue_bio(xdma_channel_t *xchan, struct bio **b, bus_addr_t addr, enum xdma_direction dir);
 
 /* Channel Control */
 int xdma_begin(xdma_channel_t *xchan);

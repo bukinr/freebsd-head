@@ -66,7 +66,7 @@ MALLOC_DEFINE(M_XDMA, "xdma", "xDMA framework");
  * Maximum number of busdma segments per mbuf chain supported.
  * Bigger mbuf chains will be merged to single using m_defrag().
  */
-#define	MAX_NSEGS	8
+#define	MAX_NSEGS	64
 
 /*
  * Multiple xDMA controllers may work with single DMA device,
@@ -307,12 +307,14 @@ xdma_bufs_alloc_busdma(xdma_channel_t *xchan)
 	/* Allocate bus_dma memory for mbufs. */
 	err = bus_dma_tag_create(
 	    bus_get_dma_tag(xdma->dev),	/* Parent tag. */
-	    16, 0,			/* alignment, boundary */
+	    32, 0,			/* alignment, boundary */
 	    BUS_SPACE_MAXADDR_32BIT,	/* lowaddr */
 	    BUS_SPACE_MAXADDR,		/* highaddr */
 	    NULL, NULL,			/* filter, filterarg */
 	    MCLBYTES, MAX_NSEGS, 	/* maxsize, nsegments */
 	    MCLBYTES,			/* maxsegsize */
+	   //MAXPHYS, MAX_NSEGS,
+	   //MAXPHYS,
 	    0,				/* flags */
 	    NULL, NULL,			/* lockfunc, lockarg */
 	    &xchan->dma_tag_bufs);
@@ -505,6 +507,30 @@ xchan_next_buf(xdma_channel_t *xchan, uint32_t curidx)
 }
 
 int
+xdma_dequeue(xdma_channel_t *xchan, void **user,
+    xdma_transfer_status_t *status)
+{
+	struct xdma_request *xr;
+
+	if (xchan->xr_tail == xchan->xr_processed) {
+		return (-1);
+	}
+
+	xr = &xchan->xr[xchan->xr_tail];
+	if (xr->done == 0) {
+		return (-1);
+	}
+
+	*user = xr->user;
+	status->error = xr->status.error;
+	status->transferred = xr->status.transferred;
+	xchan->xr_tail = xchan_next_req(xchan, xchan->xr_tail);
+	atomic_subtract_int(&xchan->xr_count, 1);
+
+	return (0);
+}
+
+int
 xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
     xdma_transfer_status_t *status)
 {
@@ -530,7 +556,7 @@ xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 
 int
 xdma_enqueue(xdma_channel_t *xchan, uintptr_t src, uintptr_t dst,
-    bus_size_t len, enum xdma_direction dir)
+    bus_size_t len, enum xdma_direction dir, void *user)
 {
 	struct xdma_request *xr;
 	xdma_controller_t *xdma;
@@ -543,6 +569,7 @@ xdma_enqueue(xdma_channel_t *xchan, uintptr_t src, uintptr_t dst,
 	}
 
 	xr = &xchan->xr[xchan->xr_head];
+	xr->user = user;
 	xr->direction = dir;
 	xr->m = NULL;
 	xr->len = len;
@@ -561,6 +588,18 @@ xdma_enqueue(xdma_channel_t *xchan, uintptr_t src, uintptr_t dst,
 	xr->done = 0;
 	xchan->xr_head = xchan_next_req(xchan, xchan->xr_head);
 	atomic_add_int(&xchan->xr_count, 1);
+
+	return (0);
+}
+
+int
+xdma_enqueue_bio(xdma_channel_t *xchan, struct bio **b,
+    bus_addr_t addr, enum xdma_direction dir)
+{
+	xdma_controller_t *xdma;
+	//struct xdma_requst *xr;
+
+	xdma = xchan->xdma;
 
 	return (0);
 }
@@ -733,7 +772,8 @@ xdma_get1paddr(void *arg, bus_dma_segment_t *segs, int nsegs, int error)
 	struct bus_dma_segment *seg;
 	int i;
 
-	seg = arg;
+	slr = arg;
+	seg = slr->seg;
 
 	if (error != 0) {
 		slr->error = error;
@@ -741,7 +781,6 @@ xdma_get1paddr(void *arg, bus_dma_segment_t *segs, int nsegs, int error)
 	}
 
 	slr->nsegs = nsegs;
-	seg = slr->seg;
 
 	for (i = 0; i < nsegs; i++) {
 		seg[i].ds_addr = segs[i].ds_addr;
@@ -750,7 +789,8 @@ xdma_get1paddr(void *arg, bus_dma_segment_t *segs, int nsegs, int error)
 }
 
 static int
-xdma_load_busdma(xdma_channel_t *xchan, struct xdma_request *xr, struct bus_dma_segment *seg, uint32_t i)
+xdma_load_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
+    struct bus_dma_segment *seg, uint32_t i)
 {
 	xdma_controller_t *xdma;
 	struct seg_load_request slr;
@@ -761,6 +801,7 @@ xdma_load_busdma(xdma_channel_t *xchan, struct xdma_request *xr, struct bus_dma_
 
 	xdma = xchan->xdma;
 
+	error = 0;
 	nsegs = 0;
 
 	m = xr->m;
@@ -768,6 +809,8 @@ xdma_load_busdma(xdma_channel_t *xchan, struct xdma_request *xr, struct bus_dma_
 	if (xr->type & XR_TYPE_MBUF) {
 		error = bus_dmamap_load_mbuf_sg(xchan->dma_tag_bufs,
 		    xchan->bufs[i].map, m, seg, &nsegs, BUS_DMA_NOWAIT);
+	} else if (xr->type & XR_TYPE_BIO) {
+
 	} else {
 		switch (xr->direction) {
 		case XDMA_MEM_TO_DEV:
@@ -842,6 +885,10 @@ xdma_sglist_prepare_one_mbuf(xdma_channel_t *xchan,
 
 	if (xchan->caps & XCHAN_CAP_BUSDMA) {
 		nsegs = xdma_load_busdma(xchan, xr, seg, i);
+		if (nsegs == 0) {
+			printf(".");
+			return (0);
+		}
 	} else {
 		nsegs = 1;
 
@@ -897,6 +944,8 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 
 		if (xr->type & XR_TYPE_MBUF) {
 			c = xdma_mbuf_defrag(xchan, xr);
+		} else if (xr->type & XR_TYPE_BIO) {
+			c = 1;
 		} else {
 			c = 1;
 		}
@@ -912,7 +961,10 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 		if (xr->type & XR_TYPE_MBUF) {
 			nsegs = xdma_sglist_prepare_one_mbuf(xchan, xr, seg);
 		} else {
-			nsegs = xdma_sglist_prepare_one(xchan, xr, seg);
+			nsegs = xdma_sglist_prepare_one_mbuf(xchan, xr, seg);
+			if (0 == 1) {
+				nsegs = xdma_sglist_prepare_one(xchan, xr, seg);
+			}
 		}
 		if (nsegs == 0) {
 			break;

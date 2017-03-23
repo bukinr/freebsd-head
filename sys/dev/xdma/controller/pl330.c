@@ -785,10 +785,10 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 		offs += emit_mov(&ibuf[offs], R_DAR, dst_addr_lo);
 
 		cnt = (len / 4);
-		if (cnt > 256) {
-			offs += emit_lp(&ibuf[offs], 0, cnt / 256);
+		if (cnt > 128) {
+			offs += emit_lp(&ibuf[offs], 0, cnt / 128);
 			offs0 = offs;
-			offs += emit_lp(&ibuf[offs], 1, 256);
+			offs += emit_lp(&ibuf[offs], 1, 128);
 			offs1 = offs;
 		} else {
 			offs += emit_lp(&ibuf[offs], 0, cnt);
@@ -798,7 +798,7 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 		offs += emit_ld(&ibuf[offs]);
 		offs += emit_st(&ibuf[offs]);
 
-		if (cnt > 256) {
+		if (cnt > 128) {
 			jump_addr_relative = (offs - offs1);
 			offs += emit_lpend(&ibuf[offs], 1, jump_addr_relative);
 			jump_addr_relative = (offs - offs0);
