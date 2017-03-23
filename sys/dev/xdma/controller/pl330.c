@@ -88,6 +88,10 @@ struct pl330_channel {
 	uint32_t		map_descr;
 	uint8_t			map_err;
 	uint32_t		descs_used_count;
+	uint8_t			*ibuf;
+
+	uint32_t		enqueued;
+	uint32_t		capacity;
 };
 
 struct pl330_fdt_data {
@@ -148,16 +152,34 @@ pl330_intr(void *arg)
 	struct pl330_softc *sc;
 	uint32_t tot_copied;
 	uint32_t pending;
+	int i;
 
 	sc = arg;
-	chan = &sc->channels[0];
+	chan = &sc->channels[1];
 	xchan = chan->xchan;
 
 	pending = READ4(sc, INTMIS);
-	printf("%s: 0x%x\n", __func__, pending);
-	//WRITE4(sc, INTCLR, pending);
+	printf("%s: 0x%x, LC0 %x, SAR %x DAR %x\n",
+	    __func__, pending, READ4(sc, LC0(0)),
+	    READ4(sc, SAR(0)), READ4(sc, DAR(0)));
+	WRITE4(sc, INTCLR, pending);
+
+	st.error = 0;
+	st.transferred = 0; //le32toh(desc->transferred);
+	for (i = 0; i < chan->enqueued; i++) {
+		printf("seg done\n");
+		xchan_seg_done(xchan, 0, &st);
+	}
+
+	chan->capacity = 0x10000;
+
+	/* Finish operation */
+	status.error = 0;
+	status.transferred = 0; //tot_copied;
+	xdma_callback(chan->xchan, &status);
 
 	return;
+
 #if 0
 	printf("%s(%d): status 0x%08x next_descr 0x%08x, control 0x%08x\n", __func__,
 	    device_get_unit(sc->dev),
@@ -213,12 +235,46 @@ emit_mov(uint8_t *buf, uint32_t reg, uint32_t val)
 }
 
 static uint32_t
+emit_lp(uint8_t *buf, uint8_t idx, uint32_t iter)
+{
+
+	if (idx > 1) {
+		return (0);
+	}
+
+	buf[0] = DMALP;
+	buf[0] |= (idx << 1);
+
+	buf[1] = (iter - 1) & 0xff;
+
+	return (2);
+}
+
+static uint32_t
+emit_lpend(uint8_t *buf, uint8_t idx, uint8_t jump_addr_relative)
+{
+
+	buf[0] = DMALPEND;
+	buf[0] |= (1 << 4); //dmalp started the loop
+	buf[0] |= (idx << 2);
+
+	//buf[0] |= (0 << 1) | (1 << 0); //single
+	buf[0] |= (1 << 1) | (1 << 0); //burst
+	buf[1] = jump_addr_relative;
+
+	return (2);
+}
+
+static uint32_t
 emit_ld(uint8_t *buf)
 {
 
 	buf[0] = DMALD;
 	//single
-	buf[0] |= (0 << 1) | (1 << 0);
+	//buf[0] |= (0 << 1) | (1 << 0);
+
+	//burst
+	buf[0] |= (1 << 1) | (1 << 0);
 
 	return (1);
 }
@@ -229,7 +285,9 @@ emit_st(uint8_t *buf)
 
 	buf[0] = DMAST;
 	//single
-	buf[0] |= (0 << 1) | (1 << 0);
+	//buf[0] |= (0 << 1) | (1 << 0);
+	//burst
+	buf[0] |= (1 << 1) | (1 << 0);
 
 	return (1);
 }
@@ -431,7 +489,9 @@ pl330_attach(device_t dev)
 	xref = OF_xref_from_node(node);
 	OF_device_register_xref(xref, dev);
 
-	pl330_test(sc);
+	if (0 == 1) {
+		pl330_test(sc);
+	}
 
 #if 0
 	printf("%s: read status: %x\n", __func__, READ4(sc, 0x00));
@@ -621,6 +681,10 @@ pl330_channel_alloc(device_t dev, struct xdma_channel *xchan)
 			chan->descs_used_count = 0;
 			chan->descs_num = 1024;
 
+			chan->ibuf = (void *)kmem_alloc_contig(kernel_arena,
+			    PAGE_SIZE, M_ZERO, 0, ~0, PAGE_SIZE, 0,
+			    VM_MEMATTR_UNCACHEABLE);
+
 			return (0);
 		}
 	}
@@ -650,14 +714,14 @@ pl330_channel_capacity(device_t dev, xdma_channel_t *xchan,
     uint32_t *capacity)
 {
 	struct pl330_channel *chan;
-	uint32_t c;
+	//uint32_t c;
 
 	chan = (struct pl330_channel *)xchan->chan;
 
 	/* At least one descriptor must be left empty. */
-	c = (chan->descs_num - chan->descs_used_count - 1);
+	//c = (chan->descs_num - chan->descs_used_count - 1);
 
-	*capacity = c;
+	*capacity = chan->capacity;
 
 	return (0);
 }
@@ -671,13 +735,100 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	struct pl330_softc *sc;
 	uint32_t src_addr_lo;
 	uint32_t dst_addr_lo;
+	uint8_t *ibuf;
 	uint32_t len;
 	uint32_t tmp;
+	uint32_t reg;
+	uint32_t offs;
 	int i;
 
 	sc = device_get_softc(dev);
 
+	// pl330_channel_submit_sg: src ffa00000 dst 881000 len 512
+
 	chan = (struct pl330_channel *)xchan->chan;
+	ibuf = chan->ibuf;
+	bzero(ibuf, PAGE_SIZE);
+
+	uint8_t dbuf[6];
+
+	reg = (1 << 8) | (1 << 9) | (1 << 10);
+	reg |= (1 << 22) | (1 << 23) | (1 << 24);
+
+	reg = (1 << 14); //dst inc
+	//reg |= (1 << 0); //src inc
+	//reg = 0;
+	//SS32, DS32
+	reg |= (2 << 1); //0b010 = reads 4 bytes per beat
+	reg |= (2 << 15); //0b010 = writes 4 bytes per beat
+	//SS64, DS64
+	//reg |= (3 << 1); //0b011 = reads 8 bytes per beat
+	//reg |= (3 << 15); //0b011 = writes 8 bytes per beat
+
+	offs = 0;
+	offs += emit_mov(&chan->ibuf[offs], R_CCR, reg);
+
+	uint8_t jump_addr_relative;
+	uint8_t offs0, offs1;
+	uint32_t cnt;
+
+	for (i = 0; i < sg_n; i++) {
+		src_addr_lo = (uint32_t)sg[i].src_addr;
+		dst_addr_lo = (uint32_t)sg[i].dst_addr;
+		len = (uint32_t)sg[i].len;
+#if 1
+		printf("%s: src %x dst %x len %d\n", __func__,
+		    src_addr_lo, dst_addr_lo, len);
+#endif
+
+		offs += emit_mov(&ibuf[offs], R_SAR, src_addr_lo);
+		offs += emit_mov(&ibuf[offs], R_DAR, dst_addr_lo);
+
+		cnt = (len / 4);
+		if (cnt > 256) {
+			offs += emit_lp(&ibuf[offs], 0, cnt / 256);
+			offs0 = offs;
+			offs += emit_lp(&ibuf[offs], 1, 256);
+			offs1 = offs;
+		} else {
+			offs += emit_lp(&ibuf[offs], 0, cnt);
+			offs0 = offs;
+		}
+		offs += emit_wfp(&ibuf[offs], 25); //25 -- qspi rx
+		offs += emit_ld(&ibuf[offs]);
+		offs += emit_st(&ibuf[offs]);
+
+		if (cnt > 256) {
+			jump_addr_relative = (offs - offs1);
+			offs += emit_lpend(&ibuf[offs], 1, jump_addr_relative);
+			jump_addr_relative = (offs - offs0);
+			offs += emit_lpend(&ibuf[offs], 0, jump_addr_relative);
+		} else {
+			jump_addr_relative = (offs - offs0);
+			offs += emit_lpend(&ibuf[offs], 0, jump_addr_relative);
+		}
+	}
+
+	offs += emit_sev(&ibuf[offs], 0);
+	offs += emit_end(&ibuf[offs]);
+
+	emit_go(dbuf, vtophys(chan->ibuf));
+
+	reg = (dbuf[1] << 24) | (dbuf[0] << 16);
+	WRITE4(sc, DBGINST0, reg);
+	reg = (dbuf[5] << 24) | (dbuf[4] << 16) | (dbuf[3] << 8) | dbuf[2];
+	WRITE4(sc, DBGINST1, reg);
+
+	WRITE4(sc, INTEN, (1 << 0));
+
+	chan->enqueued = sg_n;
+	chan->capacity = 0;
+
+	/* Start operation */
+	WRITE4(sc, DBGCMD, 0);
+
+	return (0);
+
 
 	for (i = 0; i < sg_n; i++) {
 		src_addr_lo = (uint32_t)sg[i].src_addr;
@@ -730,21 +881,23 @@ static int
 pl330_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 {
 	struct pl330_channel *chan;
-	struct pl330_desc *desc;
+	//struct pl330_desc *desc;
 	struct pl330_softc *sc;
-	uint32_t addr;
-	uint32_t reg;
-	int ret;
-	int i;
+	//uint32_t addr;
+	//uint32_t reg;
+	//int ret;
+	//int i;
 
 	sc = device_get_softc(dev);
 
-#if 0
+#if 1
 	printf("%s(%d)\n", __func__, device_get_unit(dev));
 #endif
 
 	chan = (struct pl330_channel *)xchan->chan;
+	chan->capacity = 0x10000;
 
+#if 0
 	ret = pl330_desc_alloc(sc, chan, sizeof(struct pl330_desc), 16);
 	if (ret != 0) {
 		device_printf(sc->dev,
@@ -774,6 +927,7 @@ pl330_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 	reg = (PF_CONTROL_GIEM | PF_CONTROL_DESC_POLL_EN);
 	reg |= PF_CONTROL_RUN;
 	//WRITE4_DESC(sc, PF_CONTROL, reg);
+#endif
 
 	return (0);
 }
