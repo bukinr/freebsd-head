@@ -273,7 +273,7 @@ xdma_bufs_alloc_no_busdma(xdma_channel_t *xchan)
 	}
 
 	for (i = 0; i < nsegments; i++) {
-		xchan->bufs[i].cbuf = contigmalloc(MCLBYTES,
+		xchan->bufs[i].cbuf = contigmalloc(xchan->maxsegsize,
 		    M_XDMA, 0, 0, ~0, PAGE_SIZE, 0);
 	}
 
@@ -311,10 +311,8 @@ xdma_bufs_alloc_busdma(xdma_channel_t *xchan)
 	    BUS_SPACE_MAXADDR_32BIT,	/* lowaddr */
 	    BUS_SPACE_MAXADDR,		/* highaddr */
 	    NULL, NULL,			/* filter, filterarg */
-	    MCLBYTES, MAX_NSEGS, 	/* maxsize, nsegments */
-	    MCLBYTES,			/* maxsegsize */
-	   //MAXPHYS, MAX_NSEGS,
-	   //MAXPHYS,
+	    xchan->maxsegsize, MAX_NSEGS, 	/* maxsize, nsegments */
+	    xchan->maxsegsize,			/* maxsegsize */
 	    0,				/* flags */
 	    NULL, NULL,			/* lockfunc, lockarg */
 	    &xchan->dma_tag_bufs);
@@ -427,8 +425,12 @@ xdma_prep_memcpy(xdma_channel_t *xchan, uintptr_t src_addr,
 	return (0);
 }
 
+/*
+ * xr_num - xdma requests queue size,
+ * maxsegsize - maximum allowed scatter-gather list element size in bytes
+ */
 int
-xdma_prep_sg(xdma_channel_t *xchan, uint32_t xr_num)
+xdma_prep_sg(xdma_channel_t *xchan, uint32_t xr_num, uint32_t maxsegsize)
 {
 	xdma_controller_t *xdma;
 	int ret;
@@ -443,6 +445,7 @@ xdma_prep_sg(xdma_channel_t *xchan, uint32_t xr_num)
 		return (-1);
 	}
 
+	xchan->maxsegsize = maxsegsize;
 	xchan->bufs_num = xr_num;
 	xchan->xr_num = xr_num;
 

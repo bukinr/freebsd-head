@@ -56,6 +56,7 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/openfirm.h>
 
 #include <dev/flash/cqspi.h>
+#include <dev/xdma/xdma.h>
 
 #define	FL_NONE			0x00
 #define	FL_ERASE_4K		0x01
@@ -99,6 +100,15 @@ struct cqspi_softc {
 	bus_space_handle_t	bsh;
 	void			*ih;
 	uint8_t			op_done;
+
+	/* xDMA */
+	xdma_controller_t	*xdma_tx;
+	xdma_channel_t		*xchan_tx;
+	void			*ih_tx;
+
+	xdma_controller_t	*xdma_rx;
+	xdma_channel_t		*xchan_rx;
+	void			*ih_rx;
 };
 
 #define	CQSPI_LOCK(_sc)		mtx_lock(&(_sc)->sc_mtx)
@@ -146,12 +156,53 @@ cqspi_intr(void *arg)
 
 	pending = READ4(sc, CQSPI_IRQSTAT);
 
-	//printf("%s: IRQSTAT %x\n", __func__, pending);
+	printf("%s: IRQSTAT %x\n", __func__, pending);
 	if (pending & (IRQMASK_INDOPDONE | IRQMASK_INDXFRLVL | IRQMASK_INDSRAMFULL)) {
 		//printf("op_done\n");
 		sc->op_done = 1;
 	}
 	WRITE4(sc, CQSPI_IRQSTAT, pending);
+}
+
+static int
+cqspi_xdma_tx_intr(void *arg, xdma_transfer_status_t *status)
+{
+	struct cqspi_softc *sc;
+
+	sc = arg;
+
+	printf("%s\n", __func__);
+
+	return (0);
+}
+
+static int
+cqspi_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
+{
+	struct cqspi_softc *sc;
+	struct bio *bp;
+	int ret;
+	struct xdma_transfer_status st;
+
+	sc = arg;
+
+	printf("%s\n", __func__);
+
+	while (1) {
+		ret = xdma_dequeue(sc->xchan_rx, (void **)&bp, &st);
+		if (ret != 0) {
+			break;
+		}
+		printf("bio done: %x", (uint32_t)bp);
+		biodone(bp);
+		printf(".\n");
+	}
+
+	//CQSPI_LOCK(sc);
+	//wakeup(sc->xdma_rx);
+	//CQSPI_UNLOCK(sc);
+
+	return (0);
 }
 
 static uint8_t
@@ -297,7 +348,7 @@ cqspi_erase_cmd(device_t dev, off_t sector, uint8_t ecmd)
 }
 
 static int
-cqspi_write(device_t dev, off_t offset, caddr_t data, off_t count)
+cqspi_write(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count)
 {
 #if 0
 	struct cqspi_softc *sc;
@@ -395,7 +446,7 @@ cqspi_write(device_t dev, off_t offset, caddr_t data, off_t count)
 }
 
 static int
-cqspi_read(device_t dev, off_t offset, caddr_t data, off_t count)
+cqspi_read(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count)
 {
 	struct cqspi_softc *sc;
 	device_t pdev;
@@ -404,7 +455,7 @@ cqspi_read(device_t dev, off_t offset, caddr_t data, off_t count)
 	pdev = device_get_parent(dev);
 	sc = device_get_softc(dev);
 
-	//printf("%s: offset 0x%llx count %lld bytes\n", __func__, offset, count);
+	printf("%s: offset 0x%llx count %lld bytes\n", __func__, offset, count);
 
 	/*
 	 * Enforce the disk read sectorsize not the erase sectorsize.
@@ -416,6 +467,10 @@ cqspi_read(device_t dev, off_t offset, caddr_t data, off_t count)
 		printf("EIO\n");
 		return (EIO);
 	}
+
+	reg = (2 << 0); //numsglreqbytes
+	reg |= (2 << 8); //numburstreqbytes
+	WRITE4(sc, CQSPI_DMAPER, reg);
 
 	WRITE4(sc, CQSPI_INDRD, INDRD_IND_OPS_DONE_STATUS);
 	WRITE4(sc, CQSPI_INDRD, 0);
@@ -450,9 +505,7 @@ cqspi_read(device_t dev, off_t offset, caddr_t data, off_t count)
 
 	sc->op_done = 0;
 
-	WRITE4(sc, CQSPI_INDRDSTADDR, offset);
-	WRITE4(sc, CQSPI_INDRD, INDRD_START);
-
+#if 0
 	uint32_t *addr;
 	int i;
 	int n;
@@ -472,6 +525,12 @@ cqspi_read(device_t dev, off_t offset, caddr_t data, off_t count)
 
 	WRITE4(sc, CQSPI_INDRD, INDRD_IND_OPS_DONE_STATUS);
 	WRITE4(sc, CQSPI_IRQSTAT, 0);
+#else
+	xdma_enqueue(sc->xchan_rx, 0xffa00000, (uintptr_t)data, count, XDMA_DEV_TO_MEM, bp);
+	xdma_queue_submit(sc->xchan_rx);
+#endif
+	WRITE4(sc, CQSPI_INDRDSTADDR, offset);
+	WRITE4(sc, CQSPI_INDRD, INDRD_START);
 
 	return (0);
 
@@ -626,8 +685,10 @@ cqspi_cmd(struct cqspi_softc *sc, uint8_t cmd, uint32_t len)
 static int
 cqspi_attach(device_t dev)
 {
-	struct cqspi_softc *sc;
 	struct cqspi_flash_ident *ident;
+	struct cqspi_softc *sc;
+	uint32_t caps;
+	int error;
 
 	sc = device_get_softc(dev);
 	sc->dev = dev;
@@ -640,6 +701,56 @@ cqspi_attach(device_t dev)
 	/* Memory interface */
 	sc->bst = rman_get_bustag(sc->res[0]);
 	sc->bsh = rman_get_bushandle(sc->res[0]);
+
+	caps = 0;
+
+	/* Get xDMA controller. */
+	sc->xdma_tx = xdma_ofw_get(sc->dev, "tx");
+	if (sc->xdma_tx == NULL) {
+		device_printf(dev, "Can't find DMA controller.\n");
+		return (ENXIO);
+	}
+
+	sc->xdma_rx = xdma_ofw_get(sc->dev, "rx");
+	if (sc->xdma_rx == NULL) {
+		device_printf(dev, "Can't find DMA controller.\n");
+		return (ENXIO);
+	}
+
+	/* Alloc xDMA virtual channels. */
+	sc->xchan_tx = xdma_channel_alloc(sc->xdma_tx, caps);
+	if (sc->xchan_tx == NULL) {
+		device_printf(dev, "Can't alloc virtual DMA channel.\n");
+		return (ENXIO);
+	}
+
+	sc->xchan_rx = xdma_channel_alloc(sc->xdma_rx, caps);
+	if (sc->xchan_rx == NULL) {
+		device_printf(dev, "Can't alloc virtual DMA channel.\n");
+		return (ENXIO);
+	}
+
+	/* Setup interrupt handlers. */
+	error = xdma_setup_intr(sc->xchan_tx, cqspi_xdma_tx_intr, sc, &sc->ih_tx);
+	if (error) {
+		device_printf(sc->dev,
+		    "Can't setup xDMA interrupt handler.\n");
+		return (ENXIO);
+	}
+
+	error = xdma_setup_intr(sc->xchan_rx, cqspi_xdma_rx_intr, sc, &sc->ih_rx);
+	if (error) {
+		device_printf(sc->dev,
+		    "Can't setup xDMA interrupt handler.\n");
+		return (ENXIO);
+	}
+
+
+#define	TX_QUEUE_SIZE	16
+#define	RX_QUEUE_SIZE	16
+
+	xdma_prep_sg(sc->xchan_tx, TX_QUEUE_SIZE, MAXPHYS);
+	xdma_prep_sg(sc->xchan_rx, TX_QUEUE_SIZE, MAXPHYS);
 
 	/* Setup interrupt handlers */
 	if (bus_setup_intr(sc->dev, sc->res[2], INTR_TYPE_BIO | INTR_MPSAFE,
@@ -669,9 +780,10 @@ cqspi_attach(device_t dev)
 	reg = READ4(sc, CQSPI_CFG);
 	/* Configure baud rate */
 	reg &= ~(CFG_BAUD_M);
-	reg |= CFG_BAUD4;
+	//reg |= CFG_BAUD4;
+	reg |= CFG_BAUD32;
 	//reg |= (1 << 16) | (1 << 7); // DIRECT mode
-	//reg |= CFG_ENDMA;
+	reg |= CFG_ENDMA;
 	//reg |= (1 << 2) | (1 << 1);
 	WRITE4(sc, CQSPI_CFG, reg);
 
@@ -847,10 +959,13 @@ cqspi_task(void *arg)
 	for (;;) {
 		CQSPI_LOCK(sc);
 
+		printf("Task\n");
+
 		do {
 			bp = bioq_first(&sc->sc_bio_queue);
-			if (bp == NULL)
-				msleep(sc, &sc->sc_mtx, PRIBIO, "jobqueue", 0);
+			if (bp == NULL) {
+				msleep(sc, &sc->sc_mtx, PRIBIO, "jobqueue", hz);
+			}
 		} while (bp == NULL);
 
 		bioq_remove(&sc->sc_bio_queue, bp);
@@ -858,18 +973,27 @@ cqspi_task(void *arg)
 
 		switch (bp->bio_cmd) {
 		case BIO_READ:
-			bp->bio_error = cqspi_read(dev, bp->bio_offset, 
+			bp->bio_error = cqspi_read(dev, bp, bp->bio_offset, 
 			    bp->bio_data, bp->bio_bcount);
 			break;
 		case BIO_WRITE:
-			bp->bio_error = cqspi_write(dev, bp->bio_offset, 
+			bp->bio_error = EINVAL;
+			break;
+			bp->bio_error = cqspi_write(dev, bp, bp->bio_offset, 
 			    bp->bio_data, bp->bio_bcount);
 			break;
 		default:
 			bp->bio_error = EINVAL;
 		}
 
+#if 0
+		CQSPI_LOCK(sc);
+		msleep(sc->xdma_rx, &sc->sc_mtx, PRIBIO, "jobqueue", 0);
+		CQSPI_UNLOCK(sc);
+
+		printf("bio done\n");
 		biodone(bp);
+#endif
 	}
 }
 

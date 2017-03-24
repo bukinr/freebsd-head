@@ -109,6 +109,8 @@
 #define	CQSPI_FLASHCMDWRDATAUP	0xAC	/* Flash Command Write Data Register (Upper) */
 #define	CQSPI_MODULEID		0xFC	/* Module ID Register */
 
+#define	CMD_READ_4B_QUAD_OUTPUT	0x6C
+
 //remove below
 /*
  * Commands 
