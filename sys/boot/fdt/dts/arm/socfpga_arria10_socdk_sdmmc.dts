@@ -43,7 +43,7 @@
 	soc {
 		/* Local timer */
 		timer@ffffc600 {
-			clock-frequency = <200000000>;
+			clock-frequency = <300000000>;
 		};
 
 		/* Global timer */
@@ -51,7 +51,7 @@
 			compatible = "arm,cortex-a9-global-timer";
 			reg = <0xffffc200 0x20>;
 			interrupts = <1 11 0x301>;
-			clock-frequency = <200000000>;
+			clock-frequency = <300000000>;
 		};
 
 		/* LED pio */

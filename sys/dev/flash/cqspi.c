@@ -156,7 +156,7 @@ cqspi_intr(void *arg)
 
 	pending = READ4(sc, CQSPI_IRQSTAT);
 
-#if 0
+#if 1
 	printf("%s: IRQSTAT %x\n", __func__, pending);
 #endif
 	if (pending & (IRQMASK_INDOPDONE | IRQMASK_INDXFRLVL | IRQMASK_INDSRAMFULL)) {
@@ -477,10 +477,10 @@ cqspi_read(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count
 	WRITE4(sc, CQSPI_DMAPER, reg);
 	WRITE4(sc, CQSPI_INDRDWATER, 4);
 
-	//reg = (4 << 0); //numsglreqbytes
-	//reg |= (4 << 8); //numburstreqbytes
+	//reg = (2 << 0); //numsglreqbytes
+	//reg |= (2 << 8); //numburstreqbytes
 	//WRITE4(sc, CQSPI_DMAPER, reg);
-	//WRITE4(sc, CQSPI_INDRDWATER, 4);
+	//WRITE4(sc, CQSPI_INDRDWATER, 64);
 
 	WRITE4(sc, CQSPI_INDRD, INDRD_IND_OPS_DONE_STATUS);
 	WRITE4(sc, CQSPI_INDRD, 0);
@@ -792,7 +792,7 @@ cqspi_attach(device_t dev)
 	reg = READ4(sc, CQSPI_CFG);
 	/* Configure baud rate */
 	reg &= ~(CFG_BAUD_M);
-	reg |= CFG_BAUD4;
+	reg |= CFG_BAUD6;
 	//reg |= (1 << 16) | (1 << 7); // DIRECT mode
 	reg |= CFG_ENDMA;
 	//reg |= (1 << 2) | (1 << 1);
