@@ -775,8 +775,8 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	//reg |= (4 << 1); //0b100 = reads 16 bytes per beat
 	//reg |= (4 << 15); //0b100 = writes 16 bytes per beat
 
-	//reg |= ((8 - 1) << 4); //src burst len
-	//reg |= ((8 - 1) << 18); //dst burst len
+	//reg |= ((16 - 1) << 4); //src burst len
+	//reg |= ((16 - 1) << 18); //dst burst len
 
 	offs = 0;
 	offs += emit_mov(&chan->ibuf[offs], R_CCR, reg);
@@ -797,7 +797,7 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 		offs += emit_mov(&ibuf[offs], R_SAR, src_addr_lo);
 		offs += emit_mov(&ibuf[offs], R_DAR, dst_addr_lo);
 
-		cnt = (len / (4 * 1));
+		cnt = (len / 4);
 		if (cnt > 128) {
 			offs += emit_lp(&ibuf[offs], 0, cnt / 128);
 			offs0 = offs;

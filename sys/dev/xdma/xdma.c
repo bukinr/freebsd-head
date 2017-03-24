@@ -307,7 +307,7 @@ xdma_bufs_alloc_busdma(xdma_channel_t *xchan)
 	/* Allocate bus_dma memory for mbufs. */
 	err = bus_dma_tag_create(
 	    bus_get_dma_tag(xdma->dev),	/* Parent tag. */
-	    32, 0,			/* alignment, boundary */
+	    16, 0,			/* alignment, boundary */
 	    BUS_SPACE_MAXADDR_32BIT,	/* lowaddr */
 	    BUS_SPACE_MAXADDR,		/* highaddr */
 	    NULL, NULL,			/* filter, filterarg */
