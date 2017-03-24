@@ -60,14 +60,6 @@ __FBSDID("$FreeBSD$");
 
 #include <xdma_if.h>
 
-MALLOC_DEFINE(M_XDMA, "xdma", "xDMA framework");
-
-/*
- * Maximum number of busdma segments per mbuf chain supported.
- * Bigger mbuf chains will be merged to single using m_defrag().
- */
-#define	MAX_NSEGS	64
-
 /*
  * Multiple xDMA controllers may work with single DMA device,
  * so we have global lock for physical channel management.
@@ -85,8 +77,8 @@ static struct mtx xdma_mtx;
 #define	XCHAN_UNLOCK(xchan)		mtx_unlock(&(xchan)->mtx_lock)
 #define	XCHAN_ASSERT_LOCKED(xchan)	mtx_assert(&(xchan)->mtx_lock, MA_OWNED)
 
-static int xchan_sglist_init(xdma_channel_t *xchan);
-static int xchan_sglist_free(xdma_channel_t *xchan);
+//static int xchan_sglist_init(xdma_channel_t *xchan);
+//static int xchan_sglist_free(xdma_channel_t *xchan);
 
 static int xchan_bufs_alloc(xdma_channel_t *xchan);
 static int xchan_bufs_free(xdma_channel_t *xchan);
@@ -495,20 +487,6 @@ xdma_prep_sg(xdma_channel_t *xchan, uint32_t xr_num, uint32_t maxsegsize)
 	return (0);
 }
 
-static __inline uint32_t
-xchan_next_req(xdma_channel_t *xchan, uint32_t curidx)
-{
-
-	return ((curidx + 1) % xchan->xr_num);
-}
-
-static __inline uint32_t
-xchan_next_buf(xdma_channel_t *xchan, uint32_t curidx)
-{
-
-	return ((curidx + 1) % xchan->bufs_num);
-}
-
 int
 xdma_dequeue(xdma_channel_t *xchan, void **user,
     xdma_transfer_status_t *status)
@@ -525,30 +503,6 @@ xdma_dequeue(xdma_channel_t *xchan, void **user,
 	}
 
 	*user = xr->user;
-	status->error = xr->status.error;
-	status->transferred = xr->status.transferred;
-	xchan->xr_tail = xchan_next_req(xchan, xchan->xr_tail);
-	atomic_subtract_int(&xchan->xr_count, 1);
-
-	return (0);
-}
-
-int
-xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
-    xdma_transfer_status_t *status)
-{
-	struct xdma_request *xr;
-
-	if (xchan->xr_tail == xchan->xr_processed) {
-		return (-1);
-	}
-
-	xr = &xchan->xr[xchan->xr_tail];
-	if (xr->done == 0) {
-		return (-1);
-	}
-
-	*mp = xr->m;
 	status->error = xr->status.error;
 	status->transferred = xr->status.transferred;
 	xchan->xr_tail = xchan_next_req(xchan, xchan->xr_tail);
@@ -605,161 +559,6 @@ xdma_enqueue_bio(xdma_channel_t *xchan, struct bio **b,
 	xdma = xchan->xdma;
 
 	return (0);
-}
-
-int
-xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
-    uintptr_t addr, enum xdma_direction dir)
-{
-	struct xdma_request *xr;
-	xdma_controller_t *xdma;
-
-	xdma = xchan->xdma;
-
-	if (xchan->xr_count >= (xchan->xr_num - 1)) {
-		/* No space is available yet. */
-		return (-1);
-	}
-
-	xr = &xchan->xr[xchan->xr_head];
-	xr->direction = dir;
-	xr->m = *mp;
-	xr->type = XR_TYPE_MBUF;
-	if (dir == XDMA_MEM_TO_DEV) {
-		xr->dst_addr = addr;
-		xr->src_addr = 0;
-	} else {
-		xr->src_addr = addr;
-		xr->dst_addr = 0;
-	}
-	xr->done = 0;
-	xchan->xr_head = xchan_next_req(xchan, xchan->xr_head);
-	atomic_add_int(&xchan->xr_count, 1);
-
-	return (0);
-}
-
-static int
-xchan_sglist_init(xdma_channel_t *xchan)
-{
-	uint32_t sz;
-
-	if (xchan->flags & XCHAN_SGLIST_ALLOCATED) {
-		return (-1);
-	}
-
-	/* TODO: dehardcore */
-	sz = (sizeof(struct xdma_sglist) * 2048);
-
-	xchan->sg = malloc(sz, M_XDMA, M_WAITOK | M_ZERO);
-	if (xchan->sg == NULL) {
-		return (-1);
-	}
-
-	xchan->flags |= XCHAN_SGLIST_ALLOCATED;
-
-	return (0);
-}
-
-static int
-xchan_sglist_free(xdma_channel_t *xchan)
-{
-
-	if (xchan->flags & XCHAN_SGLIST_ALLOCATED) {
-		free(xchan->sg, M_XDMA);
-	}
-
-	xchan->flags &= ~XCHAN_SGLIST_ALLOCATED;
-
-	return (0);
-}
-
-static int
-xdma_sglist_add(struct xdma_sglist *sg, struct bus_dma_segment *seg,
-    uint32_t nsegs, struct xdma_request *xr)
-{
-	int i;
-
-	if (nsegs == 0) {
-		return (-1);
-	}
-
-	for (i = 0; i < nsegs; i++) {
-		if (xr->direction == XDMA_MEM_TO_DEV) {
-			sg[i].src_addr = seg[i].ds_addr;
-			sg[i].dst_addr = xr->dst_addr;
-		} else {
-			sg[i].src_addr = xr->src_addr;
-			sg[i].dst_addr = seg[i].ds_addr;
-		}
-		sg[i].len = seg[i].ds_len;
-		sg[i].direction = xr->direction;
-
-		sg[i].first = 0;
-		sg[i].last = 0;
-	}
-
-	sg[0].first = 1;
-	sg[nsegs - 1].last = 1;
-
-	return (0);
-}
-
-static uint32_t
-xdma_mbuf_chain_count(struct mbuf *m0)
-{
-	struct mbuf *m;
-	uint32_t c;
-
-	c = 0;
-
-	for (m = m0; m != NULL; m = m->m_next) {
-		c++;
-	}
-
-	return (c);
-}
-
-static uint32_t
-xdma_mbuf_defrag(xdma_channel_t *xchan, struct xdma_request *xr)
-{
-	xdma_controller_t *xdma;
-	struct mbuf *m;
-	uint32_t c;
-
-	xdma = xchan->xdma;
-
-	c = xdma_mbuf_chain_count(xr->m);
-
-	if (xchan->caps & XCHAN_CAP_BUSDMA) {
-		if ((xchan->caps & XCHAN_CAP_BUSDMA_NOSEG) || \
-		    (c > MAX_NSEGS)) {
-			if ((m = m_defrag(xr->m, M_NOWAIT)) == NULL) {
-				device_printf(xdma->dma_dev,
-				    "%s: Can't defrag mbuf\n",
-				    __func__);
-				return (c);
-			}
-			xr->m = m;
-			c = 1;
-		}
-	}
-
-	return (c);
-}
-
-static int
-xdma_sglist_prepare_one(xdma_channel_t *xchan,
-    struct xdma_request *xr, struct bus_dma_segment *seg)
-{
-	xdma_controller_t *xdma;
-	int nsegs;
-
-	xdma = xchan->xdma;
-
-	nsegs = 0;
-
-	return (nsegs);
 }
 
 struct seg_load_request {
@@ -868,11 +667,40 @@ xdma_load_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
 }
 
 static int
-xdma_sglist_prepare_one_mbuf(xdma_channel_t *xchan,
-    struct xdma_request *xr, struct bus_dma_segment *seg)
+xdma_load_no_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
+    struct bus_dma_segment *seg, uint32_t i)
 {
 	xdma_controller_t *xdma;
 	struct mbuf *m;
+	uint32_t nsegs;
+
+	xdma = xchan->xdma;
+
+	m = xr->m;
+
+	nsegs = 1;
+
+	if (xr->type & XR_TYPE_MBUF) {
+		if (xr->direction == XDMA_MEM_TO_DEV) {
+			m_copydata(m, 0, m->m_pkthdr.len, xchan->bufs[i].cbuf);
+			seg[0].ds_addr = (bus_addr_t)xchan->bufs[i].cbuf;
+			seg[0].ds_len = m->m_pkthdr.len;
+		} else {
+			seg[0].ds_addr = mtod(m, bus_addr_t);
+			seg[0].ds_len = m->m_pkthdr.len;
+		}
+	} else {
+		panic("implement me\n");
+	}
+
+	return (nsegs);
+}
+
+static int
+xdma_sglist_prepare_one(xdma_channel_t *xchan,
+    struct xdma_request *xr, struct bus_dma_segment *seg)
+{
+	xdma_controller_t *xdma;
 	int error;
 	int nsegs;
 	int i;
@@ -882,27 +710,16 @@ xdma_sglist_prepare_one_mbuf(xdma_channel_t *xchan,
 	error = 0;
 	nsegs = 0;
 
-	m = xr->m;
-
 	i = xchan->buf_head;
 
 	if (xchan->caps & XCHAN_CAP_BUSDMA) {
 		nsegs = xdma_load_busdma(xchan, xr, seg, i);
-		if (nsegs == 0) {
-			printf(".");
-			return (0);
-		}
 	} else {
-		nsegs = 1;
-
-		if (xr->direction == XDMA_MEM_TO_DEV) {
-			m_copydata(m, 0, m->m_pkthdr.len, xchan->bufs[i].cbuf);
-			seg[0].ds_addr = (bus_addr_t)xchan->bufs[i].cbuf;
-			seg[0].ds_len = m->m_pkthdr.len;
-		} else {
-			seg[0].ds_addr = mtod(m, bus_addr_t);
-			seg[0].ds_len = m->m_pkthdr.len;
-		}
+		nsegs = xdma_load_no_busdma(xchan, xr, seg, i);
+	}
+	if (nsegs == 0) {
+		printf(".");
+		return (0);
 	}
 
 	xchan->bufs[i].xr = xr;
@@ -961,14 +778,7 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 			break;
 		}
 
-		if (xr->type & XR_TYPE_MBUF) {
-			nsegs = xdma_sglist_prepare_one_mbuf(xchan, xr, seg);
-		} else {
-			nsegs = xdma_sglist_prepare_one_mbuf(xchan, xr, seg);
-			if (0 == 1) {
-				nsegs = xdma_sglist_prepare_one(xchan, xr, seg);
-			}
-		}
+		nsegs = xdma_sglist_prepare_one(xchan, xr, seg);
 		if (nsegs == 0) {
 			break;
 		}

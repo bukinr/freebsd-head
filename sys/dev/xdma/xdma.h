@@ -205,11 +205,41 @@ int xdma_teardown_intr(xdma_channel_t *xchan, struct xdma_intr_handler *ih);
 int xdma_teardown_all_intr(xdma_channel_t *xchan);
 int xdma_callback(struct xdma_channel *xchan, xdma_transfer_status_t *status);
 
+int xchan_sglist_init(xdma_channel_t *xchan);
+int xchan_sglist_free(xdma_channel_t *xchan);
+int xdma_sglist_add(struct xdma_sglist *sg, struct bus_dma_segment *seg,
+    uint32_t nsegs, struct xdma_request *xr);
+
 struct xdma_intr_handler {
 	int				(*cb)(void *cb_user, xdma_transfer_status_t *status);
 	void				*cb_user;
 	struct mtx			ih_lock;
 	TAILQ_ENTRY(xdma_intr_handler)	ih_next;
 };
+
+static __inline uint32_t
+xchan_next_req(xdma_channel_t *xchan, uint32_t curidx)
+{
+
+	return ((curidx + 1) % xchan->xr_num);
+}
+
+static __inline uint32_t
+xchan_next_buf(xdma_channel_t *xchan, uint32_t curidx)
+{
+
+	return ((curidx + 1) % xchan->bufs_num);
+}
+
+static MALLOC_DEFINE(M_XDMA, "xdma", "xDMA framework");
+
+/*
+ * Maximum number of busdma segments per mbuf chain supported.
+ * Bigger mbuf chains will be merged to single using m_defrag().
+ */
+#define	MAX_NSEGS	64
+
+uint32_t xdma_mbuf_defrag(xdma_channel_t *xchan, struct xdma_request *xr);
+uint32_t xdma_mbuf_chain_count(struct mbuf *m0);
 
 #endif /* !_DEV_XDMA_H_ */
