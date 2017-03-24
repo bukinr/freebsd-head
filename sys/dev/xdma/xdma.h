@@ -46,6 +46,12 @@ enum xdma_operation_type {
 	XDMA_CYCLIC,
 };
 
+enum xdma_request_type {
+	XR_TYPE_ADDR,
+	XR_TYPE_MBUF,
+	XR_TYPE_BIO,
+};
+
 enum xdma_command {
 	XDMA_CMD_BEGIN,
 	XDMA_CMD_PAUSE,
@@ -74,9 +80,7 @@ typedef struct xdma_controller xdma_controller_t;
 /* SG type of transfer. */
 struct xdma_request {
 	struct mbuf			*m;
-	uint32_t			type;
-#define	XR_TYPE_MBUF			(1 << 0)
-#define	XR_TYPE_BIO			(1 << 1)
+	enum xdma_request_type		type;
 	enum xdma_direction		direction;
 	bus_addr_t			src_addr;	/* Physical address. */
 	bus_addr_t			dst_addr;	/* Physical address. */

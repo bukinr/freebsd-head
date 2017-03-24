@@ -606,12 +606,14 @@ xdma_load_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
 
 	m = xr->m;
 
-	if (xr->type & XR_TYPE_MBUF) {
+	switch (xr->type) {
+	case XR_TYPE_MBUF:
 		error = bus_dmamap_load_mbuf_sg(xchan->dma_tag_bufs,
 		    xchan->bufs[i].map, m, seg, &nsegs, BUS_DMA_NOWAIT);
-	} else if (xr->type & XR_TYPE_BIO) {
-
-	} else {
+		break;
+	case XR_TYPE_BIO:
+		break;
+	case XR_TYPE_ADDR:
 		switch (xr->direction) {
 		case XDMA_MEM_TO_DEV:
 			addr = (void *)xr->src_addr;
@@ -635,6 +637,9 @@ xdma_load_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
 			return (0);
 		}
 		nsegs = slr.nsegs;
+		break;
+	default:
+		break;
 	}
 
 	if (error != 0) {
@@ -676,7 +681,8 @@ xdma_load_no_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
 
 	nsegs = 1;
 
-	if (xr->type & XR_TYPE_MBUF) {
+	switch (xr->type) {
+	case XR_TYPE_MBUF:
 		if (xr->direction == XDMA_MEM_TO_DEV) {
 			m_copydata(m, 0, m->m_pkthdr.len, xchan->bufs[i].cbuf);
 			seg[0].ds_addr = (bus_addr_t)xchan->bufs[i].cbuf;
@@ -685,7 +691,10 @@ xdma_load_no_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
 			seg[0].ds_addr = mtod(m, bus_addr_t);
 			seg[0].ds_len = m->m_pkthdr.len;
 		}
-	} else {
+		break;
+	case XR_TYPE_BIO:
+	case XR_TYPE_ADDR:
+	default:
 		panic("implement me\n");
 	}
 
@@ -758,11 +767,13 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 		}
 		xr = &xchan->xr[xchan->xr_processed];
 
-		if (xr->type & XR_TYPE_MBUF) {
+		switch (xr->type) {
+		case XR_TYPE_MBUF:
 			c = xdma_mbuf_defrag(xchan, xr);
-		} else if (xr->type & XR_TYPE_BIO) {
-			c = 1;
-		} else {
+			break;
+		case XR_TYPE_BIO:
+		case XR_TYPE_ADDR:
+		default:
 			c = 1;
 		}
 
