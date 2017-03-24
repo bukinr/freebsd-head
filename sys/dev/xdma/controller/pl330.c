@@ -171,7 +171,7 @@ pl330_intr(void *arg)
 	st.transferred = 0; //le32toh(desc->transferred);
 	for (i = 0; i < chan->enqueued; i++) {
 		//printf("seg done\n");
-		xchan_seg_done(xchan, 0, &st);
+		xchan_seg_done(xchan, &st);
 	}
 
 	chan->capacity = 0x10000;
@@ -208,7 +208,7 @@ pl330_intr(void *arg)
 		tot_copied += le32toh(desc->transferred);
 		st.error = 0;
 		st.transferred = le32toh(desc->transferred);
-		xchan_seg_done(xchan, chan->idx_tail, &st);
+		xchan_seg_done(xchan, &st);
 
 		chan->idx_tail = pl330_next_desc(chan, chan->idx_tail);
 		atomic_subtract_int(&chan->descs_used_count, 1);

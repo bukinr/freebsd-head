@@ -494,7 +494,7 @@ softdma_process_descriptors(struct softdma_channel *chan, xdma_transfer_status_t
 			st.transferred = 0;
 		}
 
-		xchan_seg_done(xchan, chan->idx_tail, &st);
+		xchan_seg_done(xchan, &st);
 		atomic_subtract_int(&chan->descs_used_count, 1);
 
 		if (ret >= 0) {

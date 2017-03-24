@@ -77,9 +77,6 @@ static struct mtx xdma_mtx;
 #define	XCHAN_UNLOCK(xchan)		mtx_unlock(&(xchan)->mtx_lock)
 #define	XCHAN_ASSERT_LOCKED(xchan)	mtx_assert(&(xchan)->mtx_lock, MA_OWNED)
 
-//static int xchan_sglist_init(xdma_channel_t *xchan);
-//static int xchan_sglist_free(xdma_channel_t *xchan);
-
 static int xchan_bufs_alloc(xdma_channel_t *xchan);
 static int xchan_bufs_free(xdma_channel_t *xchan);
 
@@ -296,15 +293,15 @@ xdma_bufs_alloc_busdma(xdma_channel_t *xchan)
 		return (-1);
 	}
 
-	/* Allocate bus_dma memory for mbufs. */
 	err = bus_dma_tag_create(
 	    bus_get_dma_tag(xdma->dev),	/* Parent tag. */
 	    16, 0,			/* alignment, boundary */
 	    BUS_SPACE_MAXADDR_32BIT,	/* lowaddr */
 	    BUS_SPACE_MAXADDR,		/* highaddr */
 	    NULL, NULL,			/* filter, filterarg */
-	    xchan->maxsegsize, MAX_NSEGS, 	/* maxsize, nsegments */
-	    xchan->maxsegsize,			/* maxsegsize */
+	    xchan->maxsegsize,		/* maxsize */
+	    xchan->maxnsegs,		/* nsegments */
+	    xchan->maxsegsize,		/* maxsegsize */
 	    0,				/* flags */
 	    NULL, NULL,			/* lockfunc, lockarg */
 	    &xchan->dma_tag_bufs);
@@ -347,7 +344,7 @@ xchan_bufs_alloc(xdma_channel_t *xchan)
 	}
 	if (ret != 0) {
 		device_printf(xdma->dev,
-		    "%s: Can't allocate memory for mbufs.\n",
+		    "%s: Can't setup busdma.\n",
 		    __func__);
 		return (-1);
 	}
@@ -438,6 +435,7 @@ xdma_prep_sg(xdma_channel_t *xchan, uint32_t xr_num, uint32_t maxsegsize)
 	}
 
 	xchan->maxsegsize = maxsegsize;
+	xchan->maxnsegs = 8;
 	xchan->bufs_num = xr_num;
 	xchan->xr_num = xr_num;
 
@@ -653,8 +651,6 @@ xdma_load_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
 		return (0);
 	}
 
-	KASSERT(nsegs < MAX_NSEGS, ("%s: %d segments returned!", __func__, nsegs));
-
 	if (xr->direction == XDMA_MEM_TO_DEV) {
 		bus_dmamap_sync(xchan->dma_tag_bufs, xchan->bufs[i].map,
 		    BUS_DMASYNC_PREWRITE);
@@ -735,7 +731,7 @@ static int
 xdma_sglist_prepare(xdma_channel_t *xchan,
     struct xdma_sglist *sg)
 {
-	struct bus_dma_segment seg[MAX_NSEGS];
+	struct bus_dma_segment seg[128];
 	struct xdma_request *xr;
 	xdma_controller_t *xdma;
 	uint32_t capacity;
@@ -939,7 +935,7 @@ xdma_pause(xdma_channel_t *xchan)
 }
 
 int
-xchan_seg_done(xdma_channel_t *xchan, uint32_t idx,
+xchan_seg_done(xdma_channel_t *xchan,
     struct xdma_transfer_status *st)
 {
 	struct xdma_request *xr;

@@ -164,7 +164,7 @@ msgdma_intr(void *arg)
 		tot_copied += le32toh(desc->transferred);
 		st.error = 0;
 		st.transferred = le32toh(desc->transferred);
-		xchan_seg_done(xchan, chan->idx_tail, &st);
+		xchan_seg_done(xchan, &st);
 
 		chan->idx_tail = msgdma_next_desc(chan, chan->idx_tail);
 		atomic_subtract_int(&chan->descs_used_count, 1);

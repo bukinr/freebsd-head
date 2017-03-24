@@ -1267,7 +1267,7 @@ atse_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	xdma_prep_sg(sc->xchan_tx, TX_QUEUE_SIZE);
+	xdma_prep_sg(sc->xchan_tx, TX_QUEUE_SIZE, MCLBYTES);
 
 	/* Get RX xDMA controller */
 	sc->xdma_rx = xdma_ofw_get(sc->dev, "rx");
@@ -1291,7 +1291,7 @@ atse_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	xdma_prep_sg(sc->xchan_rx, RX_QUEUE_SIZE);
+	xdma_prep_sg(sc->xchan_rx, RX_QUEUE_SIZE, MCLBYTES);
 
 	atse_ethernet_option_bits_read(dev);
 

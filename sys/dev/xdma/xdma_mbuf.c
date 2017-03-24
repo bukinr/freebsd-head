@@ -142,7 +142,7 @@ xdma_mbuf_defrag(xdma_channel_t *xchan, struct xdma_request *xr)
 
 	if (xchan->caps & XCHAN_CAP_BUSDMA) {
 		if ((xchan->caps & XCHAN_CAP_BUSDMA_NOSEG) || \
-		    (c > MAX_NSEGS)) {
+		    (c > xchan->maxnsegs)) {
 			if ((m = m_defrag(xr->m, M_NOWAIT)) == NULL) {
 				device_printf(xdma->dma_dev,
 				    "%s: Can't defrag mbuf\n",
