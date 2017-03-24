@@ -594,7 +594,6 @@ xdma_load_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
 {
 	xdma_controller_t *xdma;
 	struct seg_load_request slr;
-	struct mbuf *m;
 	uint32_t nsegs;
 	void *addr;
 	int error;
@@ -604,12 +603,10 @@ xdma_load_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
 	error = 0;
 	nsegs = 0;
 
-	m = xr->m;
-
 	switch (xr->type) {
 	case XR_TYPE_MBUF:
 		error = bus_dmamap_load_mbuf_sg(xchan->dma_tag_bufs,
-		    xchan->bufs[i].map, m, seg, &nsegs, BUS_DMA_NOWAIT);
+		    xchan->bufs[i].map, xr->m, seg, &nsegs, BUS_DMA_NOWAIT);
 		break;
 	case XR_TYPE_BIO:
 		break;
@@ -650,7 +647,7 @@ xdma_load_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
 			 */
 		} else {
 			device_printf(xdma->dma_dev,
-			    "%s: bus_dmamap_load_mbuf_sg failed with err %d\n",
+			    "%s: bus_dmamap_load failed with err %d\n",
 			    __func__, error);
 		}
 		return (0);
