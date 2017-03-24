@@ -89,6 +89,7 @@ struct pl330_channel {
 	uint8_t			map_err;
 	uint32_t		descs_used_count;
 	uint8_t			*ibuf;
+	bus_addr_t		ibuf_phys;
 
 	uint32_t		enqueued;
 	uint32_t		capacity;
@@ -159,15 +160,17 @@ pl330_intr(void *arg)
 	xchan = chan->xchan;
 
 	pending = READ4(sc, INTMIS);
+#if 0
 	printf("%s: 0x%x, LC0 %x, SAR %x DAR %x\n",
 	    __func__, pending, READ4(sc, LC0(0)),
 	    READ4(sc, SAR(0)), READ4(sc, DAR(0)));
+#endif
 	WRITE4(sc, INTCLR, pending);
 
 	st.error = 0;
 	st.transferred = 0; //le32toh(desc->transferred);
 	for (i = 0; i < chan->enqueued; i++) {
-		printf("seg done\n");
+		//printf("seg done\n");
 		xchan_seg_done(xchan, 0, &st);
 	}
 
@@ -306,7 +309,7 @@ emit_sev(uint8_t *buf, uint32_t ev)
 {
 
 	buf[0] = DMASEV;
-	buf[1] |= (ev << 3);
+	buf[1] = (ev << 3);
 
 	return (2);
 }
@@ -317,7 +320,7 @@ emit_wfp(uint8_t *buf, uint32_t p_id)
 
 	buf[0] = DMAWFP;
 	buf[0] |= (1 << 0); //periph
-	buf[1] |= (p_id << 3);
+	buf[1] = (p_id << 3);
 
 	return (2);
 }
@@ -684,6 +687,7 @@ pl330_channel_alloc(device_t dev, struct xdma_channel *xchan)
 			chan->ibuf = (void *)kmem_alloc_contig(kernel_arena,
 			    PAGE_SIZE, M_ZERO, 0, ~0, PAGE_SIZE, 0,
 			    VM_MEMATTR_UNCACHEABLE);
+			chan->ibuf_phys = vtophys(chan->ibuf);
 
 			return (0);
 		}
@@ -748,7 +752,7 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 
 	chan = (struct pl330_channel *)xchan->chan;
 	ibuf = chan->ibuf;
-	bzero(ibuf, PAGE_SIZE);
+	//bzero(ibuf, 128);
 
 	uint8_t dbuf[6];
 
@@ -758,12 +762,21 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	reg = (1 << 14); //dst inc
 	//reg |= (1 << 0); //src inc
 	//reg = 0;
+
 	//SS32, DS32
 	reg |= (2 << 1); //0b010 = reads 4 bytes per beat
 	reg |= (2 << 15); //0b010 = writes 4 bytes per beat
+
 	//SS64, DS64
 	//reg |= (3 << 1); //0b011 = reads 8 bytes per beat
 	//reg |= (3 << 15); //0b011 = writes 8 bytes per beat
+
+	//SS128, DS128
+	//reg |= (4 << 1); //0b100 = reads 16 bytes per beat
+	//reg |= (4 << 15); //0b100 = writes 16 bytes per beat
+
+	//reg |= ((8 - 1) << 4); //src burst len
+	//reg |= ((8 - 1) << 18); //dst burst len
 
 	offs = 0;
 	offs += emit_mov(&chan->ibuf[offs], R_CCR, reg);
@@ -776,7 +789,7 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 		src_addr_lo = (uint32_t)sg[i].src_addr;
 		dst_addr_lo = (uint32_t)sg[i].dst_addr;
 		len = (uint32_t)sg[i].len;
-#if 1
+#if 0
 		printf("%s: src %x dst %x len %d\n", __func__,
 		    src_addr_lo, dst_addr_lo, len);
 #endif
@@ -784,7 +797,7 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 		offs += emit_mov(&ibuf[offs], R_SAR, src_addr_lo);
 		offs += emit_mov(&ibuf[offs], R_DAR, dst_addr_lo);
 
-		cnt = (len / 4);
+		cnt = (len / (4 * 1));
 		if (cnt > 128) {
 			offs += emit_lp(&ibuf[offs], 0, cnt / 128);
 			offs0 = offs;
@@ -812,13 +825,16 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	offs += emit_sev(&ibuf[offs], 0);
 	offs += emit_end(&ibuf[offs]);
 
-	emit_go(dbuf, vtophys(chan->ibuf));
+	//emit_go(dbuf, vtophys(chan->ibuf));
+	emit_go(dbuf, chan->ibuf_phys);
+	//printf("%x %lx\n", vtophys(chan->ibuf), chan->ibuf_phys);
 
 	reg = (dbuf[1] << 24) | (dbuf[0] << 16);
 	WRITE4(sc, DBGINST0, reg);
 	reg = (dbuf[5] << 24) | (dbuf[4] << 16) | (dbuf[3] << 8) | dbuf[2];
 	WRITE4(sc, DBGINST1, reg);
 
+	WRITE4(sc, INTCLR, 0xffffffff);
 	WRITE4(sc, INTEN, (1 << 0));
 
 	chan->enqueued = sg_n;

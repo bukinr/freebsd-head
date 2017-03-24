@@ -156,7 +156,9 @@ cqspi_intr(void *arg)
 
 	pending = READ4(sc, CQSPI_IRQSTAT);
 
+#if 0
 	printf("%s: IRQSTAT %x\n", __func__, pending);
+#endif
 	if (pending & (IRQMASK_INDOPDONE | IRQMASK_INDXFRLVL | IRQMASK_INDSRAMFULL)) {
 		//printf("op_done\n");
 		sc->op_done = 1;
@@ -186,20 +188,21 @@ cqspi_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 
 	sc = arg;
 
-	printf("%s\n", __func__);
+	//printf("%s\n", __func__);
 
 	while (1) {
 		ret = xdma_dequeue(sc->xchan_rx, (void **)&bp, &st);
 		if (ret != 0) {
 			break;
 		}
-		printf("bio done: %x", (uint32_t)bp);
+		//printf("bio done: %x\n", (uint32_t)bp);
+		//printf(".");
 		biodone(bp);
-		printf(".\n");
+		sc->op_done = 1;
 	}
 
 	//CQSPI_LOCK(sc);
-	//wakeup(sc->xdma_rx);
+	wakeup(sc->xdma_rx);
 	//CQSPI_UNLOCK(sc);
 
 	return (0);
@@ -455,7 +458,8 @@ cqspi_read(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count
 	pdev = device_get_parent(dev);
 	sc = device_get_softc(dev);
 
-	printf("%s: offset 0x%llx count %lld bytes\n", __func__, offset, count);
+	//printf("%s: offset 0x%llx count %lld bytes\n", __func__, offset, count);
+	sc->op_done = 0;
 
 	/*
 	 * Enforce the disk read sectorsize not the erase sectorsize.
@@ -471,12 +475,18 @@ cqspi_read(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count
 	reg = (2 << 0); //numsglreqbytes
 	reg |= (2 << 8); //numburstreqbytes
 	WRITE4(sc, CQSPI_DMAPER, reg);
+	WRITE4(sc, CQSPI_INDRDWATER, 4);
+
+	//reg = (4 << 0); //numsglreqbytes
+	//reg |= (4 << 8); //numburstreqbytes
+	//WRITE4(sc, CQSPI_DMAPER, reg);
+	//WRITE4(sc, CQSPI_INDRDWATER, 4);
 
 	WRITE4(sc, CQSPI_INDRD, INDRD_IND_OPS_DONE_STATUS);
 	WRITE4(sc, CQSPI_INDRD, 0);
 
-	WRITE4(sc, CQSPI_INDRDWATER, 4);
 	WRITE4(sc, CQSPI_INDRDCNT, count);
+	WRITE4(sc, CQSPI_INDRDSTADDR, offset);
 
 	reg = (CMD_FAST_READ << DEVRD_RDOPCODE_S);
 	reg |= (0 << DEVRD_DUMMYRDCLKS_S);
@@ -512,6 +522,8 @@ cqspi_read(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count
 	uint32_t cnt;
 	addr = (uint32_t *)data;
 
+	WRITE4(sc, CQSPI_INDRD, INDRD_START);
+
 	n = 0;
 	while (n < (count / 4)) {
 		cnt = READ4(sc, CQSPI_SRAMFILL) & 0xffff;
@@ -528,9 +540,9 @@ cqspi_read(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count
 #else
 	xdma_enqueue(sc->xchan_rx, 0xffa00000, (uintptr_t)data, count, XDMA_DEV_TO_MEM, bp);
 	xdma_queue_submit(sc->xchan_rx);
-#endif
-	WRITE4(sc, CQSPI_INDRDSTADDR, offset);
+
 	WRITE4(sc, CQSPI_INDRD, INDRD_START);
+#endif
 
 	return (0);
 
@@ -780,8 +792,7 @@ cqspi_attach(device_t dev)
 	reg = READ4(sc, CQSPI_CFG);
 	/* Configure baud rate */
 	reg &= ~(CFG_BAUD_M);
-	//reg |= CFG_BAUD4;
-	reg |= CFG_BAUD32;
+	reg |= CFG_BAUD4;
 	//reg |= (1 << 16) | (1 << 7); // DIRECT mode
 	reg |= CFG_ENDMA;
 	//reg |= (1 << 2) | (1 << 1);
@@ -959,7 +970,7 @@ cqspi_task(void *arg)
 	for (;;) {
 		CQSPI_LOCK(sc);
 
-		printf("Task\n");
+		//printf("Task\n");
 
 		do {
 			bp = bioq_first(&sc->sc_bio_queue);
@@ -986,11 +997,13 @@ cqspi_task(void *arg)
 			bp->bio_error = EINVAL;
 		}
 
-#if 0
 		CQSPI_LOCK(sc);
-		msleep(sc->xdma_rx, &sc->sc_mtx, PRIBIO, "jobqueue", 0);
+		while (sc->op_done == 0) {
+			msleep(sc->xdma_rx, &sc->sc_mtx, PRIBIO, "jobqueue", hz/2);
+		}
 		CQSPI_UNLOCK(sc);
 
+#if 0
 		printf("bio done\n");
 		biodone(bp);
 #endif
