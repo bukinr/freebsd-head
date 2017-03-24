@@ -80,6 +80,7 @@ typedef struct xdma_controller xdma_controller_t;
 /* SG type of transfer. */
 struct xdma_request {
 	struct mbuf			*m;
+	struct bio			*bp;
 	enum xdma_request_type		type;
 	enum xdma_direction		direction;
 	bus_addr_t			src_addr;	/* Physical address. */
@@ -240,5 +241,7 @@ static MALLOC_DEFINE(M_XDMA, "xdma", "xDMA framework");
 
 uint32_t xdma_mbuf_defrag(xdma_channel_t *xchan, struct xdma_request *xr);
 uint32_t xdma_mbuf_chain_count(struct mbuf *m0);
+int xdma_dequeue_bio(xdma_channel_t *xchan, struct bio **bp, xdma_transfer_status_t *status);
+int xdma_enqueue_bio(xdma_channel_t *xchan, struct bio **bp, bus_addr_t addr, enum xdma_direction dir);
 
 #endif /* !_DEV_XDMA_H_ */

@@ -191,7 +191,8 @@ cqspi_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 	//printf("%s\n", __func__);
 
 	while (1) {
-		ret = xdma_dequeue(sc->xchan_rx, (void **)&bp, &st);
+		//ret = xdma_dequeue(sc->xchan_rx, (void **)&bp, &st);
+		ret = xdma_dequeue_bio(sc->xchan_rx, &bp, &st);
 		if (ret != 0) {
 			break;
 		}
@@ -538,7 +539,8 @@ cqspi_read(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count
 	WRITE4(sc, CQSPI_INDRD, INDRD_IND_OPS_DONE_STATUS);
 	WRITE4(sc, CQSPI_IRQSTAT, 0);
 #else
-	xdma_enqueue(sc->xchan_rx, 0xffa00000, (uintptr_t)data, count, XDMA_DEV_TO_MEM, bp);
+	//xdma_enqueue(sc->xchan_rx, 0xffa00000, (uintptr_t)data, count, XDMA_DEV_TO_MEM, bp);
+	xdma_enqueue_bio(sc->xchan_rx, &bp, 0xffa00000, XDMA_DEV_TO_MEM);
 	xdma_queue_submit(sc->xchan_rx);
 
 	WRITE4(sc, CQSPI_INDRD, INDRD_START);

@@ -547,18 +547,6 @@ xdma_enqueue(xdma_channel_t *xchan, uintptr_t src, uintptr_t dst,
 	return (0);
 }
 
-int
-xdma_enqueue_bio(xdma_channel_t *xchan, struct bio **b,
-    bus_addr_t addr, enum xdma_direction dir)
-{
-	xdma_controller_t *xdma;
-	//struct xdma_requst *xr;
-
-	xdma = xchan->xdma;
-
-	return (0);
-}
-
 struct seg_load_request {
 	struct bus_dma_segment *seg;
 	uint32_t nsegs;
@@ -609,6 +597,18 @@ xdma_load_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
 		    xchan->bufs[i].map, xr->m, seg, &nsegs, BUS_DMA_NOWAIT);
 		break;
 	case XR_TYPE_BIO:
+		slr.nsegs = 0;
+		slr.error = 0;
+		slr.seg = seg;
+		error = bus_dmamap_load_bio(xchan->dma_tag_bufs,
+		    xchan->bufs[i].map, xr->bp, xdma_get1paddr, &slr, BUS_DMA_NOWAIT);
+		if (slr.error != 0) {
+			device_printf(xdma->dma_dev,
+			    "%s: bus_dmamap_load failed, err %d\n",
+			    __func__, slr.error);
+			return (0);
+		}
+		nsegs = slr.nsegs;
 		break;
 	case XR_TYPE_ADDR:
 		switch (xr->direction) {
