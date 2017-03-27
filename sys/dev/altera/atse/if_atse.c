@@ -91,7 +91,8 @@ __FBSDID("$FreeBSD$");
 
 #define	RX_QUEUE_SIZE		1024
 #define	TX_QUEUE_SIZE		1024
-#define	NUM_RX_REQ		512
+#define	NUM_RX_MBUF		512
+#define	BUFRING_SIZE		8192
 
 #include <machine/cache.h>
 
@@ -264,7 +265,6 @@ atse_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 
 	ifp = sc->atse_ifp;
 
-
 	cnt_processed = 0;
 	for (;;) {
 		err = xdma_dequeue_mbuf(sc->xchan_rx, &m, &st);
@@ -295,33 +295,39 @@ atse_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 }
 
 static int
-atse_transmit_locked(struct ifnet *ifp, struct mbuf *m)
+atse_transmit_locked(struct ifnet *ifp)
 {
 	struct atse_softc *sc;
-	int ret;
+	struct mbuf *m;
+	struct buf_ring *br;
+	int error;
+	int enq;
 
 	sc = ifp->if_softc;
+	br = sc->br;
 
-	if ((ifp->if_drv_flags & (IFF_DRV_RUNNING | IFF_DRV_OACTIVE)) != IFF_DRV_RUNNING) {
-		return (-1);
+	enq = 0;
+
+	while ((m = drbr_peek(ifp, br)) != NULL) {
+		error = xdma_enqueue_mbuf(sc->xchan_tx, &m, 0, XDMA_MEM_TO_DEV);
+		if (error != 0) {
+			/* No space in request queue available yet. */
+			drbr_putback(ifp, br, m);
+			break;
+		}
+
+		drbr_advance(ifp, br);
+
+		sc->txcount++;
+		enq++;
+
+		/* If anyone is interested give them a copy. */
+		ETHER_BPF_MTAP(ifp, m);
+        }
+
+	if (enq > 0) {
+		xdma_queue_submit(sc->xchan_tx);
 	}
-
-	if ((sc->atse_flags & ATSE_FLAGS_LINK) == 0) {
-		return (-1);
-	}
-
-	ret = xdma_enqueue_mbuf(sc->xchan_tx, &m, 0, XDMA_MEM_TO_DEV);
-	if (ret != 0) {
-		/* No space in request queue available yet. */
-		return (-1);
-	}
-
-	/* If anyone is interested give them a copy. */
-	BPF_MTAP(sc->atse_ifp, m);
-
-	sc->txcount++;
-
-	xdma_queue_submit(sc->xchan_tx);
 
 	return (0);
 }
@@ -330,14 +336,36 @@ static int
 atse_transmit(struct ifnet *ifp, struct mbuf *m)
 {
 	struct atse_softc *sc;
+	struct buf_ring *br;
+	int error;
 
 	sc = ifp->if_softc;
+	br = sc->br;
 
 	ATSE_LOCK(sc);
-	atse_transmit_locked(ifp, m);
+
+	if ((ifp->if_drv_flags & (IFF_DRV_RUNNING | IFF_DRV_OACTIVE)) != IFF_DRV_RUNNING) {
+		error = drbr_enqueue(ifp, sc->br, m);
+		ATSE_UNLOCK(sc);
+		return (error);
+	}
+
+	if ((sc->atse_flags & ATSE_FLAGS_LINK) == 0) {
+		error = drbr_enqueue(ifp, sc->br, m);
+		ATSE_UNLOCK(sc);
+		return (error);
+	}
+
+	error = drbr_enqueue(ifp, br, m);
+	if (error) {
+		ATSE_UNLOCK(sc);
+		return (error);
+	}
+	error = atse_transmit_locked(ifp);
+
 	ATSE_UNLOCK(sc);
 
-	return (0);
+	return (error);
 }
 
 static void
@@ -346,6 +374,8 @@ atse_qflush(struct ifnet *ifp)
 	struct atse_softc *sc;
 
 	sc = ifp->if_softc;
+
+	printf("%s\n", __func__);
 }
 
 static int
@@ -1293,6 +1323,13 @@ atse_attach(device_t dev)
 
 	xdma_prep_sg(sc->xchan_rx, RX_QUEUE_SIZE, MCLBYTES);
 
+	mtx_init(&sc->br_mtx, "buf ring mtx", NULL, MTX_DEF);
+	sc->br = buf_ring_alloc(BUFRING_SIZE, M_DEVBUF,
+	    M_NOWAIT, &sc->br_mtx);
+	if (sc->br == NULL) {
+		return (ENOMEM);
+	}
+
 	atse_ethernet_option_bits_read(dev);
 
 	mtx_init(&sc->atse_mtx, device_get_nameunit(dev), MTX_NETWORK_LOCK,
@@ -1361,7 +1398,7 @@ err:
 		atse_sysctl_stats_attach(dev);
 	}
 
-	atse_rx_enqueue(sc, NUM_RX_REQ);
+	atse_rx_enqueue(sc, NUM_RX_MBUF);
 	xdma_queue_submit(sc->xchan_rx);
 
 	return (error);

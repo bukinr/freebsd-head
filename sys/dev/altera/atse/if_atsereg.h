@@ -450,6 +450,9 @@ struct atse_softc {
 	xdma_controller_t	*xdma_rx;
 	xdma_channel_t		*xchan_rx;
 	void			*ih_rx;
+
+	struct buf_ring		*br;
+	struct mtx		br_mtx;
 };
 
 
