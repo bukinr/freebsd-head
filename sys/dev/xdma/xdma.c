@@ -36,6 +36,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/conf.h>
 #include <sys/bus.h>
 #include <sys/kernel.h>
+#include <sys/kthread.h>
 #include <sys/queue.h>
 #include <sys/kobj.h>
 #include <sys/malloc.h>
@@ -79,6 +80,32 @@ static struct mtx xdma_mtx;
 
 static int xchan_bufs_alloc(xdma_channel_t *xchan);
 static int xchan_bufs_free(xdma_channel_t *xchan);
+
+static void
+xdma_task(void *arg)
+{
+	xdma_controller_t *xdma;
+	xdma_channel_t *xchan_tmp;
+	xdma_channel_t *xchan;
+
+	xdma = arg;
+
+	for (;;) {
+		mtx_lock(&xdma->proc_mtx);
+		msleep(xdma, &xdma->proc_mtx, PRIBIO, "jobqueue", hz);
+		mtx_unlock(&xdma->proc_mtx);
+
+		if (TAILQ_EMPTY(&xdma->channels)) {
+			continue;
+		}
+
+		TAILQ_FOREACH_SAFE(xchan, &xdma->channels, xchan_next, xchan_tmp) {
+			if (xchan->flags & XCHAN_TYPE_SG) {
+				xdma_queue_submit(xchan);
+			}
+		}
+	}
+}
 
 /*
  * Allocate virtual xDMA channel.
@@ -621,7 +648,8 @@ xdma_load_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
 			addr = (void *)xr->dst_addr;
 			break;
 		default:
-			printf("direction is unknown\n");
+			device_printf(xdma->dma_dev,
+			    "%s: Direction is not supported\n", __func__);
 			return (0);
 		}
 		slr.nsegs = 0;
@@ -991,6 +1019,9 @@ xdma_callback(xdma_channel_t *xchan, xdma_transfer_status_t *status)
 {
 	struct xdma_intr_handler *ih_tmp;
 	struct xdma_intr_handler *ih;
+	xdma_controller_t *xdma;
+
+	xdma = xchan->xdma;
 
 	TAILQ_FOREACH_SAFE(ih, &xchan->ie_handlers, ih_next, ih_tmp) {
 		if (ih->cb != NULL) {
@@ -998,11 +1029,7 @@ xdma_callback(xdma_channel_t *xchan, xdma_transfer_status_t *status)
 		}
 	}
 
-	if (xchan->flags & XCHAN_TYPE_SG) {
-		/* Check if more entries available in queue to submit. */
-		xdma_queue_submit(xchan);
-		return (0);
-	};
+	wakeup(xdma);
 
 	return (0);
 }
@@ -1093,6 +1120,9 @@ xdma_ofw_get(device_t dev, const char *prop)
 	xdma_ofw_md_data(xdma, cells, ncells);
 	free(cells, M_OFWPROP);
 
+	mtx_init(&xdma->proc_mtx, "xDMA ofw controller", NULL, MTX_DEF);
+	kproc_create(&xdma_task, xdma, &xdma->xdma_proc, 0, 0, "xdma drainer");
+
 	return (xdma);
 }
 #endif
@@ -1111,6 +1141,9 @@ xdma_put(xdma_controller_t *xdma)
 		device_printf(xdma->dev, "%s: Can't free xDMA\n", __func__);
 		return (-1);
 	}
+
+	kproc_shutdown(&xdma->xdma_proc, 0);
+	mtx_destroy(&xdma->proc_mtx);
 
 	free(xdma->data, M_DEVBUF);
 	free(xdma, M_XDMA);

@@ -33,6 +33,8 @@
 #ifndef _DEV_XDMA_H_
 #define _DEV_XDMA_H_
 
+#include <sys/proc.h>
+
 enum xdma_direction {
 	XDMA_MEM_TO_MEM,
 	XDMA_MEM_TO_DEV,
@@ -70,6 +72,8 @@ struct xdma_controller {
 	device_t dev;		/* DMA consumer device_t. */
 	device_t dma_dev;	/* A real DMA device_t. */
 	void *data;		/* OFW MD part. */
+	struct proc *xdma_proc;
+	struct mtx proc_mtx;
 
 	/* List of virtual channels allocated. */
 	TAILQ_HEAD(xdma_channel_list, xdma_channel)	channels;
