@@ -755,21 +755,16 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	xdma = xchan->xdma;
 	data = (struct pl330_fdt_data *)xdma->data;
 
-	// pl330_channel_submit_sg: src ffa00000 dst 881000 len 512
-
 	chan = (struct pl330_channel *)xchan->chan;
 	ibuf = chan->ibuf;
 
 	offs = 0;
 
 	for (i = 0; i < sg_n; i++) {
-		reg = (1 << 8) | (1 << 9) | (1 << 10);
-		reg |= (1 << 22) | (1 << 23) | (1 << 24);
-
 		if (sg[i].direction == XDMA_DEV_TO_MEM) {
 			reg = (1 << 14); //dst inc
 		} else {
-			reg |= (1 << 0); //src inc
+			reg = (1 << 0); //src inc
 		}
 
 		//SS32, DS32
