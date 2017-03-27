@@ -706,6 +706,7 @@ cqspi_attach(device_t dev)
 
 	sc = device_get_softc(dev);
 	sc->dev = dev;
+	printf("%s: dev %p\n", __func__, dev);
 
 	if (bus_alloc_resources(dev, cqspi_spec, sc->res)) {
 		device_printf(dev, "could not allocate resources\n");
@@ -763,8 +764,8 @@ cqspi_attach(device_t dev)
 #define	TX_QUEUE_SIZE	16
 #define	RX_QUEUE_SIZE	16
 
-	xdma_prep_sg(sc->xchan_tx, TX_QUEUE_SIZE, MAXPHYS);
-	xdma_prep_sg(sc->xchan_rx, TX_QUEUE_SIZE, MAXPHYS);
+	xdma_prep_sg(sc->xchan_tx, TX_QUEUE_SIZE, MAXPHYS, 16);
+	xdma_prep_sg(sc->xchan_rx, TX_QUEUE_SIZE, MAXPHYS, 16);
 
 	/* Setup interrupt handlers */
 	if (bus_setup_intr(sc->dev, sc->res[2], INTR_TYPE_BIO | INTR_MPSAFE,
@@ -940,6 +941,8 @@ cqspi_getattr(struct bio *bp)
 	struct cqspi_softc *sc;
 	device_t dev;
 
+	printf("%s\n", __func__);
+
 	if (bp->bio_disk == NULL || bp->bio_disk->d_drv1 == NULL) {
 		return (ENXIO);
 	}
@@ -952,9 +955,11 @@ cqspi_getattr(struct bio *bp)
 			return (EFAULT);
 		}
 		bcopy(&dev, bp->bio_data, sizeof(dev));
+		printf("%s: 0\n", __func__);
 		return (0);
 	}
 
+	printf("%s: 1\n", __func__);
 	return (-1);
 }
 
