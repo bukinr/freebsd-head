@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2016 Ruslan Bukin <br@bsdpad.com>
+ * Copyright (c) 2017 Ruslan Bukin <br@bsdpad.com>
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -390,8 +390,6 @@ pl330_test(struct pl330_softc *sc)
 
 	reg = (1 << 0) | (1 << 14);
 
-	//reg = 0;
-
 	//SS32, DS32
 	reg |= (2 << 1); //0b010 = reads 4 bytes per beat
 	reg |= (2 << 15); //0b010 = writes 4 bytes per beat
@@ -734,6 +732,7 @@ static int
 pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
     struct xdma_sglist *sg, uint32_t sg_n)
 {
+	xdma_controller_t *xdma;
 	struct pl330_channel *chan;
 	struct pl330_desc *desc;
 	struct pl330_softc *sc;
@@ -744,51 +743,45 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	uint32_t tmp;
 	uint32_t reg;
 	uint32_t offs;
+	uint8_t dbuf[6];
+	uint8_t jump_addr_relative;
+	uint8_t offs0, offs1;
+	uint32_t cnt;
+	struct pl330_fdt_data *data;
 	int i;
 
 	sc = device_get_softc(dev);
+
+	xdma = xchan->xdma;
+	data = (struct pl330_fdt_data *)xdma->data;
 
 	// pl330_channel_submit_sg: src ffa00000 dst 881000 len 512
 
 	chan = (struct pl330_channel *)xchan->chan;
 	ibuf = chan->ibuf;
-	//bzero(ibuf, 128);
-
-	uint8_t dbuf[6];
-
-	reg = (1 << 8) | (1 << 9) | (1 << 10);
-	reg |= (1 << 22) | (1 << 23) | (1 << 24);
-
-	reg = (1 << 14); //dst inc
-	//reg |= (1 << 0); //src inc
-	//reg = 0;
-
-	//SS32, DS32
-	reg |= (2 << 1); //0b010 = reads 4 bytes per beat
-	reg |= (2 << 15); //0b010 = writes 4 bytes per beat
-
-	//SS64, DS64
-	//reg |= (3 << 1); //0b011 = reads 8 bytes per beat
-	//reg |= (3 << 15); //0b011 = writes 8 bytes per beat
-
-	//SS128, DS128
-	//reg |= (4 << 1); //0b100 = reads 16 bytes per beat
-	//reg |= (4 << 15); //0b100 = writes 16 bytes per beat
-
-	//reg |= ((16 - 1) << 4); //src burst len
-	//reg |= ((16 - 1) << 18); //dst burst len
 
 	offs = 0;
-	offs += emit_mov(&chan->ibuf[offs], R_CCR, reg);
-
-	uint8_t jump_addr_relative;
-	uint8_t offs0, offs1;
-	uint32_t cnt;
 
 	for (i = 0; i < sg_n; i++) {
+		reg = (1 << 8) | (1 << 9) | (1 << 10);
+		reg |= (1 << 22) | (1 << 23) | (1 << 24);
+
+		if (sg[i].direction == XDMA_DEV_TO_MEM) {
+			reg = (1 << 14); //dst inc
+		} else {
+			reg |= (1 << 0); //src inc
+		}
+
+		//SS32, DS32
+		reg |= (2 << 1); //0b010 = reads 4 bytes per beat
+		reg |= (2 << 15); //0b010 = writes 4 bytes per beat
+
+		offs += emit_mov(&chan->ibuf[offs], R_CCR, reg);
+
 		src_addr_lo = (uint32_t)sg[i].src_addr;
 		dst_addr_lo = (uint32_t)sg[i].dst_addr;
 		len = (uint32_t)sg[i].len;
+
 #if 0
 		printf("%s: src %x dst %x len %d\n", __func__,
 		    src_addr_lo, dst_addr_lo, len);
@@ -807,7 +800,7 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 			offs += emit_lp(&ibuf[offs], 0, cnt);
 			offs0 = offs;
 		}
-		offs += emit_wfp(&ibuf[offs], 25); //25 -- qspi rx
+		offs += emit_wfp(&ibuf[offs], data->periph_id); //25 -- qspi rx
 		offs += emit_ld(&ibuf[offs]);
 		offs += emit_st(&ibuf[offs]);
 
@@ -825,9 +818,7 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	offs += emit_sev(&ibuf[offs], 0);
 	offs += emit_end(&ibuf[offs]);
 
-	//emit_go(dbuf, vtophys(chan->ibuf));
 	emit_go(dbuf, chan->ibuf_phys);
-	//printf("%x %lx\n", vtophys(chan->ibuf), chan->ibuf_phys);
 
 	reg = (dbuf[1] << 24) | (dbuf[0] << 16);
 	WRITE4(sc, DBGINST0, reg);
@@ -1027,3 +1018,12 @@ static devclass_t pl330_devclass;
 
 EARLY_DRIVER_MODULE(pl330, simplebus, pl330_driver, pl330_devclass, 0, 0,
     BUS_PASS_INTERRUPT + BUS_PASS_ORDER_LATE);
+
+	//SS64, DS64
+	//reg |= (3 << 1); //0b011 = reads 8 bytes per beat
+	//reg |= (3 << 15); //0b011 = writes 8 bytes per beat
+	//SS128, DS128
+	//reg |= (4 << 1); //0b100 = reads 16 bytes per beat
+	//reg |= (4 << 15); //0b100 = writes 16 bytes per beat
+	//reg |= ((16 - 1) << 4); //src burst len
+	//reg |= ((16 - 1) << 18); //dst burst len
