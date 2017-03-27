@@ -1297,7 +1297,7 @@ atse_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	xdma_prep_sg(sc->xchan_tx, TX_QUEUE_SIZE, MCLBYTES);
+	xdma_prep_sg(sc->xchan_tx, TX_QUEUE_SIZE, MCLBYTES, 16);
 
 	/* Get RX xDMA controller */
 	sc->xdma_rx = xdma_ofw_get(sc->dev, "rx");
@@ -1321,7 +1321,7 @@ atse_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	xdma_prep_sg(sc->xchan_rx, RX_QUEUE_SIZE, MCLBYTES);
+	xdma_prep_sg(sc->xchan_rx, RX_QUEUE_SIZE, MCLBYTES, 16);
 
 	mtx_init(&sc->br_mtx, "buf ring mtx", NULL, MTX_DEF);
 	sc->br = buf_ring_alloc(BUFRING_SIZE, M_DEVBUF,

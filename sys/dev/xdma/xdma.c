@@ -295,7 +295,7 @@ xdma_bufs_alloc_busdma(xdma_channel_t *xchan)
 
 	err = bus_dma_tag_create(
 	    bus_get_dma_tag(xdma->dev),	/* Parent tag. */
-	    16, 0,			/* alignment, boundary */
+	    xchan->alignment, 0,	/* alignment, boundary */
 	    BUS_SPACE_MAXADDR_32BIT,	/* lowaddr */
 	    BUS_SPACE_MAXADDR,		/* highaddr */
 	    NULL, NULL,			/* filter, filterarg */
@@ -419,7 +419,8 @@ xdma_prep_memcpy(xdma_channel_t *xchan, uintptr_t src_addr,
  * maxsegsize - maximum allowed scatter-gather list element size in bytes
  */
 int
-xdma_prep_sg(xdma_channel_t *xchan, uint32_t xr_num, uint32_t maxsegsize)
+xdma_prep_sg(xdma_channel_t *xchan, uint32_t xr_num,
+    uint32_t maxsegsize, uint32_t alignment)
 {
 	xdma_controller_t *xdma;
 	int ret;
@@ -435,6 +436,7 @@ xdma_prep_sg(xdma_channel_t *xchan, uint32_t xr_num, uint32_t maxsegsize)
 	}
 
 	xchan->maxsegsize = maxsegsize;
+	xchan->alignment = alignment;
 	xchan->maxnsegs = 8;
 	xchan->bufs_num = xr_num;
 	xchan->xr_num = xr_num;

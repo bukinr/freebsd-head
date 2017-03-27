@@ -167,8 +167,11 @@ struct xdma_channel {
 	bus_dma_tag_t			dma_tag_bufs;
 	uint32_t			buf_head;
 	uint32_t			buf_tail;
+
+	/* Bus dma tag options. */
 	uint32_t			maxsegsize;
 	uint32_t			maxnsegs;
+	uint32_t			alignment;
 
 	struct xdma_sglist		*sg;
 };
@@ -186,7 +189,7 @@ int xdma_channel_free(xdma_channel_t *);
 int xdma_prep_cyclic(xdma_channel_t *, enum xdma_direction,
     uintptr_t, uintptr_t, int, int, int, int);
 int xdma_prep_memcpy(xdma_channel_t *, uintptr_t, uintptr_t, size_t len);
-int xdma_prep_sg(xdma_channel_t *xchan, uint32_t, uint32_t);
+int xdma_prep_sg(xdma_channel_t *xchan, uint32_t, uint32_t, uint32_t);
 
 int xchan_seg_done(xdma_channel_t *xchan, xdma_transfer_status_t *);
 
