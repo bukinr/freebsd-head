@@ -299,7 +299,7 @@ xdma_bufs_alloc_busdma(xdma_channel_t *xchan)
 	    BUS_SPACE_MAXADDR_32BIT,	/* lowaddr */
 	    BUS_SPACE_MAXADDR,		/* highaddr */
 	    NULL, NULL,			/* filter, filterarg */
-	    xchan->maxsegsize,		/* maxsize */
+	    xchan->maxsegsize * xchan->maxnsegs,		/* maxsize */
 	    xchan->maxnsegs,		/* nsegments */
 	    xchan->maxsegsize,		/* maxsegsize */
 	    0,				/* flags */
@@ -816,15 +816,16 @@ xdma_queue_submit(xdma_channel_t *xchan)
 		return (-1);
 	}
 
+	XCHAN_LOCK(xchan);
+
 	sg_n = xdma_sglist_prepare(xchan, sg);
 	if (sg_n == 0) {
 		/* Nothing to submit */
+		XCHAN_UNLOCK(xchan);
 		return (0);
 	}
 
 	/* Now submit xdma_sglist to DMA engine driver. */
-
-	XCHAN_LOCK(xchan);
 
 	ret = XDMA_CHANNEL_SUBMIT_SG(xdma->dma_dev, xchan, sg, sg_n);
 	if (ret != 0) {

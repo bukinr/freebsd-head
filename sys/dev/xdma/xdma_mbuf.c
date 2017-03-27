@@ -139,6 +139,10 @@ xdma_mbuf_defrag(xdma_channel_t *xchan, struct xdma_request *xr)
 	xdma = xchan->xdma;
 
 	c = xdma_mbuf_chain_count(xr->m);
+	if (c == 1) {
+		/* Nothing to do. */
+		return (c);
+	}
 
 	if (xchan->caps & XCHAN_CAP_BUSDMA) {
 		if ((xchan->caps & XCHAN_CAP_BUSDMA_NOSEG) || \
