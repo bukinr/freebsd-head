@@ -1279,7 +1279,7 @@ dev/bwn/if_bwn_phy_lp.c		optional bwn siba_bwn \
 dev/bwn/if_bwn_phy_n.c		optional bwn siba_bwn
 dev/bwn/if_bwn_util.c		optional bwn siba_bwn
 dev/bwn/bwn_mac.c		optional bwn bhnd
-dev/cadence/cqspi.c		optional cqspi
+# dev/cadence/cqspi.c		optional cqspi
 dev/cardbus/cardbus.c		optional cardbus
 dev/cardbus/cardbus_cis.c	optional cardbus
 dev/cardbus/cardbus_device.c	optional cardbus
@@ -1644,7 +1644,7 @@ dev/fdt/fdt_clock_if.m		optional fdt fdt_clock
 dev/fdt/fdt_common.c		optional fdt
 dev/fdt/fdt_pinctrl.c		optional fdt fdt_pinctrl
 dev/fdt/fdt_pinctrl_if.m	optional fdt fdt_pinctrl
-dev/fdt/fdt_slicer.c		optional fdt cfi | fdt nand | fdt mx25l
+dev/fdt/fdt_slicer.c		optional fdt cfi | fdt nand | fdt mx25l | fdt cqspi
 dev/fdt/fdt_static_dtb.S	optional fdt fdt_dtb_static \
 	dependency	"fdt_dtb_file"
 dev/fdt/simplebus.c		optional fdt
@@ -1663,6 +1663,9 @@ dev/firewire/if_fwip.c		optional fwip
 dev/firewire/sbp.c		optional sbp
 dev/firewire/sbp_targ.c		optional sbp_targ
 dev/flash/at45d.c		optional at45d
+dev/flash/cqspi.c		optional cqspi
+dev/flash/qspi_if.m		optional cqspi
+dev/flash/n25q.c		optional n25q
 dev/flash/mx25l.c		optional mx25l
 dev/fxp/if_fxp.c		optional fxp
 dev/fxp/inphy.c			optional fxp
@@ -3281,8 +3284,11 @@ wpi.fw			optional wpifw					\
 	clean		"wpi.fw"
 dev/xdma/controller/pl330.c	optional xdma pl330
 dev/xdma/xdma.c			optional xdma
-dev/xdma/xdma_if.m		optional xdma
+dev/xdma/xdma_bio.c		optional xdma
 dev/xdma/xdma_fdt_test.c	optional xdma xdma_test fdt
+dev/xdma/xdma_if.m		optional xdma
+dev/xdma/xdma_mbuf.c		optional xdma
+dev/xdma/xdma_sglist.c		optional xdma
 dev/xe/if_xe.c			optional xe
 dev/xe/if_xe_pccard.c		optional xe pccard
 dev/xen/balloon/balloon.c	optional xenhvm
@@ -3437,7 +3443,7 @@ geom/geom_disk.c		standard
 geom/geom_dump.c		standard
 geom/geom_event.c		standard
 geom/geom_fox.c			optional geom_fox
-geom/geom_flashmap.c		optional fdt cfi | fdt nand | fdt mx25l | mmcsd
+geom/geom_flashmap.c		optional fdt cfi | fdt nand | fdt mx25l | mmcsd | fdt cqspi
 geom/geom_io.c			standard
 geom/geom_kern.c		standard
 geom/geom_map.c			optional geom_map
