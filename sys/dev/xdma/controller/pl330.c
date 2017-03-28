@@ -154,32 +154,38 @@ pl330_intr(void *arg)
 	uint32_t tot_copied;
 	uint32_t pending;
 	int i;
+	int c;
 
 	sc = arg;
-	chan = &sc->channels[1];
-	xchan = chan->xchan;
 
 	pending = READ4(sc, INTMIS);
-#if 0
+#if 1
 	printf("%s: 0x%x, LC0 %x, SAR %x DAR %x\n",
 	    __func__, pending, READ4(sc, LC0(0)),
 	    READ4(sc, SAR(0)), READ4(sc, DAR(0)));
 #endif
 	WRITE4(sc, INTCLR, pending);
 
-	st.error = 0;
-	st.transferred = 0; //le32toh(desc->transferred);
-	for (i = 0; i < chan->enqueued; i++) {
-		//printf("seg done\n");
-		xchan_seg_done(xchan, &st);
+	for (c = 0; c < 32; c++) {
+		if ((pending & (1 << c)) == 0) {
+			continue;
+		}
+		chan = &sc->channels[c];
+		xchan = chan->xchan;
+		st.error = 0;
+		st.transferred = 0; //le32toh(desc->transferred);
+		for (i = 0; i < chan->enqueued; i++) {
+			//printf("seg done\n");
+			xchan_seg_done(xchan, &st);
+		}
+
+		chan->capacity = 0x10000;
+
+		/* Finish operation */
+		status.error = 0;
+		status.transferred = 0; //tot_copied;
+		xdma_callback(chan->xchan, &status);
 	}
-
-	chan->capacity = 0x10000;
-
-	/* Finish operation */
-	status.error = 0;
-	status.transferred = 0; //tot_copied;
-	xdma_callback(chan->xchan, &status);
 
 	return;
 
@@ -326,13 +332,13 @@ emit_wfp(uint8_t *buf, uint32_t p_id)
 }
 
 static uint32_t
-emit_go(uint8_t *buf, uint32_t addr)
+emit_go(uint8_t *buf, uint32_t chan_id, uint32_t addr)
 {
 
 	buf[0] = DMAGO;
 	//buf[0] |= (1 << 1); //ns
 
-	buf[1] = 0; //chan
+	buf[1] = chan_id;
 	buf[2] = addr;
 	buf[3] = addr >> 8;
 	buf[4] = addr >> 16;
@@ -412,7 +418,7 @@ pl330_test(struct pl330_softc *sc)
 	offs += emit_sev(&ibuf[offs], 0);
 	offs += emit_end(&ibuf[offs]);
 
-	emit_go(dbuf, vtophys(ibuf));
+	emit_go(dbuf, 0, vtophys(ibuf));
 
 	reg = (dbuf[1] << 24) | (dbuf[0] << 16);
 	WRITE4(sc, DBGINST0, reg);
@@ -486,9 +492,24 @@ pl330_attach(device_t dev)
 		return (ENXIO);
 	}
 
+	/* Setup interrupt handler */
+	err = bus_setup_intr(dev, sc->res[2], INTR_TYPE_MISC | INTR_MPSAFE,
+	    NULL, pl330_intr, sc, &sc->ih);
+	if (err) {
+		device_printf(dev, "Unable to alloc interrupt resource.\n");
+		return (ENXIO);
+	}
+
 	node = ofw_bus_get_node(dev);
 	xref = OF_xref_from_node(node);
 	OF_device_register_xref(xref, dev);
+
+	uint32_t reg;
+
+	reg = READ4(sc, CRD);
+	reg &= ~(0x7);
+	reg |= 0x2;
+	WRITE4(sc, CRD, reg);
 
 	if (0 == 1) {
 		pl330_test(sc);
@@ -752,19 +773,28 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 
 	sc = device_get_softc(dev);
 
+	reg = READ4(sc, CRD);
+	printf("CRD %x\n", READ4(sc, CRD));
+
 	xdma = xchan->xdma;
 	data = (struct pl330_fdt_data *)xdma->data;
 
 	chan = (struct pl330_channel *)xchan->chan;
 	ibuf = chan->ibuf;
 
+	printf("%s: chan->index %d\n", __func__, chan->index);
+
 	offs = 0;
 
 	for (i = 0; i < sg_n; i++) {
 		if (sg[i].direction == XDMA_DEV_TO_MEM) {
 			reg = (1 << 14); //dst inc
+			//printf("dst inc\n");
 		} else {
+			//printf("src inc\n");
 			reg = (1 << 0); //src inc
+			reg |= (1 << 22); //dst prot ctrl
+
 		}
 
 		//SS32, DS32
@@ -777,13 +807,39 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 		dst_addr_lo = (uint32_t)sg[i].dst_addr;
 		len = (uint32_t)sg[i].len;
 
-#if 0
-		printf("%s: src %x dst %x len %d\n", __func__,
-		    src_addr_lo, dst_addr_lo, len);
+#if 1
+		printf("%s: src %x dst %x len %d periph_id %d\n", __func__,
+		    src_addr_lo, dst_addr_lo, len, data->periph_id);
 #endif
 
 		offs += emit_mov(&ibuf[offs], R_SAR, src_addr_lo);
 		offs += emit_mov(&ibuf[offs], R_DAR, dst_addr_lo);
+
+
+#if 0
+	if (sg[i].direction == XDMA_MEM_TO_DEV) {
+		//cnt = (len / 256);
+		//offs += emit_lp(&ibuf[offs], 0, cnt);
+			//offs0 = offs;
+			//offs += emit_lp(&ibuf[offs], 1, 4);
+			//offs1 = offs;
+
+			offs += emit_lp(&ibuf[offs], 0, 64);
+			offs0 = offs;
+			offs += emit_wfp(&ibuf[offs], data->periph_id);
+			offs += emit_ld(&ibuf[offs]);
+			offs += emit_st(&ibuf[offs]);
+			jump_addr_relative = (offs - offs0);
+			offs += emit_lpend(&ibuf[offs], 0, jump_addr_relative);
+
+			//jump_addr_relative = (offs - offs1);
+			//offs += emit_lpend(&ibuf[offs], 1, jump_addr_relative);
+			//offs += emit_wfp(&ibuf[offs], data->periph_id);
+		//jump_addr_relative = (offs - offs0);
+		//offs += emit_lpend(&ibuf[offs], 0, jump_addr_relative);
+
+	} else {
+#endif
 
 		cnt = (len / 4);
 		if (cnt > 128) {
@@ -808,20 +864,23 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 			jump_addr_relative = (offs - offs0);
 			offs += emit_lpend(&ibuf[offs], 0, jump_addr_relative);
 		}
+	//}
+
 	}
 
-	offs += emit_sev(&ibuf[offs], 0);
+	offs += emit_sev(&ibuf[offs], chan->index);
 	offs += emit_end(&ibuf[offs]);
 
-	emit_go(dbuf, chan->ibuf_phys);
+	emit_go(dbuf, chan->index, chan->ibuf_phys);
 
 	reg = (dbuf[1] << 24) | (dbuf[0] << 16);
+	//reg |= (chan->index << 8);
 	WRITE4(sc, DBGINST0, reg);
 	reg = (dbuf[5] << 24) | (dbuf[4] << 16) | (dbuf[3] << 8) | dbuf[2];
 	WRITE4(sc, DBGINST1, reg);
 
 	WRITE4(sc, INTCLR, 0xffffffff);
-	WRITE4(sc, INTEN, (1 << 0));
+	WRITE4(sc, INTEN, (1 << chan->index));
 
 	chan->enqueued = sg_n;
 	chan->capacity = 0;

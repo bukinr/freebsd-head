@@ -105,8 +105,8 @@ xdma_enqueue_bio(xdma_channel_t *xchan, struct bio **bp,
 		xr->dst_addr = addr;
 		xr->src_addr = 0;
 	} else {
-		xr->src_addr = addr;
 		xr->dst_addr = 0;
+		xr->src_addr = addr;
 	}
 	xr->done = 0;
 	xchan->xr_head = xchan_next_req(xchan, xchan->xr_head);

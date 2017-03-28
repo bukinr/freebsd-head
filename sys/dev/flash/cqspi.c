@@ -78,6 +78,8 @@ __FBSDID("$FreeBSD$");
 #define WRITE1(_sc, _reg, _val) bus_write_1((_sc)->res[0], _reg, _val)
 #define READ_DATA_4(_sc, _reg) bus_read_4((_sc)->res[1], _reg)
 #define READ_DATA_1(_sc, _reg) bus_read_1((_sc)->res[1], _reg)
+#define WRITE_DATA_4(_sc, _reg, _val) bus_write_4((_sc)->res[1], _reg, _val)
+#define WRITE_DATA_1(_sc, _reg, _val) bus_write_1((_sc)->res[1], _reg, _val)
 
 struct cqspi_flash_ident {
 	const char	*name;
@@ -104,6 +106,7 @@ struct cqspi_softc {
 	bus_space_handle_t	bsh;
 	void			*ih;
 	uint8_t			op_done;
+	uint8_t			write_op_done;
 
 	/* xDMA */
 	xdma_controller_t	*xdma_tx;
@@ -166,10 +169,29 @@ static int
 cqspi_xdma_tx_intr(void *arg, xdma_transfer_status_t *status)
 {
 	struct cqspi_softc *sc;
+	struct bio *bp;
+	int ret;
+	struct xdma_transfer_status st;
 
 	sc = arg;
 
 	printf("%s\n", __func__);
+
+	while (1) {
+		//ret = xdma_dequeue(sc->xchan_tx, (void **)&bp, &st);
+		ret = xdma_dequeue_bio(sc->xchan_tx, &bp, &st);
+		if (ret != 0) {
+			break;
+		}
+		//printf("bio done: %x\n", (uint32_t)bp);
+		//printf(".");
+		//biodone(bp);
+		sc->write_op_done = 1;
+	}
+
+	//CQSPI_LOCK(sc);
+	wakeup(&sc->xdma_tx);
+	//CQSPI_UNLOCK(sc);
 
 	return (0);
 }
@@ -204,6 +226,61 @@ cqspi_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 
 	return (0);
 }
+
+static int
+cqspi_cmd(struct cqspi_softc *sc, uint8_t cmd, uint32_t len)
+{
+	uint32_t reg;
+
+	printf("%s: %x\n", __func__, cmd);
+	//printf("datardlo before %x\n", READ4(sc, CQSPI_FLASHCMDRDDATALO));
+
+	reg = (cmd << FLASHCMD_CMDOPCODE_S);
+	reg |= ((len - 1) << FLASHCMD_NUMRDDATABYTES_S);
+	reg |= FLASHCMD_ENRDDATA;
+	WRITE4(sc, CQSPI_FLASHCMD, reg);
+
+	reg |= FLASHCMD_EXECCMD;
+	WRITE4(sc, CQSPI_FLASHCMD, reg);
+
+	int timeout;
+	int i;
+
+	timeout = 1000;
+	for (i = timeout; i > 0; i--) {
+		if ((READ4(sc, CQSPI_FLASHCMD) & FLASHCMD_CMDEXECSTAT) == 0) {
+			break;
+		}
+	}
+	if (i == 0) {
+		printf("cmd timed out\n");
+	}
+	//printf("i %d\n", i);
+
+	//printf("cmd %x\n", READ4(sc, CQSPI_FLASHCMD));
+	//printf("datardlo %x\n", READ4(sc, CQSPI_FLASHCMDRDDATALO));
+	//printf("datardup %x\n", READ4(sc, CQSPI_FLASHCMDRDDATAUP));
+
+	uint32_t data;
+
+	data = READ4(sc, CQSPI_FLASHCMDRDDATALO);
+
+	switch (len) {
+	case 4:
+		return (data);
+	case 3:
+		return (data & 0xffffff);
+	case 2:
+		return (data & 0xffff);
+	case 1:
+		return (data & 0xff);
+	default:
+		return (0);
+	}
+
+	return (0);
+}
+
 
 static uint8_t
 cqspi_get_status(device_t dev)
@@ -348,8 +425,94 @@ cqspi_erase_cmd(device_t dev, off_t sector, uint8_t ecmd)
 }
 
 static int
-cqspi_write(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count)
+cqspi_write(device_t dev, device_t child, struct bio *bp,
+    off_t offset, caddr_t data, off_t count)
 {
+	struct cqspi_softc *sc;
+	device_t pdev;
+	uint32_t reg;
+
+	pdev = device_get_parent(dev);
+	sc = device_get_softc(dev);
+
+	//count = 256;
+
+	reg = cqspi_cmd(sc, CMD_WRITE_ENABLE, 1);
+	printf("write enable %x\n", reg);
+
+	sc->write_op_done = 0;
+
+	printf("%s: offset 0x%llx count %lld bytes\n", __func__, offset, count);
+
+	reg = (2 << 0); //numsglreqbytes
+	reg |= (2 << 8); //numburstreqbytes
+	WRITE4(sc, CQSPI_DMAPER, reg);
+
+	WRITE4(sc, CQSPI_INDWRWATER, 64); //(128 * 4) / 8);
+
+	WRITE4(sc, CQSPI_INDWR, INDRD_IND_OPS_DONE_STATUS);
+	WRITE4(sc, CQSPI_INDWR, 0);
+
+	WRITE4(sc, CQSPI_INDWRCNT, count);
+	WRITE4(sc, CQSPI_INDWRSTADDR, offset);
+
+#define	QUAD_INPUT_FAST_PROGRAM	0x32
+
+	reg = (0 << DEVRD_DUMMYRDCLKS_S);
+	reg |= (2 << 16); //data width
+	reg |= (0 << 12); //addr width
+	//reg |= (QUAD_INPUT_FAST_PROGRAM << DEVRD_RDOPCODE_S);
+	reg |= (0x34 << DEVRD_RDOPCODE_S);
+	//reg |= (0xEC << DEVRD_RDOPCODE_S);
+	//reg |= (CMD_PAGE_PROGRAM << DEVRD_RDOPCODE_S);
+	WRITE4(sc, CQSPI_DEVWR, reg);
+
+	reg = (2 << 16); //data width
+	reg |= (0 << 12); //addr width
+	reg |= (0 <<  8); //inst width
+	WRITE4(sc, CQSPI_DEVRD, reg);
+
+	//WRITE4(sc, CQSPI_MODEBIT, 0);
+
+#if 1
+	xdma_enqueue_bio(sc->xchan_tx, &bp, 0xffa00000, XDMA_MEM_TO_DEV);
+	xdma_queue_submit(sc->xchan_tx);
+#endif
+
+	WRITE4(sc, CQSPI_INDWR, INDRD_START);
+
+	int i;
+
+	//WRITE_DATA_4(sc, 0, 0);
+
+#if 1
+	uint32_t fill;
+	for (i = 0; i < 512/4; i++) {
+		fill = READ4(sc, CQSPI_SRAMFILL);
+		fill >>= 16;
+		fill &= 0xffff;
+		printf("fill %d\n", fill);
+		//WRITE_DATA_4(sc, 0, 0);
+	}
+#endif
+
+	for (i = 0; i < 10; i++) {
+		printf("indwr %x\n", READ4(sc, CQSPI_INDWR));
+		DELAY(10000);
+	}
+
+#if 1
+	CQSPI_LOCK(sc);
+	while (sc->write_op_done == 0) {
+		tsleep(&sc->xdma_tx, PCATCH | PZERO, "spi", hz/2);
+	}
+	CQSPI_UNLOCK(sc);
+#endif
+
+	printf("wr done\n");
+
+	return (0);
+
 #if 0
 	struct cqspi_softc *sc;
 	uint8_t txBuf[8], rxBuf[8];
@@ -446,15 +609,6 @@ cqspi_write(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t coun
 }
 
 static int
-cqspi_write_1(device_t dev)
-{
-
-	printf("%s\n", __func__);
-
-	return (0);
-}
-
-static int
 cqspi_read(device_t dev, device_t child, struct bio *bp,
     off_t offset, caddr_t data, off_t count)
 {
@@ -468,12 +622,12 @@ cqspi_read(device_t dev, device_t child, struct bio *bp,
 	//printf("%s: offset 0x%llx count %lld bytes\n", __func__, offset, count);
 	sc->op_done = 0;
 
+#if 0
 	/*
 	 * Enforce the disk read sectorsize not the erase sectorsize.
 	 * In this way, smaller read IO is possible,dramatically
 	 * speeding up filesystem/geom_compress access.
 	 */
-#if 0
 	if (count % sc->sc_disk->d_sectorsize != 0
 	    || offset % sc->sc_disk->d_sectorsize != 0) {
 		printf("EIO\n");
@@ -481,31 +635,23 @@ cqspi_read(device_t dev, device_t child, struct bio *bp,
 	}
 #endif
 
-	//printf("Wr\n");
 	reg = (2 << 0); //numsglreqbytes
 	reg |= (2 << 8); //numburstreqbytes
 	WRITE4(sc, CQSPI_DMAPER, reg);
-	WRITE4(sc, CQSPI_INDRDWATER, 4);
-	//printf("Wr done\n");
 
-	//reg = (2 << 0); //numsglreqbytes
-	//reg |= (2 << 8); //numburstreqbytes
-	//WRITE4(sc, CQSPI_DMAPER, reg);
-	//WRITE4(sc, CQSPI_INDRDWATER, 64);
-
+	WRITE4(sc, CQSPI_INDRDWATER, 64);
 	WRITE4(sc, CQSPI_INDRD, INDRD_IND_OPS_DONE_STATUS);
 	WRITE4(sc, CQSPI_INDRD, 0);
 
 	WRITE4(sc, CQSPI_INDRDCNT, count);
 	WRITE4(sc, CQSPI_INDRDSTADDR, offset);
 
-	reg = (CMD_FAST_READ << DEVRD_RDOPCODE_S);
-	reg |= (0 << DEVRD_DUMMYRDCLKS_S);
-	reg |= (0 << 16); //data width
-	reg |= (0 << 12); //addr width
-	reg |= (0 <<  8); //inst width
-	reg |= (0 << 20); //enmodebits
-
+	//reg = (CMD_FAST_READ << DEVRD_RDOPCODE_S);
+	//reg |= (0 << DEVRD_DUMMYRDCLKS_S);
+	//reg |= (0 << 16); //data width
+	//reg |= (0 << 12); //addr width
+	//reg |= (0 <<  8); //inst width
+	//reg |= (0 << 20); //enmodebits
 	//reg = READ4(sc, CQSPI_DEVRD);
 	//reg &= ~(0xff << DEVRD_RDOPCODE_S);
 	//reg |= (CMD_FAST_READ << DEVRD_RDOPCODE_S);
@@ -663,60 +809,6 @@ found:
 }
 
 static int
-cqspi_cmd(struct cqspi_softc *sc, uint8_t cmd, uint32_t len)
-{
-	uint32_t reg;
-
-	printf("%s: %x\n", __func__, cmd);
-	//printf("datardlo before %x\n", READ4(sc, CQSPI_FLASHCMDRDDATALO));
-
-	reg = (cmd << FLASHCMD_CMDOPCODE_S);
-	reg |= ((len - 1) << FLASHCMD_NUMRDDATABYTES_S);
-	reg |= FLASHCMD_ENRDDATA;
-	WRITE4(sc, CQSPI_FLASHCMD, reg);
-
-	reg |= FLASHCMD_EXECCMD;
-	WRITE4(sc, CQSPI_FLASHCMD, reg);
-
-	int timeout;
-	int i;
-
-	timeout = 1000;
-	for (i = timeout; i > 0; i--) {
-		if ((READ4(sc, CQSPI_FLASHCMD) & FLASHCMD_CMDEXECSTAT) == 0) {
-			break;
-		}
-	}
-	if (i == 0) {
-		printf("cmd timed out\n");
-	}
-	//printf("i %d\n", i);
-
-	//printf("cmd %x\n", READ4(sc, CQSPI_FLASHCMD));
-	//printf("datardlo %x\n", READ4(sc, CQSPI_FLASHCMDRDDATALO));
-	//printf("datardup %x\n", READ4(sc, CQSPI_FLASHCMDRDDATAUP));
-
-	uint32_t data;
-
-	data = READ4(sc, CQSPI_FLASHCMDRDDATALO);
-
-	switch (len) {
-	case 4:
-		return (data);
-	case 3:
-		return (data & 0xffffff);
-	case 2:
-		return (data & 0xffff);
-	case 1:
-		return (data & 0xff);
-	default:
-		return (0);
-	}
-
-	return (0);
-}
-
-static int
 cqspi_attach(device_t dev)
 {
 	struct cqspi_flash_ident *ident;
@@ -805,12 +897,12 @@ cqspi_attach(device_t dev)
 	WRITE4(sc, CQSPI_CFG, reg);
 
 	reg = READ4(sc, CQSPI_DEVSZ);
-	//printf("devsz %x\n", reg);
 	reg |= 3;
 	WRITE4(sc, CQSPI_DEVSZ, reg);
+	printf("devsz %x\n", reg);
 
 	//WRITE4(sc, CQSPI_REMAPADDR, 0);
-	//WRITE4(sc, CQSPI_SRAMPART, 128/2);
+	WRITE4(sc, CQSPI_SRAMPART, 128/2);
 
 	reg = READ4(sc, CQSPI_CFG);
 	/* Configure baud rate */
@@ -913,7 +1005,7 @@ static device_method_t cqspi_methods[] = {
 	DEVMETHOD(device_detach,	cqspi_detach),
 
 	DEVMETHOD(qspi_read,		cqspi_read),
-	DEVMETHOD(qspi_write,		cqspi_write_1),
+	DEVMETHOD(qspi_write,		cqspi_write),
 	{ 0, 0 }
 };
 

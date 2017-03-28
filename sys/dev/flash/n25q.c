@@ -283,6 +283,19 @@ n25q_erase_cmd(device_t dev, off_t sector, uint8_t ecmd)
 static int
 n25q_write(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count)
 {
+	struct n25q_softc *sc;
+	device_t pdev;
+	int err;
+
+	pdev = device_get_parent(dev);
+	sc = device_get_softc(dev);
+
+	//printf("%s: offset 0x%llx count %lld bytes\n", __func__, offset, count);
+
+	err = QSPI_WRITE(pdev, dev, bp, offset, data, count);
+
+	return (err);
+
 #if 0
 	struct n25q_softc *sc;
 	uint8_t txBuf[8], rxBuf[8];
@@ -389,7 +402,6 @@ n25q_read(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count)
 	sc = device_get_softc(dev);
 
 	//printf("%s: offset 0x%llx count %lld bytes\n", __func__, offset, count);
-	sc->op_done = 0;
 
 	/*
 	 * Enforce the disk read sectorsize not the erase sectorsize.
@@ -685,8 +697,6 @@ n25q_task(void *arg)
 			    bp->bio_data, bp->bio_bcount);
 			break;
 		case BIO_WRITE:
-			bp->bio_error = EINVAL;
-			break;
 			bp->bio_error = n25q_write(dev, bp, bp->bio_offset, 
 			    bp->bio_data, bp->bio_bcount);
 			break;

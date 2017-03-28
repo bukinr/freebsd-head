@@ -28,7 +28,6 @@
 
 #include <sys/bus.h>
 #include <sys/bio.h>
-#include <dev/spibus/spi.h>
 
 INTERFACE qspi;
 
@@ -46,4 +45,9 @@ METHOD int read {
 
 METHOD int write {
 	device_t dev;
+	device_t child;
+	struct bio *bp;
+	off_t offset;
+	caddr_t data;
+	off_t count;
 };
