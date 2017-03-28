@@ -28,7 +28,7 @@
  * SUCH DAMAGE.
  */
 
-/* Cadence Quad SPI Flash Controller driver. */
+/* n25q flash driver */
 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
@@ -55,10 +55,7 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus_subr.h>
 #include <dev/ofw/openfirm.h>
 
-#include <dev/fdt/simplebus.h>
-
 #include <dev/flash/cqspi.h>
-#include <dev/xdma/xdma.h>
 
 #include "qspi_if.h"
 
@@ -79,7 +76,7 @@ __FBSDID("$FreeBSD$");
 #define READ_DATA_4(_sc, _reg) bus_read_4((_sc)->res[1], _reg)
 #define READ_DATA_1(_sc, _reg) bus_read_1((_sc)->res[1], _reg)
 
-struct cqspi_flash_ident {
+struct n25q_flash_ident {
 	const char	*name;
 	uint8_t		manufacturer_id;
 	uint16_t	device_id;
@@ -88,7 +85,7 @@ struct cqspi_flash_ident {
 	unsigned int	flags;
 };
 
-struct cqspi_softc {
+struct n25q_softc {
 	device_t	dev;
 	uint8_t		sc_manufacturer_id;
 	uint16_t	device_id;
@@ -104,56 +101,47 @@ struct cqspi_softc {
 	bus_space_handle_t	bsh;
 	void			*ih;
 	uint8_t			op_done;
-
-	/* xDMA */
-	xdma_controller_t	*xdma_tx;
-	xdma_channel_t		*xchan_tx;
-	void			*ih_tx;
-
-	xdma_controller_t	*xdma_rx;
-	xdma_channel_t		*xchan_rx;
-	void			*ih_rx;
 };
 
-#define	CQSPI_LOCK(_sc)		mtx_lock(&(_sc)->sc_mtx)
-#define	CQSPI_UNLOCK(_sc)	mtx_unlock(&(_sc)->sc_mtx)
-#define CQSPI_LOCK_INIT(_sc)					\
+#define	N25Q_LOCK(_sc)		mtx_lock(&(_sc)->sc_mtx)
+#define	N25Q_UNLOCK(_sc)	mtx_unlock(&(_sc)->sc_mtx)
+#define N25Q_LOCK_INIT(_sc)					\
 	mtx_init(&_sc->sc_mtx, device_get_nameunit(_sc->dev),	\
-	    "cqspi", MTX_DEF)
-#define CQSPI_LOCK_DESTROY(_sc)	mtx_destroy(&_sc->sc_mtx);
-#define CQSPI_ASSERT_LOCKED(_sc)				\
+	    "n25q", MTX_DEF)
+#define N25Q_LOCK_DESTROY(_sc)	mtx_destroy(&_sc->sc_mtx);
+#define N25Q_ASSERT_LOCKED(_sc)				\
 	mtx_assert(&_sc->sc_mtx, MA_OWNED);
-#define CQSPI_ASSERT_UNLOCKED(_sc)				\
+#define N25Q_ASSERT_UNLOCKED(_sc)				\
 	mtx_assert(&_sc->sc_mtx, MA_NOTOWNED);
 
-static struct resource_spec cqspi_spec[] = {
+#if 0
+static struct resource_spec n25q_spec[] = {
 	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },
-	{ SYS_RES_MEMORY,	1,	RF_ACTIVE },
-	{ SYS_RES_IRQ,		0,	RF_ACTIVE },
 	{ -1, 0 }
 };
+#endif
 
 static struct ofw_compat_data compat_data[] = {
-	{ "cdns,qspi-nor",	1 },
+	{ "n25q00aa",		1 },
 	{ NULL,			0 },
 };
 
 /* disk routines */
-static int cqspi_open(struct disk *dp);
-static int cqspi_close(struct disk *dp);
-static int cqspi_ioctl(struct disk *, u_long, void *, int, struct thread *);
-static void cqspi_strategy(struct bio *bp);
-static int cqspi_getattr(struct bio *bp);
-static void cqspi_task(void *arg);
+static int n25q_open(struct disk *dp);
+static int n25q_close(struct disk *dp);
+static int n25q_ioctl(struct disk *, u_long, void *, int, struct thread *);
+static void n25q_strategy(struct bio *bp);
+static int n25q_getattr(struct bio *bp);
+static void n25q_task(void *arg);
 
-struct cqspi_flash_ident flash_devices_1[] = {
+struct n25q_flash_ident flash_devices[] = {
 	{ "n25q00", 0x20, 0xbb21, (64 * 1024), 2048, FL_NONE },
 };
 
 static void
-cqspi_intr(void *arg)
+n25q_intr(void *arg)
 {
-	struct cqspi_softc *sc;
+	struct n25q_softc *sc;
 	uint32_t pending;
 
 	sc = arg;
@@ -170,51 +158,8 @@ cqspi_intr(void *arg)
 	WRITE4(sc, CQSPI_IRQSTAT, pending);
 }
 
-static int
-cqspi_xdma_tx_intr(void *arg, xdma_transfer_status_t *status)
-{
-	struct cqspi_softc *sc;
-
-	sc = arg;
-
-	printf("%s\n", __func__);
-
-	return (0);
-}
-
-static int
-cqspi_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
-{
-	struct cqspi_softc *sc;
-	struct bio *bp;
-	int ret;
-	struct xdma_transfer_status st;
-
-	sc = arg;
-
-	//printf("%s\n", __func__);
-
-	while (1) {
-		//ret = xdma_dequeue(sc->xchan_rx, (void **)&bp, &st);
-		ret = xdma_dequeue_bio(sc->xchan_rx, &bp, &st);
-		if (ret != 0) {
-			break;
-		}
-		//printf("bio done: %x\n", (uint32_t)bp);
-		//printf(".");
-		//biodone(bp);
-		sc->op_done = 1;
-	}
-
-	//CQSPI_LOCK(sc);
-	wakeup(&sc->xdma_rx);
-	//CQSPI_UNLOCK(sc);
-
-	return (0);
-}
-
 static uint8_t
-cqspi_get_status(device_t dev)
+n25q_get_status(device_t dev)
 {
 #if 0
 	uint8_t txBuf[2], rxBuf[2];
@@ -237,15 +182,15 @@ cqspi_get_status(device_t dev)
 }
 
 static void
-cqspi_wait_for_device_ready(device_t dev)
+n25q_wait_for_device_ready(device_t dev)
 {
 
-	while ((cqspi_get_status(dev) & STATUS_WIP))
+	while ((n25q_get_status(dev) & STATUS_WIP))
 		continue;
 }
 
-static struct cqspi_flash_ident*
-cqspi_get_device_ident(struct cqspi_softc *sc)
+static struct n25q_flash_ident*
+n25q_get_device_ident(struct n25q_softc *sc)
 {
 #if 0
 	device_t dev;
@@ -278,10 +223,10 @@ cqspi_get_device_ident(struct cqspi_softc *sc)
 	dev_id = (rxBuf[2] << 8) | (rxBuf[3]);
 
 	for (i = 0; 
-	    i < nitems(flash_devices_1); i++) {
-		if ((flash_devices_1[i].manufacturer_id == manufacturer_id) &&
-		    (flash_devices_1[i].device_id == dev_id))
-			return &flash_devices_1[i];
+	    i < nitems(flash_devices); i++) {
+		if ((flash_devices[i].manufacturer_id == manufacturer_id) &&
+		    (flash_devices[i].device_id == dev_id))
+			return &flash_devices[i];
 	}
 
 	printf("Unknown SPI flash device. Vendor: %02x, device id: %04x\n",
@@ -292,7 +237,7 @@ cqspi_get_device_ident(struct cqspi_softc *sc)
 }
 
 static void
-cqspi_set_writable(device_t dev, int writable)
+n25q_set_writable(device_t dev, int writable)
 {
 #if 0
 	uint8_t txBuf[1], rxBuf[1];
@@ -315,10 +260,10 @@ cqspi_set_writable(device_t dev, int writable)
 }
 
 static void
-cqspi_erase_cmd(device_t dev, off_t sector, uint8_t ecmd)
+n25q_erase_cmd(device_t dev, off_t sector, uint8_t ecmd)
 {
 #if 0
-	struct cqspi_softc *sc;
+	struct n25q_softc *sc;
 	uint8_t txBuf[5], rxBuf[5];
 	struct spi_command cmd;
 	int err;
@@ -327,8 +272,8 @@ cqspi_erase_cmd(device_t dev, off_t sector, uint8_t ecmd)
 
 	sc = device_get_softc(dev);
 
-	cqspi_wait_for_device_ready(dev);
-	cqspi_set_writable(dev, 1);
+	n25q_wait_for_device_ready(dev);
+	n25q_set_writable(dev, 1);
 
 	memset(&cmd, 0, sizeof(cmd));
 	memset(txBuf, 0, sizeof(txBuf));
@@ -356,10 +301,10 @@ cqspi_erase_cmd(device_t dev, off_t sector, uint8_t ecmd)
 }
 
 static int
-cqspi_write(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count)
+n25q_write(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count)
 {
 #if 0
-	struct cqspi_softc *sc;
+	struct n25q_softc *sc;
 	uint8_t txBuf[8], rxBuf[8];
 	struct spi_command cmd;
 	off_t write_offset;
@@ -409,7 +354,7 @@ cqspi_write(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t coun
 		 * If we crossed sector boundary - erase next sector
 		 */
 		if (((offset + bytes_writen) % sc->sc_sectorsize) == 0)
-			cqspi_erase_cmd(dev, offset + bytes_writen, CMD_SECTOR_ERASE);
+			n25q_erase_cmd(dev, offset + bytes_writen, CMD_SECTOR_ERASE);
 
 		txBuf[0] = CMD_PAGE_PROGRAM;
 		if (sc->sc_flags & FL_ENABLE_4B_ADDR) {
@@ -437,8 +382,8 @@ cqspi_write(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t coun
 		 * (write enable latch) to disabled state,
 		 * so we re-enable it here 
 		 */
-		cqspi_wait_for_device_ready(dev);
-		cqspi_set_writable(dev, 1);
+		n25q_wait_for_device_ready(dev);
+		n25q_set_writable(dev, 1);
 
 		err = 0; //SPIBUS_TRANSFER(pdev, dev, &cmd);
 		if (err)
@@ -453,31 +398,10 @@ cqspi_write(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t coun
 	return (0);
 }
 
-#if 0
 static int
-cqspi_read_1(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count)
+n25q_read(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count)
 {
-
-	printf("%s\n", __func__);
-
-	return (0);
-}
-#endif
-
-static int
-cqspi_write_1(device_t dev)
-{
-
-	printf("%s\n", __func__);
-
-	return (0);
-}
-
-static int
-cqspi_read(device_t dev, device_t child, struct bio *bp,
-    off_t offset, caddr_t data, off_t count)
-{
-	struct cqspi_softc *sc;
+	struct n25q_softc *sc;
 	device_t pdev;
 	uint32_t reg;
 
@@ -492,20 +416,22 @@ cqspi_read(device_t dev, device_t child, struct bio *bp,
 	 * In this way, smaller read IO is possible,dramatically
 	 * speeding up filesystem/geom_compress access.
 	 */
-#if 0
 	if (count % sc->sc_disk->d_sectorsize != 0
 	    || offset % sc->sc_disk->d_sectorsize != 0) {
 		printf("EIO\n");
 		return (EIO);
 	}
-#endif
 
-	//printf("Wr\n");
+	//printf("qspi cmd read\n");
+	QSPI_READ(pdev, dev, bp, offset, data, count);
+	//printf("qspi cmd read done\n");
+
+	return (0);
+
 	reg = (2 << 0); //numsglreqbytes
 	reg |= (2 << 8); //numburstreqbytes
 	WRITE4(sc, CQSPI_DMAPER, reg);
 	WRITE4(sc, CQSPI_INDRDWATER, 4);
-	//printf("Wr done\n");
 
 	//reg = (2 << 0); //numsglreqbytes
 	//reg |= (2 << 8); //numburstreqbytes
@@ -568,22 +494,12 @@ cqspi_read(device_t dev, device_t child, struct bio *bp,
 	WRITE4(sc, CQSPI_INDRD, INDRD_IND_OPS_DONE_STATUS);
 	WRITE4(sc, CQSPI_IRQSTAT, 0);
 #else
-	//printf("enqueing bp %p\n", &bp);
 	//xdma_enqueue(sc->xchan_rx, 0xffa00000, (uintptr_t)data, count, XDMA_DEV_TO_MEM, bp);
-	xdma_enqueue_bio(sc->xchan_rx, &bp, 0xffa00000, XDMA_DEV_TO_MEM);
-	xdma_queue_submit(sc->xchan_rx);
+	//xdma_enqueue_bio(sc->xchan_rx, &bp, 0xffa00000, XDMA_DEV_TO_MEM);
+	//xdma_queue_submit(sc->xchan_rx);
 
 	WRITE4(sc, CQSPI_INDRD, INDRD_START);
 #endif
-
-	CQSPI_LOCK(sc);
-	//printf("sl\n");
-	while (sc->op_done == 0) {
-		//mtx_sleep(sc->xdma_rx, &sc->sc_mtx, PRIBIO, "job queue", hz/2);
-		tsleep(&sc->xdma_rx, PCATCH | PZERO, "spi", hz/2);
-	}
-	//printf("sd\n");
-	CQSPI_UNLOCK(sc);
 
 	return (0);
 
@@ -624,7 +540,7 @@ cqspi_read(device_t dev, device_t child, struct bio *bp,
 }
 
 static int
-cqspi_set_4b_mode(device_t dev, uint8_t command)
+n25q_set_4b_mode(device_t dev, uint8_t command)
 {
 #if 0
 	uint8_t txBuf[1], rxBuf[1];
@@ -647,7 +563,7 @@ cqspi_set_4b_mode(device_t dev, uint8_t command)
 
 	err = 0; //SPIBUS_TRANSFER(pdev, dev, &cmd);
 
-	cqspi_wait_for_device_ready(dev);
+	n25q_wait_for_device_ready(dev);
 
 	return (err);
 #endif
@@ -655,7 +571,7 @@ cqspi_set_4b_mode(device_t dev, uint8_t command)
 }
 
 static int
-cqspi_probe(device_t dev)
+n25q_probe(device_t dev)
 {
 	int i;
 
@@ -670,19 +586,19 @@ cqspi_probe(device_t dev)
 	 * Next, try to find a compatible device using the names in the
 	 * flash_devices structure
 	 */
-	for (i = 0; i < nitems(flash_devices_1); i++)
-		if (ofw_bus_is_compatible(dev, flash_devices_1[i].name))
+	for (i = 0; i < nitems(flash_devices); i++)
+		if (ofw_bus_is_compatible(dev, flash_devices[i].name))
 			goto found;
 
 	return (ENXIO);
 found:
-	device_set_desc(dev, "n25q flash");
+	device_set_desc(dev, "Quad SPI Flash Controller");
 
 	return (0);
 }
 
 static int
-cqspi_cmd(struct cqspi_softc *sc, uint8_t cmd, uint32_t len)
+n25q_cmd(struct n25q_softc *sc, uint8_t cmd, uint32_t len)
 {
 	uint32_t reg;
 
@@ -736,203 +652,43 @@ cqspi_cmd(struct cqspi_softc *sc, uint8_t cmd, uint32_t len)
 }
 
 static int
-cqspi_attach(device_t dev)
+n25q_attach(device_t dev)
 {
-	struct cqspi_flash_ident *ident;
-	struct cqspi_softc *sc;
-	uint32_t caps;
-	int error;
+	struct n25q_flash_ident *ident;
+	struct n25q_softc *sc;
+	//uint32_t caps;
+	//int error;
 
 	sc = device_get_softc(dev);
 	sc->dev = dev;
 	printf("%s: dev %p\n", __func__, dev);
 
-	if (bus_alloc_resources(dev, cqspi_spec, sc->res)) {
-		device_printf(dev, "could not allocate resources\n");
-		return (ENXIO);
-	}
+	//if (bus_alloc_resources(dev, n25q_spec, sc->res)) {
+	//	device_printf(dev, "could not allocate resources\n");
+	//	return (ENXIO);
+	//}
 
 	/* Memory interface */
-	sc->bst = rman_get_bustag(sc->res[0]);
-	sc->bsh = rman_get_bushandle(sc->res[0]);
+	//sc->bst = rman_get_bustag(sc->res[0]);
+	//sc->bsh = rman_get_bushandle(sc->res[0]);
 
-	caps = 0;
-
-	/* Get xDMA controller. */
-	sc->xdma_tx = xdma_ofw_get(sc->dev, "tx");
-	if (sc->xdma_tx == NULL) {
-		device_printf(dev, "Can't find DMA controller.\n");
-		return (ENXIO);
-	}
-
-	sc->xdma_rx = xdma_ofw_get(sc->dev, "rx");
-	if (sc->xdma_rx == NULL) {
-		device_printf(dev, "Can't find DMA controller.\n");
-		return (ENXIO);
-	}
-
-	/* Alloc xDMA virtual channels. */
-	sc->xchan_tx = xdma_channel_alloc(sc->xdma_tx, caps);
-	if (sc->xchan_tx == NULL) {
-		device_printf(dev, "Can't alloc virtual DMA channel.\n");
-		return (ENXIO);
-	}
-
-	sc->xchan_rx = xdma_channel_alloc(sc->xdma_rx, caps);
-	if (sc->xchan_rx == NULL) {
-		device_printf(dev, "Can't alloc virtual DMA channel.\n");
-		return (ENXIO);
-	}
-
-	/* Setup interrupt handlers. */
-	error = xdma_setup_intr(sc->xchan_tx, cqspi_xdma_tx_intr, sc, &sc->ih_tx);
-	if (error) {
-		device_printf(sc->dev,
-		    "Can't setup xDMA interrupt handler.\n");
-		return (ENXIO);
-	}
-
-	error = xdma_setup_intr(sc->xchan_rx, cqspi_xdma_rx_intr, sc, &sc->ih_rx);
-	if (error) {
-		device_printf(sc->dev,
-		    "Can't setup xDMA interrupt handler.\n");
-		return (ENXIO);
-	}
-
-
-#define	TX_QUEUE_SIZE	16
-#define	RX_QUEUE_SIZE	16
-
-	xdma_prep_sg(sc->xchan_tx, TX_QUEUE_SIZE, MAXPHYS, 16);
-	xdma_prep_sg(sc->xchan_rx, TX_QUEUE_SIZE, MAXPHYS, 16);
-
-	/* Setup interrupt handlers */
-	if (bus_setup_intr(sc->dev, sc->res[2], INTR_TYPE_BIO | INTR_MPSAFE,
-	    NULL, cqspi_intr, sc, &sc->ih)) {
-		device_printf(sc->dev, "Unable to setup intr\n");
-		return (ENXIO);
-	}
-
-	printf("Module ID %x\n", READ4(sc, CQSPI_MODULEID));
-	printf("cfg %x\n", READ4(sc, CQSPI_CFG));
-
-	uint32_t reg;
-
-	/* Disable controller */
-	reg = READ4(sc, CQSPI_CFG);
-	reg &= ~(CFG_EN);
-	WRITE4(sc, CQSPI_CFG, reg);
-
-	reg = READ4(sc, CQSPI_DEVSZ);
-	//printf("devsz %x\n", reg);
-	reg |= 3;
-	WRITE4(sc, CQSPI_DEVSZ, reg);
-
-	//WRITE4(sc, CQSPI_REMAPADDR, 0);
-	//WRITE4(sc, CQSPI_SRAMPART, 128/2);
-
-	reg = READ4(sc, CQSPI_CFG);
-	/* Configure baud rate */
-	reg &= ~(CFG_BAUD_M);
-	reg |= CFG_BAUD6;
-	//reg |= (1 << 16) | (1 << 7); // DIRECT mode
-	reg |= CFG_ENDMA;
-	//reg |= (1 << 2) | (1 << 1);
-	WRITE4(sc, CQSPI_CFG, reg);
-
-	reg = (3 << DELAY_NSS_S);
-	reg |= (3 << DELAY_BTWN_S);
-	reg |= (1 << DELAY_AFTER_S);
-	reg |= (1 << DELAY_INIT_S);
-
-	reg = (3 << DELAY_NSS_S);
-	reg |= (3  << DELAY_BTWN_S);
-	reg |= (1 << DELAY_AFTER_S);
-	reg |= (1 << DELAY_INIT_S);
-	WRITE4(sc, CQSPI_DELAY, reg);
-
-	READ4(sc, CQSPI_RDDATACAP);
-	reg &= ~(RDDATACAP_DELAY_M);
-	reg |= (1 << RDDATACAP_DELAY_S);
-	WRITE4(sc, CQSPI_RDDATACAP, reg);
-
-	/* Enable controller */
-	reg = READ4(sc, CQSPI_CFG);
-	reg |= (CFG_EN);
-	WRITE4(sc, CQSPI_CFG, reg);
-
-	reg = cqspi_cmd(sc, CMD_READ_IDENT, 4);
-	printf("Ident %x\n", reg);
-
-	reg = cqspi_cmd(sc, CMD_READ_STATUS, 2);
-	printf("Status %x\n", reg);
-
-	printf("Enter 4b mode\n");
-	cqspi_cmd(sc, CMD_ENTER_4B_MODE, 1);
-
-	//printf("Exit 4b mode\n");
-	//cqspi_cmd(sc, CMD_EXIT_4B_MODE, 1);
-
-	printf("Nvconf\n");
-	reg = cqspi_cmd(sc, CMD_READ_NVCONF_REG, 2);
-	printf("NVCONF %x\n", reg);
-
-	printf("Conf\n");
-	reg = cqspi_cmd(sc, CMD_READ_CONF_REG, 1);
-	printf("CONF %x\n", reg);
-
-	printf("FSR\n");
-	reg = cqspi_cmd(sc, CMD_READ_FSR, 1);
-	printf("FSR %x\n", reg);
-
-	CQSPI_LOCK_INIT(sc);
-
-	phandle_t child, node;
-	device_t child_dev;
-
-	node = ofw_bus_get_node(dev);
-	simplebus_init(dev, node);
-	for (child = OF_child(node); child != 0; child = OF_peer(child)) {
-		//child_dev = device_add_child(dev, NULL, -1);
-		child_dev = simplebus_add_device(dev, child, 0, NULL, -1, NULL);
-		if (child_dev == NULL) {
-			return (ENXIO);
-		}
-
-#if 0
-		struct ofw_bus_devinfo *dinfo;
-		dinfo = malloc(sizeof(*dinfo), M_DEVBUF, M_NOWAIT | M_ZERO);
-		if (dinfo == NULL) {
-			return (ENXIO);
-		}
-		if (ofw_bus_gen_setup_devinfo(dinfo, child) != 0) {
-			free(dinfo, M_DEVBUF);
-			return (ENXIO);
-		}
-#endif
-
-		error = device_probe_and_attach(child_dev);
-		if (error != 0) {
-			printf("can't probe and attach: %d\n", error);
-		}
-	}
+	N25Q_LOCK_INIT(sc);
 
 	if (0 == 1) {
-		ident = cqspi_get_device_ident(sc);
+		ident = n25q_get_device_ident(sc);
 	}
-	ident = &flash_devices_1[0];
+	ident = &flash_devices[0];
 	if (ident == NULL)
 		return (ENXIO);
 
-#if 0
-	cqspi_wait_for_device_ready(sc->dev);
+	n25q_wait_for_device_ready(sc->dev);
 
 	sc->sc_disk = disk_alloc();
-	sc->sc_disk->d_open = cqspi_open;
-	sc->sc_disk->d_close = cqspi_close;
-	sc->sc_disk->d_strategy = cqspi_strategy;
-	sc->sc_disk->d_getattr = cqspi_getattr;
-	sc->sc_disk->d_ioctl = cqspi_ioctl;
+	sc->sc_disk->d_open = n25q_open;
+	sc->sc_disk->d_close = n25q_close;
+	sc->sc_disk->d_strategy = n25q_strategy;
+	sc->sc_disk->d_getattr = n25q_getattr;
+	sc->sc_disk->d_ioctl = n25q_ioctl;
 	sc->sc_disk->d_name = "flash/qspi";
 	sc->sc_disk->d_drv1 = sc;
 	sc->sc_disk->d_maxsize = DFLTPHYS;
@@ -945,10 +701,10 @@ cqspi_attach(device_t dev)
 	sc->sc_flags = ident->flags;
 
 	if (sc->sc_flags & FL_ENABLE_4B_ADDR)
-		cqspi_set_4b_mode(dev, CMD_ENTER_4B_MODE);
+		n25q_set_4b_mode(dev, CMD_ENTER_4B_MODE);
 
 	if (sc->sc_flags & FL_DISABLE_4B_ADDR)
-		cqspi_set_4b_mode(dev, CMD_EXIT_4B_MODE);
+		n25q_set_4b_mode(dev, CMD_EXIT_4B_MODE);
 
         /* NB: use stripesize to hold the erase/region size for RedBoot */
 	sc->sc_disk->d_stripesize = ident->sectorsize;
@@ -956,38 +712,36 @@ cqspi_attach(device_t dev)
 	disk_create(sc->sc_disk, DISK_VERSION);
 	bioq_init(&sc->sc_bio_queue);
 
-	kproc_create(&cqspi_task, sc, &sc->sc_p, 0, 0, "task: cqspi flash");
+	kproc_create(&n25q_task, sc, &sc->sc_p, 0, 0, "task: n25q flash");
 	device_printf(sc->dev, "%s, sector %d bytes, %d sectors\n", 
 	    ident->name, ident->sectorsize, ident->sectorcount);
-#endif
 
-	return (bus_generic_attach(dev));
-	//return (0);
+	return (0);
 }
 
 static int
-cqspi_detach(device_t dev)
+n25q_detach(device_t dev)
 {
 
 	return (EIO);
 }
 
 static int
-cqspi_open(struct disk *dp)
+n25q_open(struct disk *dp)
 {
 
 	return (0);
 }
 
 static int
-cqspi_close(struct disk *dp)
+n25q_close(struct disk *dp)
 {
 
 	return (0);
 }
 
 static int
-cqspi_ioctl(struct disk *dp, u_long cmd, void *data,
+n25q_ioctl(struct disk *dp, u_long cmd, void *data,
     int fflag, struct thread *td)
 {
 
@@ -995,25 +749,23 @@ cqspi_ioctl(struct disk *dp, u_long cmd, void *data,
 }
 
 static void
-cqspi_strategy(struct bio *bp)
+n25q_strategy(struct bio *bp)
 {
-	struct cqspi_softc *sc;
+	struct n25q_softc *sc;
 
-	sc = (struct cqspi_softc *)bp->bio_disk->d_drv1;
+	sc = (struct n25q_softc *)bp->bio_disk->d_drv1;
 
-	CQSPI_LOCK(sc);
+	N25Q_LOCK(sc);
 	bioq_disksort(&sc->sc_bio_queue, bp);
 	wakeup(sc);
-	CQSPI_UNLOCK(sc);
+	N25Q_UNLOCK(sc);
 }
 
 static int
-cqspi_getattr(struct bio *bp)
+n25q_getattr(struct bio *bp)
 {
-	struct cqspi_softc *sc;
+	struct n25q_softc *sc;
 	device_t dev;
-
-	printf("%s\n", __func__);
 
 	if (bp->bio_disk == NULL || bp->bio_disk->d_drv1 == NULL) {
 		return (ENXIO);
@@ -1027,28 +779,25 @@ cqspi_getattr(struct bio *bp)
 			return (EFAULT);
 		}
 		bcopy(&dev, bp->bio_data, sizeof(dev));
-		printf("%s: 0\n", __func__);
 		return (0);
 	}
 
-	printf("%s: 1\n", __func__);
 	return (-1);
 }
 
-#if 0
 static void
-cqspi_task(void *arg)
+n25q_task(void *arg)
 {
-	struct cqspi_softc *sc;
+	struct n25q_softc *sc;
 	struct bio *bp;
 	device_t dev;
 
-	sc = (struct cqspi_softc *)arg;
+	sc = (struct n25q_softc *)arg;
 
 	dev = sc->dev;
 
 	for (;;) {
-		CQSPI_LOCK(sc);
+		N25Q_LOCK(sc);
 
 		//printf("Task\n");
 
@@ -1060,51 +809,53 @@ cqspi_task(void *arg)
 		} while (bp == NULL);
 
 		bioq_remove(&sc->sc_bio_queue, bp);
-		CQSPI_UNLOCK(sc);
+		N25Q_UNLOCK(sc);
 
 		switch (bp->bio_cmd) {
 		case BIO_READ:
-			bp->bio_error = cqspi_read(dev, bp, bp->bio_offset, 
+			bp->bio_error = n25q_read(dev, bp, bp->bio_offset, 
 			    bp->bio_data, bp->bio_bcount);
 			break;
 		case BIO_WRITE:
 			bp->bio_error = EINVAL;
 			break;
-			bp->bio_error = cqspi_write(dev, bp, bp->bio_offset, 
+			bp->bio_error = n25q_write(dev, bp, bp->bio_offset, 
 			    bp->bio_data, bp->bio_bcount);
 			break;
 		default:
 			bp->bio_error = EINVAL;
 		}
 
-		CQSPI_LOCK(sc);
+#if 0
+		N25Q_LOCK(sc);
 		while (sc->op_done == 0) {
 			msleep(sc->xdma_rx, &sc->sc_mtx, PRIBIO, "jobqueue", hz/2);
 		}
-		CQSPI_UNLOCK(sc);
+		N25Q_UNLOCK(sc);
+#endif
 
-#if 0
-		printf("bio done\n");
+#if 1
+		//printf("bio done\n");
 		biodone(bp);
 #endif
 	}
 }
-#endif
 
-static device_method_t cqspi_methods[] = {
+static devclass_t n25q_devclass;
+
+static device_method_t n25q_methods[] = {
 	/* Device interface */
-	DEVMETHOD(device_probe,		cqspi_probe),
-	DEVMETHOD(device_attach,	cqspi_attach),
-	DEVMETHOD(device_detach,	cqspi_detach),
+	DEVMETHOD(device_probe,		n25q_probe),
+	DEVMETHOD(device_attach,	n25q_attach),
+	DEVMETHOD(device_detach,	n25q_detach),
 
-	DEVMETHOD(qspi_read,		cqspi_read),
-	DEVMETHOD(qspi_write,		cqspi_write_1),
 	{ 0, 0 }
 };
 
-DEFINE_CLASS_1(cqspi, cqspi_driver, cqspi_methods,
-    sizeof(struct cqspi_softc), simplebus_driver);
+static driver_t n25q_driver = {
+	"n25q",
+	n25q_methods,
+	sizeof(struct n25q_softc),
+};
 
-static devclass_t cqspi_devclass;
-
-DRIVER_MODULE(cqspi, simplebus, cqspi_driver, cqspi_devclass, 0, 0);
+DRIVER_MODULE(n25q, simplebus, n25q_driver, n25q_devclass, 0, 0);
