@@ -138,14 +138,6 @@ static struct ofw_compat_data compat_data[] = {
 	{ NULL,			0 },
 };
 
-/* disk routines */
-static int cqspi_open(struct disk *dp);
-static int cqspi_close(struct disk *dp);
-static int cqspi_ioctl(struct disk *, u_long, void *, int, struct thread *);
-static void cqspi_strategy(struct bio *bp);
-static int cqspi_getattr(struct bio *bp);
-static void cqspi_task(void *arg);
-
 struct cqspi_flash_ident flash_devices_1[] = {
 	{ "n25q00", 0x20, 0xbb21, (64 * 1024), 2048, FL_NONE },
 };
@@ -452,17 +444,6 @@ cqspi_write(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t coun
 #endif
 	return (0);
 }
-
-#if 0
-static int
-cqspi_read_1(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count)
-{
-
-	printf("%s\n", __func__);
-
-	return (0);
-}
-#endif
 
 static int
 cqspi_write_1(device_t dev)
@@ -926,43 +907,9 @@ cqspi_attach(device_t dev)
 
 #if 0
 	cqspi_wait_for_device_ready(sc->dev);
-
-	sc->sc_disk = disk_alloc();
-	sc->sc_disk->d_open = cqspi_open;
-	sc->sc_disk->d_close = cqspi_close;
-	sc->sc_disk->d_strategy = cqspi_strategy;
-	sc->sc_disk->d_getattr = cqspi_getattr;
-	sc->sc_disk->d_ioctl = cqspi_ioctl;
-	sc->sc_disk->d_name = "flash/qspi";
-	sc->sc_disk->d_drv1 = sc;
-	sc->sc_disk->d_maxsize = DFLTPHYS;
-	sc->sc_disk->d_sectorsize = CQSPI_SECTORSIZE;
-	sc->sc_disk->d_mediasize = (ident->sectorsize * ident->sectorcount);
-	sc->sc_disk->d_unit = device_get_unit(sc->dev);
-	sc->sc_disk->d_dump = NULL;
-	/* Sectorsize for erase operations */
-	sc->sc_sectorsize =  ident->sectorsize;
-	sc->sc_flags = ident->flags;
-
-	if (sc->sc_flags & FL_ENABLE_4B_ADDR)
-		cqspi_set_4b_mode(dev, CMD_ENTER_4B_MODE);
-
-	if (sc->sc_flags & FL_DISABLE_4B_ADDR)
-		cqspi_set_4b_mode(dev, CMD_EXIT_4B_MODE);
-
-        /* NB: use stripesize to hold the erase/region size for RedBoot */
-	sc->sc_disk->d_stripesize = ident->sectorsize;
-
-	disk_create(sc->sc_disk, DISK_VERSION);
-	bioq_init(&sc->sc_bio_queue);
-
-	kproc_create(&cqspi_task, sc, &sc->sc_p, 0, 0, "task: cqspi flash");
-	device_printf(sc->dev, "%s, sector %d bytes, %d sectors\n", 
-	    ident->name, ident->sectorsize, ident->sectorcount);
 #endif
 
 	return (bus_generic_attach(dev));
-	//return (0);
 }
 
 static int
@@ -971,125 +918,6 @@ cqspi_detach(device_t dev)
 
 	return (EIO);
 }
-
-static int
-cqspi_open(struct disk *dp)
-{
-
-	return (0);
-}
-
-static int
-cqspi_close(struct disk *dp)
-{
-
-	return (0);
-}
-
-static int
-cqspi_ioctl(struct disk *dp, u_long cmd, void *data,
-    int fflag, struct thread *td)
-{
-
-	return (EINVAL);
-}
-
-static void
-cqspi_strategy(struct bio *bp)
-{
-	struct cqspi_softc *sc;
-
-	sc = (struct cqspi_softc *)bp->bio_disk->d_drv1;
-
-	CQSPI_LOCK(sc);
-	bioq_disksort(&sc->sc_bio_queue, bp);
-	wakeup(sc);
-	CQSPI_UNLOCK(sc);
-}
-
-static int
-cqspi_getattr(struct bio *bp)
-{
-	struct cqspi_softc *sc;
-	device_t dev;
-
-	printf("%s\n", __func__);
-
-	if (bp->bio_disk == NULL || bp->bio_disk->d_drv1 == NULL) {
-		return (ENXIO);
-	}
-
-	sc = bp->bio_disk->d_drv1;
-	dev = sc->dev;
-
-	if (strcmp(bp->bio_attribute, "SPI::device") == 0) {
-		if (bp->bio_length != sizeof(dev)) {
-			return (EFAULT);
-		}
-		bcopy(&dev, bp->bio_data, sizeof(dev));
-		printf("%s: 0\n", __func__);
-		return (0);
-	}
-
-	printf("%s: 1\n", __func__);
-	return (-1);
-}
-
-#if 0
-static void
-cqspi_task(void *arg)
-{
-	struct cqspi_softc *sc;
-	struct bio *bp;
-	device_t dev;
-
-	sc = (struct cqspi_softc *)arg;
-
-	dev = sc->dev;
-
-	for (;;) {
-		CQSPI_LOCK(sc);
-
-		//printf("Task\n");
-
-		do {
-			bp = bioq_first(&sc->sc_bio_queue);
-			if (bp == NULL) {
-				msleep(sc, &sc->sc_mtx, PRIBIO, "jobqueue", hz);
-			}
-		} while (bp == NULL);
-
-		bioq_remove(&sc->sc_bio_queue, bp);
-		CQSPI_UNLOCK(sc);
-
-		switch (bp->bio_cmd) {
-		case BIO_READ:
-			bp->bio_error = cqspi_read(dev, bp, bp->bio_offset, 
-			    bp->bio_data, bp->bio_bcount);
-			break;
-		case BIO_WRITE:
-			bp->bio_error = EINVAL;
-			break;
-			bp->bio_error = cqspi_write(dev, bp, bp->bio_offset, 
-			    bp->bio_data, bp->bio_bcount);
-			break;
-		default:
-			bp->bio_error = EINVAL;
-		}
-
-		CQSPI_LOCK(sc);
-		while (sc->op_done == 0) {
-			msleep(sc->xdma_rx, &sc->sc_mtx, PRIBIO, "jobqueue", hz/2);
-		}
-		CQSPI_UNLOCK(sc);
-
-#if 0
-		printf("bio done\n");
-		biodone(bp);
-#endif
-	}
-}
-#endif
 
 static device_method_t cqspi_methods[] = {
 	/* Device interface */
