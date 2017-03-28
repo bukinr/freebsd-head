@@ -138,26 +138,6 @@ struct n25q_flash_ident flash_devices[] = {
 	{ "n25q00", 0x20, 0xbb21, (64 * 1024), 2048, FL_NONE },
 };
 
-static void
-n25q_intr(void *arg)
-{
-	struct n25q_softc *sc;
-	uint32_t pending;
-
-	sc = arg;
-
-	pending = READ4(sc, CQSPI_IRQSTAT);
-
-#if 1
-	printf("%s: IRQSTAT %x\n", __func__, pending);
-#endif
-	if (pending & (IRQMASK_INDOPDONE | IRQMASK_INDXFRLVL | IRQMASK_INDSRAMFULL)) {
-		//printf("op_done\n");
-		sc->op_done = 1;
-	}
-	WRITE4(sc, CQSPI_IRQSTAT, pending);
-}
-
 static uint8_t
 n25q_get_status(device_t dev)
 {
@@ -403,7 +383,7 @@ n25q_read(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count)
 {
 	struct n25q_softc *sc;
 	device_t pdev;
-	uint32_t reg;
+	int err;
 
 	pdev = device_get_parent(dev);
 	sc = device_get_softc(dev);
@@ -422,121 +402,9 @@ n25q_read(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count)
 		return (EIO);
 	}
 
-	//printf("qspi cmd read\n");
-	QSPI_READ(pdev, dev, bp, offset, data, count);
-	//printf("qspi cmd read done\n");
-
-	return (0);
-
-	reg = (2 << 0); //numsglreqbytes
-	reg |= (2 << 8); //numburstreqbytes
-	WRITE4(sc, CQSPI_DMAPER, reg);
-	WRITE4(sc, CQSPI_INDRDWATER, 4);
-
-	//reg = (2 << 0); //numsglreqbytes
-	//reg |= (2 << 8); //numburstreqbytes
-	//WRITE4(sc, CQSPI_DMAPER, reg);
-	//WRITE4(sc, CQSPI_INDRDWATER, 64);
-
-	WRITE4(sc, CQSPI_INDRD, INDRD_IND_OPS_DONE_STATUS);
-	WRITE4(sc, CQSPI_INDRD, 0);
-
-	WRITE4(sc, CQSPI_INDRDCNT, count);
-	WRITE4(sc, CQSPI_INDRDSTADDR, offset);
-
-	reg = (CMD_FAST_READ << DEVRD_RDOPCODE_S);
-	reg |= (0 << DEVRD_DUMMYRDCLKS_S);
-	reg |= (0 << 16); //data width
-	reg |= (0 << 12); //addr width
-	reg |= (0 <<  8); //inst width
-	reg |= (0 << 20); //enmodebits
-
-	//reg = READ4(sc, CQSPI_DEVRD);
-	//reg &= ~(0xff << DEVRD_RDOPCODE_S);
-	//reg |= (CMD_FAST_READ << DEVRD_RDOPCODE_S);
-
-	reg = (0 << DEVRD_DUMMYRDCLKS_S);
-	reg |= (2 << 16); //data width
-	reg |= (0 << 12); //addr width
-	reg |= (0 <<  8); //inst width
-	reg |= (1 << 20); //enmodebits
-	reg |= (CMD_READ_4B_QUAD_OUTPUT << DEVRD_RDOPCODE_S);
-	WRITE4(sc, CQSPI_DEVRD, reg);
-
-	WRITE4(sc, CQSPI_MODEBIT, 0xff);
-
-	reg = READ4(sc, CQSPI_IRQMASK);
-	reg |= (IRQMASK_INDOPDONE | IRQMASK_INDXFRLVL | IRQMASK_INDSRAMFULL);
-	//WRITE4(sc, CQSPI_IRQMASK, reg);
-
-	sc->op_done = 0;
-
-#if 0
-	uint32_t *addr;
-	int i;
-	int n;
-	uint32_t cnt;
-	addr = (uint32_t *)data;
-
-	WRITE4(sc, CQSPI_INDRD, INDRD_START);
-
-	n = 0;
-	while (n < (count / 4)) {
-		cnt = READ4(sc, CQSPI_SRAMFILL) & 0xffff;
-		for (i = 0; i < cnt; i++) {
-			addr[n++] = READ_DATA_4(sc, 0);
-		}
-	}
-
-	while ((READ4(sc, CQSPI_INDRD) & INDRD_IND_OPS_DONE_STATUS) == 0)
-		;
-
-	WRITE4(sc, CQSPI_INDRD, INDRD_IND_OPS_DONE_STATUS);
-	WRITE4(sc, CQSPI_IRQSTAT, 0);
-#else
-	//xdma_enqueue(sc->xchan_rx, 0xffa00000, (uintptr_t)data, count, XDMA_DEV_TO_MEM, bp);
-	//xdma_enqueue_bio(sc->xchan_rx, &bp, 0xffa00000, XDMA_DEV_TO_MEM);
-	//xdma_queue_submit(sc->xchan_rx);
-
-	WRITE4(sc, CQSPI_INDRD, INDRD_START);
-#endif
-
-	return (0);
-
-#if 0
-	txBuf[0] = CMD_FAST_READ;
-	if (sc->sc_flags & FL_ENABLE_4B_ADDR) {
-		cmd.tx_cmd_sz = 6;
-		cmd.rx_cmd_sz = 6;
-
-		txBuf[1] = ((offset >> 24) & 0xff);
-		txBuf[2] = ((offset >> 16) & 0xff);
-		txBuf[3] = ((offset >> 8) & 0xff);
-		txBuf[4] = (offset & 0xff);
-		/* Dummy byte */
-		txBuf[5] = 0;
-	} else {
-		cmd.tx_cmd_sz = 5;
-		cmd.rx_cmd_sz = 5;
-
-		txBuf[1] = ((offset >> 16) & 0xff);
-		txBuf[2] = ((offset >> 8) & 0xff);
-		txBuf[3] = (offset & 0xff);
-		/* Dummy byte */
-		txBuf[4] = 0;
-	}
-
-	cmd.tx_cmd = txBuf;
-	cmd.rx_cmd = rxBuf;
-	cmd.tx_data = data;
-	cmd.tx_data_sz = count;
-	cmd.rx_data = data;
-	cmd.rx_data_sz = count;
-
-	err = 0; //SPIBUS_TRANSFER(pdev, dev, &cmd);
+	err = QSPI_READ(pdev, dev, bp, offset, data, count);
 
 	return (err);
-#endif
 }
 
 static int
@@ -826,18 +694,7 @@ n25q_task(void *arg)
 			bp->bio_error = EINVAL;
 		}
 
-#if 0
-		N25Q_LOCK(sc);
-		while (sc->op_done == 0) {
-			msleep(sc->xdma_rx, &sc->sc_mtx, PRIBIO, "jobqueue", hz/2);
-		}
-		N25Q_UNLOCK(sc);
-#endif
-
-#if 1
-		//printf("bio done\n");
 		biodone(bp);
-#endif
 	}
 }
 

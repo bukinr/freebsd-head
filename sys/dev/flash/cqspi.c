@@ -874,23 +874,10 @@ cqspi_attach(device_t dev)
 	node = ofw_bus_get_node(dev);
 	simplebus_init(dev, node);
 	for (child = OF_child(node); child != 0; child = OF_peer(child)) {
-		//child_dev = device_add_child(dev, NULL, -1);
 		child_dev = simplebus_add_device(dev, child, 0, NULL, -1, NULL);
 		if (child_dev == NULL) {
 			return (ENXIO);
 		}
-
-#if 0
-		struct ofw_bus_devinfo *dinfo;
-		dinfo = malloc(sizeof(*dinfo), M_DEVBUF, M_NOWAIT | M_ZERO);
-		if (dinfo == NULL) {
-			return (ENXIO);
-		}
-		if (ofw_bus_gen_setup_devinfo(dinfo, child) != 0) {
-			free(dinfo, M_DEVBUF);
-			return (ENXIO);
-		}
-#endif
 
 		error = device_probe_and_attach(child_dev);
 		if (error != 0) {
