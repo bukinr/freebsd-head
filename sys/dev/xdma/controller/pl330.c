@@ -159,7 +159,7 @@ pl330_intr(void *arg)
 	sc = arg;
 
 	pending = READ4(sc, INTMIS);
-#if 1
+#if 0
 	printf("%s: 0x%x, LC0 %x, SAR %x DAR %x\n",
 	    __func__, pending, READ4(sc, LC0(0)),
 	    READ4(sc, SAR(0)), READ4(sc, DAR(0)));
@@ -773,8 +773,8 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 
 	sc = device_get_softc(dev);
 
-	reg = READ4(sc, CRD);
-	printf("CRD %x\n", READ4(sc, CRD));
+	//reg = READ4(sc, CRD);
+	//printf("CRD %x\n", READ4(sc, CRD));
 
 	xdma = xchan->xdma;
 	data = (struct pl330_fdt_data *)xdma->data;
@@ -782,7 +782,7 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	chan = (struct pl330_channel *)xchan->chan;
 	ibuf = chan->ibuf;
 
-	printf("%s: chan->index %d\n", __func__, chan->index);
+	//printf("%s: chan->index %d\n", __func__, chan->index);
 
 	offs = 0;
 
@@ -807,7 +807,7 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 		dst_addr_lo = (uint32_t)sg[i].dst_addr;
 		len = (uint32_t)sg[i].len;
 
-#if 1
+#if 0
 		printf("%s: src %x dst %x len %d periph_id %d\n", __func__,
 		    src_addr_lo, dst_addr_lo, len, data->periph_id);
 #endif
