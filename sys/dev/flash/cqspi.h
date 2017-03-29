@@ -95,8 +95,10 @@
 #define	CQSPI_INDWRSTADDR	0x78	/* Indirect Write Transfer Start Address Register */
 #define	CQSPI_INDWRCNT		0x7C	/* Indirect Write Transfer Number Bytes Register */
 #define	CQSPI_FLASHCMD		0x90	/* Flash Command Control Register */
+#define	 FLASHCMD_NUMADDRBYTES_S	16
 #define	 FLASHCMD_NUMRDDATABYTES_S	20
 #define	 FLASHCMD_NUMRDDATABYTES_M	(0x7 << FLASHCMD_NUMRDDATABYTES_S)
+#define	 FLASHCMD_ENCMDADDR	(1 << 19)
 #define	 FLASHCMD_ENRDDATA	(1 << 23)
 #define	 FLASHCMD_CMDOPCODE_S	24
 #define	 FLASHCMD_CMDOPCODE_M	(0xff << FLASHCMD_CMDOPCODE_S)
