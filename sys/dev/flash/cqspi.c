@@ -228,11 +228,70 @@ cqspi_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 }
 
 static int
-cqspi_cmd(struct cqspi_softc *sc, uint8_t cmd, uint32_t len)
+cqspi_cmd_write_reg(struct cqspi_softc *sc, uint8_t cmd, uint32_t addr, uint32_t len)
 {
 	uint32_t reg;
+	int timeout;
+	int i;
+
+	reg = (cmd << FLASHCMD_CMDOPCODE_S);
+	WRITE4(sc, CQSPI_FLASHCMD, reg);
+	reg |= FLASHCMD_EXECCMD;
+	WRITE4(sc, CQSPI_FLASHCMD, reg);
+
+	timeout = 1000;
+	for (i = timeout; i > 0; i--) {
+		if ((READ4(sc, CQSPI_FLASHCMD) & FLASHCMD_CMDEXECSTAT) == 0) {
+			break;
+		}
+	}
+	if (i == 0) {
+		printf("%s: cmd timed out\n", __func__);
+	}
+
+	return (0);
+}
+
+static int
+cqspi_cmd_write(struct cqspi_softc *sc, uint8_t cmd, uint32_t addr, uint32_t len)
+{
+	uint32_t reg;
+	int timeout;
+	int i;
 
 	printf("%s: %x\n", __func__, cmd);
+
+	WRITE4(sc, CQSPI_FLASHCMDADDR, addr);
+	reg = (cmd << FLASHCMD_CMDOPCODE_S);
+	reg |= (FLASHCMD_ENCMDADDR);
+	reg |= ((len - 1) << FLASHCMD_NUMADDRBYTES_S);
+	WRITE4(sc, CQSPI_FLASHCMD, reg);
+
+	reg |= FLASHCMD_EXECCMD;
+	WRITE4(sc, CQSPI_FLASHCMD, reg);
+
+	timeout = 1000;
+	for (i = timeout; i > 0; i--) {
+		if ((READ4(sc, CQSPI_FLASHCMD) & FLASHCMD_CMDEXECSTAT) == 0) {
+			break;
+		}
+	}
+	if (i == 0) {
+		printf("%s: cmd timed out\n", __func__);
+	}
+
+	return (0);
+}
+
+static int
+cqspi_cmd(struct cqspi_softc *sc, uint8_t cmd, uint32_t len)
+{
+	uint32_t data;
+	uint32_t reg;
+	int timeout;
+	int i;
+
+	//printf("%s: %x\n", __func__, cmd);
 	//printf("datardlo before %x\n", READ4(sc, CQSPI_FLASHCMDRDDATALO));
 
 	reg = (cmd << FLASHCMD_CMDOPCODE_S);
@@ -243,9 +302,6 @@ cqspi_cmd(struct cqspi_softc *sc, uint8_t cmd, uint32_t len)
 	reg |= FLASHCMD_EXECCMD;
 	WRITE4(sc, CQSPI_FLASHCMD, reg);
 
-	int timeout;
-	int i;
-
 	timeout = 1000;
 	for (i = timeout; i > 0; i--) {
 		if ((READ4(sc, CQSPI_FLASHCMD) & FLASHCMD_CMDEXECSTAT) == 0) {
@@ -255,13 +311,11 @@ cqspi_cmd(struct cqspi_softc *sc, uint8_t cmd, uint32_t len)
 	if (i == 0) {
 		printf("cmd timed out\n");
 	}
-	//printf("i %d\n", i);
 
+	//printf("i %d\n", i);
 	//printf("cmd %x\n", READ4(sc, CQSPI_FLASHCMD));
 	//printf("datardlo %x\n", READ4(sc, CQSPI_FLASHCMDRDDATALO));
 	//printf("datardup %x\n", READ4(sc, CQSPI_FLASHCMDRDDATAUP));
-
-	uint32_t data;
 
 	data = READ4(sc, CQSPI_FLASHCMDRDDATALO);
 
@@ -425,6 +479,18 @@ cqspi_erase_cmd(device_t dev, off_t sector, uint8_t ecmd)
 }
 
 static int
+cqspi_wait_ready(struct cqspi_softc *sc)
+{
+	uint8_t reg;
+
+	do {
+		reg = cqspi_cmd(sc, CMD_READ_STATUS, 1);
+	} while (reg & (1 << 0));
+
+	return (0);
+}
+
+static int
 cqspi_write(device_t dev, device_t child, struct bio *bp,
     off_t offset, caddr_t data, off_t count)
 {
@@ -435,10 +501,28 @@ cqspi_write(device_t dev, device_t child, struct bio *bp,
 	pdev = device_get_parent(dev);
 	sc = device_get_softc(dev);
 
-	//count = 256;
+	cqspi_wait_ready(sc);
+	printf("%s: status %x\n", __func__, cqspi_cmd(sc, CMD_READ_STATUS, 1));
 
-	reg = cqspi_cmd(sc, CMD_WRITE_ENABLE, 1);
-	printf("write enable %x\n", reg);
+	reg = cqspi_cmd_write_reg(sc, CMD_WRITE_ENABLE, 0, 0);
+
+	cqspi_wait_ready(sc);
+	printf("%s: status %x\n", __func__, cqspi_cmd(sc, CMD_READ_STATUS, 1));
+
+	//reg = cqspi_cmd_write(sc, CMD_SECTOR_ERASE, offset, 4);
+	reg = cqspi_cmd_write(sc, 0xdc, offset, 4);
+	DELAY(100000);
+	DELAY(100000);
+	DELAY(100000);
+	DELAY(100000);
+
+	cqspi_wait_ready(sc);
+	printf("%s: status %x\n", __func__, cqspi_cmd(sc, CMD_READ_STATUS, 1));
+
+	reg = cqspi_cmd_write_reg(sc, CMD_WRITE_ENABLE, 0, 0);
+
+	cqspi_wait_ready(sc);
+	printf("%s: status %x\n", __func__, cqspi_cmd(sc, CMD_READ_STATUS, 1));
 
 	sc->write_op_done = 0;
 
@@ -461,10 +545,11 @@ cqspi_write(device_t dev, device_t child, struct bio *bp,
 	reg = (0 << DEVRD_DUMMYRDCLKS_S);
 	reg |= (2 << 16); //data width
 	reg |= (0 << 12); //addr width
+
+	//dont use this
 	//reg |= (QUAD_INPUT_FAST_PROGRAM << DEVRD_RDOPCODE_S);
+
 	reg |= (0x34 << DEVRD_RDOPCODE_S);
-	//reg |= (0xEC << DEVRD_RDOPCODE_S);
-	//reg |= (CMD_PAGE_PROGRAM << DEVRD_RDOPCODE_S);
 	WRITE4(sc, CQSPI_DEVWR, reg);
 
 	reg = (2 << 16); //data width
@@ -472,7 +557,7 @@ cqspi_write(device_t dev, device_t child, struct bio *bp,
 	reg |= (0 <<  8); //inst width
 	WRITE4(sc, CQSPI_DEVRD, reg);
 
-	//WRITE4(sc, CQSPI_MODEBIT, 0);
+	WRITE4(sc, CQSPI_MODEBIT, 0);
 
 #if 1
 	xdma_enqueue_bio(sc->xchan_tx, &bp, 0xffa00000, XDMA_MEM_TO_DEV);
@@ -481,11 +566,8 @@ cqspi_write(device_t dev, device_t child, struct bio *bp,
 
 	WRITE4(sc, CQSPI_INDWR, INDRD_START);
 
-	int i;
-
-	//WRITE_DATA_4(sc, 0, 0);
-
-#if 1
+#if 0
+	WRITE_DATA_4(sc, 0, 0);
 	uint32_t fill;
 	for (i = 0; i < 512/4; i++) {
 		fill = READ4(sc, CQSPI_SRAMFILL);
@@ -494,22 +576,18 @@ cqspi_write(device_t dev, device_t child, struct bio *bp,
 		printf("fill %d\n", fill);
 		//WRITE_DATA_4(sc, 0, 0);
 	}
-#endif
 
 	for (i = 0; i < 10; i++) {
 		printf("indwr %x\n", READ4(sc, CQSPI_INDWR));
 		DELAY(10000);
 	}
+#endif
 
-#if 1
 	CQSPI_LOCK(sc);
 	while (sc->write_op_done == 0) {
 		tsleep(&sc->xdma_tx, PCATCH | PZERO, "spi", hz/2);
 	}
 	CQSPI_UNLOCK(sc);
-#endif
-
-	printf("wr done\n");
 
 	return (0);
 
@@ -907,7 +985,7 @@ cqspi_attach(device_t dev)
 	reg = READ4(sc, CQSPI_CFG);
 	/* Configure baud rate */
 	reg &= ~(CFG_BAUD_M);
-	reg |= CFG_BAUD6;
+	reg |= CFG_BAUD12;
 	//reg |= (1 << 16) | (1 << 7); // DIRECT mode
 	reg |= CFG_ENDMA;
 	//reg |= (1 << 2) | (1 << 1);
@@ -937,7 +1015,7 @@ cqspi_attach(device_t dev)
 	reg = cqspi_cmd(sc, CMD_READ_IDENT, 4);
 	printf("Ident %x\n", reg);
 
-	reg = cqspi_cmd(sc, CMD_READ_STATUS, 2);
+	reg = cqspi_cmd(sc, CMD_READ_STATUS, 1);
 	printf("Status %x\n", reg);
 
 	printf("Enter 4b mode\n");
