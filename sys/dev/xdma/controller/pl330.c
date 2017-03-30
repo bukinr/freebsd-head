@@ -174,10 +174,10 @@ pl330_intr(void *arg)
 		st.error = 0;
 		st.transferred = 0;
 		for (i = 0; i < chan->enqueued; i++) {
-			//printf("seg done\n");
 			xchan_seg_done(xchan, &st);
 		}
 
+		/* Start accept new requests. */
 		chan->capacity = 0x10000;
 
 		/* Finish operation */
@@ -328,7 +328,6 @@ pl330_attach(device_t dev)
 {
 	struct pl330_softc *sc;
 	phandle_t xref, node;
-	uint32_t reg;
 	int err;
 	int i;
 
@@ -360,11 +359,6 @@ pl330_attach(device_t dev)
 	node = ofw_bus_get_node(dev);
 	xref = OF_xref_from_node(node);
 	OF_device_register_xref(xref, dev);
-
-	reg = READ4(sc, CRD);
-	reg &= ~(0x7);
-	reg |= 0x2;
-	WRITE4(sc, CRD, reg);
 
 	return (0);
 }
