@@ -750,7 +750,7 @@ xdma_sglist_prepare_one(xdma_channel_t *xchan,
 		nsegs = xdma_load_no_busdma(xchan, xr, seg, i);
 	}
 	if (nsegs == 0) {
-		printf(".");
+		/* Try again later. */
 		return (0);
 	}
 
