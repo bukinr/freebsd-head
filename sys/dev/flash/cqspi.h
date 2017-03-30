@@ -68,6 +68,8 @@
 #define	 RDDATACAP_DELAY_S	1
 #define	 RDDATACAP_DELAY_M	(0xf << RDDATACAP_DELAY_S)
 #define	CQSPI_DEVSZ		0x14	/* Device Size Configuration Register */
+#define	 DEVSZ_NUMADDRBYTES_S	0
+#define	 DEVSZ_NUMADDRBYTES_M	(0xf << DEVSZ_NUMADDRBYTES_S)
 #define	CQSPI_SRAMPART		0x18	/* SRAM Partition Configuration Register */
 #define	CQSPI_INDADDRTRIG	0x1C	/* Indirect AHB Address Trigger Register */
 #define	CQSPI_DMAPER		0x20	/* DMA Peripheral Configuration Register */

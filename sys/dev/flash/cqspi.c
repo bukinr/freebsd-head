@@ -94,6 +94,10 @@ struct cqspi_softc {
 	uint8_t			op_done;
 	uint8_t			write_op_done;
 
+	uint32_t		fifo_depth;
+	uint32_t		fifo_width;
+	uint32_t		trigger_address;
+
 	/* xDMA */
 	xdma_controller_t	*xdma_tx;
 	xdma_channel_t		*xchan_tx;
@@ -340,22 +344,15 @@ cqspi_write(device_t dev, device_t child, struct bio *bp,
 	sc = device_get_softc(dev);
 
 	cqspi_wait_ready(sc);
-	//printf("%s: status %x\n", __func__, cqspi_cmd(sc, CMD_READ_STATUS, 1));
-
 	reg = cqspi_cmd_write_reg(sc, CMD_WRITE_ENABLE, 0, 0);
 
 	cqspi_wait_ready(sc);
-	//printf("%s: status %x\n", __func__, cqspi_cmd(sc, CMD_READ_STATUS, 1));
-
 	reg = cqspi_cmd_write(sc, 0xdc, offset, 4);
 
 	cqspi_wait_ready(sc);
-	//printf("%s: status %x\n", __func__, cqspi_cmd(sc, CMD_READ_STATUS, 1));
-
 	reg = cqspi_cmd_write_reg(sc, CMD_WRITE_ENABLE, 0, 0);
 
 	cqspi_wait_ready(sc);
-	//printf("%s: status %x\n", __func__, cqspi_cmd(sc, CMD_READ_STATUS, 1));
 
 	sc->write_op_done = 0;
 
@@ -372,8 +369,6 @@ cqspi_write(device_t dev, device_t child, struct bio *bp,
 
 	WRITE4(sc, CQSPI_INDWRCNT, count);
 	WRITE4(sc, CQSPI_INDWRSTADDR, offset);
-
-#define	QUAD_INPUT_FAST_PROGRAM	0x32
 
 	reg = (0 << DEVRD_DUMMYRDCLKS_S);
 	reg |= (2 << 16); //data width
@@ -392,29 +387,10 @@ cqspi_write(device_t dev, device_t child, struct bio *bp,
 
 	WRITE4(sc, CQSPI_MODEBIT, 0);
 
-#if 1
 	xdma_enqueue_bio(sc->xchan_tx, &bp, 0xffa00000, XDMA_MEM_TO_DEV);
 	xdma_queue_submit(sc->xchan_tx);
-#endif
 
 	WRITE4(sc, CQSPI_INDWR, INDRD_START);
-
-#if 0
-	WRITE_DATA_4(sc, 0, 0);
-	uint32_t fill;
-	for (i = 0; i < 512/4; i++) {
-		fill = READ4(sc, CQSPI_SRAMFILL);
-		fill >>= 16;
-		fill &= 0xffff;
-		printf("fill %d\n", fill);
-		//WRITE_DATA_4(sc, 0, 0);
-	}
-
-	for (i = 0; i < 10; i++) {
-		printf("indwr %x\n", READ4(sc, CQSPI_INDWR));
-		DELAY(10000);
-	}
-#endif
 
 	CQSPI_LOCK(sc);
 	while (sc->write_op_done == 0) {
@@ -459,51 +435,19 @@ cqspi_read(device_t dev, device_t child, struct bio *bp,
 	WRITE4(sc, CQSPI_DEVRD, reg);
 
 	WRITE4(sc, CQSPI_MODEBIT, 0xff);
-
-	reg = READ4(sc, CQSPI_IRQMASK);
-	reg |= (IRQMASK_INDOPDONE | IRQMASK_INDXFRLVL | IRQMASK_INDSRAMFULL);
-	//WRITE4(sc, CQSPI_IRQMASK, reg);
+	WRITE4(sc, CQSPI_IRQMASK, 0);
 
 	sc->op_done = 0;
 
-#if 0
-	uint32_t *addr;
-	int i;
-	int n;
-	uint32_t cnt;
-	addr = (uint32_t *)data;
-
-	WRITE4(sc, CQSPI_INDRD, INDRD_START);
-
-	n = 0;
-	while (n < (count / 4)) {
-		cnt = READ4(sc, CQSPI_SRAMFILL) & 0xffff;
-		for (i = 0; i < cnt; i++) {
-			addr[n++] = READ_DATA_4(sc, 0);
-		}
-	}
-
-	while ((READ4(sc, CQSPI_INDRD) & INDRD_IND_OPS_DONE_STATUS) == 0)
-		;
-
-	WRITE4(sc, CQSPI_INDRD, INDRD_IND_OPS_DONE_STATUS);
-	WRITE4(sc, CQSPI_IRQSTAT, 0);
-#else
-	//printf("enqueing bp %p\n", &bp);
-	//xdma_enqueue(sc->xchan_rx, 0xffa00000, (uintptr_t)data, count, XDMA_DEV_TO_MEM, bp);
 	xdma_enqueue_bio(sc->xchan_rx, &bp, 0xffa00000, XDMA_DEV_TO_MEM);
 	xdma_queue_submit(sc->xchan_rx);
 
 	WRITE4(sc, CQSPI_INDRD, INDRD_START);
-#endif
 
 	CQSPI_LOCK(sc);
-	//printf("sl\n");
 	while (sc->op_done == 0) {
-		//mtx_sleep(sc->xdma_rx, &sc->sc_mtx, PRIBIO, "job queue", hz/2);
 		tsleep(&sc->xdma_rx, PCATCH | PZERO, "spi", hz/2);
 	}
-	//printf("sd\n");
 	CQSPI_UNLOCK(sc);
 
 	return (0);
@@ -512,10 +456,36 @@ cqspi_read(device_t dev, device_t child, struct bio *bp,
 static int
 cqspi_init(struct cqspi_softc *sc)
 {
+	pcell_t dts_value[1];
+	phandle_t node;
 	uint32_t reg;
+	int len;
 
-	printf("Module ID %x\n", READ4(sc, CQSPI_MODULEID));
-	printf("cfg %x\n", READ4(sc, CQSPI_CFG));
+	device_printf(sc->dev, "Module ID %x\n", READ4(sc, CQSPI_MODULEID));
+
+	//printf("cfg %x\n", READ4(sc, CQSPI_CFG));
+
+	if ((node = ofw_bus_get_node(sc->dev)) == -1) {
+		return (ENXIO);
+	}
+
+	if ((len = OF_getproplen(node, "cdns,fifo-depth")) <= 0) {
+		return (ENXIO);
+	}
+	OF_getencprop(node, "cdns,fifo-depth", dts_value, len);
+	sc->fifo_depth = dts_value[0];
+
+	if ((len = OF_getproplen(node, "cdns,fifo-width")) <= 0) {
+		return (ENXIO);
+	}
+	OF_getencprop(node, "cdns,fifo-width", dts_value, len);
+	sc->fifo_width = dts_value[0];
+
+	if ((len = OF_getproplen(node, "cdns,trigger-address")) <= 0) {
+		return (ENXIO);
+	}
+	OF_getencprop(node, "cdns,trigger-address", dts_value, len);
+	sc->trigger_address = dts_value[0];
 
 	/* Disable controller */
 	reg = READ4(sc, CQSPI_CFG);
@@ -523,11 +493,11 @@ cqspi_init(struct cqspi_softc *sc)
 	WRITE4(sc, CQSPI_CFG, reg);
 
 	reg = READ4(sc, CQSPI_DEVSZ);
-	reg |= 3;
+	reg &= ~(DEVSZ_NUMADDRBYTES_M);
+	reg |= ((4 - 1) - DEVSZ_NUMADDRBYTES_S);
 	WRITE4(sc, CQSPI_DEVSZ, reg);
-	printf("devsz %x\n", reg);
 
-	WRITE4(sc, CQSPI_SRAMPART, 128/2);
+	WRITE4(sc, CQSPI_SRAMPART, sc->fifo_depth/2);
 
 	reg = READ4(sc, CQSPI_CFG);
 	/* Configure baud rate */
@@ -535,11 +505,6 @@ cqspi_init(struct cqspi_softc *sc)
 	reg |= CFG_BAUD4;
 	reg |= CFG_ENDMA;
 	WRITE4(sc, CQSPI_CFG, reg);
-
-	reg = (3 << DELAY_NSS_S);
-	reg |= (3 << DELAY_BTWN_S);
-	reg |= (1 << DELAY_AFTER_S);
-	reg |= (1 << DELAY_INIT_S);
 
 	reg = (3 << DELAY_NSS_S);
 	reg |= (3  << DELAY_BTWN_S);
@@ -556,6 +521,8 @@ cqspi_init(struct cqspi_softc *sc)
 	reg = READ4(sc, CQSPI_CFG);
 	reg |= (CFG_EN);
 	WRITE4(sc, CQSPI_CFG, reg);
+
+
 
 	reg = cqspi_cmd(sc, CMD_READ_IDENT, 4);
 	printf("Ident %x\n", reg);
@@ -589,7 +556,9 @@ cqspi_add_devices(device_t dev)
 	int error;
 
 	node = ofw_bus_get_node(dev);
+
 	simplebus_init(dev, node);
+
 	for (child = OF_child(node); child != 0; child = OF_peer(child)) {
 		child_dev = simplebus_add_device(dev, child, 0, NULL, -1, NULL);
 		if (child_dev == NULL) {
@@ -706,7 +675,7 @@ static int
 cqspi_detach(device_t dev)
 {
 
-	return (EIO);
+	return (ENXIO);
 }
 
 static device_method_t cqspi_methods[] = {
