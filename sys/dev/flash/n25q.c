@@ -288,100 +288,6 @@ n25q_write(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count
 	err = QSPI_WRITE(pdev, dev, bp, offset, data, count);
 
 	return (err);
-
-#if 0
-	struct n25q_softc *sc;
-	uint8_t txBuf[8], rxBuf[8];
-	struct spi_command cmd;
-	off_t write_offset;
-	long bytes_to_write, bytes_writen;
-	device_t pdev;
-	int err = 0;
-
-	printf("%s\n", __func__);
-
-	pdev = device_get_parent(dev);
-	sc = device_get_softc(dev);
-
-	if (sc->sc_flags & FL_ENABLE_4B_ADDR) {
-		cmd.tx_cmd_sz = 5;
-		cmd.rx_cmd_sz = 5;
-	} else {
-		cmd.tx_cmd_sz = 4;
-		cmd.rx_cmd_sz = 4;
-	}
-
-	bytes_writen = 0;
-	write_offset = offset;
-
-	/*
-	 * Use the erase sectorsize here since blocks are fully erased
-	 * first before they're written to.
-	 */
-	if (count % sc->sc_sectorsize != 0 || offset % sc->sc_sectorsize != 0)
-		return (EIO);
-
-	/*
-	 * Assume here that we write per-sector only 
-	 * and sector size should be 256 bytes aligned
-	 */
-	KASSERT(write_offset % FLASH_PAGE_SIZE == 0,
-	    ("offset for BIO_WRITE is not page size (%d bytes) aligned",
-		FLASH_PAGE_SIZE));
-
-	/*
-	 * Maximum write size for CMD_PAGE_PROGRAM is 
-	 * FLASH_PAGE_SIZE, so split data to chunks 
-	 * FLASH_PAGE_SIZE bytes eash and write them
-	 * one by one
-	 */
-	while (bytes_writen < count) {
-		/*
-		 * If we crossed sector boundary - erase next sector
-		 */
-		if (((offset + bytes_writen) % sc->sc_sectorsize) == 0)
-			n25q_erase_cmd(dev, offset + bytes_writen, CMD_SECTOR_ERASE);
-
-		txBuf[0] = CMD_PAGE_PROGRAM;
-		if (sc->sc_flags & FL_ENABLE_4B_ADDR) {
-			txBuf[1] = ((write_offset >> 24) & 0xff);
-			txBuf[2] = ((write_offset >> 16) & 0xff);
-			txBuf[3] = ((write_offset >> 8) & 0xff);
-			txBuf[4] = (write_offset & 0xff);
-		} else {
-			txBuf[1] = ((write_offset >> 16) & 0xff);
-			txBuf[2] = ((write_offset >> 8) & 0xff);
-			txBuf[3] = (write_offset & 0xff);
-		}
-
-		bytes_to_write = MIN(FLASH_PAGE_SIZE,
-		    count - bytes_writen);
-		cmd.tx_cmd = txBuf;
-		cmd.rx_cmd = rxBuf;
-		cmd.tx_data = data + bytes_writen;
-		cmd.tx_data_sz = bytes_to_write;
-		cmd.rx_data = data + bytes_writen;
-		cmd.rx_data_sz = bytes_to_write;
-
-		/*
-		 * Eash completed write operation resets WEL 
-		 * (write enable latch) to disabled state,
-		 * so we re-enable it here 
-		 */
-		n25q_wait_for_device_ready(dev);
-		n25q_set_writable(dev, 1);
-
-		err = 0; //SPIBUS_TRANSFER(pdev, dev, &cmd);
-		if (err)
-			break;
-
-		bytes_writen += bytes_to_write;
-		write_offset += bytes_to_write;
-	}
-
-	return (err);
-#endif
-	return (0);
 }
 
 static int
@@ -605,14 +511,12 @@ n25q_task(void *arg)
 
 	for (;;) {
 		N25Q_LOCK(sc);
-
 		do {
 			bp = bioq_first(&sc->sc_bio_queue);
 			if (bp == NULL) {
 				msleep(sc, &sc->sc_mtx, PRIBIO, "jobqueue", hz);
 			}
 		} while (bp == NULL);
-
 		bioq_remove(&sc->sc_bio_queue, bp);
 		N25Q_UNLOCK(sc);
 
