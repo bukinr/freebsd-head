@@ -983,10 +983,6 @@ xchan_seg_done(xdma_channel_t *xchan,
 
 	xdma = xchan->xdma;
 
-#if 0
-	printf("%s: %d\n", __func__, idx);
-#endif
-
 	b = &xchan->bufs[xchan->buf_tail];
 	xr = b->xr;
 
