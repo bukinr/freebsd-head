@@ -89,7 +89,10 @@
 #define	DMALDP		0x25
 #define	DMALP		0x20
 #define	DMALPEND	0x28
-//#define	DMALPFE		0x
+/*
+ * TODO: documentation miss opcode for infinite loop
+ * #define	DMALPFE		0
+ */
 #define	DMAMOV		0xbc
 #define	DMANOP		0x18
 #define	DMARMB		0x12
