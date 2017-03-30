@@ -586,6 +586,31 @@ cqspi_init(struct cqspi_softc *sc)
 }
 
 static int
+cqspi_add_devices(device_t dev)
+{
+	phandle_t child, node;
+	device_t child_dev;
+	int error;
+
+	node = ofw_bus_get_node(dev);
+	simplebus_init(dev, node);
+	for (child = OF_child(node); child != 0; child = OF_peer(child)) {
+		child_dev = simplebus_add_device(dev, child, 0, NULL, -1, NULL);
+		if (child_dev == NULL) {
+			return (ENXIO);
+		}
+
+		error = device_probe_and_attach(child_dev);
+		if (error != 0) {
+			printf("can't probe and attach: %d\n", error);
+		}
+	}
+
+	return (0);
+}
+
+
+static int
 cqspi_probe(device_t dev)
 {
 
@@ -627,6 +652,8 @@ cqspi_attach(device_t dev)
 		device_printf(sc->dev, "Unable to setup intr\n");
 		return (ENXIO);
 	}
+
+	CQSPI_LOCK_INIT(sc);
 
 	caps = 0;
 
@@ -674,27 +701,8 @@ cqspi_attach(device_t dev)
 	xdma_prep_sg(sc->xchan_tx, TX_QUEUE_SIZE, MAXPHYS, 16);
 	xdma_prep_sg(sc->xchan_rx, TX_QUEUE_SIZE, MAXPHYS, 16);
 
-	CQSPI_LOCK_INIT(sc);
-
 	cqspi_init(sc);
-	//cqspi_add_devices(sc);
-
-	phandle_t child, node;
-	device_t child_dev;
-
-	node = ofw_bus_get_node(dev);
-	simplebus_init(dev, node);
-	for (child = OF_child(node); child != 0; child = OF_peer(child)) {
-		child_dev = simplebus_add_device(dev, child, 0, NULL, -1, NULL);
-		if (child_dev == NULL) {
-			return (ENXIO);
-		}
-
-		error = device_probe_and_attach(child_dev);
-		if (error != 0) {
-			printf("can't probe and attach: %d\n", error);
-		}
-	}
+	cqspi_add_devices(dev);
 
 	return (bus_generic_attach(dev));
 }
