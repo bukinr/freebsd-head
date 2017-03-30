@@ -114,13 +114,6 @@ struct n25q_softc {
 #define N25Q_ASSERT_UNLOCKED(_sc)				\
 	mtx_assert(&_sc->sc_mtx, MA_NOTOWNED);
 
-#if 0
-static struct resource_spec n25q_spec[] = {
-	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },
-	{ -1, 0 }
-};
-#endif
-
 static struct ofw_compat_data compat_data[] = {
 	{ "n25q00aa",		1 },
 	{ NULL,			0 },
@@ -472,61 +465,7 @@ n25q_probe(device_t dev)
 
 	return (ENXIO);
 found:
-	device_set_desc(dev, "Quad SPI Flash Controller");
-
-	return (0);
-}
-
-static int
-n25q_cmd(struct n25q_softc *sc, uint8_t cmd, uint32_t len)
-{
-	uint32_t reg;
-
-	printf("%s: %x\n", __func__, cmd);
-	//printf("datardlo before %x\n", READ4(sc, CQSPI_FLASHCMDRDDATALO));
-
-	reg = (cmd << FLASHCMD_CMDOPCODE_S);
-	reg |= ((len - 1) << FLASHCMD_NUMRDDATABYTES_S);
-	reg |= FLASHCMD_ENRDDATA;
-	WRITE4(sc, CQSPI_FLASHCMD, reg);
-
-	reg |= FLASHCMD_EXECCMD;
-	WRITE4(sc, CQSPI_FLASHCMD, reg);
-
-	int timeout;
-	int i;
-
-	timeout = 1000;
-	for (i = timeout; i > 0; i--) {
-		if ((READ4(sc, CQSPI_FLASHCMD) & FLASHCMD_CMDEXECSTAT) == 0) {
-			break;
-		}
-	}
-	if (i == 0) {
-		printf("cmd timed out\n");
-	}
-	//printf("i %d\n", i);
-
-	//printf("cmd %x\n", READ4(sc, CQSPI_FLASHCMD));
-	//printf("datardlo %x\n", READ4(sc, CQSPI_FLASHCMDRDDATALO));
-	//printf("datardup %x\n", READ4(sc, CQSPI_FLASHCMDRDDATAUP));
-
-	uint32_t data;
-
-	data = READ4(sc, CQSPI_FLASHCMDRDDATALO);
-
-	switch (len) {
-	case 4:
-		return (data);
-	case 3:
-		return (data & 0xffffff);
-	case 2:
-		return (data & 0xffff);
-	case 1:
-		return (data & 0xff);
-	default:
-		return (0);
-	}
+	device_set_desc(dev, "Micron n25q");
 
 	return (0);
 }
@@ -536,21 +475,9 @@ n25q_attach(device_t dev)
 {
 	struct n25q_flash_ident *ident;
 	struct n25q_softc *sc;
-	//uint32_t caps;
-	//int error;
 
 	sc = device_get_softc(dev);
 	sc->dev = dev;
-	printf("%s: dev %p\n", __func__, dev);
-
-	//if (bus_alloc_resources(dev, n25q_spec, sc->res)) {
-	//	device_printf(dev, "could not allocate resources\n");
-	//	return (ENXIO);
-	//}
-
-	/* Memory interface */
-	//sc->bst = rman_get_bustag(sc->res[0]);
-	//sc->bsh = rman_get_bushandle(sc->res[0]);
 
 	N25Q_LOCK_INIT(sc);
 
@@ -678,8 +605,6 @@ n25q_task(void *arg)
 
 	for (;;) {
 		N25Q_LOCK(sc);
-
-		//printf("Task\n");
 
 		do {
 			bp = bioq_first(&sc->sc_bio_queue);
