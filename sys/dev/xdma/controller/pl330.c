@@ -223,7 +223,7 @@ emit_lpend(uint8_t *buf, uint8_t idx,
 {
 
 	buf[0] = DMALPEND;
-	buf[0] |= (1 << 4); /* dmalp started the loop */
+	buf[0] |= DMALPEND_NF;
 	buf[0] |= (idx << 2);
 	if (burst) {
 		buf[0] |= (1 << 1) | (1 << 0);

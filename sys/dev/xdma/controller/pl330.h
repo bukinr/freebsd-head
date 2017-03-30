@@ -89,6 +89,7 @@
 #define	DMALDP		0x25
 #define	DMALP		0x20
 #define	DMALPEND	0x28
+#define	DMALPEND_NF	(1 << 4) /* DMALP started the loop */
 /*
  * TODO: documentation miss opcode for infinite loop
  * #define	DMALPFE		0
