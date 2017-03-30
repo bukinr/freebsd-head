@@ -57,8 +57,21 @@
 #define	 CFG_EN			(1 << 0)
 #define	CQSPI_DEVRD		0x04	/* Device Read Instruction Configuration */
 #define	 DEVRD_DUMMYRDCLKS_S	24
+#define	 DEVRD_ENMODEBITS	(1 << 20)
+#define	 DEVRD_DATA_WIDTH_S	16
+#define	 DEVRD_DATA_WIDTH_QUAD	(2 << DEVRD_DATA_WIDTH_S)
+#define	 DEVRD_ADDR_WIDTH_S	12
+#define	 DEVRD_ADDR_WIDTH_SINGLE	(0 << DEVRD_ADDR_WIDTH_S)
+#define	 DEVRD_INST_WIDTH_S	8
+#define	 DEVRD_INST_WIDTH_SINGLE	(0 << DEVRD_INST_WIDTH_S)
 #define	 DEVRD_RDOPCODE_S	0
 #define	CQSPI_DEVWR		0x08	/* Device Write Instruction Configuration */
+#define	 DEVWR_DUMMYWRCLKS_S	24
+#define	 DEVWR_WROPCODE_S	0
+#define	 DEVWR_DATA_WIDTH_S	16
+#define	 DEVWR_DATA_WIDTH_QUAD	(2 << DEVWR_DATA_WIDTH_S)
+#define	 DEVWR_ADDR_WIDTH_S	12
+#define	 DEVWR_ADDR_WIDTH_SINGLE	(0 << DEVWR_ADDR_WIDTH_S)
 #define	CQSPI_DELAY		0x0C	/* QSPI Device Delay Register */
 #define	 DELAY_NSS_S		24
 #define	 DELAY_BTWN_S		16

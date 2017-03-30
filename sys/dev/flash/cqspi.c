@@ -345,7 +345,6 @@ cqspi_write(device_t dev, device_t child, struct bio *bp,
 
 	cqspi_wait_ready(sc);
 	reg = cqspi_cmd_write_reg(sc, CMD_WRITE_ENABLE, 0, 0);
-
 	cqspi_wait_ready(sc);
 	reg = cqspi_cmd_write(sc, 0xdc, offset, 4);
 
@@ -370,19 +369,17 @@ cqspi_write(device_t dev, device_t child, struct bio *bp,
 	WRITE4(sc, CQSPI_INDWRCNT, count);
 	WRITE4(sc, CQSPI_INDWRSTADDR, offset);
 
-	reg = (0 << DEVRD_DUMMYRDCLKS_S);
-	reg |= (2 << 16); //data width
-	reg |= (0 << 12); //addr width
-
+	reg = (0 << DEVWR_DUMMYWRCLKS_S);
+	reg |= DEVWR_DATA_WIDTH_QUAD;
+	reg |= DEVWR_ADDR_WIDTH_SINGLE;
 	//dont use this
-	//reg |= (QUAD_INPUT_FAST_PROGRAM << DEVRD_RDOPCODE_S);
-
-	reg |= (0x34 << DEVRD_RDOPCODE_S);
+	//reg |= (QUAD_INPUT_FAST_PROGRAM << DEVWR_RDOPCODE_S);
+	reg |= (0x34 << DEVWR_WROPCODE_S);
 	WRITE4(sc, CQSPI_DEVWR, reg);
 
-	reg = (2 << 16); //data width
-	reg |= (0 << 12); //addr width
-	reg |= (0 <<  8); //inst width
+	reg = DEVRD_DATA_WIDTH_QUAD;
+	reg |= DEVRD_ADDR_WIDTH_SINGLE;
+	reg |= DEVRD_INST_WIDTH_SINGLE;
 	WRITE4(sc, CQSPI_DEVRD, reg);
 
 	WRITE4(sc, CQSPI_MODEBIT, 0);
