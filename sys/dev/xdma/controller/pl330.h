@@ -138,23 +138,3 @@
 	le32toh(bus_space_read_4(_sc->bst_d, _sc->bsh_d, _reg))
 #define	WRITE4_DESC(_sc, _reg, _val)	\
 	bus_space_write_4(_sc->bst_d, _sc->bsh_d, _reg, htole32(_val))
-
-/* Prefetcher-disabled descriptor format. */
-struct pl330_desc_nonpf {
-	uint32_t src_addr;
-	uint32_t dst_addr;
-	uint32_t length;
-	uint32_t control;
-};
-
-/* Prefetcher-enabled descriptor format. */
-struct pl330_desc {
-	uint32_t read_lo;
-	uint32_t write_lo;
-	uint32_t length;
-	uint32_t next;
-	uint32_t transferred;
-	uint32_t status;
-	uint32_t reserved;
-	uint32_t control;
-};
