@@ -45,8 +45,15 @@
 #define	CPC(n)		(0x104 + 0x08 * n) /* Channel PC for DMA channel n */
 #define	SAR(n)		(0x400 + 0x20 * n) /* Source address for DMA channel n */
 #define	DAR(n)		(0x404 + 0x20 * n) /* Destination address for DMA channel n */
-
 #define	CCR(n)		(0x408 + 0x20 * n) /* Channel control for DMA channel n */
+#define	 CCR_DST_BURST_SIZE_S	15
+#define	 CCR_DST_BURST_SIZE_4	(2 << CCR_DST_BURST_SIZE_S)
+#define	 CCR_SRC_BURST_SIZE_S	1
+#define	 CCR_SRC_BURST_SIZE_4	(2 << CCR_SRC_BURST_SIZE_S)
+#define	 CCR_DST_INC		(1 << 14)
+#define	 CCR_SRC_INC		(1 << 0)
+#define	 CCR_DST_PROT_CTRL_S	22
+#define	 CCR_DST_PROT_PRIV	(1 << CCR_DST_PROT_CTRL_S)
 #define	LC0(n)		(0x40C + 0x20 * n) /* Loop counter 0 for DMA channel n */
 #define	LC1(n)		(0x410 + 0x20 * n) /* Loop counter 1 for DMA channel n */
 

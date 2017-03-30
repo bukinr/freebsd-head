@@ -165,7 +165,7 @@ pl330_intr(void *arg)
 #endif
 	WRITE4(sc, INTCLR, pending);
 
-	for (c = 0; c < 32; c++) {
+	for (c = 0; c < PL330_NCHANNELS; c++) {
 		if ((pending & (1 << c)) == 0) {
 			continue;
 		}
@@ -177,12 +177,12 @@ pl330_intr(void *arg)
 			xchan_seg_done(xchan, &st);
 		}
 
-		/* Start accept new requests. */
+		/* Accept new requests. */
 		chan->capacity = 0x10000;
 
 		/* Finish operation */
 		status.error = 0;
-		status.transferred = 0; //tot_copied;
+		status.transferred = 0;
 		xdma_callback(chan->xchan, &status);
 	}
 }
@@ -192,7 +192,6 @@ emit_mov(uint8_t *buf, uint32_t reg, uint32_t val)
 {
 
 	buf[0] = DMAMOV;
-
 	buf[1] = reg;
 	buf[2] = val;
 	buf[3] = val >> 8;
@@ -207,55 +206,59 @@ emit_lp(uint8_t *buf, uint8_t idx, uint32_t iter)
 {
 
 	if (idx > 1) {
+		/* We have two loops only. */
 		return (0);
 	}
 
 	buf[0] = DMALP;
 	buf[0] |= (idx << 1);
-
 	buf[1] = (iter - 1) & 0xff;
 
 	return (2);
 }
 
 static uint32_t
-emit_lpend(uint8_t *buf, uint8_t idx, uint8_t jump_addr_relative)
+emit_lpend(uint8_t *buf, uint8_t idx,
+    uint8_t burst, uint8_t jump_addr_relative)
 {
 
 	buf[0] = DMALPEND;
-	buf[0] |= (1 << 4); //dmalp started the loop
+	buf[0] |= (1 << 4); /* dmalp started the loop */
 	buf[0] |= (idx << 2);
-
-	//buf[0] |= (0 << 1) | (1 << 0); //single
-	buf[0] |= (1 << 1) | (1 << 0); //burst
+	if (burst) {
+		buf[0] |= (1 << 1) | (1 << 0);
+	} else {
+		buf[0] |= (0 << 1) | (1 << 0);
+	}
 	buf[1] = jump_addr_relative;
 
 	return (2);
 }
 
 static uint32_t
-emit_ld(uint8_t *buf)
+emit_ld(uint8_t *buf, uint8_t burst)
 {
 
 	buf[0] = DMALD;
-	//single
-	//buf[0] |= (0 << 1) | (1 << 0);
-
-	//burst
-	buf[0] |= (1 << 1) | (1 << 0);
+	if (burst) {
+		buf[0] |= (1 << 1) | (1 << 0);
+	} else {
+		buf[0] |= (0 << 1) | (1 << 0);
+	}
 
 	return (1);
 }
 
 static uint32_t
-emit_st(uint8_t *buf)
+emit_st(uint8_t *buf, uint8_t burst)
 {
 
 	buf[0] = DMAST;
-	//single
-	//buf[0] |= (0 << 1) | (1 << 0);
-	//burst
-	buf[0] |= (1 << 1) | (1 << 0);
+	if (burst) {
+		buf[0] |= (1 << 1) | (1 << 0);
+	} else {
+		buf[0] |= (0 << 1) | (1 << 0);
+	}
 
 	return (1);
 }
@@ -284,18 +287,19 @@ emit_wfp(uint8_t *buf, uint32_t p_id)
 {
 
 	buf[0] = DMAWFP;
-	buf[0] |= (1 << 0); //periph
+	buf[0] |= (1 << 0);
 	buf[1] = (p_id << 3);
 
 	return (2);
 }
 
 static uint32_t
-emit_go(uint8_t *buf, uint32_t chan_id, uint32_t addr)
+emit_go(uint8_t *buf, uint32_t chan_id,
+    uint32_t addr, uint8_t non_secure)
 {
 
 	buf[0] = DMAGO;
-	//buf[0] |= (1 << 1); //ns
+	buf[0] |= (non_secure << 1);
 
 	buf[1] = chan_id;
 	buf[2] = addr;
@@ -445,7 +449,6 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	uint32_t reg;
 	uint32_t offs;
 	uint8_t dbuf[6];
-	uint8_t jump_addr_relative;
 	uint8_t offs0, offs1;
 	uint32_t cnt;
 	struct pl330_fdt_data *data;
@@ -467,16 +470,14 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 
 	for (i = 0; i < sg_n; i++) {
 		if (sg[i].direction == XDMA_DEV_TO_MEM) {
-			reg = (1 << 14); //dst inc
+			reg = CCR_DST_INC;
 		} else {
-			reg = (1 << 0); //src inc
-			reg |= (1 << 22); //dst prot ctrl
-
+			reg = CCR_SRC_INC;
+			reg |= (CCR_DST_PROT_PRIV);
 		}
 
-		//SS32, DS32
-		reg |= (2 << 1); //0b010 = reads 4 bytes per beat
-		reg |= (2 << 15); //0b010 = writes 4 bytes per beat
+		reg |= CCR_SRC_BURST_SIZE_4; /* 4 bytes per beat */
+		reg |= CCR_DST_BURST_SIZE_4; /* 4 bytes per beat */
 
 		offs += emit_mov(&chan->ibuf[offs], R_CCR, reg);
 
@@ -503,24 +504,21 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 			offs0 = offs;
 		}
 		offs += emit_wfp(&ibuf[offs], data->periph_id);
-		offs += emit_ld(&ibuf[offs]);
-		offs += emit_st(&ibuf[offs]);
+		offs += emit_ld(&ibuf[offs], 1);
+		offs += emit_st(&ibuf[offs], 1);
 
 		if (cnt > 128) {
-			jump_addr_relative = (offs - offs1);
-			offs += emit_lpend(&ibuf[offs], 1, jump_addr_relative);
-			jump_addr_relative = (offs - offs0);
-			offs += emit_lpend(&ibuf[offs], 0, jump_addr_relative);
+			offs += emit_lpend(&ibuf[offs], 1, 1, (offs - offs1));
+			offs += emit_lpend(&ibuf[offs], 0, 1, (offs - offs0));
 		} else {
-			jump_addr_relative = (offs - offs0);
-			offs += emit_lpend(&ibuf[offs], 0, jump_addr_relative);
+			offs += emit_lpend(&ibuf[offs], 0, 1, (offs - offs0));
 		}
 	}
 
 	offs += emit_sev(&ibuf[offs], chan->index);
 	offs += emit_end(&ibuf[offs]);
 
-	emit_go(dbuf, chan->index, chan->ibuf_phys);
+	emit_go(dbuf, chan->index, chan->ibuf_phys, 0);
 
 	reg = (dbuf[1] << 24) | (dbuf[0] << 16);
 	WRITE4(sc, DBGINST0, reg);
