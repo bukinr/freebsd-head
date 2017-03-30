@@ -307,107 +307,6 @@ emit_go(uint8_t *buf, uint32_t chan_id, uint32_t addr)
 }
 
 static int
-pl330_test(struct pl330_softc *sc)
-{
-	uint8_t *ibuf;
-	uint8_t dbuf[6];
-	uint8_t *buf1;
-	uint8_t *buf2;
-	uint32_t offs;
-	uint32_t reg;
-
-	bus_space_handle_t sram;
-	if (bus_space_map(fdtbus_bs_tag, 0xFFE00000, 1024, 0, &sram) != 0) {
-		printf("failed\n");
-	}
-	bus_space_write_4(fdtbus_bs_tag, sram, 0, 0xab);
-
-	WRITE4(sc, INTEN, (1 << 0));
-
-	printf("CRD %x\n", READ4(sc, CRD));
-
-#if 0
-	dbuf = (void *)kmem_alloc_contig(kernel_arena,
-		PAGE_SIZE, M_ZERO, 0, ~0, PAGE_SIZE, 0,
-		VM_MEMATTR_UNCACHEABLE);
-#endif
-
-	ibuf = (void *)kmem_alloc_contig(kernel_arena,
-		PAGE_SIZE, M_ZERO, 0, ~0, PAGE_SIZE, 0,
-		VM_MEMATTR_UNCACHEABLE);
-	printf("ibuf is %x\n", (uint32_t)ibuf);
-
-	buf1 = (void *)kmem_alloc_contig(kernel_arena,
-		PAGE_SIZE, M_ZERO, 0, ~0, PAGE_SIZE, 0,
-		VM_MEMATTR_UNCACHEABLE);
-	buf1[0] = 0xaa;
-
-	buf2 = (void *)kmem_alloc_contig(kernel_arena,
-		PAGE_SIZE, M_ZERO, 0, ~0, PAGE_SIZE, 0,
-		VM_MEMATTR_UNCACHEABLE);
-
-	printf("buf1 %x\n", vtophys(buf1));
-	printf("buf2 %x\n", vtophys(buf2));
-	printf("ibuf %x\n", vtophys(ibuf));
-
-	reg = (1 << 8) | (1 << 9) | (1 << 10);
-	reg |= (1 << 22) | (1 << 23) | (1 << 24);
-
-	reg = (1 << 0) | (1 << 14);
-
-	//SS32, DS32
-	reg |= (2 << 1); //0b010 = reads 4 bytes per beat
-	reg |= (2 << 15); //0b010 = writes 4 bytes per beat
-
-	//SS64, DS64
-	//reg |= (3 << 1); //0b011 = reads 8 bytes per beat
-	//reg |= (3 << 15); //0b011 = writes 8 bytes per beat
-
-	offs = 0;
-	offs += emit_mov(&ibuf[offs], R_CCR, reg);
-
-	//offs += emit_mov(&ibuf[offs], R_SAR, 0xFFE00000); //sram
-	//offs += emit_mov(&ibuf[offs], R_DAR, 0xFFE00010); //sram
-	offs += emit_mov(&ibuf[offs], R_SAR, 0xffa00000); //vtophys(buf1));
-	offs += emit_mov(&ibuf[offs], R_DAR, vtophys(buf2));
-
-	offs += emit_wfp(&ibuf[offs], 25); //25 -- qspi rx
-	offs += emit_ld(&ibuf[offs]);
-	offs += emit_st(&ibuf[offs]);
-	offs += emit_sev(&ibuf[offs], 0);
-	offs += emit_end(&ibuf[offs]);
-
-	emit_go(dbuf, 0, vtophys(ibuf));
-
-	reg = (dbuf[1] << 24) | (dbuf[0] << 16);
-	WRITE4(sc, DBGINST0, reg);
-	reg = (dbuf[5] << 24) | (dbuf[4] << 16) | (dbuf[3] << 8) | dbuf[2];
-	WRITE4(sc, DBGINST1, reg);
-
-	printf("DSR %x, DBGSTATUS %x FTRD %x FTR(0) %x\n",
-	    READ4(sc, DSR), READ4(sc, DBGSTATUS), READ4(sc, FTRD), READ4(sc, FTR(0)));
-	WRITE4(sc, DBGCMD, 0);
-	DELAY(100000);
-	DELAY(100000);
-	DELAY(100000);
-	DELAY(100000);
-	DELAY(100000);
-	DELAY(100000);
-	printf("DSR %x, DBGSTATUS %x FTRD %x FTR(0) %x\n",
-	    READ4(sc, DSR), READ4(sc, DBGSTATUS), READ4(sc, FTRD), READ4(sc, FTR(0)));
-	printf("CSR(0) %x\n", READ4(sc, CSR(0)));
-	printf("RESULT: buf2 is %x\n", buf2[0]);
-
-	printf("%s: SAR(0) %x\n", __func__, READ4(sc, SAR(0)));
-	printf("%s: DAR(0) %x\n", __func__, READ4(sc, DAR(0)));
-	printf("%s: CCR(0) %x\n", __func__, READ4(sc, CCR(0)));
-
-	printf("res %x\n", bus_space_read_4(fdtbus_bs_tag, sram, 0x10));
-
-	return (0);
-}
-
-static int
 pl330_probe(device_t dev)
 {
 	int hwtype;
@@ -429,6 +328,7 @@ pl330_attach(device_t dev)
 {
 	struct pl330_softc *sc;
 	phandle_t xref, node;
+	uint32_t reg;
 	int err;
 	int i;
 
@@ -461,16 +361,10 @@ pl330_attach(device_t dev)
 	xref = OF_xref_from_node(node);
 	OF_device_register_xref(xref, dev);
 
-	uint32_t reg;
-
 	reg = READ4(sc, CRD);
 	reg &= ~(0x7);
 	reg |= 0x2;
 	WRITE4(sc, CRD, reg);
-
-	if (0 == 1) {
-		pl330_test(sc);
-	}
 
 	return (0);
 }
@@ -571,7 +465,9 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	chan = (struct pl330_channel *)xchan->chan;
 	ibuf = chan->ibuf;
 
-	//printf("%s: chan->index %d\n", __func__, chan->index);
+#if 0
+	printf("%s: chan->index %d\n", __func__, chan->index);
+#endif
 
 	offs = 0;
 
