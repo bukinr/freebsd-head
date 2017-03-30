@@ -55,7 +55,6 @@ __FBSDID("$FreeBSD$");
 
 #include <machine/bus.h>
 #include <machine/fdt.h>
-//#include <machine/cache.h>
 
 #ifdef FDT
 #include <dev/fdt/fdt_common.h>
@@ -457,40 +456,6 @@ pl330_attach(device_t dev)
 		pl330_test(sc);
 	}
 
-#if 0
-	printf("%s: read status: %x\n", __func__, READ4(sc, 0x00));
-	printf("%s: read control: %x\n", __func__, READ4(sc, 0x04));
-	printf("%s: read 1: %x\n", __func__, READ4(sc, 0x08));
-	printf("%s: read 2: %x\n", __func__, READ4(sc, 0x0C));
-
-	int timeout;
-
-	WRITE4(sc, DMA_STATUS, 0x3ff);
-	WRITE4(sc, DMA_CONTROL, CONTROL_RESET);
-
-	timeout = 100;
-	do {
-		if ((READ4(sc, DMA_STATUS) & STATUS_RESETTING) == 0)
-			break;
-	} while (timeout--);
-
-	printf("timeout %d\n", timeout);
-
-	WRITE4(sc, DMA_CONTROL, CONTROL_GIEM);
-
-	printf("%s: read control after reset: %x\n", __func__, READ4(sc, DMA_CONTROL));
-
-	int i;
-	for (i = 0; i < 10000; i++) {
-		printf("%s: read control after reset: %x\n", __func__, READ4(sc, DMA_CONTROL));
-		DELAY(1);
-	}
-
-	for (i = 0; i < 20; i++) {
-		printf("%s: read status after reset: %x\n", __func__, READ4(sc, DMA_STATUS));
-	}
-#endif
-
 	return (0);
 }
 
@@ -556,7 +521,6 @@ pl330_channel_capacity(device_t dev, xdma_channel_t *xchan,
     uint32_t *capacity)
 {
 	struct pl330_channel *chan;
-	//uint32_t c;
 
 	chan = (struct pl330_channel *)xchan->chan;
 
@@ -600,9 +564,7 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	for (i = 0; i < sg_n; i++) {
 		if (sg[i].direction == XDMA_DEV_TO_MEM) {
 			reg = (1 << 14); //dst inc
-			//printf("dst inc\n");
 		} else {
-			//printf("src inc\n");
 			reg = (1 << 0); //src inc
 			reg |= (1 << 22); //dst prot ctrl
 
@@ -636,7 +598,7 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 			offs += emit_lp(&ibuf[offs], 0, cnt);
 			offs0 = offs;
 		}
-		offs += emit_wfp(&ibuf[offs], data->periph_id); //25 -- qspi rx
+		offs += emit_wfp(&ibuf[offs], data->periph_id);
 		offs += emit_ld(&ibuf[offs]);
 		offs += emit_st(&ibuf[offs]);
 
@@ -657,7 +619,6 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	emit_go(dbuf, chan->index, chan->ibuf_phys);
 
 	reg = (dbuf[1] << 24) | (dbuf[0] << 16);
-	//reg |= (chan->index << 8);
 	WRITE4(sc, DBGINST0, reg);
 	reg = (dbuf[5] << 24) | (dbuf[4] << 16) | (dbuf[3] << 8) | dbuf[2];
 	WRITE4(sc, DBGINST1, reg);
@@ -679,10 +640,6 @@ pl330_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 {
 	struct pl330_channel *chan;
 	struct pl330_softc *sc;
-	//uint32_t addr;
-	//uint32_t reg;
-	//int ret;
-	//int i;
 
 	sc = device_get_softc(dev);
 
