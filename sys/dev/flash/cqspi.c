@@ -144,9 +144,9 @@ cqspi_intr(void *arg)
 #if 1
 	printf("%s: IRQSTAT %x\n", __func__, pending);
 #endif
+
 	if (pending & (IRQMASK_INDOPDONE | IRQMASK_INDXFRLVL | IRQMASK_INDSRAMFULL)) {
-		//printf("op_done\n");
-		sc->op_done = 1;
+		/* TODO: PIO operation done */
 	}
 	WRITE4(sc, CQSPI_IRQSTAT, pending);
 }
@@ -427,10 +427,10 @@ cqspi_read(device_t dev, device_t child, struct bio *bp,
 	WRITE4(sc, CQSPI_INDRDSTADDR, offset);
 
 	reg = (0 << DEVRD_DUMMYRDCLKS_S);
-	reg |= (2 << 16); //data width
-	reg |= (0 << 12); //addr width
-	reg |= (0 <<  8); //inst width
-	reg |= (1 << 20); //enmodebits
+	reg |= DEVRD_DATA_WIDTH_QUAD;
+	reg |= DEVRD_ADDR_WIDTH_SINGLE;
+	reg |= DEVRD_INST_WIDTH_SINGLE;
+	reg |= DEVRD_ENMODEBITS;
 	reg |= (CMD_READ_4B_QUAD_OUTPUT << DEVRD_RDOPCODE_S);
 	WRITE4(sc, CQSPI_DEVRD, reg);
 
@@ -462,8 +462,6 @@ cqspi_init(struct cqspi_softc *sc)
 	int len;
 
 	device_printf(sc->dev, "Module ID %x\n", READ4(sc, CQSPI_MODULEID));
-
-	//printf("cfg %x\n", READ4(sc, CQSPI_CFG));
 
 	if ((node = ofw_bus_get_node(sc->dev)) == -1) {
 		return (ENXIO);
