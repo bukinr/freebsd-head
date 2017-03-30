@@ -1,7 +1,7 @@
 /*-
  * Copyright (c) 2012, 2013 Bjoern A. Zeeb
  * Copyright (c) 2014 Robert N. M. Watson
- * Copyright (c) 2016 Ruslan Bukin <br@bsdpad.com>
+ * Copyright (c) 2016-2017 Ruslan Bukin <br@bsdpad.com>
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
