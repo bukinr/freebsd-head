@@ -67,21 +67,16 @@ __FBSDID("$FreeBSD$");
 
 #include <dev/xdma/controller/pl330.h>
 
-#define	MSGDMA_NCHANNELS	32
+#define	PL330_NCHANNELS	32
 
 struct pl330_channel {
 	struct pl330_softc	*sc;
 	struct mtx		mtx;
 	xdma_channel_t		*xchan;
-	struct proc		*p;
 	int			used;
 	int			index;
-	int			idx_head;
-	int			idx_tail;
-
 	uint8_t			*ibuf;
 	bus_addr_t		ibuf_phys;
-
 	uint32_t		enqueued;
 	uint32_t		capacity;
 };
@@ -92,24 +87,47 @@ struct pl330_fdt_data {
 
 struct pl330_softc {
 	device_t		dev;
-	struct resource		*res[10];
+	struct resource		*res[PL330_NCHANNELS + 1];
 	bus_space_tag_t		bst;
 	bus_space_handle_t	bsh;
-	void			*ih;
-	struct pl330_channel	channels[MSGDMA_NCHANNELS];
+	void			*ih[PL330_NCHANNELS];
+	struct pl330_channel	channels[PL330_NCHANNELS];
 };
 
 static struct resource_spec pl330_spec[] = {
 	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },
 	{ SYS_RES_IRQ,		0,	RF_ACTIVE },
-	{ SYS_RES_IRQ,		1,	RF_ACTIVE },
-	{ SYS_RES_IRQ,		2,	RF_ACTIVE },
-	{ SYS_RES_IRQ,		3,	RF_ACTIVE },
-	{ SYS_RES_IRQ,		4,	RF_ACTIVE },
-	{ SYS_RES_IRQ,		5,	RF_ACTIVE },
-	{ SYS_RES_IRQ,		6,	RF_ACTIVE },
-	{ SYS_RES_IRQ,		7,	RF_ACTIVE },
-	{ SYS_RES_IRQ,		8,	RF_ACTIVE },
+	{ SYS_RES_IRQ,		1,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		2,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		3,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		4,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		5,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		6,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		7,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		8,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		9,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		10,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		11,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		12,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		13,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		14,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		15,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		16,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		17,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		18,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		19,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		20,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		21,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		22,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		23,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		24,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		25,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		26,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		27,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		28,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		29,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		30,	RF_ACTIVE | RF_OPTIONAL },
+	{ SYS_RES_IRQ,		31,	RF_ACTIVE | RF_OPTIONAL },
 	{ -1, 0 }
 };
 
@@ -412,6 +430,7 @@ pl330_attach(device_t dev)
 	struct pl330_softc *sc;
 	phandle_t xref, node;
 	int err;
+	int i;
 
 	sc = device_get_softc(dev);
 	sc->dev = dev;
@@ -426,19 +445,16 @@ pl330_attach(device_t dev)
 	sc->bsh = rman_get_bushandle(sc->res[0]);
 
 	/* Setup interrupt handler */
-	err = bus_setup_intr(dev, sc->res[1], INTR_TYPE_MISC | INTR_MPSAFE,
-	    NULL, pl330_intr, sc, &sc->ih);
-	if (err) {
-		device_printf(dev, "Unable to alloc interrupt resource.\n");
-		return (ENXIO);
-	}
-
-	/* Setup interrupt handler */
-	err = bus_setup_intr(dev, sc->res[2], INTR_TYPE_MISC | INTR_MPSAFE,
-	    NULL, pl330_intr, sc, &sc->ih);
-	if (err) {
-		device_printf(dev, "Unable to alloc interrupt resource.\n");
-		return (ENXIO);
+	for (i = 0; i < PL330_NCHANNELS; i++) {
+		if (sc->res[i + 1] == NULL) {
+			break;
+		}
+		err = bus_setup_intr(dev, sc->res[i + 1], INTR_TYPE_MISC | INTR_MPSAFE,
+		    NULL, pl330_intr, sc, sc->ih[i]);
+		if (err) {
+			device_printf(dev, "Unable to alloc interrupt resource.\n");
+			return (ENXIO);
+		}
 	}
 
 	node = ofw_bus_get_node(dev);
@@ -478,7 +494,7 @@ pl330_channel_alloc(device_t dev, struct xdma_channel *xchan)
 
 	sc = device_get_softc(dev);
 
-	for (i = 0; i < MSGDMA_NCHANNELS; i++) {
+	for (i = 0; i < PL330_NCHANNELS; i++) {
 		chan = &sc->channels[i];
 		if (chan->used == 0) {
 			chan->xchan = xchan;
@@ -487,8 +503,6 @@ pl330_channel_alloc(device_t dev, struct xdma_channel *xchan)
 			chan->index = i;
 			chan->sc = sc;
 			chan->used = 1;
-			chan->idx_head = 0;
-			chan->idx_tail = 0;
 
 			chan->ibuf = (void *)kmem_alloc_contig(kernel_arena,
 			    PAGE_SIZE, M_ZERO, 0, ~0, PAGE_SIZE, 0,
