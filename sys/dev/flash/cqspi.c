@@ -527,7 +527,6 @@ cqspi_init(struct cqspi_softc *sc)
 	WRITE4(sc, CQSPI_DEVSZ, reg);
 	printf("devsz %x\n", reg);
 
-	//WRITE4(sc, CQSPI_REMAPADDR, 0);
 	WRITE4(sc, CQSPI_SRAMPART, 128/2);
 
 	reg = READ4(sc, CQSPI_CFG);
@@ -570,15 +569,12 @@ cqspi_init(struct cqspi_softc *sc)
 	//printf("Exit 4b mode\n");
 	//cqspi_cmd(sc, CMD_EXIT_4B_MODE, 1);
 
-	printf("Nvconf\n");
 	reg = cqspi_cmd(sc, CMD_READ_NVCONF_REG, 2);
 	printf("NVCONF %x\n", reg);
 
-	printf("Conf\n");
 	reg = cqspi_cmd(sc, CMD_READ_CONF_REG, 1);
 	printf("CONF %x\n", reg);
 
-	printf("FSR\n");
 	reg = cqspi_cmd(sc, CMD_READ_FSR, 1);
 	printf("FSR %x\n", reg);
 
@@ -608,7 +604,6 @@ cqspi_add_devices(device_t dev)
 
 	return (0);
 }
-
 
 static int
 cqspi_probe(device_t dev)
