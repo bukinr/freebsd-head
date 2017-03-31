@@ -165,38 +165,20 @@ n25q_wait_for_device_ready(device_t dev)
 static struct n25q_flash_ident*
 n25q_get_device_ident(struct n25q_softc *sc)
 {
-#if 0
-	device_t dev;
-	uint8_t txBuf[8], rxBuf[8];
-	struct spi_command cmd;
 	uint8_t manufacturer_id;
 	uint16_t dev_id;
-	int err, i;
+	device_t pdev;
+	uint8_t data[4];
+	int i;
 
-	dev = sc->dev;
+	pdev = device_get_parent(sc->dev);
 
-	memset(&cmd, 0, sizeof(cmd));
-	memset(txBuf, 0, sizeof(txBuf));
-	memset(rxBuf, 0, sizeof(rxBuf));
+	QSPI_READ_REG(pdev, sc->dev, CMD_READ_IDENT, (uint32_t *)&data[0], 4);
 
-	txBuf[0] = CMD_READ_IDENT;
-	cmd.tx_cmd = &txBuf;
-	cmd.rx_cmd = &rxBuf;
-	/*
-	 * Some compatible devices has extended two-bytes ID
-	 * We'll use only manufacturer/deviceid atm
-	 */
-	cmd.tx_cmd_sz = 4;
-	cmd.rx_cmd_sz = 4;
-	err = 0; //SPIBUS_TRANSFER(device_get_parent(dev), dev, &cmd);
-	if (err)
-		return (NULL);
+	manufacturer_id = data[0];
+	dev_id = (data[1] << 8) | (data[2]);
 
-	manufacturer_id = rxBuf[1];
-	dev_id = (rxBuf[2] << 8) | (rxBuf[3]);
-
-	for (i = 0; 
-	    i < nitems(flash_devices); i++) {
+	for (i = 0; i < nitems(flash_devices); i++) {
 		if ((flash_devices[i].manufacturer_id == manufacturer_id) &&
 		    (flash_devices[i].device_id == dev_id))
 			return &flash_devices[i];
@@ -204,7 +186,6 @@ n25q_get_device_ident(struct n25q_softc *sc)
 
 	printf("Unknown SPI flash device. Vendor: %02x, device id: %04x\n",
 	    manufacturer_id, dev_id);
-#endif
 
 	return (NULL);
 }
@@ -285,6 +266,7 @@ n25q_write(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count
 
 	//printf("%s: offset 0x%llx count %lld bytes\n", __func__, offset, count);
 
+	err = QSPI_ERASE(pdev, dev, offset);
 	err = QSPI_WRITE(pdev, dev, bp, offset, data, count);
 
 	return (err);
@@ -387,12 +369,10 @@ n25q_attach(device_t dev)
 
 	N25Q_LOCK_INIT(sc);
 
-	if (0 == 1) {
-		ident = n25q_get_device_ident(sc);
-	}
-	ident = &flash_devices[0];
-	if (ident == NULL)
+	ident = n25q_get_device_ident(sc);
+	if (ident == NULL) {
 		return (ENXIO);
+	}
 
 	n25q_wait_for_device_ready(sc->dev);
 

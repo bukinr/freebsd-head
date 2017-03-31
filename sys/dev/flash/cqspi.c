@@ -556,9 +556,6 @@ cqspi_init(struct cqspi_softc *sc)
 	uint32_t data;
 	int ret;
 
-	ret = cqspi_cmd_read(sc, CMD_READ_IDENT, &data, 4);
-	printf("Ident %x\n", data);
-
 	ret = cqspi_cmd_read(sc, CMD_READ_STATUS, &data, 1);
 	printf("Status %x\n", data);
 
