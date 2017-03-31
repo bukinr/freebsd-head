@@ -77,14 +77,14 @@ __FBSDID("$FreeBSD$");
 #define WRITE_DATA_1(_sc, _reg, _val) bus_write_1((_sc)->res[1], _reg, _val)
 
 struct cqspi_softc {
-	unsigned int		sc_flags;
+	unsigned int		sc_flags[24];
 	device_t		dev;
 
 	struct resource		*res[3];
 	bus_space_tag_t		bst;
 	bus_space_handle_t	bsh;
 	void			*ih;
-	uint8_t			op_done;
+	uint8_t			read_op_done;
 	uint8_t			write_op_done;
 
 	uint32_t		fifo_depth;
@@ -200,7 +200,7 @@ cqspi_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 		//printf("bio done: %x\n", (uint32_t)bp);
 		//printf(".");
 		//biodone(bp);
-		sc->op_done = 1;
+		sc->read_op_done = 1;
 	}
 
 	wakeup(&sc->xdma_rx);
@@ -221,7 +221,7 @@ cqspi_wait_for_completion(struct cqspi_softc *sc)
 		}
 	}
 	if (i == 0) {
-		printf("%s: cmd timed out\n", __func__);
+		printf("%s: cmd timed out: %x\n", __func__, READ4(sc, CQSPI_FLASHCMD));
 		return (-1);
 	}
 
@@ -280,6 +280,10 @@ cqspi_cmd_read(struct cqspi_softc *sc, uint8_t cmd,
 	int ret;
 	int i;
 
+	if (len > 8) {
+		printf("failed to read data\n");
+		return (-1);
+	}
 #if 0
 	printf("%s: %x\n", __func__, cmd);
 #endif
@@ -355,15 +359,15 @@ static int
 cqspi_erase(device_t dev, device_t child, off_t offset)
 {
 	struct cqspi_softc *sc;
-	uint32_t reg;
+	int ret;
 
 	sc = device_get_softc(dev);
 
 	cqspi_wait_ready(sc);
-	reg = cqspi_cmd_write(sc, CMD_WRITE_ENABLE, 0, 0);
+	ret = cqspi_cmd_write(sc, CMD_WRITE_ENABLE, 0, 0);
 
 	cqspi_wait_ready(sc);
-	reg = cqspi_cmd_write_addr(sc, 0xdc, offset, 4);
+	ret = cqspi_cmd_write_addr(sc, 0xdc, offset, 4);
 
 	return (0);
 }
@@ -385,8 +389,6 @@ cqspi_write(device_t dev, device_t child, struct bio *bp,
 	reg = cqspi_cmd_write(sc, CMD_WRITE_ENABLE, 0, 0);
 
 	cqspi_wait_ready(sc);
-
-	sc->write_op_done = 0;
 
 	reg = (2 << 0); //numsglreqbytes
 	reg |= (2 << 8); //numburstreqbytes
@@ -418,6 +420,8 @@ cqspi_write(device_t dev, device_t child, struct bio *bp,
 	xdma_enqueue_bio(sc->xchan_tx, &bp, 0xffa00000, XDMA_MEM_TO_DEV);
 	xdma_queue_submit(sc->xchan_tx);
 
+	sc->write_op_done = 0;
+
 	WRITE4(sc, CQSPI_INDWR, INDRD_START);
 
 	CQSPI_LOCK(sc);
@@ -441,7 +445,6 @@ cqspi_read(device_t dev, device_t child, struct bio *bp,
 #if 0
 	printf("%s: offset 0x%llx count %lld bytes\n", __func__, offset, count);
 #endif
-	sc->op_done = 0;
 
 	reg = (2 << 0); //numsglreqbytes
 	reg |= (2 << 8); //numburstreqbytes
@@ -468,10 +471,12 @@ cqspi_read(device_t dev, device_t child, struct bio *bp,
 	xdma_enqueue_bio(sc->xchan_rx, &bp, 0xffa00000, XDMA_DEV_TO_MEM);
 	xdma_queue_submit(sc->xchan_rx);
 
+	sc->read_op_done = 0;
+
 	WRITE4(sc, CQSPI_INDRD, INDRD_START);
 
 	CQSPI_LOCK(sc);
-	while (sc->op_done == 0) {
+	while (sc->read_op_done == 0) {
 		tsleep(&sc->xdma_rx, PCATCH | PZERO, "spi", hz/2);
 	}
 	CQSPI_UNLOCK(sc);
