@@ -356,6 +356,21 @@ cqspi_read_reg(device_t dev, device_t child,
 }
 
 static int
+cqspi_wait_idle(struct cqspi_softc *sc)
+{
+	uint32_t reg;
+
+	do {
+		reg = READ4(sc, CQSPI_CFG);
+		if (reg & (1 << 31)) {
+			break;
+		}
+	} while (1);
+
+	return (0);
+}
+
+static int
 cqspi_erase(device_t dev, device_t child, off_t offset)
 {
 	struct cqspi_softc *sc;
@@ -363,11 +378,15 @@ cqspi_erase(device_t dev, device_t child, off_t offset)
 
 	sc = device_get_softc(dev);
 
+	cqspi_wait_idle(sc);
 	cqspi_wait_ready(sc);
 	ret = cqspi_cmd_write(sc, CMD_WRITE_ENABLE, 0, 0);
 
+	cqspi_wait_idle(sc);
 	cqspi_wait_ready(sc);
 	ret = cqspi_cmd_write_addr(sc, 0xdc, offset, 4);
+
+	cqspi_wait_idle(sc);
 
 	return (0);
 }
@@ -388,7 +407,9 @@ cqspi_write(device_t dev, device_t child, struct bio *bp,
 	cqspi_wait_ready(sc);
 	reg = cqspi_cmd_write(sc, CMD_WRITE_ENABLE, 0, 0);
 
+	cqspi_wait_idle(sc);
 	cqspi_wait_ready(sc);
+	cqspi_wait_idle(sc);
 
 	reg = (2 << 0); //numsglreqbytes
 	reg |= (2 << 8); //numburstreqbytes
@@ -415,7 +436,7 @@ cqspi_write(device_t dev, device_t child, struct bio *bp,
 	reg |= DEVRD_INST_WIDTH_SINGLE;
 	WRITE4(sc, CQSPI_DEVRD, reg);
 
-	WRITE4(sc, CQSPI_MODEBIT, 0);
+	//WRITE4(sc, CQSPI_MODEBIT, 0);
 
 	xdma_enqueue_bio(sc->xchan_tx, &bp, 0xffa00000, XDMA_MEM_TO_DEV);
 	xdma_queue_submit(sc->xchan_tx);
@@ -429,6 +450,8 @@ cqspi_write(device_t dev, device_t child, struct bio *bp,
 		tsleep(&sc->xdma_tx, PCATCH | PZERO, "spi", hz/2);
 	}
 	CQSPI_UNLOCK(sc);
+
+	cqspi_wait_idle(sc);
 
 	return (0);
 }
@@ -445,6 +468,8 @@ cqspi_read(device_t dev, device_t child, struct bio *bp,
 #if 0
 	printf("%s: offset 0x%llx count %lld bytes\n", __func__, offset, count);
 #endif
+
+	cqspi_wait_idle(sc);
 
 	reg = (2 << 0); //numsglreqbytes
 	reg |= (2 << 8); //numburstreqbytes
@@ -480,6 +505,8 @@ cqspi_read(device_t dev, device_t child, struct bio *bp,
 		tsleep(&sc->xdma_rx, PCATCH | PZERO, "spi", hz/2);
 	}
 	CQSPI_UNLOCK(sc);
+
+	cqspi_wait_idle(sc);
 
 	return (0);
 }
@@ -531,7 +558,7 @@ cqspi_init(struct cqspi_softc *sc)
 	reg = READ4(sc, CQSPI_CFG);
 	/* Configure baud rate */
 	reg &= ~(CFG_BAUD_M);
-	reg |= CFG_BAUD4;
+	reg |= CFG_BAUD12;
 	reg |= CFG_ENDMA;
 	WRITE4(sc, CQSPI_CFG, reg);
 
@@ -554,25 +581,12 @@ cqspi_init(struct cqspi_softc *sc)
 
 
 	uint32_t data;
-	int ret;
-
-	ret = cqspi_cmd_read(sc, CMD_READ_STATUS, &data, 1);
-	printf("Status %x\n", data);
 
 	printf("Enter 4b mode\n");
 	cqspi_cmd_read(sc, CMD_ENTER_4B_MODE, &data, 1);
 
 	//printf("Exit 4b mode\n");
 	//cqspi_cmd_read(sc, CMD_EXIT_4B_MODE, &data, 1);
-
-	ret = cqspi_cmd_read(sc, CMD_READ_NVCONF_REG, &data, 2);
-	printf("NVCONF %x\n", data);
-
-	ret = cqspi_cmd_read(sc, CMD_READ_CONF_REG, &data, 1);
-	printf("CONF %x\n", data);
-
-	ret = cqspi_cmd_read(sc, CMD_READ_FSR, &data, 1);
-	printf("FSR %x\n", data);
 
 	return (0);
 }
