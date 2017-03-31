@@ -213,47 +213,6 @@ n25q_set_writable(device_t dev, int writable)
 #endif
 }
 
-static void
-n25q_erase_cmd(device_t dev, off_t sector, uint8_t ecmd)
-{
-#if 0
-	struct n25q_softc *sc;
-	uint8_t txBuf[5], rxBuf[5];
-	struct spi_command cmd;
-	int err;
-
-	printf("%s\n", __func__);
-
-	sc = device_get_softc(dev);
-
-	n25q_wait_for_device_ready(dev);
-	n25q_set_writable(dev, 1);
-
-	memset(&cmd, 0, sizeof(cmd));
-	memset(txBuf, 0, sizeof(txBuf));
-	memset(rxBuf, 0, sizeof(rxBuf));
-
-	txBuf[0] = ecmd;
-	cmd.tx_cmd = txBuf;
-	cmd.rx_cmd = rxBuf;
-	if (sc->sc_flags & FL_ENABLE_4B_ADDR) {
-		cmd.rx_cmd_sz = 5;
-		cmd.tx_cmd_sz = 5;
-		txBuf[1] = ((sector >> 24) & 0xff);
-		txBuf[2] = ((sector >> 16) & 0xff);
-		txBuf[3] = ((sector >> 8) & 0xff);
-		txBuf[4] = (sector & 0xff);
-	} else {
-		cmd.rx_cmd_sz = 4;
-		cmd.tx_cmd_sz = 4;
-		txBuf[1] = ((sector >> 16) & 0xff);
-		txBuf[2] = ((sector >> 8) & 0xff);
-		txBuf[3] = (sector & 0xff);
-	}
-	err = 0; //SPIBUS_TRANSFER(device_get_parent(dev), dev, &cmd);
-#endif
-}
-
 static int
 n25q_write(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count)
 {
