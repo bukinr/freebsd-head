@@ -51,3 +51,25 @@ METHOD int write {
 	caddr_t data;
 	off_t count;
 };
+
+METHOD int erase {
+	device_t dev;
+	device_t child;
+	off_t offset;
+};
+
+METHOD int write_reg {
+	device_t dev;
+	device_t child;
+	uint8_t opcode;
+	uint32_t *addr;
+	uint32_t len;
+};
+
+METHOD int read_reg {
+	device_t dev;
+	device_t child;
+	uint8_t opcode;
+	uint32_t *addr;
+	uint32_t len;
+};
