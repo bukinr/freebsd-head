@@ -82,6 +82,7 @@ __FBSDID("$FreeBSD$");
 
 struct cqspi_softc {
 	unsigned int		sc_flags[24];
+
 	device_t		dev;
 
 	struct resource		*res[3];
@@ -298,6 +299,7 @@ cqspi_cmd_read(struct cqspi_softc *sc, uint8_t cmd,
 		device_printf(sc->dev, "Failed to read data\n");
 		return (-1);
 	}
+
 #if 0
 	printf("%s: %x\n", __func__, cmd);
 #endif
@@ -447,7 +449,7 @@ cqspi_write(device_t dev, device_t child, struct bio *bp,
 	reg |= DEVRD_INST_WIDTH_SINGLE;
 	WRITE4(sc, CQSPI_DEVRD, reg);
 
-	xdma_enqueue_bio(sc->xchan_tx, &bp, sc->sram_phys, XDMA_MEM_TO_DEV);
+	xdma_enqueue_bio(sc->xchan_tx, &bp, sc->sram_phys, XDMA_MEM_TO_DEV, 4, 4);
 	xdma_queue_submit(sc->xchan_tx);
 
 	sc->write_op_done = 0;
@@ -502,7 +504,7 @@ cqspi_read(device_t dev, device_t child, struct bio *bp,
 	WRITE4(sc, CQSPI_MODEBIT, 0xff);
 	WRITE4(sc, CQSPI_IRQMASK, 0);
 
-	xdma_enqueue_bio(sc->xchan_rx, &bp, sc->sram_phys, XDMA_DEV_TO_MEM);
+	xdma_enqueue_bio(sc->xchan_rx, &bp, sc->sram_phys, XDMA_DEV_TO_MEM, 4, 4);
 	xdma_queue_submit(sc->xchan_rx);
 
 	sc->read_op_done = 0;
