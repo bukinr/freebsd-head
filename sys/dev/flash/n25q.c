@@ -30,7 +30,7 @@
  * SUCH DAMAGE.
  */
 
-/* n25q quad spi flash driver */
+/* n25q Quad SPI Flash driver. */
 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
@@ -67,7 +67,12 @@ __FBSDID("$FreeBSD$");
 #define	FL_ENABLE_4B_ADDR	0x04
 #define	FL_DISABLE_4B_ADDR	0x08
 
-#define	CQSPI_SECTORSIZE	512
+/*
+ * Define the sectorsize to be a smaller size rather than the flash
+ * sector size. Trying to run FFS off of a 64k flash sector size
+ * results in a completely un-usable system.
+ */
+#define	FLASH_SECTORSIZE	512
 
 #define	READ4(_sc, _reg) bus_read_4((_sc)->res[0], _reg)
 #define READ2(_sc, _reg) bus_read_2((_sc)->res[0], _reg)
@@ -305,7 +310,7 @@ n25q_attach(device_t dev)
 	sc->sc_disk->d_name = "flash/qspi";
 	sc->sc_disk->d_drv1 = sc;
 	sc->sc_disk->d_maxsize = DFLTPHYS;
-	sc->sc_disk->d_sectorsize = CQSPI_SECTORSIZE;
+	sc->sc_disk->d_sectorsize = FLASH_SECTORSIZE;
 	sc->sc_disk->d_mediasize = (ident->sectorsize * ident->sectorcount);
 	sc->sc_disk->d_unit = device_get_unit(sc->dev);
 	sc->sc_disk->d_dump = NULL;
