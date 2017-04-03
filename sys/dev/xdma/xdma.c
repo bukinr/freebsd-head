@@ -308,10 +308,6 @@ xdma_bufs_alloc_busdma(xdma_channel_t *xchan)
 
 	nsegments = xchan->bufs_num;
 
-#if 0
-	printf("%s: nseg %d\n", __func__, nsegments);
-#endif
-
 	xchan->bufs = malloc(nsegments * sizeof(struct xchan_buf),
 	    M_XDMA, (M_WAITOK | M_ZERO));
 	if (xchan->bufs == NULL) {
@@ -563,16 +559,8 @@ xdma_enqueue(xdma_channel_t *xchan, uintptr_t src, uintptr_t dst,
 	xr->dst_addr = dst;
 	xr->src_width = src_width;
 	xr->dst_width = dst_width;
-#if 0
-	if (dir == XDMA_MEM_TO_DEV) {
-		xr->dst_addr = addr;
-		xr->src_addr = 0;
-	} else {
-		xr->src_addr = addr;
-		xr->dst_addr = 0;
-	}
-#endif
 	xr->done = 0;
+
 	xchan->xr_head = xchan_next_req(xchan, xchan->xr_head);
 	atomic_add_int(&xchan->xr_count, 1);
 
