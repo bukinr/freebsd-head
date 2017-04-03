@@ -436,22 +436,63 @@ pl330_channel_capacity(device_t dev, xdma_channel_t *xchan,
 }
 
 static int
+pl330_ccr_port_width(struct xdma_sglist *sg, uint32_t *addr)
+{
+	uint32_t reg;
+
+	reg = 0;
+
+	switch (sg->src_width) {
+	case 1:
+		reg |= CCR_SRC_BURST_SIZE_1;
+		break;
+	case 2:
+		reg |= CCR_SRC_BURST_SIZE_2;
+		break;
+	case 4:
+		reg |= CCR_SRC_BURST_SIZE_4;
+		break;
+	default:
+		return (-1);
+	}
+
+	switch (sg->dst_width) {
+	case 1:
+		reg |= CCR_DST_BURST_SIZE_1;
+		break;
+	case 2:
+		reg |= CCR_DST_BURST_SIZE_2;
+		break;
+	case 4:
+		reg |= CCR_DST_BURST_SIZE_4;
+		break;
+	default:
+		return (-1);
+	}
+
+	*addr |= reg;
+
+	return (0);
+}
+
+static int
 pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
     struct xdma_sglist *sg, uint32_t sg_n)
 {
+	struct pl330_fdt_data *data;
 	xdma_controller_t *xdma;
 	struct pl330_channel *chan;
 	struct pl330_softc *sc;
 	uint32_t src_addr_lo;
 	uint32_t dst_addr_lo;
-	uint8_t *ibuf;
 	uint32_t len;
 	uint32_t reg;
 	uint32_t offs;
+	uint32_t cnt;
+	uint8_t *ibuf;
 	uint8_t dbuf[6];
 	uint8_t offs0, offs1;
-	uint32_t cnt;
-	struct pl330_fdt_data *data;
+	int err;
 	int i;
 
 	sc = device_get_softc(dev);
@@ -476,8 +517,10 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 			reg |= (CCR_DST_PROT_PRIV);
 		}
 
-		reg |= CCR_SRC_BURST_SIZE_4; /* 4 bytes per beat */
-		reg |= CCR_DST_BURST_SIZE_4; /* 4 bytes per beat */
+		err = pl330_ccr_port_width(&sg[i], &reg);
+		if (err != 0) {
+			return (err);
+		}
 
 		offs += emit_mov(&chan->ibuf[offs], R_CCR, reg);
 
@@ -493,7 +536,12 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 		offs += emit_mov(&ibuf[offs], R_SAR, src_addr_lo);
 		offs += emit_mov(&ibuf[offs], R_DAR, dst_addr_lo);
 
-		cnt = (len / 4);
+		if (sg[i].src_width != sg[i].dst_width) {
+			/* Not supported. */
+			return (-1);
+		}
+
+		cnt = (len / sg[i].src_width);
 		if (cnt > 128) {
 			offs += emit_lp(&ibuf[offs], 0, cnt / 128);
 			offs0 = offs;

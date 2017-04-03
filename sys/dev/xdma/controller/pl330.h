@@ -50,8 +50,12 @@
 #define	DAR(n)		(0x404 + 0x20 * (n)) /* Destination address for DMA channel n */
 #define	CCR(n)		(0x408 + 0x20 * (n)) /* Channel control for DMA channel n */
 #define	 CCR_DST_BURST_SIZE_S	15
+#define	 CCR_DST_BURST_SIZE_1	(0 << CCR_DST_BURST_SIZE_S)
+#define	 CCR_DST_BURST_SIZE_2	(1 << CCR_DST_BURST_SIZE_S)
 #define	 CCR_DST_BURST_SIZE_4	(2 << CCR_DST_BURST_SIZE_S)
 #define	 CCR_SRC_BURST_SIZE_S	1
+#define	 CCR_SRC_BURST_SIZE_1	(0 << CCR_SRC_BURST_SIZE_S)
+#define	 CCR_SRC_BURST_SIZE_2	(1 << CCR_SRC_BURST_SIZE_S)
 #define	 CCR_SRC_BURST_SIZE_4	(2 << CCR_SRC_BURST_SIZE_S)
 #define	 CCR_DST_INC		(1 << 14)
 #define	 CCR_SRC_INC		(1 << 0)

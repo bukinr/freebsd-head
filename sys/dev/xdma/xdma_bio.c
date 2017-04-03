@@ -84,7 +84,8 @@ xdma_dequeue_bio(xdma_channel_t *xchan, struct bio **bp,
 
 int
 xdma_enqueue_bio(xdma_channel_t *xchan, struct bio **bp,
-    bus_addr_t addr, enum xdma_direction dir)
+    bus_addr_t addr, enum xdma_direction dir,
+    uint8_t src_width, uint8_t dst_width)
 {
 	struct xdma_request *xr;
 	xdma_controller_t *xdma;
@@ -100,6 +101,9 @@ xdma_enqueue_bio(xdma_channel_t *xchan, struct bio **bp,
 	xr->direction = dir;
 	xr->bp = *bp;
 	xr->type = XR_TYPE_BIO;
+
+	xr->src_width = src_width;
+	xr->dst_width = dst_width;
 
 	if (dir == XDMA_MEM_TO_DEV) {
 		xr->dst_addr = addr;

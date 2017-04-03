@@ -103,6 +103,9 @@ xdma_sglist_add(struct xdma_sglist *sg, struct bus_dma_segment *seg,
 	}
 
 	for (i = 0; i < nsegs; i++) {
+		sg[i].src_width = xr->src_width;
+		sg[i].dst_width = xr->dst_width;
+
 		if (xr->direction == XDMA_MEM_TO_DEV) {
 			sg[i].src_addr = seg[i].ds_addr;
 			sg[i].dst_addr = xr->dst_addr;
