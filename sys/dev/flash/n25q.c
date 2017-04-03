@@ -93,21 +93,20 @@ struct n25q_flash_ident {
 };
 
 struct n25q_softc {
-	device_t	dev;
-	uint8_t		sc_manufacturer_id;
-	uint16_t	device_id;
-	unsigned int	sc_sectorsize;
-	struct mtx	sc_mtx;
-	struct disk	*sc_disk;
-	struct proc	*sc_p;
-	struct bio_queue_head sc_bio_queue;
-	unsigned int	sc_flags;
-
-	struct resource		*res[3];
+	device_t		dev;
 	bus_space_tag_t		bst;
 	bus_space_handle_t	bsh;
 	void			*ih;
-	uint8_t			op_done;
+	struct resource		*res[3];
+
+	uint8_t			sc_manufacturer_id;
+	uint16_t		device_id;
+	unsigned int		sc_sectorsize;
+	struct mtx		sc_mtx;
+	struct disk		*sc_disk;
+	struct proc		*sc_p;
+	struct bio_queue_head	sc_bio_queue;
+	unsigned int		sc_flags;
 };
 
 #define	N25Q_LOCK(_sc)		mtx_lock(&(_sc)->sc_mtx)
