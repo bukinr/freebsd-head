@@ -60,6 +60,7 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/openfirm.h>
 
 #include <dev/flash/cqspi.h>
+#include <dev/flash/mx25lreg.h>
 #include <dev/xdma/xdma.h>
 
 #include "qspi_if.h"

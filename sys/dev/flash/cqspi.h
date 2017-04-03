@@ -130,43 +130,4 @@
 #define	CQSPI_FLASHCMDWRDATAUP	0xAC	/* Flash Command Write Data Register (Upper) */
 #define	CQSPI_MODULEID		0xFC	/* Module ID Register */
 
-/*
- * Commands 
- */
-#define CMD_WRITE_ENABLE	0x06
-#define CMD_WRITE_DISABLE	0x04
-#define CMD_READ_IDENT		0x9F
-#define CMD_READ_STATUS		0x05
-#define CMD_WRITE_STATUS	0x01
-#define CMD_READ		0x03
-#define CMD_FAST_READ		0x0B
-#define CMD_PAGE_PROGRAM	0x02
-#define CMD_SECTOR_ERASE	0xD8
-#define CMD_BULK_ERASE		0xC7
-#define	CMD_BLOCK_4K_ERASE	0x20
-#define	CMD_BLOCK_32K_ERASE	0x52
-#define	CMD_ENTER_4B_MODE	0xB7
-#define	CMD_EXIT_4B_MODE	0xE9
-
-#define	CMD_READ_NVCONF_REG	0xB5
-#define	CMD_READ_CONF_REG	0x85
-#define	CMD_READ_FSR		0x70
-
-/* Quad, 4B-addressing operations. */
-#define	CMD_QUAD_SECTOR_ERASE	0xdc
-#define	CMD_QUAD_PAGE_PROGRAM	0x34
-#define	CMD_READ_4B_QUAD_OUTPUT	0x6C
-
-/*
- * Status register flags
- */
-#define	STATUS_SRWD	(1 << 7)
-#define	STATUS_BP2	(1 << 4)
-#define	STATUS_BP1	(1 << 3)
-#define	STATUS_BP0	(1 << 2)
-#define	STATUS_WEL	(1 << 1)
-#define	STATUS_WIP	(1 << 0)
-
-#define	FLASH_PAGE_SIZE	256
-
 #endif /* !_CQSPI_H_ */
