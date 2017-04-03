@@ -130,30 +130,20 @@ static int n25q_getattr(struct bio *bp);
 static void n25q_task(void *arg);
 
 struct n25q_flash_ident flash_devices[] = {
-	{ "n25q00", 0x20, 0xbb21, (64 * 1024), 2048, FL_NONE },
+	{ "n25q00", 0x20, 0xbb21, (64 * 1024), 2048, FL_ENABLE_4B_ADDR},
 };
 
 static uint8_t
 n25q_get_status(device_t dev)
 {
-#if 0
-	uint8_t txBuf[2], rxBuf[2];
-	struct spi_command cmd;
-	int err;
+	device_t pdev;
+	uint8_t status;
 
-	memset(&cmd, 0, sizeof(cmd));
-	memset(txBuf, 0, sizeof(txBuf));
-	memset(rxBuf, 0, sizeof(rxBuf));
+	pdev = device_get_parent(dev);
 
-	txBuf[0] = CMD_READ_STATUS;
-	cmd.tx_cmd = txBuf;
-	cmd.rx_cmd = rxBuf;
-	cmd.rx_cmd_sz = 2;
-	cmd.tx_cmd_sz = 2;
-	err = 0; //SPIBUS_TRANSFER(device_get_parent(dev), dev, &cmd);
-	return (rxBuf[1]);
-#endif
-	return (0);
+	QSPI_READ_REG(pdev, dev, CMD_READ_STATUS, &status, 1);
+
+	return (status);
 }
 
 static void
