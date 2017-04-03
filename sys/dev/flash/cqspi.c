@@ -28,7 +28,10 @@
  * SUCH DAMAGE.
  */
 
-/* Cadence Quad SPI Flash Controller driver. */
+/*
+ * Cadence Quad SPI Flash Controller driver.
+ * 4B-addressing supported only.
+ */
 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
@@ -143,16 +146,18 @@ cqspi_intr(void *arg)
 	if (pending & (IRQMASK_INDOPDONE | IRQMASK_INDXFRLVL | IRQMASK_INDSRAMFULL)) {
 		/* TODO: PIO operation done */
 	}
+
 	WRITE4(sc, CQSPI_IRQSTAT, pending);
 }
 
 static int
 cqspi_xdma_tx_intr(void *arg, xdma_transfer_status_t *status)
 {
+	struct xdma_transfer_status st;
 	struct cqspi_softc *sc;
 	struct bio *bp;
 	int ret;
-	struct xdma_transfer_status st;
+	int deq;
 
 	sc = arg;
 
@@ -160,16 +165,18 @@ cqspi_xdma_tx_intr(void *arg, xdma_transfer_status_t *status)
 	printf("%s\n", __func__);
 #endif
 
+	deq = 0;
+
 	while (1) {
-		//ret = xdma_dequeue(sc->xchan_tx, (void **)&bp, &st);
 		ret = xdma_dequeue_bio(sc->xchan_tx, &bp, &st);
 		if (ret != 0) {
 			break;
 		}
-		//printf("bio done: %x\n", (uint32_t)bp);
-		//printf(".");
-		//biodone(bp);
 		sc->write_op_done = 1;
+		deq++;
+	}
+	if (deq > 1) {
+		device_printf(sc->dev, "Warning: more than 1 tx bio dequeued\n");
 	}
 
 	wakeup(&sc->xdma_tx);
@@ -180,10 +187,11 @@ cqspi_xdma_tx_intr(void *arg, xdma_transfer_status_t *status)
 static int
 cqspi_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 {
+	struct xdma_transfer_status st;
 	struct cqspi_softc *sc;
 	struct bio *bp;
 	int ret;
-	struct xdma_transfer_status st;
+	int deq;
 
 	sc = arg;
 
@@ -191,16 +199,19 @@ cqspi_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 	printf("%s\n", __func__);
 #endif
 
+	deq = 0;
+
 	while (1) {
-		//ret = xdma_dequeue(sc->xchan_rx, (void **)&bp, &st);
 		ret = xdma_dequeue_bio(sc->xchan_rx, &bp, &st);
 		if (ret != 0) {
 			break;
 		}
-		//printf("bio done: %x\n", (uint32_t)bp);
-		//printf(".");
-		//biodone(bp);
 		sc->read_op_done = 1;
+		deq++;
+	}
+
+	if (deq > 1) {
+		device_printf(sc->dev, "Warning: more than 1 rx bio dequeued\n");
 	}
 
 	wakeup(&sc->xdma_rx);
@@ -215,6 +226,7 @@ cqspi_wait_for_completion(struct cqspi_softc *sc)
 	int i;
 
 	timeout = 10000;
+
 	for (i = timeout; i > 0; i--) {
 		if ((READ4(sc, CQSPI_FLASHCMD) & FLASHCMD_CMDEXECSTAT) == 0) {
 			break;
@@ -281,7 +293,7 @@ cqspi_cmd_read(struct cqspi_softc *sc, uint8_t cmd,
 	int i;
 
 	if (len > 8) {
-		printf("failed to read data\n");
+		device_printf(sc->dev, "Failed to read data\n");
 		return (-1);
 	}
 #if 0
@@ -415,8 +427,7 @@ cqspi_write(device_t dev, device_t child, struct bio *bp,
 	reg |= (2 << 8); //numburstreqbytes
 	WRITE4(sc, CQSPI_DMAPER, reg);
 
-	WRITE4(sc, CQSPI_INDWRWATER, 64); //(128 * 4) / 8);
-
+	WRITE4(sc, CQSPI_INDWRWATER, 64);
 	WRITE4(sc, CQSPI_INDWR, INDRD_IND_OPS_DONE_STATUS);
 	WRITE4(sc, CQSPI_INDWR, 0);
 
@@ -435,8 +446,6 @@ cqspi_write(device_t dev, device_t child, struct bio *bp,
 	reg |= DEVRD_ADDR_WIDTH_SINGLE;
 	reg |= DEVRD_INST_WIDTH_SINGLE;
 	WRITE4(sc, CQSPI_DEVRD, reg);
-
-	//WRITE4(sc, CQSPI_MODEBIT, 0);
 
 	xdma_enqueue_bio(sc->xchan_tx, &bp, 0xffa00000, XDMA_MEM_TO_DEV);
 	xdma_queue_submit(sc->xchan_tx);
@@ -554,6 +563,8 @@ cqspi_init(struct cqspi_softc *sc)
 	WRITE4(sc, CQSPI_DEVSZ, reg);
 
 	WRITE4(sc, CQSPI_SRAMPART, sc->fifo_depth/2);
+
+	/* TODO: calculate baud rate and delay values. */
 
 	reg = READ4(sc, CQSPI_CFG);
 	/* Configure baud rate */
