@@ -173,7 +173,7 @@ n25q_get_device_ident(struct n25q_softc *sc)
 
 	pdev = device_get_parent(sc->dev);
 
-	QSPI_READ_REG(pdev, sc->dev, CMD_READ_IDENT, (uint32_t *)&data[0], 4);
+	QSPI_READ_REG(pdev, sc->dev, CMD_READ_IDENT, (uint8_t *)&data[0], 4);
 
 	manufacturer_id = data[0];
 	dev_id = (data[1] << 8) | (data[2]);

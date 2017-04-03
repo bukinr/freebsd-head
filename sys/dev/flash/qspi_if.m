@@ -62,7 +62,7 @@ METHOD int write_reg {
 	device_t dev;
 	device_t child;
 	uint8_t opcode;
-	uint32_t *addr;
+	uint8_t *addr;
 	uint32_t len;
 };
 
@@ -70,6 +70,6 @@ METHOD int read_reg {
 	device_t dev;
 	device_t child;
 	uint8_t opcode;
-	uint32_t *addr;
+	uint8_t *addr;
 	uint32_t len;
 };
