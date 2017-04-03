@@ -449,7 +449,7 @@ cqspi_write(device_t dev, device_t child, struct bio *bp,
 	reg |= DEVRD_INST_WIDTH_SINGLE;
 	WRITE4(sc, CQSPI_DEVRD, reg);
 
-	xdma_enqueue_bio(sc->xchan_tx, &bp, sc->sram_phys, XDMA_MEM_TO_DEV, 4, 4);
+	xdma_enqueue_bio(sc->xchan_tx, &bp, sc->sram_phys, 4, 4, XDMA_MEM_TO_DEV);
 	xdma_queue_submit(sc->xchan_tx);
 
 	sc->write_op_done = 0;
@@ -504,7 +504,7 @@ cqspi_read(device_t dev, device_t child, struct bio *bp,
 	WRITE4(sc, CQSPI_MODEBIT, 0xff);
 	WRITE4(sc, CQSPI_IRQMASK, 0);
 
-	xdma_enqueue_bio(sc->xchan_rx, &bp, sc->sram_phys, XDMA_DEV_TO_MEM, 4, 4);
+	xdma_enqueue_bio(sc->xchan_rx, &bp, sc->sram_phys, 4, 4, XDMA_DEV_TO_MEM);
 	xdma_queue_submit(sc->xchan_rx);
 
 	sc->read_op_done = 0;

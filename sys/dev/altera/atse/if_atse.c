@@ -207,7 +207,7 @@ atse_rx_enqueue(struct atse_softc *sc, uint32_t n)
 		}
 
 		m->m_pkthdr.len = m->m_len = m->m_ext.ext_size;
-		xdma_enqueue_mbuf(sc->xchan_rx, &m, 0, XDMA_DEV_TO_MEM);
+		xdma_enqueue_mbuf(sc->xchan_rx, &m, 0, 4, 4, XDMA_DEV_TO_MEM);
 	}
 
 	return (0);
@@ -309,7 +309,7 @@ atse_transmit_locked(struct ifnet *ifp)
 	enq = 0;
 
 	while ((m = drbr_peek(ifp, br)) != NULL) {
-		error = xdma_enqueue_mbuf(sc->xchan_tx, &m, 0, XDMA_MEM_TO_DEV);
+		error = xdma_enqueue_mbuf(sc->xchan_tx, &m, 0, 4, 4, XDMA_MEM_TO_DEV);
 		if (error != 0) {
 			/* No space in request queue available yet. */
 			drbr_putback(ifp, br, m);

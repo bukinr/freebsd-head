@@ -540,7 +540,8 @@ xdma_dequeue(xdma_channel_t *xchan, void **user,
 
 int
 xdma_enqueue(xdma_channel_t *xchan, uintptr_t src, uintptr_t dst,
-    bus_size_t len, enum xdma_direction dir, void *user)
+    uint8_t src_width, uint8_t dst_width, bus_size_t len,
+    enum xdma_direction dir, void *user)
 {
 	struct xdma_request *xr;
 	xdma_controller_t *xdma;
@@ -560,6 +561,8 @@ xdma_enqueue(xdma_channel_t *xchan, uintptr_t src, uintptr_t dst,
 	xr->type = 0;
 	xr->src_addr = src;
 	xr->dst_addr = dst;
+	xr->src_width = src_width;
+	xr->dst_width = dst_width;
 #if 0
 	if (dir == XDMA_MEM_TO_DEV) {
 		xr->dst_addr = addr;

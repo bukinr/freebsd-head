@@ -203,13 +203,14 @@ int xchan_seg_done(xdma_channel_t *xchan, xdma_transfer_status_t *);
 
 /* xchan queues operations */
 int xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **m, xdma_transfer_status_t *);
-int xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **m, uintptr_t addr, enum xdma_direction dir);
+int xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **m, uintptr_t addr,
+    uint8_t, uint8_t, enum xdma_direction dir);
 int xdma_dequeue_bio(xdma_channel_t *xchan, struct bio **bp, xdma_transfer_status_t *status);
 int xdma_enqueue_bio(xdma_channel_t *xchan, struct bio **bp, bus_addr_t addr,
-    enum xdma_direction dir, uint8_t, uint8_t);
+    uint8_t, uint8_t, enum xdma_direction dir);
 int xdma_dequeue(xdma_channel_t *xchan, void **user, xdma_transfer_status_t *status);
 int xdma_enqueue(xdma_channel_t *xchan, uintptr_t src, uintptr_t dst,
-    bus_size_t, enum xdma_direction dir, void *);
+    uint8_t, uint8_t, bus_size_t, enum xdma_direction dir, void *);
 
 int xdma_queue_submit(xdma_channel_t *xchan);
 

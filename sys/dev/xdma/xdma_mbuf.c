@@ -84,7 +84,8 @@ xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 
 int
 xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
-    uintptr_t addr, enum xdma_direction dir)
+    uintptr_t addr, uint8_t src_width, uint8_t dst_width,
+    enum xdma_direction dir)
 {
 	struct xdma_request *xr;
 	xdma_controller_t *xdma;
@@ -107,6 +108,8 @@ xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 		xr->src_addr = addr;
 		xr->dst_addr = 0;
 	}
+	xr->src_width = src_width;
+	xr->dst_width = dst_width;
 	xr->done = 0;
 	xchan->xr_head = xchan_next_req(xchan, xchan->xr_head);
 	atomic_add_int(&xchan->xr_count, 1);

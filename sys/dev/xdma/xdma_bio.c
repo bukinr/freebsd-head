@@ -84,8 +84,8 @@ xdma_dequeue_bio(xdma_channel_t *xchan, struct bio **bp,
 
 int
 xdma_enqueue_bio(xdma_channel_t *xchan, struct bio **bp,
-    bus_addr_t addr, enum xdma_direction dir,
-    uint8_t src_width, uint8_t dst_width)
+    bus_addr_t addr, uint8_t src_width, uint8_t dst_width,
+    enum xdma_direction dir)
 {
 	struct xdma_request *xr;
 	xdma_controller_t *xdma;
