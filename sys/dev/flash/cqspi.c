@@ -334,7 +334,7 @@ cqspi_wait_ready(struct cqspi_softc *sc)
 
 	do {
 		ret = cqspi_cmd_read(sc, CMD_READ_STATUS, &data, 1);
-	} while (data & (1 << 0));
+	} while (data & STATUS_WIP);
 
 	return (0);
 }
@@ -396,7 +396,7 @@ cqspi_erase(device_t dev, device_t child, off_t offset)
 
 	cqspi_wait_idle(sc);
 	cqspi_wait_ready(sc);
-	ret = cqspi_cmd_write_addr(sc, 0xdc, offset, 4);
+	ret = cqspi_cmd_write_addr(sc, CMD_QUAD_SECTOR_ERASE, offset, 4);
 
 	cqspi_wait_idle(sc);
 
@@ -423,8 +423,8 @@ cqspi_write(device_t dev, device_t child, struct bio *bp,
 	cqspi_wait_ready(sc);
 	cqspi_wait_idle(sc);
 
-	reg = (2 << 0); //numsglreqbytes
-	reg |= (2 << 8); //numburstreqbytes
+	reg = DMAPER_NUMSGLREQBYTES_4;
+	reg |= DMAPER_NUMBURSTREQBYTES_4;
 	WRITE4(sc, CQSPI_DMAPER, reg);
 
 	WRITE4(sc, CQSPI_INDWRWATER, 64);
@@ -437,9 +437,7 @@ cqspi_write(device_t dev, device_t child, struct bio *bp,
 	reg = (0 << DEVWR_DUMMYWRCLKS_S);
 	reg |= DEVWR_DATA_WIDTH_QUAD;
 	reg |= DEVWR_ADDR_WIDTH_SINGLE;
-	//dont use this
-	//reg |= (QUAD_INPUT_FAST_PROGRAM << DEVWR_RDOPCODE_S);
-	reg |= (0x34 << DEVWR_WROPCODE_S);
+	reg |= (CMD_QUAD_PAGE_PROGRAM << DEVWR_WROPCODE_S);
 	WRITE4(sc, CQSPI_DEVWR, reg);
 
 	reg = DEVRD_DATA_WIDTH_QUAD;
@@ -480,8 +478,8 @@ cqspi_read(device_t dev, device_t child, struct bio *bp,
 
 	cqspi_wait_idle(sc);
 
-	reg = (2 << 0); //numsglreqbytes
-	reg |= (2 << 8); //numburstreqbytes
+	reg = DMAPER_NUMSGLREQBYTES_4;
+	reg |= DMAPER_NUMBURSTREQBYTES_4;
 	WRITE4(sc, CQSPI_DMAPER, reg);
 
 	WRITE4(sc, CQSPI_INDRDWATER, 64);

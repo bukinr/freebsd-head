@@ -86,6 +86,10 @@
 #define	CQSPI_SRAMPART		0x18	/* SRAM Partition Configuration Register */
 #define	CQSPI_INDADDRTRIG	0x1C	/* Indirect AHB Address Trigger Register */
 #define	CQSPI_DMAPER		0x20	/* DMA Peripheral Configuration Register */
+#define	 DMAPER_NUMSGLREQBYTES_S	0
+#define	 DMAPER_NUMBURSTREQBYTES_S	8
+#define	 DMAPER_NUMSGLREQBYTES_4	(2 << DMAPER_NUMSGLREQBYTES_S);
+#define	 DMAPER_NUMBURSTREQBYTES_4	(2 << DMAPER_NUMBURSTREQBYTES_S);
 #define	CQSPI_REMAPADDR		0x24	/* Remap Address Register */
 #define	CQSPI_MODEBIT		0x28	/* Mode Bit Configuration */
 #define	CQSPI_SRAMFILL		0x2C	/* SRAM Fill Register */
@@ -126,9 +130,6 @@
 #define	CQSPI_FLASHCMDWRDATAUP	0xAC	/* Flash Command Write Data Register (Upper) */
 #define	CQSPI_MODULEID		0xFC	/* Module ID Register */
 
-#define	CMD_READ_4B_QUAD_OUTPUT	0x6C
-
-//remove below
 /*
  * Commands 
  */
@@ -150,6 +151,11 @@
 #define	CMD_READ_NVCONF_REG	0xB5
 #define	CMD_READ_CONF_REG	0x85
 #define	CMD_READ_FSR		0x70
+
+/* Quad, 4B-addressing operations. */
+#define	CMD_QUAD_SECTOR_ERASE	0xdc
+#define	CMD_QUAD_PAGE_PROGRAM	0x34
+#define	CMD_READ_4B_QUAD_OUTPUT	0x6C
 
 /*
  * Status register flags
