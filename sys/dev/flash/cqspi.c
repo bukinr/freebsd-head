@@ -81,8 +81,6 @@ __FBSDID("$FreeBSD$");
 #define WRITE_DATA_1(_sc, _reg, _val) bus_write_1((_sc)->res[1], _reg, _val)
 
 struct cqspi_softc {
-	unsigned int		sc_flags[24];
-
 	device_t		dev;
 
 	struct resource		*res[3];
@@ -106,6 +104,7 @@ struct cqspi_softc {
 	xdma_channel_t		*xchan_rx;
 	void			*ih_rx;
 
+	struct intr_config_hook	config_intrhook;
 	struct mtx		sc_mtx;
 };
 
@@ -603,8 +602,6 @@ cqspi_add_devices(device_t dev)
 
 	node = ofw_bus_get_node(dev);
 
-	simplebus_init(dev, node);
-
 	for (child = OF_child(node); child != 0; child = OF_peer(child)) {
 		child_dev = simplebus_add_device(dev, child, 0, NULL, -1, NULL);
 		if (child_dev == NULL) {
@@ -618,6 +615,19 @@ cqspi_add_devices(device_t dev)
 	}
 
 	return (0);
+}
+
+static void
+cqspi_delayed_attach(void *arg)
+{
+	struct cqspi_softc *sc;
+
+	sc = arg;
+
+	cqspi_add_devices(sc->dev);
+	bus_generic_attach(sc->dev);
+
+	config_intrhook_disestablish(&sc->config_intrhook);
 }
 
 static int
@@ -714,9 +724,15 @@ cqspi_attach(device_t dev)
 	xdma_prep_sg(sc->xchan_rx, TX_QUEUE_SIZE, MAXPHYS, 16);
 
 	cqspi_init(sc);
-	cqspi_add_devices(dev);
 
-	return (bus_generic_attach(dev));
+	sc->config_intrhook.ich_func = cqspi_delayed_attach;
+	sc->config_intrhook.ich_arg = sc;
+	if (config_intrhook_establish(&sc->config_intrhook) != 0) {
+		device_printf(dev, "config_intrhook_establish failed\n");
+		return (ENOMEM);
+	}
+
+	return (0);
 }
 
 static int
@@ -742,9 +758,9 @@ static device_method_t cqspi_methods[] = {
 	{ 0, 0 }
 };
 
+static devclass_t cqspi_devclass;
+
 DEFINE_CLASS_1(cqspi, cqspi_driver, cqspi_methods,
     sizeof(struct cqspi_softc), simplebus_driver);
-
-static devclass_t cqspi_devclass;
 
 DRIVER_MODULE(cqspi, simplebus, cqspi_driver, cqspi_devclass, 0, 0);
