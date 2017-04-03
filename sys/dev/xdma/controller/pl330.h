@@ -43,12 +43,12 @@
 #define	FSRD		0x030 /* Fault Status DMA Manager */
 #define	FSRC		0x034 /* Fault Status DMA Channel */
 #define	FTRD		0x038 /* Fault Type DMA Manager */
-#define	FTR(n)		(0x040 + 0x04 * n) /* Fault type for DMA channel n */
-#define	CSR(n)		(0x100 + 0x08 * n) /* Channel status for DMA channel n */
-#define	CPC(n)		(0x104 + 0x08 * n) /* Channel PC for DMA channel n */
-#define	SAR(n)		(0x400 + 0x20 * n) /* Source address for DMA channel n */
-#define	DAR(n)		(0x404 + 0x20 * n) /* Destination address for DMA channel n */
-#define	CCR(n)		(0x408 + 0x20 * n) /* Channel control for DMA channel n */
+#define	FTR(n)		(0x040 + 0x04 * (n)) /* Fault type for DMA channel n */
+#define	CSR(n)		(0x100 + 0x08 * (n)) /* Channel status for DMA channel n */
+#define	CPC(n)		(0x104 + 0x08 * (n)) /* Channel PC for DMA channel n */
+#define	SAR(n)		(0x400 + 0x20 * (n)) /* Source address for DMA channel n */
+#define	DAR(n)		(0x404 + 0x20 * (n)) /* Destination address for DMA channel n */
+#define	CCR(n)		(0x408 + 0x20 * (n)) /* Channel control for DMA channel n */
 #define	 CCR_DST_BURST_SIZE_S	15
 #define	 CCR_DST_BURST_SIZE_4	(2 << CCR_DST_BURST_SIZE_S)
 #define	 CCR_SRC_BURST_SIZE_S	1
@@ -57,8 +57,8 @@
 #define	 CCR_SRC_INC		(1 << 0)
 #define	 CCR_DST_PROT_CTRL_S	22
 #define	 CCR_DST_PROT_PRIV	(1 << CCR_DST_PROT_CTRL_S)
-#define	LC0(n)		(0x40C + 0x20 * n) /* Loop counter 0 for DMA channel n */
-#define	LC1(n)		(0x410 + 0x20 * n) /* Loop counter 1 for DMA channel n */
+#define	LC0(n)		(0x40C + 0x20 * (n)) /* Loop counter 0 for DMA channel n */
+#define	LC1(n)		(0x410 + 0x20 * (n)) /* Loop counter 1 for DMA channel n */
 
 #define	DBGSTATUS	0xD00 /* Debug Status */
 #define	DBGCMD		0xD04 /* Debug Command */
@@ -76,10 +76,10 @@
 #define	R_CCR	1
 #define	R_DAR	2
 
-#if 0
-0xFE0- 0xFEC  periph_id_n RO  Configuration-dependent Peripheral Identification Registers
-0xFF0- 0xFFC  pcell_id_n RO   Configuration-dependent Component Identification Registers
-#endif
+/*
+ * 0xFE0- 0xFEC  periph_id_n RO  Configuration-dependent Peripheral Identification Registers
+ * 0xFF0- 0xFFC  pcell_id_n RO   Configuration-dependent Component Identification Registers
+ */
 
 /* pl330 ISA */
 #define	DMAADDH		0x54
@@ -107,10 +107,5 @@
 #define	DMAWFE		0x36
 #define	DMAWFP		0x30
 #define	DMAWMB		0x13
-
-#define	READ4(_sc, _reg)	\
-	bus_space_read_4(_sc->bst, _sc->bsh, _reg)
-#define	WRITE4(_sc, _reg, _val)	\
-	bus_space_write_4(_sc->bst, _sc->bsh, _reg, _val)
 
 #endif /* !_DEV_XDMA_CONTROLLER_PL330_H_ */

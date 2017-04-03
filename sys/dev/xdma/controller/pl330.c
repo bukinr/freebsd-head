@@ -67,6 +67,11 @@ __FBSDID("$FreeBSD$");
 
 #include <dev/xdma/controller/pl330.h>
 
+#define	READ4(_sc, _reg)	\
+	bus_read_4(_sc->res[0], _reg)
+#define	WRITE4(_sc, _reg, _val)	\
+	bus_write_4(_sc->res[0], _reg, _val)
+
 #define	PL330_NCHANNELS	32
 #define	PL330_MAXLOAD	0x10000
 
@@ -89,8 +94,6 @@ struct pl330_fdt_data {
 struct pl330_softc {
 	device_t		dev;
 	struct resource		*res[PL330_NCHANNELS + 1];
-	bus_space_tag_t		bst;
-	bus_space_handle_t	bsh;
 	void			*ih[PL330_NCHANNELS];
 	struct pl330_channel	channels[PL330_NCHANNELS];
 };
@@ -344,10 +347,6 @@ pl330_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	/* CSR memory interface */
-	sc->bst = rman_get_bustag(sc->res[0]);
-	sc->bsh = rman_get_bushandle(sc->res[0]);
-
 	/* Setup interrupt handler */
 	for (i = 0; i < PL330_NCHANNELS; i++) {
 		if (sc->res[i + 1] == NULL) {
@@ -510,10 +509,9 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 
 		if (cnt > 128) {
 			offs += emit_lpend(&ibuf[offs], 1, 1, (offs - offs1));
-			offs += emit_lpend(&ibuf[offs], 0, 1, (offs - offs0));
-		} else {
-			offs += emit_lpend(&ibuf[offs], 0, 1, (offs - offs0));
 		}
+
+		offs += emit_lpend(&ibuf[offs], 0, 1, (offs - offs0));
 	}
 
 	offs += emit_sev(&ibuf[offs], chan->index);
@@ -546,7 +544,7 @@ pl330_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 
 	sc = device_get_softc(dev);
 
-#if 1
+#if 0
 	printf("%s(%d)\n", __func__, device_get_unit(dev));
 #endif
 
