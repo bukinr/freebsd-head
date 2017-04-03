@@ -255,7 +255,7 @@ cqspi_cmd_write_addr(struct cqspi_softc *sc, uint8_t cmd,
 
 static int
 cqspi_cmd_write(struct cqspi_softc *sc, uint8_t cmd,
-    uint32_t *addr, uint32_t len)
+    uint8_t *addr, uint32_t len)
 {
 	uint32_t reg;
 	int ret;
@@ -272,7 +272,7 @@ cqspi_cmd_write(struct cqspi_softc *sc, uint8_t cmd,
 
 static int
 cqspi_cmd_read(struct cqspi_softc *sc, uint8_t cmd,
-    uint32_t *addr, uint32_t len)
+    uint8_t *addr, uint32_t len)
 {
 	uint32_t data;
 	uint32_t reg;
@@ -317,7 +317,7 @@ cqspi_cmd_read(struct cqspi_softc *sc, uint8_t cmd,
 static int
 cqspi_wait_ready(struct cqspi_softc *sc)
 {
-	uint32_t data;
+	uint8_t data;
 	int ret;
 
 	do {
@@ -329,7 +329,7 @@ cqspi_wait_ready(struct cqspi_softc *sc)
 
 static int
 cqspi_write_reg(device_t dev, device_t child,
-    uint8_t opcode, uint32_t *addr, uint32_t len)
+    uint8_t opcode, uint8_t *addr, uint32_t len)
 {
 	struct cqspi_softc *sc;
 	int ret;
@@ -343,7 +343,7 @@ cqspi_write_reg(device_t dev, device_t child,
 
 static int
 cqspi_read_reg(device_t dev, device_t child,
-    uint8_t opcode, uint32_t *addr, uint32_t len)
+    uint8_t opcode, uint8_t *addr, uint32_t len)
 {
 	struct cqspi_softc *sc;
 	int ret;
@@ -578,16 +578,6 @@ cqspi_init(struct cqspi_softc *sc)
 	reg |= (CFG_EN);
 	WRITE4(sc, CQSPI_CFG, reg);
 
-
-
-	uint32_t data;
-
-	printf("Enter 4b mode\n");
-	cqspi_cmd_read(sc, CMD_ENTER_4B_MODE, &data, 1);
-
-	//printf("Exit 4b mode\n");
-	//cqspi_cmd_read(sc, CMD_EXIT_4B_MODE, &data, 1);
-
 	return (0);
 }
 
@@ -733,7 +723,7 @@ static device_method_t cqspi_methods[] = {
 	DEVMETHOD(qspi_read,		cqspi_read),
 	DEVMETHOD(qspi_write,		cqspi_write),
 	DEVMETHOD(qspi_erase,		cqspi_erase),
-	
+
 	{ 0, 0 }
 };
 
