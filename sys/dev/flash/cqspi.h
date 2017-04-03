@@ -34,6 +34,7 @@
 #define _CQSPI_H_
 
 #define	CQSPI_CFG		0x00	/* QSPI Configuration */
+#define	 CFG_IDLE		(1 << 31)
 #define	 CFG_ENDMA		(1 << 15)
 #define	 CFG_IDLE		(1 << 31)
 #define	 CFG_BAUD_S		19

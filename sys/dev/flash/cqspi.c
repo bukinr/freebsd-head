@@ -94,6 +94,7 @@ struct cqspi_softc {
 	uint32_t		fifo_depth;
 	uint32_t		fifo_width;
 	uint32_t		trigger_address;
+	uint32_t		sram_phys;
 
 	/* xDMA */
 	xdma_controller_t	*xdma_tx;
@@ -375,7 +376,7 @@ cqspi_wait_idle(struct cqspi_softc *sc)
 
 	do {
 		reg = READ4(sc, CQSPI_CFG);
-		if (reg & (1 << 31)) {
+		if (reg & CFG_IDLE) {
 			break;
 		}
 	} while (1);
@@ -446,7 +447,7 @@ cqspi_write(device_t dev, device_t child, struct bio *bp,
 	reg |= DEVRD_INST_WIDTH_SINGLE;
 	WRITE4(sc, CQSPI_DEVRD, reg);
 
-	xdma_enqueue_bio(sc->xchan_tx, &bp, 0xffa00000, XDMA_MEM_TO_DEV);
+	xdma_enqueue_bio(sc->xchan_tx, &bp, sc->sram_phys, XDMA_MEM_TO_DEV);
 	xdma_queue_submit(sc->xchan_tx);
 
 	sc->write_op_done = 0;
@@ -501,7 +502,7 @@ cqspi_read(device_t dev, device_t child, struct bio *bp,
 	WRITE4(sc, CQSPI_MODEBIT, 0xff);
 	WRITE4(sc, CQSPI_IRQMASK, 0);
 
-	xdma_enqueue_bio(sc->xchan_rx, &bp, 0xffa00000, XDMA_DEV_TO_MEM);
+	xdma_enqueue_bio(sc->xchan_rx, &bp, sc->sram_phys, XDMA_DEV_TO_MEM);
 	xdma_queue_submit(sc->xchan_rx);
 
 	sc->read_op_done = 0;
@@ -652,6 +653,8 @@ cqspi_attach(device_t dev)
 	/* Memory interface */
 	sc->bst = rman_get_bustag(sc->res[0]);
 	sc->bsh = rman_get_bushandle(sc->res[0]);
+
+	sc->sram_phys = rman_get_start(sc->res[1]);
 
 	/* Setup interrupt handlers */
 	if (bus_setup_intr(sc->dev, sc->res[2], INTR_TYPE_BIO | INTR_MPSAFE,
