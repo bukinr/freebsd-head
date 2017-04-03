@@ -68,6 +68,7 @@ __FBSDID("$FreeBSD$");
 #include <dev/xdma/controller/pl330.h>
 
 #define	PL330_NCHANNELS	32
+#define	PL330_MAXLOAD	0x10000
 
 struct pl330_channel {
 	struct pl330_softc	*sc;
@@ -178,7 +179,7 @@ pl330_intr(void *arg)
 		}
 
 		/* Accept new requests. */
-		chan->capacity = 0x10000;
+		chan->capacity = PL330_MAXLOAD;
 
 		/* Finish operation */
 		status.error = 0;
@@ -397,7 +398,7 @@ pl330_channel_alloc(device_t dev, struct xdma_channel *xchan)
 			chan->used = 1;
 
 			chan->ibuf = (void *)kmem_alloc_contig(kernel_arena,
-			    PAGE_SIZE, M_ZERO, 0, ~0, PAGE_SIZE, 0,
+			    PAGE_SIZE*8, M_ZERO, 0, ~0, PAGE_SIZE, 0,
 			    VM_MEMATTR_UNCACHEABLE);
 			chan->ibuf_phys = vtophys(chan->ibuf);
 
@@ -550,7 +551,7 @@ pl330_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 #endif
 
 	chan = (struct pl330_channel *)xchan->chan;
-	chan->capacity = 0x10000;
+	chan->capacity = PL330_MAXLOAD;
 
 	return (0);
 }

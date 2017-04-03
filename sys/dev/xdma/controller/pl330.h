@@ -30,6 +30,9 @@
  * $FreeBSD$
  */
 
+#ifndef _DEV_XDMA_CONTROLLER_PL330_H_
+#define _DEV_XDMA_CONTROLLER_PL330_H_
+
 /* pl330 registers */
 #define	DSR		0x000 /* DMA Manager Status */
 #define	DPC		0x004 /* DMA Program Counter */
@@ -109,3 +112,5 @@
 	bus_space_read_4(_sc->bst, _sc->bsh, _reg)
 #define	WRITE4(_sc, _reg, _val)	\
 	bus_space_write_4(_sc->bst, _sc->bsh, _reg, _val)
+
+#endif /* !_DEV_XDMA_CONTROLLER_PL330_H_ */
