@@ -1,4 +1,6 @@
 /*-
+ * Copyright (c) 2006 M. Warner Losh.  All rights reserved.
+ * Copyright (c) 2009 Oleksandr Tymoshenko.  All rights reserved.
  * Copyright (c) 2017 Ruslan Bukin <br@bsdpad.com>
  * All rights reserved.
  *
@@ -28,7 +30,7 @@
  * SUCH DAMAGE.
  */
 
-/* n25q flash driver */
+/* n25q quad spi flash driver */
 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
@@ -190,29 +192,6 @@ n25q_get_device_ident(struct n25q_softc *sc)
 	return (NULL);
 }
 
-static void
-n25q_set_writable(device_t dev, int writable)
-{
-#if 0
-	uint8_t txBuf[1], rxBuf[1];
-	struct spi_command cmd;
-	int err;
-
-	printf("%s\n", __func__);
-
-	memset(&cmd, 0, sizeof(cmd));
-	memset(txBuf, 0, sizeof(txBuf));
-	memset(rxBuf, 0, sizeof(rxBuf));
-
-	txBuf[0] = writable ? CMD_WRITE_ENABLE : CMD_WRITE_DISABLE;
-	cmd.tx_cmd = txBuf;
-	cmd.rx_cmd = rxBuf;
-	cmd.rx_cmd_sz = 1;
-	cmd.tx_cmd_sz = 1;
-	err = 0; //SPIBUS_TRANSFER(device_get_parent(dev), dev, &cmd);
-#endif
-}
-
 static int
 n25q_write(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count)
 {
@@ -223,9 +202,15 @@ n25q_write(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count
 	pdev = device_get_parent(dev);
 	sc = device_get_softc(dev);
 
-	//printf("%s: offset 0x%llx count %lld bytes\n", __func__, offset, count);
+#if 0
+	printf("%s: offset 0x%llx count %lld bytes\n", __func__, offset, count);
+#endif
 
 	err = QSPI_ERASE(pdev, dev, offset);
+	if (err != 0) {
+		return (err);
+	}
+
 	err = QSPI_WRITE(pdev, dev, bp, offset, data, count);
 
 	return (err);
@@ -241,7 +226,9 @@ n25q_read(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count)
 	pdev = device_get_parent(dev);
 	sc = device_get_softc(dev);
 
-	//printf("%s: offset 0x%llx count %lld bytes\n", __func__, offset, count);
+#if 0
+	printf("%s: offset 0x%llx count %lld bytes\n", __func__, offset, count);
+#endif
 
 	/*
 	 * Enforce the disk read sectorsize not the erase sectorsize.
@@ -262,32 +249,16 @@ n25q_read(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count)
 static int
 n25q_set_4b_mode(device_t dev, uint8_t command)
 {
-#if 0
-	uint8_t txBuf[1], rxBuf[1];
-	struct spi_command cmd;
+	struct n25q_softc *sc;
 	device_t pdev;
 	int err;
 
-	memset(&cmd, 0, sizeof(cmd));
-	memset(txBuf, 0, sizeof(txBuf));
-	memset(rxBuf, 0, sizeof(rxBuf));
-
 	pdev = device_get_parent(dev);
+	sc = device_get_softc(dev);
 
-	cmd.tx_cmd_sz = cmd.rx_cmd_sz = 1;
-
-	cmd.tx_cmd = txBuf;
-	cmd.rx_cmd = rxBuf;
-
-	txBuf[0] = command;
-
-	err = 0; //SPIBUS_TRANSFER(pdev, dev, &cmd);
-
-	n25q_wait_for_device_ready(dev);
+	err = QSPI_WRITE_REG(pdev, dev, command, 0, 0);
 
 	return (err);
-#endif
-	return (0);
 }
 
 static int
