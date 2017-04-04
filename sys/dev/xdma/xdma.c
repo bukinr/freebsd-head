@@ -139,6 +139,7 @@ xdma_channel_alloc(xdma_controller_t *xdma, uint32_t caps)
 	}
 
 	TAILQ_INIT(&xchan->ie_handlers);
+
 	mtx_init(&xchan->mtx_lock, "xDMA", NULL, MTX_DEF);
 	mtx_init(&xchan->mtx_qin_lock, "xDMA", NULL, MTX_DEF);
 	mtx_init(&xchan->mtx_qout_lock, "xDMA", NULL, MTX_DEF);
