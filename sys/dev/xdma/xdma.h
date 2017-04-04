@@ -89,8 +89,6 @@ struct xchan_buf {
 	void				*cbuf;
 };
 
-typedef struct xchan_buf xchan_buf_t;
-
 /* SG type of transfer. */
 struct xdma_request {
 	struct mbuf			*m;

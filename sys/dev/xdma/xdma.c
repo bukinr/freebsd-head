@@ -367,7 +367,7 @@ static int
 xchan_bufs_free(xdma_channel_t *xchan)
 {
 	struct xdma_request *xr;
-	xchan_buf_t *b;
+	struct xchan_buf *b;
 	int i;
 
 	if ((xchan->flags & XCHAN_BUFS_ALLOCATED) == 0) {
@@ -980,7 +980,7 @@ xchan_seg_done(xdma_channel_t *xchan,
 {
 	struct xdma_request *xr;
 	xdma_controller_t *xdma;
-	xchan_buf_t *b;
+	struct xchan_buf *b;
 
 	xdma = xchan->xdma;
 
