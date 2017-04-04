@@ -388,14 +388,19 @@ xchan_bufs_free(xdma_channel_t *xchan)
 		return (-1);
 	}
 
-	for (i = 0; i < xchan->bufs_num; i++) {
-		b = &xchan->bufs[i];
-		bus_dmamap_destroy(xchan->dma_tag_bufs, b->map);
+	if (xchan->caps & XCHAN_CAP_BUSDMA) {
+		for (i = 0; i < xchan->bufs_num; i++) {
+			b = &xchan->bufs[i];
+			bus_dmamap_destroy(xchan->dma_tag_bufs, b->map);
+		}
+		bus_dma_tag_destroy(xchan->dma_tag_bufs);
+	} else {
+		for (i = 0; i < xchan->bufs_num; i++) {
+			contigfree(xchan->bufs[i].cbuf, xchan->maxsegsize, M_XDMA);
+		}
 	}
 
-	bus_dma_tag_destroy(xchan->dma_tag_bufs);
 	free(xchan->bufs, M_XDMA);
-
 	xchan->flags &= ~XCHAN_BUFS_ALLOCATED;
 
 	return (0);
@@ -574,7 +579,7 @@ struct seg_load_request {
 };
 
 static void
-xdma_get1paddr(void *arg, bus_dma_segment_t *segs, int nsegs, int error)
+xdma_dmamap_cb(void *arg, bus_dma_segment_t *segs, int nsegs, int error)
 {
 	struct seg_load_request *slr;
 	struct bus_dma_segment *seg;
@@ -621,7 +626,7 @@ xdma_load_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
 		slr.error = 0;
 		slr.seg = seg;
 		error = bus_dmamap_load_bio(xchan->dma_tag_bufs,
-		    xchan->bufs[i].map, xr->bp, xdma_get1paddr, &slr, BUS_DMA_NOWAIT);
+		    xchan->bufs[i].map, xr->bp, xdma_dmamap_cb, &slr, BUS_DMA_NOWAIT);
 		if (slr.error != 0) {
 			device_printf(xdma->dma_dev,
 			    "%s: bus_dmamap_load failed, err %d\n",
@@ -647,7 +652,7 @@ xdma_load_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
 		slr.error = 0;
 		slr.seg = seg;
 		error = bus_dmamap_load(xchan->dma_tag_bufs, xchan->bufs[i].map,
-		    addr, xr->len, xdma_get1paddr, &slr, BUS_DMA_NOWAIT);
+		    addr, xr->len, xdma_dmamap_cb, &slr, BUS_DMA_NOWAIT);
 		if (slr.error != 0) {
 			device_printf(xdma->dma_dev,
 			    "%s: bus_dmamap_load failed, err %d\n",
