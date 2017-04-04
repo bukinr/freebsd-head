@@ -250,7 +250,6 @@ struct xdma_request * xchan_bank_get(xdma_channel_t *xchan);
 #define	QUEUE_IN_UNLOCK(xchan)		mtx_unlock(&(xchan)->mtx_qin_lock)
 #define	QUEUE_IN_ASSERT_LOCKED(xchan)	mtx_assert(&(xchan)->mtx_qin_lock, MA_OWNED)
 
-#if 1
 #define	QUEUE_OUT_LOCK(xchan)		mtx_lock(&(xchan)->mtx_qout_lock)
 #define	QUEUE_OUT_UNLOCK(xchan)		mtx_unlock(&(xchan)->mtx_qout_lock)
 #define	QUEUE_OUT_ASSERT_LOCKED(xchan)	mtx_assert(&(xchan)->mtx_qout_lock, MA_OWNED)
@@ -262,20 +261,5 @@ struct xdma_request * xchan_bank_get(xdma_channel_t *xchan);
 #define	QUEUE_PROC_LOCK(xchan)		mtx_lock(&(xchan)->mtx_proc_lock)
 #define	QUEUE_PROC_UNLOCK(xchan)	mtx_unlock(&(xchan)->mtx_proc_lock)
 #define	QUEUE_PROC_ASSERT_LOCKED(xchan)	mtx_assert(&(xchan)->mtx_proc_lock, MA_OWNED)
-
-#else
-
-#define	QUEUE_OUT_LOCK(xchan)
-#define	QUEUE_OUT_UNLOCK(xchan)	
-#define	QUEUE_OUT_ASSERT_LOCKED(xchan)
-
-#define	QUEUE_BANK_LOCK(xchan)	
-#define	QUEUE_BANK_UNLOCK(xchan)	
-#define	QUEUE_BANK_ASSERT_LOCKED(xchan)
-
-#define	QUEUE_PROC_LOCK(xchan)	
-#define	QUEUE_PROC_UNLOCK(xchan)	
-#define	QUEUE_PROC_ASSERT_LOCKED(xchan)
-#endif
 
 #endif /* !_DEV_XDMA_H_ */
