@@ -81,6 +81,16 @@ struct xdma_controller {
 
 typedef struct xdma_controller xdma_controller_t;
 
+struct xchan_buf {
+	bus_dmamap_t			map;
+	struct xdma_request		*xr;
+	uint32_t			nsegs;
+	uint32_t			nsegs_left;
+	void				*cbuf;
+};
+
+typedef struct xchan_buf xchan_buf_t;
+
 /* SG type of transfer. */
 struct xdma_request {
 	struct mbuf			*m;
@@ -95,6 +105,8 @@ struct xdma_request {
 	xdma_transfer_status_t		status;
 	bool				done;
 	void				*user;
+	TAILQ_ENTRY(xdma_request)	xr_next;
+	struct xchan_buf		buf;
 };
 
 /*
@@ -125,16 +137,6 @@ struct xdma_sglist {
 	bool				last;
 };
 
-struct xchan_buf {
-	bus_dmamap_t			map;
-	struct xdma_request		*xr;
-	uint32_t			nsegs;
-	uint32_t			nsegs_left;
-	void				*cbuf;
-};
-
-typedef struct xchan_buf xchan_buf_t;
-
 struct xdma_channel {
 	xdma_controller_t		*xdma;
 	xdma_config_t			conf;
@@ -160,21 +162,15 @@ struct xdma_channel {
 	TAILQ_ENTRY(xdma_channel)	xchan_next;
 
 	struct mtx			mtx_lock;
+	struct mtx			mtx_qin_lock;
+	struct mtx			mtx_qout_lock;
+	struct mtx			mtx_bank_lock;
+	struct mtx			mtx_proc_lock;
 
 	/* Request queue. */
-	struct xdma_request		*xr;
-	uint32_t			xr_num;
-	uint32_t			xr_count;
-	uint32_t			xr_head;
-	uint32_t			xr_processed;
-	uint32_t			xr_tail;
-
-	/* Bus dma bufs. */
-	xchan_buf_t			*bufs;
-	uint32_t			bufs_num;
 	bus_dma_tag_t			dma_tag_bufs;
-	uint32_t			buf_head;
-	uint32_t			buf_tail;
+	struct xdma_request		*xr_mem;
+	uint32_t			xr_num;
 
 	/* Bus dma tag options. */
 	uint32_t			maxsegsize;
@@ -182,6 +178,12 @@ struct xdma_channel {
 	uint32_t			alignment;
 
 	struct xdma_sglist		*sg;
+
+	TAILQ_HEAD(, xdma_request)	bank;
+	TAILQ_HEAD(, xdma_request)	queue_in;
+	TAILQ_HEAD(, xdma_request)	queue_out;
+	TAILQ_HEAD(, xdma_request)	processing;
+	struct mtx			mtx_queue;
 };
 
 typedef struct xdma_channel xdma_channel_t;
@@ -240,20 +242,40 @@ struct xdma_intr_handler {
 	TAILQ_ENTRY(xdma_intr_handler)	ih_next;
 };
 
-static __inline uint32_t
-xchan_next_req(xdma_channel_t *xchan, uint32_t curidx)
-{
-
-	return ((curidx + 1) % xchan->xr_num);
-}
-
-static __inline uint32_t
-xchan_next_buf(xdma_channel_t *xchan, uint32_t curidx)
-{
-
-	return ((curidx + 1) % xchan->bufs_num);
-}
-
 static MALLOC_DEFINE(M_XDMA, "xdma", "xDMA framework");
+
+struct xdma_request * xchan_bank_get(xdma_channel_t *xchan);
+
+#define	QUEUE_IN_LOCK(xchan)		mtx_lock(&(xchan)->mtx_qin_lock)
+#define	QUEUE_IN_UNLOCK(xchan)		mtx_unlock(&(xchan)->mtx_qin_lock)
+#define	QUEUE_IN_ASSERT_LOCKED(xchan)	mtx_assert(&(xchan)->mtx_qin_lock, MA_OWNED)
+
+#if 1
+#define	QUEUE_OUT_LOCK(xchan)		mtx_lock(&(xchan)->mtx_qout_lock)
+#define	QUEUE_OUT_UNLOCK(xchan)		mtx_unlock(&(xchan)->mtx_qout_lock)
+#define	QUEUE_OUT_ASSERT_LOCKED(xchan)	mtx_assert(&(xchan)->mtx_qout_lock, MA_OWNED)
+
+#define	QUEUE_BANK_LOCK(xchan)		mtx_lock(&(xchan)->mtx_bank_lock)
+#define	QUEUE_BANK_UNLOCK(xchan)	mtx_unlock(&(xchan)->mtx_bank_lock)
+#define	QUEUE_BANK_ASSERT_LOCKED(xchan)	mtx_assert(&(xchan)->mtx_bank_lock, MA_OWNED)
+
+#define	QUEUE_PROC_LOCK(xchan)		mtx_lock(&(xchan)->mtx_proc_lock)
+#define	QUEUE_PROC_UNLOCK(xchan)	mtx_unlock(&(xchan)->mtx_proc_lock)
+#define	QUEUE_PROC_ASSERT_LOCKED(xchan)	mtx_assert(&(xchan)->mtx_proc_lock, MA_OWNED)
+
+#else
+
+#define	QUEUE_OUT_LOCK(xchan)
+#define	QUEUE_OUT_UNLOCK(xchan)	
+#define	QUEUE_OUT_ASSERT_LOCKED(xchan)
+
+#define	QUEUE_BANK_LOCK(xchan)	
+#define	QUEUE_BANK_UNLOCK(xchan)	
+#define	QUEUE_BANK_ASSERT_LOCKED(xchan)
+
+#define	QUEUE_PROC_LOCK(xchan)	
+#define	QUEUE_PROC_UNLOCK(xchan)	
+#define	QUEUE_PROC_ASSERT_LOCKED(xchan)
+#endif
 
 #endif /* !_DEV_XDMA_H_ */

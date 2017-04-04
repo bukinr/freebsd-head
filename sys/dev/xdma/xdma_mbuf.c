@@ -63,21 +63,30 @@ xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
     xdma_transfer_status_t *status)
 {
 	struct xdma_request *xr;
+	struct xdma_request *xr_tmp;
+	int found;
 
-	if (xchan->xr_tail == xchan->xr_processed) {
-		return (-1);
+	found = 0;
+
+	QUEUE_OUT_LOCK(xchan);
+	TAILQ_FOREACH_SAFE(xr, &xchan->queue_out, xr_next, xr_tmp) {
+		TAILQ_REMOVE(&xchan->queue_out, xr, xr_next);
+		found = 1;
+		break;
 	}
+	QUEUE_OUT_UNLOCK(xchan);
 
-	xr = &xchan->xr[xchan->xr_tail];
-	if (xr->done == 0) {
+	if (found == 0) {
 		return (-1);
 	}
 
 	*mp = xr->m;
 	status->error = xr->status.error;
 	status->transferred = xr->status.transferred;
-	xchan->xr_tail = xchan_next_req(xchan, xchan->xr_tail);
-	atomic_subtract_int(&xchan->xr_count, 1);
+
+	QUEUE_BANK_LOCK(xchan);
+	TAILQ_INSERT_TAIL(&xchan->bank, xr, xr_next);
+	QUEUE_BANK_UNLOCK(xchan);
 
 	return (0);
 }
@@ -92,12 +101,13 @@ xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 
 	xdma = xchan->xdma;
 
-	if (xchan->xr_count >= (xchan->xr_num - 1)) {
+	xr = xchan_bank_get(xchan);
+	if (xr == NULL) {
+		printf("%s: no space\n", __func__);
 		/* No space is available yet. */
 		return (-1);
-	}
+	};
 
-	xr = &xchan->xr[xchan->xr_head];
 	xr->direction = dir;
 	xr->m = *mp;
 	xr->type = XR_TYPE_MBUF;
@@ -111,8 +121,10 @@ xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 	xr->src_width = src_width;
 	xr->dst_width = dst_width;
 	xr->done = 0;
-	xchan->xr_head = xchan_next_req(xchan, xchan->xr_head);
-	atomic_add_int(&xchan->xr_count, 1);
+
+	QUEUE_IN_LOCK(xchan);
+	TAILQ_INSERT_TAIL(&xchan->queue_in, xr, xr_next);
+	QUEUE_IN_UNLOCK(xchan);
 
 	return (0);
 }
