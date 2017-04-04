@@ -60,6 +60,15 @@ __FBSDID("$FreeBSD$");
 #include <dev/xdma/xdma.h>
 #include "xdma_if.h"
 
+#define DEBUG
+#undef DEBUG
+
+#ifdef DEBUG
+#define dprintf(fmt, ...)  printf(fmt, ##__VA_ARGS__)
+#else
+#define dprintf(fmt, ...)
+#endif
+
 #define	AVALON_FIFO_TX_BASIC_OPTS_DEPTH		16
 #define	SOFTDMA_NCHANNELS			1
 #define	CONTROL_GEN_SOP				(1 << 0)

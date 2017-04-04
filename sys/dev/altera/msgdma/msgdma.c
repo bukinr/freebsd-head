@@ -63,6 +63,15 @@ __FBSDID("$FreeBSD$");
 
 #include <dev/altera/msgdma/msgdma.h>
 
+#define DEBUG
+#undef DEBUG
+
+#ifdef DEBUG
+#define dprintf(fmt, ...)  printf(fmt, ##__VA_ARGS__)
+#else
+#define dprintf(fmt, ...)
+#endif
+
 #define	MSGDMA_NCHANNELS	1
 
 struct msgdma_channel {
@@ -139,20 +148,16 @@ msgdma_intr(void *arg)
 	chan = &sc->channels[0];
 	xchan = chan->xchan;
 
-#if 0
-	printf("%s(%d): status 0x%08x next_descr 0x%08x, control 0x%08x\n", __func__,
+	dprintf("%s(%d): status 0x%08x next_descr 0x%08x, control 0x%08x\n", __func__,
 	    device_get_unit(sc->dev),
 		READ4_DESC(sc, PF_STATUS),
 		READ4_DESC(sc, PF_NEXT_LO),
 		READ4_DESC(sc, PF_CONTROL));
-#endif
 
 	tot_copied = 0;
 
 	while (chan->idx_tail != chan->idx_head) {
-#if 0
-		printf("%s: idx_tail %d idx_head %d\n", __func__, chan->idx_tail, chan->idx_head);
-#endif
+		dprintf("%s: idx_tail %d idx_head %d\n", __func__, chan->idx_tail, chan->idx_head);
 		bus_dmamap_sync(chan->dma_tag, chan->dma_map[chan->idx_tail],
 		    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
 
@@ -293,9 +298,7 @@ msgdma_dmamap_cb(void *arg, bus_dma_segment_t *segs, int nseg, int err)
 	chan->descs_phys[chan->map_descr].ds_addr = segs[0].ds_addr;
 	chan->descs_phys[chan->map_descr].ds_len = segs[0].ds_len;
 
-#if 0
-	printf("map desc %d: descs phys %lx len %ld\n", chan->map_descr, segs[0].ds_addr, segs[0].ds_len);
-#endif
+	dprintf("map desc %d: descs phys %lx len %ld\n", chan->map_descr, segs[0].ds_addr, segs[0].ds_len);
 }
 
 static int
@@ -331,9 +334,7 @@ msgdma_desc_alloc(struct msgdma_softc *sc, struct msgdma_channel *chan,
 
 	nsegments = chan->descs_num;
 
-#if 0
-	printf("%s: nseg %d\n", __func__, nsegments);
-#endif
+	dprintf("%s: nseg %d\n", __func__, nsegments);
 
 	err = bus_dma_tag_create(
 	    bus_get_dma_tag(sc->dev),
@@ -481,10 +482,8 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 		dst_addr_lo = (uint32_t)sg[i].dst_addr;
 		len = (uint32_t)sg[i].len;
 
-#if 0
-		printf("%s: src %x dst %x len %d\n", __func__,
+		dprintf("%s: src %x dst %x len %d\n", __func__,
 		    src_addr_lo, dst_addr_lo, len);
-#endif
 
 		desc = chan->descs[chan->idx_head];
 		desc->read_lo = htole32(src_addr_lo);
@@ -536,9 +535,7 @@ msgdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 
 	sc = device_get_softc(dev);
 
-#if 0
-	printf("%s(%d)\n", __func__, device_get_unit(dev));
-#endif
+	dprintf("%s(%d)\n", __func__, device_get_unit(dev));
 
 	chan = (struct msgdma_channel *)xchan->chan;
 
@@ -557,10 +554,9 @@ msgdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 		} else {
 			desc->next = htole32(chan->descs_phys[i+1].ds_addr);
 		}
-#if 0
-		printf("%s(%d): desc %d vaddr %lx next paddr %x\n", __func__,
+
+		dprintf("%s(%d): desc %d vaddr %lx next paddr %x\n", __func__,
 		    device_get_unit(dev), i, (uint64_t)desc, le32toh(desc->next));
-#endif
 	}
 
 	addr = chan->descs_phys[0].ds_addr;
