@@ -62,6 +62,15 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus_subr.h>
 #endif
 
+#define DEBUG
+#undef DEBUG
+
+#ifdef DEBUG
+#define dprintf(fmt, ...)  printf(fmt, ##__VA_ARGS__)
+#else
+#define dprintf(fmt, ...)
+#endif
+
 #include <dev/xdma/xdma.h>
 #include "xdma_if.h"
 
@@ -73,7 +82,7 @@ __FBSDID("$FreeBSD$");
 	bus_write_4(_sc->res[0], _reg, _val)
 
 #define	PL330_NCHANNELS	32
-#define	PL330_MAXLOAD	0x10000
+#define	PL330_MAXLOAD	2048
 
 struct pl330_channel {
 	struct pl330_softc	*sc;
@@ -162,11 +171,11 @@ pl330_intr(void *arg)
 	sc = arg;
 
 	pending = READ4(sc, INTMIS);
-#if 0
-	printf("%s: 0x%x, LC0 %x, SAR %x DAR %x\n",
+
+	dprintf("%s: 0x%x, LC0 %x, SAR %x DAR %x\n",
 	    __func__, pending, READ4(sc, LC0(0)),
 	    READ4(sc, SAR(0)), READ4(sc, DAR(0)));
-#endif
+
 	WRITE4(sc, INTCLR, pending);
 
 	for (c = 0; c < PL330_NCHANNELS; c++) {
@@ -503,9 +512,7 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	chan = (struct pl330_channel *)xchan->chan;
 	ibuf = chan->ibuf;
 
-#if 0
-	printf("%s: chan->index %d\n", __func__, chan->index);
-#endif
+	dprintf("%s: chan->index %d\n", __func__, chan->index);
 
 	offs = 0;
 
@@ -528,10 +535,8 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 		dst_addr_lo = (uint32_t)sg[i].dst_addr;
 		len = (uint32_t)sg[i].len;
 
-#if 0
-		printf("%s: src %x dst %x len %d periph_id %d\n", __func__,
+		dprintf("%s: src %x dst %x len %d periph_id %d\n", __func__,
 		    src_addr_lo, dst_addr_lo, len, data->periph_id);
-#endif
 
 		offs += emit_mov(&ibuf[offs], R_SAR, src_addr_lo);
 		offs += emit_mov(&ibuf[offs], R_DAR, dst_addr_lo);
@@ -592,9 +597,7 @@ pl330_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
 
 	sc = device_get_softc(dev);
 
-#if 0
-	printf("%s(%d)\n", __func__, device_get_unit(dev));
-#endif
+	dprintf("%s(%d)\n", __func__, device_get_unit(dev));
 
 	chan = (struct pl330_channel *)xchan->chan;
 	chan->capacity = PL330_MAXLOAD;
