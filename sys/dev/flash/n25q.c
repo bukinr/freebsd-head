@@ -61,6 +61,15 @@ __FBSDID("$FreeBSD$");
 
 #include "qspi_if.h"
 
+#define DEBUG
+#undef DEBUG
+
+#ifdef DEBUG
+#define dprintf(fmt, ...)  printf(fmt, ##__VA_ARGS__)
+#else
+#define dprintf(fmt, ...)
+#endif
+
 #define	FL_NONE			0x00
 #define	FL_ERASE_4K		0x01
 #define	FL_ERASE_32K		0x02
@@ -196,9 +205,7 @@ n25q_write(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count
 	pdev = device_get_parent(dev);
 	sc = device_get_softc(dev);
 
-#if 0
-	printf("%s: offset 0x%llx count %lld bytes\n", __func__, offset, count);
-#endif
+	dprintf("%s: offset 0x%llx count %lld bytes\n", __func__, offset, count);
 
 	err = QSPI_ERASE(pdev, dev, offset);
 	if (err != 0) {
@@ -220,9 +227,7 @@ n25q_read(device_t dev, struct bio *bp, off_t offset, caddr_t data, off_t count)
 	pdev = device_get_parent(dev);
 	sc = device_get_softc(dev);
 
-#if 0
-	printf("%s: offset 0x%llx count %lld bytes\n", __func__, offset, count);
-#endif
+	dprintf("%s: offset 0x%llx count %lld bytes\n", __func__, offset, count);
 
 	/*
 	 * Enforce the disk read sectorsize not the erase sectorsize.

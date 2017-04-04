@@ -62,6 +62,10 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus_subr.h>
 #endif
 
+#include <dev/xdma/xdma.h>
+#include <dev/xdma/controller/pl330.h>
+#include "xdma_if.h"
+
 #define DEBUG
 #undef DEBUG
 
@@ -70,11 +74,6 @@ __FBSDID("$FreeBSD$");
 #else
 #define dprintf(fmt, ...)
 #endif
-
-#include <dev/xdma/xdma.h>
-#include "xdma_if.h"
-
-#include <dev/xdma/controller/pl330.h>
 
 #define	READ4(_sc, _reg)	\
 	bus_read_4(_sc->res[0], _reg)

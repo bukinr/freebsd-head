@@ -65,6 +65,15 @@ __FBSDID("$FreeBSD$");
 
 #include "qspi_if.h"
 
+#define DEBUG
+#undef DEBUG
+
+#ifdef DEBUG
+#define dprintf(fmt, ...)  printf(fmt, ##__VA_ARGS__)
+#else
+#define dprintf(fmt, ...)
+#endif
+
 #define	CQSPI_SECTORSIZE	512
 #define	TX_QUEUE_SIZE		16
 #define	RX_QUEUE_SIZE		16
@@ -163,9 +172,7 @@ cqspi_xdma_tx_intr(void *arg, xdma_transfer_status_t *status)
 
 	sc = arg;
 
-#if 0
-	printf("%s\n", __func__);
-#endif
+	dprintf("%s\n", __func__);
 
 	deq = 0;
 
@@ -197,9 +204,7 @@ cqspi_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 
 	sc = arg;
 
-#if 0
-	printf("%s\n", __func__);
-#endif
+	dprintf("%s\n", __func__);
 
 	deq = 0;
 
@@ -249,9 +254,7 @@ cqspi_cmd_write_addr(struct cqspi_softc *sc, uint8_t cmd,
 	uint32_t reg;
 	int ret;
 
-#if 0
-	printf("%s: %x\n", __func__, cmd);
-#endif
+	dprintf("%s: %x\n", __func__, cmd);
 
 	WRITE4(sc, CQSPI_FLASHCMDADDR, addr);
 	reg = (cmd << FLASHCMD_CMDOPCODE_S);
@@ -299,9 +302,7 @@ cqspi_cmd_read(struct cqspi_softc *sc, uint8_t cmd,
 		return (-1);
 	}
 
-#if 0
-	printf("%s: %x\n", __func__, cmd);
-#endif
+	dprintf("%s: %x\n", __func__, cmd);
 
 	buf = (uint8_t *)addr;
 
@@ -413,9 +414,7 @@ cqspi_write(device_t dev, device_t child, struct bio *bp,
 	struct cqspi_softc *sc;
 	uint32_t reg;
 
-#if 0
-	printf("%s: offset 0x%llx count %lld bytes\n", __func__, offset, count);
-#endif
+	dprintf("%s: offset 0x%llx count %lld bytes\n", __func__, offset, count);
 
 	sc = device_get_softc(dev);
 
@@ -475,9 +474,7 @@ cqspi_read(device_t dev, device_t child, struct bio *bp,
 
 	sc = device_get_softc(dev);
 
-#if 0
-	printf("%s: offset 0x%llx count %lld bytes\n", __func__, offset, count);
-#endif
+	dprintf("%s: offset 0x%llx count %lld bytes\n", __func__, offset, count);
 
 	cqspi_wait_idle(sc);
 
