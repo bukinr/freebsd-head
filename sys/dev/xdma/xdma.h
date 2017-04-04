@@ -103,7 +103,6 @@ struct xdma_request {
 	uint8_t				dst_width;
 	bus_size_t			len;
 	xdma_transfer_status_t		status;
-	bool				done;
 	void				*user;
 	TAILQ_ENTRY(xdma_request)	xr_next;
 	struct xchan_buf		buf;

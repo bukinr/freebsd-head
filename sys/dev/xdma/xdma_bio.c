@@ -115,7 +115,6 @@ xdma_enqueue_bio(xdma_channel_t *xchan, struct bio **bp,
 		xr->dst_addr = 0;
 		xr->src_addr = addr;
 	}
-	xr->done = 0;
 
 	TAILQ_INSERT_TAIL(&xchan->queue_in, xr, xr_next);
 

@@ -120,7 +120,6 @@ xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 	}
 	xr->src_width = src_width;
 	xr->dst_width = dst_width;
-	xr->done = 0;
 
 	QUEUE_IN_LOCK(xchan);
 	TAILQ_INSERT_TAIL(&xchan->queue_in, xr, xr_next);

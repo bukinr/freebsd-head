@@ -529,19 +529,15 @@ xdma_dequeue(xdma_channel_t *xchan, void **user,
 {
 	struct xdma_request *xr_tmp;
 	struct xdma_request *xr;
-	int found;
-
-	found = 0;
 
 	QUEUE_OUT_LOCK(xchan);
 	TAILQ_FOREACH_SAFE(xr, &xchan->queue_out, xr_next, xr_tmp) {
 		TAILQ_REMOVE(&xchan->queue_out, xr, xr_next);
-		found = 1;
 		break;
 	}
 	QUEUE_OUT_UNLOCK(xchan);
 
-	if (found == 0) {
+	if (xr == NULL) {
 		return (-1);
 	}
 
@@ -577,7 +573,6 @@ xdma_enqueue(xdma_channel_t *xchan, uintptr_t src, uintptr_t dst,
 	xr->dst_addr = dst;
 	xr->src_width = src_width;
 	xr->dst_width = dst_width;
-	xr->done = 0;
 
 	QUEUE_IN_LOCK(xchan);
 	TAILQ_INSERT_TAIL(&xchan->queue_in, xr, xr_next);
@@ -983,22 +978,14 @@ xchan_seg_done(xdma_channel_t *xchan,
     struct xdma_transfer_status *st)
 {
 	struct xdma_request *xr;
-	struct xdma_request *xr_tmp;
 	xdma_controller_t *xdma;
 	xchan_buf_t *b;
-	int found;
 
 	xdma = xchan->xdma;
 
-	found = 0;
-
-	TAILQ_FOREACH_SAFE(xr, &xchan->processing, xr_next, xr_tmp) {
-		found = 1;
-		break;
-	}
-
-	if (found == 0) {
-		panic("seg not found\n");
+	xr = TAILQ_FIRST(&xchan->processing);
+	if (xr == NULL) {
+		panic("request not found\n");
 	}
 
 	b = &xr->buf;
@@ -1018,7 +1005,6 @@ xchan_seg_done(xdma_channel_t *xchan,
 		}
 		xr->status.error = st->error;
 		xr->status.transferred = st->transferred;
-		xr->done = 1;
 
 		QUEUE_PROC_LOCK(xchan);
 		TAILQ_REMOVE(&xchan->processing, xr, xr_next);
