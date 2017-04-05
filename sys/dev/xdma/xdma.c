@@ -287,12 +287,22 @@ xchan_bank_get(xdma_channel_t *xchan)
 	QUEUE_BANK_LOCK(xchan);
 	TAILQ_FOREACH_SAFE(xr, &xchan->bank, xr_next, xr_tmp) {
 		TAILQ_REMOVE(&xchan->bank, xr, xr_next);
-		QUEUE_BANK_UNLOCK(xchan);
-		return (xr);
+		break;
 	}
 	QUEUE_BANK_UNLOCK(xchan);
 
-	return (NULL);
+	return (xr);
+}
+
+int
+xchan_bank_put(xdma_channel_t *xchan, struct xdma_request *xr)
+{
+
+	QUEUE_BANK_LOCK(xchan);
+	TAILQ_INSERT_TAIL(&xchan->bank, xr, xr_next);
+	QUEUE_BANK_UNLOCK(xchan);
+
+	return (0);
 }
 
 static int
@@ -545,6 +555,8 @@ xdma_dequeue(xdma_channel_t *xchan, void **user,
 	*user = xr->user;
 	status->error = xr->status.error;
 	status->transferred = xr->status.transferred;
+
+	xchan_bank_put(xchan, xr);
 
 	return (0);
 }

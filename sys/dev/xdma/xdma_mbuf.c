@@ -64,19 +64,15 @@ xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 {
 	struct xdma_request *xr;
 	struct xdma_request *xr_tmp;
-	int found;
-
-	found = 0;
 
 	QUEUE_OUT_LOCK(xchan);
 	TAILQ_FOREACH_SAFE(xr, &xchan->queue_out, xr_next, xr_tmp) {
 		TAILQ_REMOVE(&xchan->queue_out, xr, xr_next);
-		found = 1;
 		break;
 	}
 	QUEUE_OUT_UNLOCK(xchan);
 
-	if (found == 0) {
+	if (xr == NULL) {
 		return (-1);
 	}
 
@@ -84,9 +80,7 @@ xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 	status->error = xr->status.error;
 	status->transferred = xr->status.transferred;
 
-	QUEUE_BANK_LOCK(xchan);
-	TAILQ_INSERT_TAIL(&xchan->bank, xr, xr_next);
-	QUEUE_BANK_UNLOCK(xchan);
+	xchan_bank_put(xchan, xr);
 
 	return (0);
 }

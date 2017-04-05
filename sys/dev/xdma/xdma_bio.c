@@ -64,25 +64,24 @@ xdma_dequeue_bio(xdma_channel_t *xchan, struct bio **bp,
 {
 	struct xdma_request *xr_tmp;
 	struct xdma_request *xr;
-	int found;
 
-	found = 0;
-
+	QUEUE_OUT_LOCK(xchan);
 	TAILQ_FOREACH_SAFE(xr, &xchan->queue_out, xr_next, xr_tmp) {
 		TAILQ_REMOVE(&xchan->queue_out, xr, xr_next);
-		found = 1;
 		break;
 	}
+	QUEUE_OUT_UNLOCK(xchan);
 
-	if (found == 0) {
+	if (xr == NULL) {
 		return (-1);
 	}
 
 	*bp = xr->bp;
+
 	status->error = xr->status.error;
 	status->transferred = xr->status.transferred;
 
-	TAILQ_INSERT_TAIL(&xchan->bank, xr, xr_next);
+	xchan_bank_put(xchan, xr);
 
 	return (0);
 }
@@ -116,7 +115,9 @@ xdma_enqueue_bio(xdma_channel_t *xchan, struct bio **bp,
 		xr->src_addr = addr;
 	}
 
+	QUEUE_IN_LOCK(xchan);
 	TAILQ_INSERT_TAIL(&xchan->queue_in, xr, xr_next);
+	QUEUE_IN_UNLOCK(xchan);
 
 	return (0);
 }

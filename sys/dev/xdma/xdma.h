@@ -83,7 +83,6 @@ typedef struct xdma_controller xdma_controller_t;
 
 struct xchan_buf {
 	bus_dmamap_t			map;
-	struct xdma_request		*xr;
 	uint32_t			nsegs;
 	uint32_t			nsegs_left;
 	void				*cbuf;
@@ -242,6 +241,7 @@ struct xdma_intr_handler {
 static MALLOC_DEFINE(M_XDMA, "xdma", "xDMA framework");
 
 struct xdma_request * xchan_bank_get(xdma_channel_t *xchan);
+int xchan_bank_put(xdma_channel_t *xchan, struct xdma_request *xr);
 
 #define	QUEUE_IN_LOCK(xchan)		mtx_lock(&(xchan)->mtx_qin_lock)
 #define	QUEUE_IN_UNLOCK(xchan)		mtx_unlock(&(xchan)->mtx_qin_lock)
