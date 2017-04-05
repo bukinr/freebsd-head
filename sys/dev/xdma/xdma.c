@@ -78,6 +78,8 @@ static struct mtx xdma_mtx;
 #define	XCHAN_UNLOCK(xchan)		mtx_unlock(&(xchan)->mtx_lock)
 #define	XCHAN_ASSERT_LOCKED(xchan)	mtx_assert(&(xchan)->mtx_lock, MA_OWNED)
 
+#define	XDMA_MAX_SEG	128
+
 static int xchan_bufs_alloc(xdma_channel_t *xchan);
 static int xchan_bufs_free(xdma_channel_t *xchan);
 
@@ -445,8 +447,8 @@ xdma_prep_memcpy(xdma_channel_t *xchan, uintptr_t src_addr,
  * maxsegsize - maximum allowed scatter-gather list element size in bytes
  */
 int
-xdma_prep_sg(xdma_channel_t *xchan, uint32_t xr_num,
-    uint32_t maxsegsize, uint32_t alignment)
+xdma_prep_sg(xdma_channel_t *xchan, uint32_t xr_num, uint32_t maxsegsize,
+    uint32_t maxnsegs, uint32_t alignment)
 {
 	struct xdma_request *xr;
 	xdma_controller_t *xdma;
@@ -465,9 +467,15 @@ xdma_prep_sg(xdma_channel_t *xchan, uint32_t xr_num,
 	}
 
 	xchan->maxsegsize = maxsegsize;
+	xchan->maxnsegs = maxnsegs;
 	xchan->alignment = alignment;
-	xchan->maxnsegs = 8;
 	xchan->xr_num = xr_num;
+
+	if (xchan->maxnsegs > XDMA_MAX_SEG) {
+		device_printf(xdma->dev,
+		    "%s: Can't prepare sg transfer\n", __func__);
+		return (-1);
+	}
 
 	/* Create bus_dma tag */
 	err = bus_dma_tag_create(
@@ -779,7 +787,7 @@ static int
 xdma_sglist_prepare(xdma_channel_t *xchan,
     struct xdma_sglist *sg)
 {
-	struct bus_dma_segment seg[128];
+	struct bus_dma_segment seg[XDMA_MAX_SEG];
 	struct xdma_request *xr;
 	struct xdma_request *xr_tmp;
 	xdma_controller_t *xdma;
