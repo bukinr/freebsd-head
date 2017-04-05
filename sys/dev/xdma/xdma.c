@@ -78,8 +78,6 @@ static struct mtx xdma_mtx;
 #define	XCHAN_UNLOCK(xchan)		mtx_unlock(&(xchan)->mtx_lock)
 #define	XCHAN_ASSERT_LOCKED(xchan)	mtx_assert(&(xchan)->mtx_lock, MA_OWNED)
 
-#define	XDMA_MAX_SEG	128
-
 static int xchan_bufs_alloc(xdma_channel_t *xchan);
 static int xchan_bufs_free(xdma_channel_t *xchan);
 
@@ -831,7 +829,7 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 			break;
 		}
 
-		if ((c + n + xchan->maxnsegs) >= SGLIST_MAXLEN) {
+		if ((c + n + xchan->maxnsegs) >= XDMA_SGLIST_MAXLEN) {
 			/* Sglist is full. */
 			break;
 		}
