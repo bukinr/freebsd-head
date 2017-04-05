@@ -107,6 +107,67 @@ xdma_task(void *arg)
 	}
 }
 
+static int
+xchan_bank_init(xdma_channel_t *xchan)
+{
+	struct xdma_request *xr;
+	xdma_controller_t *xdma;
+	int i;
+
+	xdma = xchan->xdma;
+	KASSERT(xdma != NULL, ("xdma is NULL"));
+
+	xchan->xr_mem = malloc(sizeof(struct xdma_request) * xchan->xr_num,
+	    M_XDMA, M_WAITOK | M_ZERO);
+	if (xchan->xr_mem == NULL) {
+		device_printf(xdma->dev,
+		    "%s: Can't allocate memory.\n", __func__);
+		return (-1);
+	}
+	for (i = 0; i < xchan->xr_num; i++) {
+		xr = &xchan->xr_mem[i];
+		TAILQ_INSERT_TAIL(&xchan->bank, xr, xr_next);
+	}
+
+	return (0);
+}
+
+static int
+xchan_bank_free(xdma_channel_t *xchan)
+{
+
+	free(xchan->xr_mem, M_XDMA);
+
+	return (0);
+}
+
+struct xdma_request *
+xchan_bank_get(xdma_channel_t *xchan)
+{
+	struct xdma_request *xr;
+	struct xdma_request *xr_tmp;
+
+	QUEUE_BANK_LOCK(xchan);
+	TAILQ_FOREACH_SAFE(xr, &xchan->bank, xr_next, xr_tmp) {
+		TAILQ_REMOVE(&xchan->bank, xr, xr_next);
+		break;
+	}
+	QUEUE_BANK_UNLOCK(xchan);
+
+	return (xr);
+}
+
+int
+xchan_bank_put(xdma_channel_t *xchan, struct xdma_request *xr)
+{
+
+	QUEUE_BANK_LOCK(xchan);
+	TAILQ_INSERT_TAIL(&xchan->bank, xr, xr_next);
+	QUEUE_BANK_UNLOCK(xchan);
+
+	return (0);
+}
+
 /*
  * Allocate virtual xDMA channel.
  */
@@ -176,10 +237,9 @@ xdma_channel_free(xdma_channel_t *xchan)
 
 	/* Deallocate bufs, if any. */
 	xchan_bufs_free(xchan);
-	xchan_sglist_free(xchan);
-
 	if (xchan->flags & XCHAN_TYPE_SG) {
-		free(xchan->xr_mem, M_XDMA);
+		xchan_sglist_free(xchan);
+		xchan_bank_free(xchan);
 	}
 
 	mtx_destroy(&xchan->mtx_lock);
@@ -274,59 +334,6 @@ xdma_teardown_all_intr(xdma_channel_t *xchan)
 		TAILQ_REMOVE(&xchan->ie_handlers, ih, ih_next);
 		free(ih, M_XDMA);
 	}
-
-	return (0);
-}
-
-
-static int
-xchan_bank_init(xdma_channel_t *xchan)
-{
-	struct xdma_request *xr;
-	xdma_controller_t *xdma;
-	int i;
-
-	xdma = xchan->xdma;
-	KASSERT(xdma != NULL, ("xdma is NULL"));
-
-	xchan->xr_mem = malloc(sizeof(struct xdma_request) * xchan->xr_num,
-	    M_XDMA, M_WAITOK | M_ZERO);
-	if (xchan->xr_mem == NULL) {
-		device_printf(xdma->dev,
-		    "%s: Can't allocate memory.\n", __func__);
-		return (-1);
-	}
-	for (i = 0; i < xchan->xr_num; i++) {
-		xr = &xchan->xr_mem[i];
-		TAILQ_INSERT_TAIL(&xchan->bank, xr, xr_next);
-	}
-
-	return (0);
-}
-
-struct xdma_request *
-xchan_bank_get(xdma_channel_t *xchan)
-{
-	struct xdma_request *xr;
-	struct xdma_request *xr_tmp;
-
-	QUEUE_BANK_LOCK(xchan);
-	TAILQ_FOREACH_SAFE(xr, &xchan->bank, xr_next, xr_tmp) {
-		TAILQ_REMOVE(&xchan->bank, xr, xr_next);
-		break;
-	}
-	QUEUE_BANK_UNLOCK(xchan);
-
-	return (xr);
-}
-
-int
-xchan_bank_put(xdma_channel_t *xchan, struct xdma_request *xr)
-{
-
-	QUEUE_BANK_LOCK(xchan);
-	TAILQ_INSERT_TAIL(&xchan->bank, xr, xr_next);
-	QUEUE_BANK_UNLOCK(xchan);
 
 	return (0);
 }
@@ -550,6 +557,10 @@ xdma_prep_sg(xdma_channel_t *xchan, uint32_t xr_num, uint32_t maxsegsize,
 	if (err != 0) {
 		device_printf(xdma->dev,
 		    "%s: Can't init bank.\n", __func__);
+
+		/* Cleanup */
+		xchan_sglist_free(xchan);
+
 		return (-1);
 	}
 
@@ -558,6 +569,11 @@ xdma_prep_sg(xdma_channel_t *xchan, uint32_t xr_num, uint32_t maxsegsize,
 	if (ret != 0) {
 		device_printf(xdma->dev,
 		    "%s: Can't allocate bufs.\n", __func__);
+
+		/* Cleanup */
+		xchan_sglist_free(xchan);
+		xchan_bank_free(xchan);
+
 		return (-1);
 	}
 
@@ -623,6 +639,7 @@ xdma_enqueue(xdma_channel_t *xchan, uintptr_t src, uintptr_t dst,
 	xr->user = user;
 	xr->direction = dir;
 	xr->m = NULL;
+	xr->bp = NULL;
 	xr->len = len;
 	xr->type = 0;
 	xr->src_addr = src;
