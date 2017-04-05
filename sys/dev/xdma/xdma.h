@@ -259,4 +259,6 @@ int xchan_bank_put(xdma_channel_t *xchan, struct xdma_request *xr);
 #define	QUEUE_PROC_UNLOCK(xchan)	mtx_unlock(&(xchan)->mtx_proc_lock)
 #define	QUEUE_PROC_ASSERT_LOCKED(xchan)	mtx_assert(&(xchan)->mtx_proc_lock, MA_OWNED)
 
+#define	SGLIST_MAXLEN	2048
+
 #endif /* !_DEV_XDMA_H_ */

@@ -511,6 +511,11 @@ xdma_prep_sg(xdma_channel_t *xchan, uint32_t xr_num, uint32_t maxsegsize,
 
 	xchan->xr_mem = malloc(sizeof(struct xdma_request) * xr_num,
 	    M_XDMA, M_WAITOK | M_ZERO);
+	if (xchan->xr_mem == NULL) {
+		device_printf(xdma->dev,
+		    "%s: Can't allocate memory.\n", __func__);
+		return (-1);
+	}
 	for (i = 0; i < xr_num; i++) {
 		xr = &xchan->xr_mem[i];
 		TAILQ_INSERT_TAIL(&xchan->bank, xr, xr_next);
@@ -527,7 +532,6 @@ xdma_prep_sg(xdma_channel_t *xchan, uint32_t xr_num, uint32_t maxsegsize,
 	xchan->flags |= (XCHAN_CONFIGURED | XCHAN_TYPE_SG);
 
 	XCHAN_LOCK(xchan);
-
 	ret = XDMA_CHANNEL_PREP_SG(xdma->dma_dev, xchan);
 	if (ret != 0) {
 		device_printf(xdma->dev,
@@ -536,7 +540,6 @@ xdma_prep_sg(xdma_channel_t *xchan, uint32_t xr_num, uint32_t maxsegsize,
 
 		return (-1);
 	}
-
 	XCHAN_UNLOCK(xchan);
 
 	return (0);
@@ -814,6 +817,7 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 			c = xdma_mbuf_defrag(xchan, xr);
 			break;
 		case XR_TYPE_BIO:
+			/* TODO: unmapped bio ? */
 		case XR_TYPE_ADDR:
 		default:
 			c = 1;
@@ -824,6 +828,11 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 			 * No space yet available for the entire
 			 * request in the DMA engine.
 			 */
+			break;
+		}
+
+		if ((c + n + xchan->maxnsegs) >= SGLIST_MAXLEN) {
+			/* Sglist is full. */
 			break;
 		}
 
