@@ -89,8 +89,8 @@ __FBSDID("$FreeBSD$");
 #include <dev/altera/atse/if_atsereg.h>
 #include <dev/xdma/xdma.h>
 
-#define	RX_QUEUE_SIZE		1024
-#define	TX_QUEUE_SIZE		1024
+#define	RX_QUEUE_SIZE		4096
+#define	TX_QUEUE_SIZE		4096
 #define	NUM_RX_MBUF		512
 #define	BUFRING_SIZE		8192
 
@@ -1297,7 +1297,11 @@ atse_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	xdma_prep_sg(sc->xchan_tx, TX_QUEUE_SIZE, MCLBYTES, 16);
+	xdma_prep_sg(sc->xchan_tx,
+		TX_QUEUE_SIZE,	/* xchan requests queue size */
+		MCLBYTES,	/* maxsegsize */
+		8,		/* maxnsegs */
+		16);		/* alignment */
 
 	/* Get RX xDMA controller */
 	sc->xdma_rx = xdma_ofw_get(sc->dev, "rx");
@@ -1321,7 +1325,11 @@ atse_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	xdma_prep_sg(sc->xchan_rx, RX_QUEUE_SIZE, MCLBYTES, 16);
+	xdma_prep_sg(sc->xchan_rx,
+		RX_QUEUE_SIZE,	/* xchan requests queue size */
+		MCLBYTES,	/* maxsegsize */
+		1,		/* maxnsegs */
+		16);		/* alignment */
 
 	mtx_init(&sc->br_mtx, "buf ring mtx", NULL, MTX_DEF);
 	sc->br = buf_ring_alloc(BUFRING_SIZE, M_DEVBUF,
