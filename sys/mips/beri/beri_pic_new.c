@@ -95,6 +95,13 @@ struct beripic_intr_arg {
 #endif
 };
 
+enum {
+	BP_CFG,
+	BP_IP_READ,
+	BP_IP_SET,
+	BP_IP_CLEAR
+};
+
 struct beripic_cookie {
 	struct beripic_intr_arg	*bpia;
 	struct resource		*hirq;
@@ -199,7 +206,7 @@ beri_pic_intr(void *arg)
 
 	uint64_t intr;
 
-	intr = bus_read_8(sc->res[1], 0);
+	intr = bus_read_8(sc->res[BP_IP_READ], 0);
 	while ((i = fls(intr)) != 0) {
 		i--;
 		intr &= ~(1u << i);
@@ -211,7 +218,7 @@ beri_pic_intr(void *arg)
 			device_printf(sc->dev, "Stray interrupt %u detected\n", i);
 		}
 
-		bus_write_8(sc->res[3], 0, (1 << i));
+		bus_write_8(sc->res[BP_IP_CLEAR], 0, (1 << i));
 	}
 
 	return (0);
@@ -265,7 +272,7 @@ beripic_attach(device_t dev)
 		isrc = &sc->irqs[i].isrc;
 		err = intr_isrc_register(isrc, sc->dev,
 		    0, "pic%d,%d", unit, i);
-		bus_write_8(sc->res[0], i * 8, 0);
+		bus_write_8(sc->res[BP_CFG], i * 8, 0);
 	}
 
 	/*
@@ -309,7 +316,7 @@ beri_pic_enable_intr(device_t dev, struct intr_irqsrc *isrc)
 	reg = (1 << BP_CFG_SHIFT_E);
 	reg |= (1 << BP_CFG_SHIFT_IRQ);
 
-	bus_write_8(sc->res[0], pic_isrc->irq * 8, reg);
+	bus_write_8(sc->res[BP_CFG], pic_isrc->irq * 8, reg);
 }
 
 static void
@@ -324,9 +331,9 @@ beri_pic_disable_intr(device_t dev, struct intr_irqsrc *isrc)
 
 	//printf("%s: %d\n", __func__, pic_isrc->irq);
 
-	reg = bus_read_8(sc->res[0], pic_isrc->irq * 8);
+	reg = bus_read_8(sc->res[BP_CFG], pic_isrc->irq * 8);
 	reg &= ~(1 << BP_CFG_SHIFT_E);
-	bus_write_8(sc->res[0], pic_isrc->irq * 8, reg);
+	bus_write_8(sc->res[BP_CFG], pic_isrc->irq * 8, reg);
 }
 
 static int
