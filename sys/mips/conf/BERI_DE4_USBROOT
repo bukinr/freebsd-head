@@ -19,4 +19,4 @@ device		umass
 device		da
 
 options 	FDT_DTB_STATIC
-makeoptions	FDT_DTS_FILE=beripad-de4.dts
+makeoptions	FDT_DTS_FILE=beripad-de4-msgdma.dts

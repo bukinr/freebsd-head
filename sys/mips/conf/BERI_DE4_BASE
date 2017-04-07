@@ -42,7 +42,7 @@ device		xdma
 device		altera_softdma
 device		altera_msgdma
 
-#options 	INTRNG
+options 	INTRNG
 
 #
 # USB support
@@ -52,4 +52,3 @@ device		altera_msgdma
 #options	USB_VERBOSE
 device		usb
 device		saf1761otg
-
