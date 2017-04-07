@@ -77,46 +77,7 @@ struct hirq {
 
 struct beripic_softc {
 	device_t		dev;
-
-#if 0
-	device_t		bp_dev;
-	struct resource		*bp_cfg_res;
-	struct resource		*bp_read_res;
-	struct resource		*bp_set_res;
-	struct resource		*bp_clear_res;
-	int			bp_cfg_rid;
-	int			bp_read_rid;
-	int			bp_set_rid;
-	int			bp_clear_rid;
-	bus_space_tag_t		bp_cfg_bst;
-	bus_space_tag_t		bp_read_bst;
-	bus_space_tag_t		bp_set_bst;
-	bus_space_tag_t		bp_clear_bst;
-	bus_space_handle_t	bp_cfg_bsh;
-	bus_space_handle_t	bp_read_bsh;
-	bus_space_handle_t	bp_set_bsh;
-	bus_space_handle_t	bp_clear_bsh;
-
-	struct resource		*bp_irqs[BP_MAX_HARD_IRQS];
-	int			bp_irq_rids[BP_MAX_HARD_IRQS];
-	int			bp_nirqs;
-	int			bp_next_irq;
-	int			bp_next_tid;
-
-	int			bp_nthreads;
-
-	int			bp_nhard;
-	int			bp_nsoft;
-	int			bp_nsrcs;
-	struct rman		bp_src_rman;
-
-#ifdef __mips__
-	//mips_intrcnt_t		*bp_counters;
-#endif
-#endif
-
 	struct mtx		bp_cfgmtx;
-
 	uint32_t		nirqs;
 	struct beri_pic_isrc	irqs[64];
 	struct resource		*res[9];
@@ -345,10 +306,6 @@ beri_pic_enable_intr(device_t dev, struct intr_irqsrc *isrc)
 	reg = (1 << BP_CFG_SHIFT_E);
 	reg |= (1 << BP_CFG_SHIFT_IRQ);
 
-	if (pic_isrc->irq == 0) {
-		//return;
-	}
-
 	bus_write_8(sc->res[0], pic_isrc->irq * 8, reg);
 }
 
@@ -364,15 +321,9 @@ beri_pic_disable_intr(device_t dev, struct intr_irqsrc *isrc)
 
 	//printf("%s: %d\n", __func__, pic_isrc->irq);
 
-	if (pic_isrc->irq == 0) {
-		//return;
-	}
-
 	reg = bus_read_8(sc->res[0], pic_isrc->irq * 8);
 	reg &= ~(1 << BP_CFG_SHIFT_E);
 	bus_write_8(sc->res[0], pic_isrc->irq * 8, reg);
-
-	bus_write_8(sc->res[3], pic_isrc->irq * 8, 1);
 }
 
 static int
