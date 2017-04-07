@@ -1,5 +1,6 @@
 /*-
  * Copyright (c) 2013 SRI International
+ * Copyright (c) 2017 Ruslan Bukin <br@bsdpad.com>
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -46,7 +47,6 @@ __FBSDID("$FreeBSD$");
 
 #include <machine/bus.h>
 #include <machine/intr.h>
-//#include <machine/intr_machdep.h>
 
 #include <dev/fdt/fdt_common.h>
 #include <dev/ofw/openfirm.h>
@@ -55,36 +55,11 @@ __FBSDID("$FreeBSD$");
 
 #include "pic_if.h"
 
-//#include "fdt_ic_if.h"
-
 struct beripic_softc;
 
+#if 0
 static uint64_t	bp_read_cfg(struct beripic_softc *, int);
 static void	bp_write_cfg(struct beripic_softc *, int, uint64_t);
-static void	bp_detach_resources(device_t);
-static char	*bp_strconfig(uint64_t, char *, size_t);
-static void	bp_config_source(device_t, int, int, u_long, u_long);
-#ifdef __mips__
-static void	bp_set_counter_name(device_t, device_t, int);
-#endif
-
-#if 0
-static int	beripic_fdt_probe(device_t);
-static int	beripic_fdt_attach(device_t);
-
-static int	beripic_activate_intr(device_t, struct resource *);
-static struct resource *
-		beripic_alloc_intr(device_t, device_t, int *, u_long, u_int);
-static int	beripic_config_intr(device_t, int,  enum intr_trigger,
-		    enum intr_polarity);
-static int	beripic_release_intr(device_t, struct resource *);
-static int	beripic_setup_intr(device_t, device_t, struct resource *,
-		    int, driver_filter_t *, driver_intr_t *, void *, void **);
-static int	beripic_teardown_intr(device_t, device_t, struct resource *,
-		    void *);
-
-static int	beripic_filter(void *);
-static void	beripic_intr(void *);
 #endif
 
 struct beri_pic_isrc {
@@ -103,6 +78,7 @@ struct hirq {
 struct beripic_softc {
 	device_t		dev;
 
+#if 0
 	device_t		bp_dev;
 	struct resource		*bp_cfg_res;
 	struct resource		*bp_read_res;
@@ -136,6 +112,7 @@ struct beripic_softc {
 
 #ifdef __mips__
 	//mips_intrcnt_t		*bp_counters;
+#endif
 #endif
 
 	struct mtx		bp_cfgmtx;
@@ -191,6 +168,7 @@ static struct resource_spec beri_pic_spec[] = {
 	{ -1, 0 }
 };
 
+#if 0
 static uint64_t
 bp_read_cfg(struct beripic_softc *sc, int irq)
 {
@@ -210,52 +188,6 @@ bp_write_cfg(struct beripic_softc *sc, int irq, uint64_t config)
 }
 
 static void
-bp_detach_resources(device_t dev)
-{
-	struct beripic_softc *sc;
-	int i;
-
-	sc = device_get_softc(dev);
-
-	if (sc->bp_cfg_res != NULL) {
-		bus_release_resource(dev, SYS_RES_MEMORY, sc->bp_cfg_rid,
-		    sc->bp_cfg_res);
-		sc->bp_cfg_res = NULL;
-	}
-	if (sc->bp_read_res != NULL) {
-		bus_release_resource(dev, SYS_RES_MEMORY, sc->bp_read_rid,
-		    sc->bp_read_res);
-		sc->bp_read_res = NULL;
-	}
-	if (sc->bp_set_res != NULL) {
-		bus_release_resource(dev, SYS_RES_MEMORY, sc->bp_set_rid,
-		    sc->bp_set_res);
-		sc->bp_set_res = NULL;
-	}
-	if (sc->bp_clear_res != NULL) {
-		bus_release_resource(dev, SYS_RES_MEMORY, sc->bp_clear_rid,
-		    sc->bp_clear_res);
-		sc->bp_clear_res = NULL;
-	}
-	for (i = sc->bp_nirqs - 1; i >= 0; i--) {
-		bus_release_resource(dev, SYS_RES_IRQ, sc->bp_irq_rids[i],
-		    sc->bp_irqs[i]);
-	}
-	sc->bp_nirqs = 0;
-}
-
-static char *
-bp_strconfig(uint64_t config, char *configstr, size_t len)
-{
-	
-	if (snprintf(configstr, len, "%s tid: %llu hardintr %llu",
-	    BP_CFG_ENABLED(config) ? "enabled" : "disabled",
-	    BP_CFG_TID(config), BP_CFG_IRQ(config)) > len - 1)
-		return (NULL);
-	return (configstr);
-}
-
-static void
 bp_config_source(device_t ic, int src, int enable, u_long tid, u_long irq)
 {
 	struct beripic_softc *sc;
@@ -269,24 +201,6 @@ bp_config_source(device_t ic, int src, int enable, u_long tid, u_long irq)
 	config |= irq << BP_CFG_SHIFT_IRQ;
 
 	bp_write_cfg(sc, src, config);
-}
-
-#ifdef __mips__
-static void
-bp_set_counter_name(device_t ic, device_t child, int src)
-{
-	struct beripic_softc *sc;
-	char name[MAXCOMLEN + 1];
-
-	sc = device_get_softc(ic);
-
-	if (snprintf(name, sizeof(name), "bp%dsrc%d%s%s%s",
-	    device_get_unit(ic), src, src < sc->bp_nhard ? "" : "s",
-	    child == NULL ? "" : " ",
-	    child == NULL ? " " : device_get_nameunit(child)) >= sizeof(name))
-		name[sizeof(name) - 2] = '+';
-	
-	////mips_intrcnt_setname(sc->bp_counters[src], name);
 }
 #endif
 
@@ -352,7 +266,7 @@ beripic_probe(device_t dev)
 	if (!ofw_bus_is_compatible(dev, "sri-cambridge,beri-pic"))
 		return (ENXIO);
 		
-	device_set_desc(dev, "BERI Programmable Interrupt Controller");
+	device_set_desc(dev, "BERI Programmable Interrupt Controller (INTRNG)");
 
 	return (BUS_PROBE_DEFAULT);
 }
@@ -360,14 +274,9 @@ beripic_probe(device_t dev)
 static int
 beripic_attach(device_t dev)
 {
-	char configstr[64];
 	struct beripic_softc *sc;
-	struct fdt_ic *fic;
-	pcell_t nhard, nsoft;
-	phandle_t ph;
-	int error, i, src;
-	uint64_t config;
 	intptr_t xref;
+	int i;
 
 	sc = device_get_softc(dev);
 	sc->dev = dev;
@@ -416,418 +325,10 @@ beripic_attach(device_t dev)
 		}
 	}
 
-	return (0);
-
-	sc->bp_dev = dev;
 	mtx_init(&sc->bp_cfgmtx, "beripic config lock", NULL, MTX_DEF);
 
-	/*
-	 * FDT lists CONFIG, IP_READ, IP_SET, and IP_CLEAR registers as
-	 * seperate memory regions in that order.
-	 */
-	sc->bp_cfg_rid = 0;
-	sc->bp_cfg_res = bus_alloc_resource_any(dev, SYS_RES_MEMORY,
-	    &sc->bp_cfg_rid, RF_ACTIVE);
-	if (sc->bp_cfg_res == NULL) {
-		device_printf(dev, "failed to map config memory");
-		error = ENXIO;
-		goto err;
-	}
-	if (bootverbose)
-		device_printf(sc->bp_dev, "config region at mem %p-%p\n",
-		    (void *)rman_get_start(sc->bp_cfg_res),
-		    (void *)(rman_get_start(sc->bp_cfg_res) +
-		    rman_get_size(sc->bp_cfg_res)));
-
-	sc->bp_read_rid = 1;
-	sc->bp_read_res = bus_alloc_resource_any(dev, SYS_RES_MEMORY,
-	    &sc->bp_read_rid, RF_ACTIVE);
-	if (sc->bp_read_res == NULL) {
-		device_printf(dev, "failed to map IP read memory");
-		error = ENXIO;
-		goto err;
-	}
-	if (bootverbose)
-		device_printf(sc->bp_dev, "IP read region at mem %p-%p\n",
-		    (void *)rman_get_start(sc->bp_read_res),
-		    (void *)(rman_get_start(sc->bp_read_res) +
-		    rman_get_size(sc->bp_read_res)));
-
-	sc->bp_set_rid = 2;
-	sc->bp_set_res = bus_alloc_resource_any(dev, SYS_RES_MEMORY,
-	    &sc->bp_set_rid, RF_ACTIVE);
-	if (sc->bp_set_res == NULL) {
-		device_printf(dev, "failed to map IP read memory");
-		error = ENXIO;
-		goto err;
-	}
-	if (bootverbose)
-		device_printf(sc->bp_dev, "IP set region at mem %p-%p\n",
-		    (void *)rman_get_start(sc->bp_set_res),
-		    (void *)(rman_get_start(sc->bp_set_res) +
-		    rman_get_size(sc->bp_set_res)));
-
-	sc->bp_clear_rid = 3;
-	sc->bp_clear_res = bus_alloc_resource_any(dev, SYS_RES_MEMORY,
-	    &sc->bp_clear_rid, RF_ACTIVE);
-	if (sc->bp_clear_res == NULL) {
-		device_printf(dev, "failed to map IP read memory");
-		error = ENXIO;
-		goto err;
-	}
-	if (bootverbose)
-		device_printf(sc->bp_dev, "IP clear region at mem %p-%p\n",
-		    (void *)rman_get_start(sc->bp_clear_res),
-		    (void *)(rman_get_start(sc->bp_clear_res) +
-		    rman_get_size(sc->bp_clear_res)));
-
-	i = 0;
-	for (i = 0; i < BP_MAX_HARD_IRQS; i++) {
-		sc->bp_irq_rids[i] = i;
-		sc->bp_irqs[i] = bus_alloc_resource_any(dev, SYS_RES_IRQ,
-		    &sc->bp_irq_rids[i], RF_ACTIVE | RF_SHAREABLE);
-		if (sc->bp_irqs[i] == NULL)
-			break;
-	}
-	if (i == 0) {
-		device_printf(dev, "failed to allocate any parent IRQs!");
-		error = ENXIO;
-		goto err;
-	}
-	sc->bp_nirqs = i;
-
-	ph = ofw_bus_gen_get_node(device_get_parent(dev), dev);
-
-#ifndef SMP
-	sc->bp_nthreads = 1;
-#else
-	sc->bp_nthreads = 1;
-	/* XXX: get nthreads from cpu(s) somehow */
-#endif
-
-	if (OF_getprop(ph, "hard-interrupt-sources", &nhard, sizeof(nhard))
-	    <= 0) {
-		device_printf(dev, "failed to get number of hard sources");
-		error = ENXIO;
-		goto err;
-	}
-	if (OF_getprop(ph, "soft-interrupt-sources", &nsoft, sizeof(nsoft))
-	    <= 0) {
-		device_printf(dev, "failed to get number of soft sources");
-		error = ENXIO;
-		goto err;
-	}
-
-	sc->bp_nhard = nhard;
-	sc->bp_nsoft = nsoft;
-	sc->bp_nsrcs = sc->bp_nhard + sc->bp_nsoft;
-	/* XXX: should deal with gap between hard and soft */
-	KASSERT(sc->bp_nhard <= BP_FIRST_SOFT,
-	    ("too many hard sources"));
-	KASSERT(rman_get_size(sc->bp_cfg_res) / 8 == sc->bp_nsrcs,
-	    ("config space size does not match sources"));
-	KASSERT(sc->bp_nhard % 64 == 0,
-	    ("Non-multiple of 64 intr counts not supported"));
-	KASSERT(sc->bp_nsoft % 64 == 0,
-	    ("Non-multiple of 64 intr counts not supported"));
-	if (bootverbose)
-		device_printf(dev, "%d hard and %d soft sources\n",
-		    sc->bp_nhard, sc->bp_nsoft);
-
-#ifdef __mips__
-	////sc->bp_counters = malloc(sizeof(*sc->bp_counters) * sc->bp_nsrcs,
-	////    M_BERIPIC, M_WAITOK|M_ZERO);
-	for (i = 0; i < sc->bp_nsrcs; i++) {
-		////sc->bp_counters[i] = mips_intrcnt_create("");
-		bp_set_counter_name(dev, NULL, i);
-	}
-#endif
-	
-	sc->bp_src_rman.rm_start = 0;
-	sc->bp_src_rman.rm_end = sc->bp_nsrcs - 1;
-	sc->bp_src_rman.rm_type = RMAN_ARRAY;
-	sc->bp_src_rman.rm_descr = "Interrupt source";
-	if (rman_init(&(sc->bp_src_rman)) != 0 ||
-	    rman_manage_region(&(sc->bp_src_rman), 0, sc->bp_nsrcs - 1) != 0) {
-		device_printf(dev, "Failed to set up sources rman");
-		error = ENXIO;
-		goto err;
-	}
-
-	sc->bp_cfg_bst = rman_get_bustag(sc->bp_cfg_res);
-	sc->bp_cfg_bsh = rman_get_bushandle(sc->bp_cfg_res);
-	sc->bp_read_bst = rman_get_bustag(sc->bp_read_res);
-	sc->bp_read_bsh = rman_get_bushandle(sc->bp_read_res);
-	sc->bp_set_bst = rman_get_bustag(sc->bp_set_res);
-	sc->bp_set_bsh = rman_get_bushandle(sc->bp_set_res);
-	sc->bp_clear_bst = rman_get_bustag(sc->bp_clear_res);
-	sc->bp_clear_bsh = rman_get_bushandle(sc->bp_clear_res);
-
-	for (src = 0; src < sc->bp_nsrcs; src++) {
-		config = bp_read_cfg(sc, src);
-		if (config == 0)
-			continue;
-
-		if (bootverbose) {
-			device_printf(dev, "initial config: src %d: %s\n", src,
-			    bp_strconfig(config, configstr, sizeof(configstr)));
-			if (config & BP_CFG_RESERVED)
-				device_printf(dev,
-				    "reserved bits not 0: 0x%016jx\n",
-				    (uintmax_t) config);
-		}
-
-		bp_config_source(dev, src, 0, 0, 0);
-	}
-
-	fic = malloc(sizeof(*fic), M_BERIPIC, M_WAITOK|M_ZERO);
-	fic->iph = ph;
-	fic->dev = dev;
-	SLIST_INSERT_HEAD(&fdt_ic_list_head, fic, fdt_ics);
-
-	return (0);
-err:
-	bp_detach_resources(dev);
-
-	return (error);
-}
-
-#if 0
-static struct resource *
-beripic_alloc_intr(device_t ic, device_t child, int *rid, u_long irq,
-    u_int flags)
-{
-	struct beripic_softc *sc;
-	struct resource *rv;
-
-	printf("%s: %d\n", __func__, (uint32_t)irq);
-
-	sc = device_get_softc(ic);
-
-	rv = rman_reserve_resource(&(sc->bp_src_rman), irq, irq, 1, flags,
-	    child);
-	if (rv == NULL)
-		 printf("%s: could not reserve source interrupt for %s\n",
-		     __func__, device_get_nameunit(child));
-	rman_set_rid(rv, *rid);
-
-	if ((flags & RF_ACTIVE) &&
-	    beripic_activate_intr(ic, rv) != 0) {
-		printf("%s: could not activate interrupt\n", __func__);
-		rman_release_resource(rv);
-		return (NULL);
-	}
-
-	return (rv);
-}
-
-static int
-beripic_release_intr(device_t ic, struct resource *r)
-{
-	
-	printf("%s: %d\n", __func__, (uint32_t)rman_get_start(r));
-
-	return (rman_release_resource(r));
-}
-
-static int
-beripic_activate_intr(device_t ic, struct resource *r)
-{
-	
-	printf("%s: %d\n", __func__, (uint32_t)rman_get_start(r));
-
-	return (rman_activate_resource(r));
-}
-
-static int
-beripic_deactivate_intr(device_t ic, struct resource *r)
-{
-	
-	printf("%s: %d\n", __func__, (uint32_t)rman_get_start(r));
-
-	return (rman_deactivate_resource(r));
-}
-
-static int
-beripic_config_intr(device_t dev, int irq, enum intr_trigger trig,
-   enum intr_polarity pol)
-{
-
-	printf("%s: %d\n", __func__, irq);
-
-	if (trig != INTR_TRIGGER_CONFORM || pol != INTR_POLARITY_CONFORM)
-		return (EINVAL);
-
 	return (0);
 }
-
-static int
-beripic_setup_intr(device_t ic, device_t child, struct resource *irq,
-    int flags, driver_filter_t *filter, driver_intr_t *intr, void *arg, 
-    void **cookiep)
-{
-	struct beripic_softc *sc;
-	struct beripic_intr_arg *bpia;
-	struct beripic_cookie *bpc;
-	int error;
-	u_long hirq, src, tid;
-
-	printf("%s: %d\n", __func__, (uint32_t)rman_get_start(irq));
-
-	sc = device_get_softc(ic);
-
-	src = rman_get_start(irq);
-
-	KASSERT(src < sc->bp_nsrcs, ("source (%lu) out of range 0-%d",
-	     src, sc->bp_nsrcs - 1));
-
-	bpia = malloc(sizeof(*bpia), M_BERIPIC, M_WAITOK|M_ZERO);
-	bpia->filter = filter;
-	bpia->intr = intr;
-	bpia->arg = arg;
-	bpia->irq = irq;
-#ifdef __mips__
-	bpia->counter = sc->bp_counters[src];
-	bp_set_counter_name(ic, child, src);
-#endif
-
-	bpc = malloc(sizeof(*bpc), M_BERIPIC, M_WAITOK|M_ZERO);
-	bpc->bpia = bpia;
-
-	mtx_lock(&(sc->bp_cfgmtx));
-	bpc->hirq = sc->bp_irqs[sc->bp_next_irq];
-	hirq = rman_get_start(bpc->hirq);
-	tid = sc->bp_next_tid;
-	if (bootverbose)
-		device_printf(ic, "mapping pin %lu to irq %lu, tid %lu\n",
-			src, hirq, tid);
-
-	error = BUS_SETUP_INTR(device_get_parent(ic), ic, bpc->hirq, flags,
-	    beripic_filter, intr == NULL ? NULL : beripic_intr, bpia,
-	    &(bpc->cookie));
-	if (error != 0)
-		goto err;
-
-#ifdef NOTYET
-#ifdef SMP
-	/* XXX: bind ithread to cpu */
-	sc->bp_next_tid++;
-	if (sc->bp_next_tid >= sc->bp_nthreads)
-		sc->bp_next_tid = 0;
-#endif
-#endif
-	if (sc->bp_next_tid == 0) {
-		sc->bp_next_irq++;
-		if (sc->bp_next_irq >= sc->bp_nirqs)
-			sc->bp_next_irq = 0;
-	}
-	mtx_unlock(&(sc->bp_cfgmtx));
-
-	*cookiep = bpc;
-
-	bp_config_source(ic, rman_get_start(irq), 1, tid, hirq);
-
-	return (0);
-err:
-	free(bpc, M_BERIPIC);
-	free(bpia, M_BERIPIC);
-
-	return (error);
-}
-
-static int
-beripic_teardown_intr(device_t dev, device_t child, struct resource *irq,
-    void *cookie)
-{
-	struct beripic_cookie *bpc;
-	int error;
-
-	bpc = cookie;
-
-	bp_config_source(dev, rman_get_start(irq), 0, 0, 0);
-
-	free(bpc->bpia, M_BERIPIC);
-
-	error = BUS_TEARDOWN_INTR(device_get_parent(dev), dev, bpc->hirq,
-	    bpc->cookie);
-
-	free(bpc, M_BERIPIC);
-
-	return (error);
-}
-
-static int
-beripic_filter(void *arg)
-{
-	struct beripic_intr_arg *bpic;
-
-	bpic = arg;
-
-#ifdef __mips__
-	mips_intrcnt_inc(bpic->counter);
-#endif
-
-	/* XXX: Add a check that our source is high */
-
-	if (bpic->filter == NULL)
-		return (FILTER_SCHEDULE_THREAD);
-
-	return (bpic->filter(bpic->arg));
-}
-
-static void
-beripic_intr(void *arg)
-{
-	struct beripic_intr_arg *bpic;
-
-	bpic = arg;
-
-	KASSERT(bpic->intr != NULL,
-	    ("%s installed, but no child intr", __func__));
-
-	bpic->intr(bpic->arg);
-}
-
-#ifdef SMP
-static void
-beripic_setup_ipi(device_t ic, u_int tid, u_int ipi_irq)
-{
-	
-	bp_config_source(ic, BP_FIRST_SOFT + tid, 1, tid, ipi_irq);
-}
-
-static void
-beripic_send_ipi(device_t ic, u_int tid)
-{
-	struct beripic_softc *sc;
-	uint64_t bit;
-
-	sc = device_get_softc(ic);
-
-	KASSERT(tid < sc->bp_nsoft, ("tid (%d) too large\n", tid));
-
-	bit = 1ULL << (tid % 64);
-	bus_space_write_8(sc->bp_set_bst, sc->bp_set_bsh, 
-	    (BP_FIRST_SOFT / 8) + (tid / 64), bit);
-}
-
-static void
-beripic_clear_ipi(device_t ic, u_int tid)
-{
-	struct beripic_softc *sc;
-	uint64_t bit;
-
-	sc = device_get_softc(ic);
-
-	KASSERT(tid < sc->bp_nsoft, ("tid (%d) to large\n", tid));
-
-	bit = 1ULL << (tid % 64);
-	bus_space_write_8(sc->bp_clear_bst, sc->bp_clear_bsh, 
-	    (BP_FIRST_SOFT / 8) + (tid / 64), bit);
-}
-#endif
-
-#endif
 
 static void
 beri_pic_enable_intr(device_t dev, struct intr_irqsrc *isrc)
@@ -878,7 +379,6 @@ static int
 beri_pic_map_intr(device_t dev, struct intr_map_data *data,
         struct intr_irqsrc **isrcp)
 {
-#ifdef FDT
 	struct beripic_softc *sc;
 	struct intr_map_data_fdt *daf;
 
@@ -898,9 +398,6 @@ beri_pic_map_intr(device_t dev, struct intr_map_data *data,
 	*isrcp = &sc->irqs[irq].isrc;
 
 	return (0);
-#else
-	return (EINVAL);
-#endif
 }
 
 static void
@@ -924,32 +421,17 @@ static device_method_t beripic_fdt_methods[] = {
 	DEVMETHOD(device_probe,		beripic_probe),
 	DEVMETHOD(device_attach,	beripic_attach),
 
-#if 0
-	DEVMETHOD(fdt_ic_activate_intr,	beripic_activate_intr),
-	DEVMETHOD(fdt_ic_alloc_intr,	beripic_alloc_intr),
-	DEVMETHOD(fdt_ic_config_intr,	beripic_config_intr),
-	DEVMETHOD(fdt_ic_deactivate_intr, beripic_deactivate_intr),
-	DEVMETHOD(fdt_ic_release_intr,	beripic_release_intr),
-	DEVMETHOD(fdt_ic_setup_intr,	beripic_setup_intr),
-	DEVMETHOD(fdt_ic_teardown_intr,	beripic_teardown_intr),
-
-#ifdef SMP
-	DEVMETHOD(fdt_ic_setup_ipi,	beripic_setup_ipi),
-	DEVMETHOD(fdt_ic_clear_ipi,	beripic_clear_ipi),
-	DEVMETHOD(fdt_ic_send_ipi,	beripic_send_ipi),
-#endif
-#endif
-
 	/* Interrupt controller interface */
 	DEVMETHOD(pic_enable_intr,	beri_pic_enable_intr),
 	DEVMETHOD(pic_disable_intr,	beri_pic_disable_intr),
 	DEVMETHOD(pic_map_intr,		beri_pic_map_intr),
 	DEVMETHOD(pic_post_ithread,	beri_pic_post_ithread),
 	DEVMETHOD(pic_pre_ithread,	beri_pic_pre_ithread),
+
 	DEVMETHOD_END
 };
 
-devclass_t	beripic_devclass;
+devclass_t beripic_devclass;
 
 static driver_t beripic_driver = {
 	"beripic",
