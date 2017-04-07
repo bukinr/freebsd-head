@@ -236,7 +236,11 @@ static int
 beripic_attach(device_t dev)
 {
 	struct beripic_softc *sc;
+	const char *name;
+	struct intr_irqsrc *isrc;
 	intptr_t xref;
+	uint32_t unit;
+	int err;
 	int i;
 
 	sc = device_get_softc(dev);
@@ -249,19 +253,18 @@ beripic_attach(device_t dev)
 
 	xref = OF_xref_from_node(ofw_bus_get_node(dev));
 
-	const char *name;
-	struct intr_irqsrc *isrc;
-	int err;
 
 	name = device_get_nameunit(dev);
-	sc->nirqs = 16; //nitems(sc->pic_irqs);
+	unit = device_get_unit(dev);
+	sc->nirqs = 16;
+
 	printf("nirqs %d\n", sc->nirqs);
 
 	for (i = 0; i < sc->nirqs; i++) {
 		sc->irqs[i].irq = i;
 		isrc = &sc->irqs[i].isrc;
 		err = intr_isrc_register(isrc, sc->dev,
-		    0, "%s,i%u", name, i);
+		    0, "pic%d,%d", unit, i);
 		bus_write_8(sc->res[0], i * 8, 0);
 	}
 
