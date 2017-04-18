@@ -47,7 +47,9 @@ __FBSDID("$FreeBSD$");
 #include <machine/bus.h>
 #include <machine/intr.h>
 
+#ifdef SMP
 #include <mips/beri/beri_mp.h>
+#endif
 
 #include <dev/fdt/fdt_common.h>
 #include <dev/ofw/openfirm.h>
@@ -66,8 +68,6 @@ __FBSDID("$FreeBSD$");
 #define	BP_CFG_TID_S		8
 #define	BP_CFG_TID_M		(0x7FFFFF << BP_CFG_TID_S)
 #define	BP_CFG_ENABLE		(1 << 31)
-
-MALLOC_DEFINE(M_BERIPIC, "beripic", "beripic memory");
 
 enum {
 	BP_CFG,
