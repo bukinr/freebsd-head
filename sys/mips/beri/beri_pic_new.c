@@ -48,6 +48,8 @@ __FBSDID("$FreeBSD$");
 #include <machine/bus.h>
 #include <machine/intr.h>
 
+#include <mips/beri/beri.h>
+
 #include <dev/fdt/fdt_common.h>
 #include <dev/ofw/openfirm.h>
 #include <dev/ofw/ofw_bus.h>
@@ -68,7 +70,7 @@ struct beri_pic_isrc {
 };
 
 #define	BP_MAX_HARD_IRQS	6
-#define	BP_FIRST_SOFT		64
+#define	BP_FIRST_SOFT		16
 
 struct hirq {
 	uint32_t		irq;
@@ -79,11 +81,14 @@ struct beripic_softc {
 	device_t		dev;
 	struct mtx		bp_cfgmtx;
 	uint32_t		nirqs;
-	struct beri_pic_isrc	irqs[64];
-	struct resource		*res[9];
-	void			*ih[5];
-	struct hirq		hirq[5];
+	struct beri_pic_isrc	irqs[128];
+	struct resource		*res[4+BP_MAX_HARD_IRQS];
+	void			*ih[BP_MAX_HARD_IRQS];
+	struct hirq		hirq[BP_MAX_HARD_IRQS];
 };
+
+struct beripic_softc *beripic_sc0;
+struct beripic_softc *beripic_sc1;
 
 struct beripic_intr_arg {
 	driver_filter_t		*filter;
@@ -182,7 +187,7 @@ beri_pic_intr(void *arg)
 	struct thread *td;
 
 	td = curthread;
-	td->td_intr_nesting_level--;
+	//td->td_intr_nesting_level--;
 
 	h = arg;
 	sc = h->sc;
@@ -194,9 +199,11 @@ beri_pic_intr(void *arg)
 	printf("%s: %x\n", __func__, reg);
 #endif
 
+	uint64_t reg;
 	int i;
 
 #if 0
+	printf("%s\n", __func__);
 	printf("%s(%d):", __func__, h->irq);
 	for (i = 0; i < 16; i++) {
 		printf(" %lx", bus_read_8(sc->res[0], 0x8 * i));
@@ -205,6 +212,12 @@ beri_pic_intr(void *arg)
 #endif
 
 	uint64_t intr;
+	uint64_t intr2;
+
+	intr2 = bus_read_8(sc->res[BP_IP_READ], 0x8);
+	if (intr2 != 0) {
+		printf("intr2 %lx\n", intr2);
+	}
 
 	intr = bus_read_8(sc->res[BP_IP_READ], 0);
 	while ((i = fls(intr)) != 0) {
@@ -212,7 +225,15 @@ beri_pic_intr(void *arg)
 		intr &= ~(1u << i);
 
 		isrc = &sc->irqs[i].isrc;
-		//printf("intr %d, pending %lx\n", i, reg);
+		//printf("intr %d hard %d\n", i, h->irq);
+
+		reg = bus_read_8(sc->res[BP_CFG], i * 8);
+		if ((reg & 0xf) != h->irq) {
+			continue;
+		}
+		if ((reg & (1 << 31)) == 0) {
+			continue;
+		}
 
 		if (intr_isrc_dispatch(isrc, curthread->td_intr_frame) != 0) {
 			device_printf(sc->dev, "Stray interrupt %u detected\n", i);
@@ -221,7 +242,8 @@ beri_pic_intr(void *arg)
 		bus_write_8(sc->res[BP_IP_CLEAR], 0, (1 << i));
 	}
 
-	return (0);
+	//td->td_intr_nesting_level++;
+	return (FILTER_HANDLED);
 }
 
 static int
@@ -259,11 +281,17 @@ beripic_attach(device_t dev)
 	}
 
 	xref = OF_xref_from_node(ofw_bus_get_node(dev));
-
+	if (device_get_unit(dev) == 0) {
+		printf("unit 0\n");
+		beripic_sc0 = sc;
+	} else {
+		printf("unit 1\n");
+		beripic_sc1 = sc;
+	}
 
 	name = device_get_nameunit(dev);
 	unit = device_get_unit(dev);
-	sc->nirqs = 16;
+	sc->nirqs = 64;
 
 	printf("nirqs %d\n", sc->nirqs);
 
@@ -275,6 +303,19 @@ beripic_attach(device_t dev)
 		bus_write_8(sc->res[BP_CFG], i * 8, 0);
 	}
 
+#if 0
+	for (i = 64; i < 65; i++) {
+		sc->irqs[i].irq = i;
+		isrc = &sc->irqs[i].isrc;
+		err = intr_isrc_register(isrc, sc->dev,
+		    0, "pic%d,%d", unit, i);
+		bus_write_8(sc->res[BP_CFG], i * 8, 0);
+	}
+#endif
+	if (unit == 10) {
+		goto done;
+	}
+
 	/*
 	 * Now, when everything is initialized, it's right time to
 	 * register interrupt controller to interrupt framefork.
@@ -284,9 +325,12 @@ beripic_attach(device_t dev)
 		//goto cleanup;
 	}
 
-	for (i = 3; i < 4; i++) {
+	for (i = 0; i < BP_MAX_HARD_IRQS; i++) {
 		sc->hirq[i].sc = sc;
 		sc->hirq[i].irq = i;
+	}
+
+	for (i = 0; i < 4; i++) {
 		if (bus_setup_intr(dev, sc->res[4+i], INTR_TYPE_CLK,
 		    beri_pic_intr, NULL, &sc->hirq[i], sc->ih[i])) {
 			device_printf(dev, "could not setup irq handler\n");
@@ -296,6 +340,7 @@ beripic_attach(device_t dev)
 		}
 	}
 
+done:
 	mtx_init(&sc->bp_cfgmtx, "beripic config lock", NULL, MTX_DEF);
 
 	return (0);
@@ -315,8 +360,17 @@ beri_pic_enable_intr(device_t dev, struct intr_irqsrc *isrc)
 
 	reg = (1 << BP_CFG_SHIFT_E);
 	reg |= (1 << BP_CFG_SHIFT_IRQ);
-
 	bus_write_8(sc->res[BP_CFG], pic_isrc->irq * 8, reg);
+
+#if 0
+	if (pic_isrc->irq == 0) {
+		printf("set irq\n");
+		reg = (1 << BP_CFG_SHIFT_E);
+		reg |= (1 << BP_CFG_SHIFT_IRQ);
+		bus_write_8(sc->res[BP_CFG], 7 * 8, reg);
+		bus_write_8(sc->res[BP_IP_SET], 0, (1 << 7));
+	}
+#endif
 }
 
 static void
@@ -342,6 +396,7 @@ beri_pic_map_intr(device_t dev, struct intr_map_data *data,
 {
 	struct beripic_softc *sc;
 	struct intr_map_data_fdt *daf;
+	uint32_t irq;
 
 	printf("%s\n", __func__);
 
@@ -352,8 +407,8 @@ beri_pic_map_intr(device_t dev, struct intr_map_data *data,
 	    daf->ncells != 1 || daf->cells[0] >= sc->nirqs)
 		return (EINVAL);
 
-	uint32_t irq;
 	irq = daf->cells[0];
+
 	printf("%s: irq %d\n", __func__, irq);
 
 	*isrcp = &sc->irqs[irq].isrc;
@@ -376,6 +431,74 @@ beri_pic_pre_ithread(device_t dev, struct intr_irqsrc *isrc)
 	//printf("%s\n", __func__);
 	beri_pic_disable_intr(dev, isrc);
 }
+
+#ifdef SMP
+void
+beripic_setup_ipi(device_t dev, u_int tid, u_int ipi_irq)
+{
+	struct beripic_softc *sc;
+	uint64_t reg;
+	//device_t ic;
+
+	sc = device_get_softc(dev);
+
+	//bp_config_source(ic, BP_FIRST_SOFT + tid, 1, tid, ipi_irq);
+
+	reg = (1 << BP_CFG_SHIFT_E);
+	reg |= (ipi_irq << BP_CFG_SHIFT_IRQ);
+	bus_write_8(sc->res[BP_CFG], (BP_FIRST_SOFT * 8), reg);
+}
+
+void
+beripic_send_ipi(device_t dev, u_int tid)
+{
+	struct beripic_softc *sc;
+	uint64_t bit;
+
+	sc = device_get_softc(dev);
+
+	//KASSERT(tid < sc->bp_nsoft, ("tid (%d) too large\n", tid));
+
+	///XXXXXXXXXXXXXXXXXX
+	//printf("%s: %d -> 0\n", __func__, tid);
+	//tid = 0;
+	//bit = 1ULL << (tid % 64);
+	//bus_space_write_8(sc->bp_set_bst, sc->bp_set_bsh, 
+	//    (BP_FIRST_SOFT / 8) + (tid / 64), bit);
+	//bus_write_8(sc->res[BP_IP_SET], (BP_FIRST_SOFT / 8) + (tid / 64), bit);
+	//printf("ip_read: %lx\n", bus_read_8(sc->res[BP_IP_READ], (BP_FIRST_SOFT / 8) + (tid / 64)));
+	//printf("Cfg0: %lx\n", bus_read_8(sc->res[BP_CFG], (BP_FIRST_SOFT + 0) * 8));
+	//printf("Cfg1: %lx\n", bus_read_8(sc->res[BP_CFG], (BP_FIRST_SOFT + 1) * 8));
+	//printf("%d->%d\n", PCPU_GET(cpuid), tid);
+
+	bit = (1 << BP_FIRST_SOFT);
+	bus_write_8(sc->res[BP_IP_SET], 0x0, bit);
+
+	//printf("ip_read: %lx\n", bus_read_8(sc->res[BP_IP_READ], 0));
+	//sc = beripic_sc0;
+	//printf("Cfg7 cpu0: %lx\n", bus_read_8(sc->res[BP_CFG], (BP_FIRST_SOFT + 0) * 8));
+	//sc = beripic_sc1;
+	//printf("Cfg7 cpu1: %lx\n", bus_read_8(sc->res[BP_CFG], (BP_FIRST_SOFT + 0) * 8));
+}
+
+void
+beripic_clear_ipi(device_t dev, u_int tid)
+{
+	struct beripic_softc *sc;
+	uint64_t bit;
+
+	sc = device_get_softc(dev);
+
+	//KASSERT(tid < sc->bp_nsoft, ("tid (%d) to large\n", tid));
+	//printf("%s\n", __func__);
+	//bit = 1ULL << (tid % 64);
+	//bus_space_write_8(sc->bp_clear_bst, sc->bp_clear_bsh, 
+	//    (BP_FIRST_SOFT / 8) + (tid / 64), bit);
+
+	bit = (1 << BP_FIRST_SOFT);
+	bus_write_8(sc->res[BP_IP_CLEAR], 0x0, bit);
+}
+#endif
 
 static device_method_t beripic_fdt_methods[] = {
 	/* Device interface */
