@@ -59,17 +59,15 @@ __FBSDID("$FreeBSD$");
 
 struct beripic_softc;
 
-#if 0
-static uint64_t	bp_read_cfg(struct beripic_softc *, int);
-static void	bp_write_cfg(struct beripic_softc *, int, uint64_t);
-#endif
-
 struct beri_pic_isrc {
 	struct intr_irqsrc isrc;
 	u_int irq;
 };
 
-#define	BP_MAX_HARD_IRQS	6
+#define	BP_NUM_HARD_IRQS	5
+#define	BP_NUM_IRQS		32
+
+/* We use hard irqs 15-31 as soft */
 #define	BP_FIRST_SOFT		16
 
 struct hirq {
@@ -81,10 +79,10 @@ struct beripic_softc {
 	device_t		dev;
 	struct mtx		bp_cfgmtx;
 	uint32_t		nirqs;
-	struct beri_pic_isrc	irqs[128];
-	struct resource		*res[4+BP_MAX_HARD_IRQS];
-	void			*ih[BP_MAX_HARD_IRQS];
-	struct hirq		hirq[BP_MAX_HARD_IRQS];
+	struct beri_pic_isrc	irqs[BP_NUM_IRQS];
+	struct resource		*res[4 + BP_NUM_HARD_IRQS];
+	void			*ih[BP_NUM_HARD_IRQS];
+	struct hirq		hirq[BP_NUM_HARD_IRQS];
 };
 
 struct beripic_intr_arg {
@@ -113,21 +111,6 @@ struct beripic_cookie {
 #define	BP_CFG_TID_M		(0x7FFFFF << BP_CFG_TID_S)
 #define	BP_CFG_ENABLE		(1 << 31)
 
-#if 0
-#define	BP_CFG_MASK_E		0x80000000ull
-#define	BP_CFG_SHIFT_E		31
-#define	BP_CFG_MASK_TID		0x7FFFFF00ull	/* Depends on CPU */
-#define	BP_CFG_SHIFT_TID	8
-#define	BP_CFG_MASK_IRQ		0x0000000Full
-#define BP_CFG_SHIFT_IRQ	0
-#define	BP_CFG_VALID		(BP_CFG_MASK_E|BP_CFG_MASK_TID|BP_CFG_MASK_IRQ)
-#define	BP_CFG_RESERVED		~BP_CFG_VALID
-
-#define	BP_CFG_ENABLED(cfg)	(((cfg) & BP_CFG_MASK_E) >> BP_CFG_SHIFT_E)
-#define	BP_CFG_TID(cfg)		(((cfg) & BP_CFG_MASK_TID) >> BP_CFG_SHIFT_TID)
-#define	BP_CFG_IRQ(cfg)		(((cfg) & BP_CFG_MASK_IRQ) >> BP_CFG_SHIFT_IRQ)
-#endif
-
 MALLOC_DEFINE(M_BERIPIC, "beripic", "beripic memory");
 
 static struct resource_spec beri_pic_spec[] = {
@@ -142,42 +125,6 @@ static struct resource_spec beri_pic_spec[] = {
 	{ SYS_RES_IRQ,		4,	RF_ACTIVE },
 	{ -1, 0 }
 };
-
-#if 0
-static uint64_t
-bp_read_cfg(struct beripic_softc *sc, int irq)
-{
-	
-	KASSERT((irq >= 0 && irq < sc->bp_nsrcs),
-	    ("IRQ of of range %d (0-%d)", irq, sc->bp_nsrcs - 1));
-	return (bus_space_read_8(sc->bp_cfg_bst, sc->bp_cfg_bsh, irq * 8));
-}
-
-static void
-bp_write_cfg(struct beripic_softc *sc, int irq, uint64_t config)
-{
-	
-	KASSERT((irq >= 0 && irq < sc->bp_nsrcs),
-	    ("IRQ of of range %d (0-%d)", irq, sc->bp_nsrcs - 1));
-	bus_space_write_8(sc->bp_cfg_bst, sc->bp_cfg_bsh, irq * 8, config);
-}
-
-static void
-bp_config_source(device_t ic, int src, int enable, u_long tid, u_long irq)
-{
-	struct beripic_softc *sc;
-	uint64_t config;
-
-	sc = device_get_softc(ic);
-
-	config = 0;
-	config |= enable << BP_CFG_SHIFT_E;
-	config |= tid << BP_CFG_SHIFT_TID;
-	config |= irq << BP_CFG_SHIFT_IRQ;
-
-	bp_write_cfg(sc, src, config);
-}
-#endif
 
 static int
 beri_pic_intr(void *arg)
@@ -260,7 +207,7 @@ beripic_attach(device_t dev)
 	xref = OF_xref_from_node(ofw_bus_get_node(dev));
 	name = device_get_nameunit(dev);
 	unit = device_get_unit(dev);
-	sc->nirqs = 64;
+	sc->nirqs = BP_NUM_IRQS;
 
 	for (i = 0; i < sc->nirqs; i++) {
 		sc->irqs[i].irq = i;
@@ -279,12 +226,10 @@ beripic_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	for (i = 0; i < BP_MAX_HARD_IRQS; i++) {
+	/* Last IRQ is used for IPIs. */
+	for (i = 0; i < (BP_NUM_HARD_IRQS - 1); i++) {
 		sc->hirq[i].sc = sc;
 		sc->hirq[i].irq = i;
-	}
-
-	for (i = 0; i < 4; i++) {
 		if (bus_setup_intr(dev, sc->res[4+i], INTR_TYPE_CLK,
 		    beri_pic_intr, NULL, &sc->hirq[i], sc->ih[i])) {
 			device_printf(dev, "could not setup irq handler\n");
@@ -323,8 +268,6 @@ beri_pic_disable_intr(device_t dev, struct intr_irqsrc *isrc)
 	sc = device_get_softc(dev);
 	pic_isrc = (struct beri_pic_isrc *)isrc;
 
-	//printf("%s: %d\n", __func__, pic_isrc->irq);
-
 	reg = bus_read_8(sc->res[BP_CFG], pic_isrc->irq * 8);
 	reg &= ~(BP_CFG_ENABLE);
 	bus_write_8(sc->res[BP_CFG], pic_isrc->irq * 8, reg);
@@ -338,8 +281,6 @@ beri_pic_map_intr(device_t dev, struct intr_map_data *data,
 	struct intr_map_data_fdt *daf;
 	uint32_t irq;
 
-	printf("%s\n", __func__);
-
 	sc = device_get_softc(dev);
 	daf = (struct intr_map_data_fdt *)data;
 
@@ -348,8 +289,6 @@ beri_pic_map_intr(device_t dev, struct intr_map_data *data,
 		return (EINVAL);
 
 	irq = daf->cells[0];
-
-	printf("%s: irq %d\n", __func__, irq);
 
 	*isrcp = &sc->irqs[irq].isrc;
 
@@ -376,15 +315,13 @@ beripic_setup_ipi(device_t dev, u_int tid, u_int ipi_irq)
 {
 	struct beripic_softc *sc;
 	uint64_t reg;
-	//device_t ic;
 
 	sc = device_get_softc(dev);
 
-	//bp_config_source(ic, BP_FIRST_SOFT + tid, 1, tid, ipi_irq);
-
 	reg = (BP_CFG_ENABLE);
 	reg |= (ipi_irq << BP_CFG_IRQ_S);
-	bus_write_8(sc->res[BP_CFG], (BP_FIRST_SOFT * 8), reg);
+	reg |= (tid << BP_CFG_TID_S);
+	bus_write_8(sc->res[BP_CFG], ((BP_FIRST_SOFT + tid) * 8), reg);
 }
 
 void
@@ -395,14 +332,10 @@ beripic_send_ipi(device_t dev, u_int tid)
 
 	sc = device_get_softc(dev);
 
-	//KASSERT(tid < sc->bp_nsoft, ("tid (%d) too large\n", tid));
-	//bit = 1ULL << (tid % 64);
-	//bus_space_write_8(sc->bp_set_bst, sc->bp_set_bsh, 
-	//    (BP_FIRST_SOFT / 8) + (tid / 64), bit);
-	//bus_write_8(sc->res[BP_IP_SET], (BP_FIRST_SOFT / 8) + (tid / 64), bit);
+	bit = (BP_FIRST_SOFT + tid);
+	KASSERT(bit < BP_NUM_IRQS, ("tid (%d) to large\n", tid));
 
-	bit = (1 << BP_FIRST_SOFT);
-	bus_write_8(sc->res[BP_IP_SET], 0x0, bit);
+	bus_write_8(sc->res[BP_IP_SET], 0x0, (1 << bit));
 }
 
 void
@@ -413,13 +346,10 @@ beripic_clear_ipi(device_t dev, u_int tid)
 
 	sc = device_get_softc(dev);
 
-	//KASSERT(tid < sc->bp_nsoft, ("tid (%d) to large\n", tid));
-	//bit = 1ULL << (tid % 64);
-	//bus_space_write_8(sc->bp_clear_bst, sc->bp_clear_bsh, 
-	//    (BP_FIRST_SOFT / 8) + (tid / 64), bit);
+	bit = (BP_FIRST_SOFT + tid);
+	KASSERT(bit < BP_NUM_IRQS, ("tid (%d) to large\n", tid));
 
-	bit = (1 << BP_FIRST_SOFT);
-	bus_write_8(sc->res[BP_IP_CLEAR], 0x0, bit);
+	bus_write_8(sc->res[BP_IP_CLEAR], 0x0, (1 << bit));
 }
 #endif
 
