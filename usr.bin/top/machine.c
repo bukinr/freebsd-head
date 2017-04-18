@@ -516,7 +516,7 @@ get_system_info(struct system_info *si)
 		static int swapavail = 0;
 		static int swapfree = 0;
 		static long bufspace = 0;
-		static uint64_t nspgsin, nspgsout;
+		static int nspgsin, nspgsout;
 
 		GETSYSCTL("vfs.bufspace", bufspace);
 		GETSYSCTL("vm.stats.vm.v_active_count", memory_stats[0]);

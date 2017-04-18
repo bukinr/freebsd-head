@@ -291,7 +291,7 @@ abort_handler(struct trapframe *tf, int prefetch)
 	void *onfault;
 #endif
 
-	VM_CNT_INC(v_trap);
+	PCPU_INC(cnt.v_trap);
 	td = curthread;
 
 	fsr = (prefetch) ? cp15_ifsr_get(): cp15_dfsr_get();

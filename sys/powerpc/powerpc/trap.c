@@ -171,7 +171,7 @@ trap(struct trapframe *frame)
 	u_int		ucode;
 	ksiginfo_t	ksi;
 
-	VM_CNT_INC(v_trap);
+	PCPU_INC(cnt.v_trap);
 
 	td = curthread;
 	p = td->td_proc;

@@ -201,7 +201,7 @@ undefinedinstruction(struct trapframe *frame)
 	if (__predict_true(frame->tf_spsr & PSR_F) == 0)
 		enable_interrupts(PSR_F);
 
-	VM_CNT_INC(v_trap);
+	PCPU_INC(cnt.v_trap);
 
 	fault_pc = frame->tf_pc;
 

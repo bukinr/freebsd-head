@@ -170,7 +170,6 @@ updatestat(void)
 	struct timeval tm, btm;
 	int mib[6];
 	size_t len;
-	uint64_t val;
 	int ifcount;
 
 #ifdef DEBUG
@@ -230,12 +229,11 @@ updatestat(void)
 #endif
 
 #define	FETCH_CNT(stat, cnt) do {					\
-	len = sizeof(uint64_t);						\
-	if (sysctlbyname("vm.stats." #cnt , &val, &len, NULL, 0) < 0) {	\
-		syslog(LOG_ERR, "sysctl(vm.stats." #cnt "): %m");	\
+	len = sizeof((stat));						\
+	if (sysctlbyname("vm.stats." #cnt , &(stat), &len, 0, 0) < 0) { \
+		syslog(LOG_ERR, "sysctl(vm.stats." #cnt "): %m"); \
 		exit(1);						\
 	}								\
-	stat = val;							\
 } while (0)
 
 	FETCH_CNT(stats_all.s1.v_pgpgin, vm.v_vnodepgsin);

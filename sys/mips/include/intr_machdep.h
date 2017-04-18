@@ -71,6 +71,6 @@ mips_intrcnt_inc(mips_intrcnt_t counter)
 {
 	if (counter)
 		atomic_add_long(counter, 1);
-	VM_CNT_INC(v_intr);
+	PCPU_INC(cnt.v_intr);
 }
 #endif /* !_MACHINE_INTR_MACHDEP_H_ */
