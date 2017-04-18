@@ -40,10 +40,9 @@ __FBSDID("$FreeBSD$");
 #include <sys/malloc.h>
 #include <sys/module.h>
 #include <sys/mutex.h>
+#include <sys/proc.h>
 #include <sys/systm.h>
 #include <sys/bus.h>
-
-#include <sys/proc.h>
 
 #include <machine/bus.h>
 #include <machine/intr.h>
@@ -57,53 +56,10 @@ __FBSDID("$FreeBSD$");
 
 #include "pic_if.h"
 
-struct beripic_softc;
-
-struct beri_pic_isrc {
-	struct intr_irqsrc isrc;
-	u_int irq;
-};
-
 #define	BP_NUM_HARD_IRQS	5
 #define	BP_NUM_IRQS		32
-
 /* We use hard irqs 15-31 as soft */
 #define	BP_FIRST_SOFT		16
-
-struct hirq {
-	uint32_t		irq;
-	struct beripic_softc	*sc;
-};
-
-struct beripic_softc {
-	device_t		dev;
-	struct mtx		bp_cfgmtx;
-	uint32_t		nirqs;
-	struct beri_pic_isrc	irqs[BP_NUM_IRQS];
-	struct resource		*res[4 + BP_NUM_HARD_IRQS];
-	void			*ih[BP_NUM_HARD_IRQS];
-	struct hirq		hirq[BP_NUM_HARD_IRQS];
-};
-
-struct beripic_intr_arg {
-	driver_filter_t		*filter;
-	driver_intr_t		*intr;
-	void			*arg;
-	struct resource		*irq;
-};
-
-enum {
-	BP_CFG,
-	BP_IP_READ,
-	BP_IP_SET,
-	BP_IP_CLEAR
-};
-
-struct beripic_cookie {
-	struct beripic_intr_arg	*bpia;
-	struct resource		*hirq;
-	void			*cookie;
-};
 
 #define	BP_CFG_IRQ_S		0
 #define	BP_CFG_IRQ_M		(0xf << BP_CFG_IRQ_S)
@@ -112,6 +68,36 @@ struct beripic_cookie {
 #define	BP_CFG_ENABLE		(1 << 31)
 
 MALLOC_DEFINE(M_BERIPIC, "beripic", "beripic memory");
+
+enum {
+	BP_CFG,
+	BP_IP_READ,
+	BP_IP_SET,
+	BP_IP_CLEAR
+};
+
+struct beripic_softc;
+
+struct beri_pic_isrc {
+	struct intr_irqsrc	isrc;
+	u_int			irq;
+	uint32_t		mips_hard_irq;
+};
+
+struct hirq {
+	uint32_t		irq;
+	struct beripic_softc	*sc;
+};
+
+struct beripic_softc {
+	device_t		dev;
+	uint32_t		nirqs;
+	struct beri_pic_isrc	irqs[BP_NUM_IRQS];
+	struct resource		*res[4 + BP_NUM_HARD_IRQS];
+	void			*ih[BP_NUM_HARD_IRQS];
+	struct hirq		hirq[BP_NUM_HARD_IRQS];
+	uint8_t			mips_hard_irq_idx;
+};
 
 static struct resource_spec beri_pic_spec[] = {
 	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },
@@ -183,6 +169,7 @@ static int
 beripic_attach(device_t dev)
 {
 	struct beripic_softc *sc;
+	struct beri_pic_isrc *pic_isrc;
 	const char *name;
 	struct intr_irqsrc *isrc;
 	intptr_t xref;
@@ -206,6 +193,15 @@ beripic_attach(device_t dev)
 	for (i = 0; i < sc->nirqs; i++) {
 		sc->irqs[i].irq = i;
 		isrc = &sc->irqs[i].isrc;
+
+		/* Assign mips hard irq number. */
+		pic_isrc = (struct beri_pic_isrc *)isrc;
+		pic_isrc->mips_hard_irq = sc->mips_hard_irq_idx++;
+		/* Last IRQ is used for IPIs. */
+		if (sc->mips_hard_irq_idx >= (BP_NUM_HARD_IRQS - 1)) {
+			sc->mips_hard_irq_idx = 0;
+		}
+
 		err = intr_isrc_register(isrc, sc->dev,
 		    0, "pic%d,%d", unit, i);
 		bus_write_8(sc->res[BP_CFG], i * 8, 0);
@@ -232,8 +228,6 @@ beripic_attach(device_t dev)
 		}
 	}
 
-	mtx_init(&sc->bp_cfgmtx, "beripic config lock", NULL, MTX_DEF);
-
 	return (0);
 }
 
@@ -248,7 +242,7 @@ beri_pic_enable_intr(device_t dev, struct intr_irqsrc *isrc)
 	pic_isrc = (struct beri_pic_isrc *)isrc;
 
 	reg = BP_CFG_ENABLE;
-	reg |= (1 << BP_CFG_IRQ_S);
+	reg |= (pic_isrc->mips_hard_irq << BP_CFG_IRQ_S);
 	bus_write_8(sc->res[BP_CFG], pic_isrc->irq * 8, reg);
 }
 
@@ -263,13 +257,13 @@ beri_pic_disable_intr(device_t dev, struct intr_irqsrc *isrc)
 	pic_isrc = (struct beri_pic_isrc *)isrc;
 
 	reg = bus_read_8(sc->res[BP_CFG], pic_isrc->irq * 8);
-	reg &= ~(BP_CFG_ENABLE);
+	reg &= ~BP_CFG_ENABLE;
 	bus_write_8(sc->res[BP_CFG], pic_isrc->irq * 8, reg);
 }
 
 static int
 beri_pic_map_intr(device_t dev, struct intr_map_data *data,
-        struct intr_irqsrc **isrcp)
+    struct intr_irqsrc **isrcp)
 {
 	struct beripic_softc *sc;
 	struct intr_map_data_fdt *daf;
