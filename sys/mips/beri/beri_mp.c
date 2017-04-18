@@ -1,4 +1,5 @@
 /*-
+ * Copyright (c) 2017 Ruslan Bukin <br@bsdpad.com>
  * Copyright (c) 2012-2015 Robert N. M. Watson
  * Copyright (c) 2013 SRI International
  * All rights reserved.
