@@ -524,7 +524,6 @@ nexus_config_intr(device_t dev, int irq, enum intr_trigger trig,
 {
 
 	device_printf(dev, "bus_config_intr is obsolete and not supported!\n");
-
 	return (EOPNOTSUPP);
 }
 
