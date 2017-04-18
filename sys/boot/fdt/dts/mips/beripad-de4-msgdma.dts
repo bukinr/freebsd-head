@@ -86,38 +86,49 @@
 	};
 
 	cpuintc: cpuintc@0 {
-			#address-cells = <0>;
-			#interrupt-cells = <1>;
-			interrupt-controller;
-			compatible = "mti,cpu-interrupt-controller";
+		#address-cells = <0>;
+		#interrupt-cells = <1>;
+		interrupt-controller;
+		compatible = "mti,cpu-interrupt-controller";
 	};
 
 	beripic0: beripic@7f804000 {
-			compatible = "sri-cambridge,beri-pic";
-			interrupt-controller;
-			#address-cells = <0>;
-			#interrupt-cells = <1>;
-			reg = <0x7f804000 0x400
-			       0x7f806000 0x80
-			       0x7f806080 0x80
-			       0x7f806100 0x80>;
-			interrupts = <0 1 2 3 4>;
-			hard-interrupt-sources = <64>;
-			soft-interrupt-sources = <64>;
-
-			interrupt-parent = <&cpuintc>;
-			//interrupts = <2>;
+		compatible = "sri-cambridge,beri-pic";
+		interrupt-controller;
+		#address-cells = <0>;
+		#interrupt-cells = <1>;
+		reg = <0x7f804000 0x400
+		       0x7f806000 0x10
+		       0x7f806080 0x10
+		       0x7f806100 0x10>;
+		interrupts = < 2 3 4 5 6 >;
+		hard-interrupt-sources = <64>;
+		soft-interrupt-sources = <64>;
+		interrupt-parent = <&cpuintc>;
 	};
+
+/*
+	beripic1: beripic@7f808000 {
+		compatible = "sri-cambridge,beri-pic";
+		interrupt-controller;
+		#address-cells = <0>;
+		#interrupt-cells = <1>;
+		reg = <0x7f808000 0x400
+		       0x7f80a000 0x10
+		       0x7f80a080 0x10
+		       0x7f80a100 0x10>;
+		interrupts = < 2 3 4 5 6 >;
+		hard-interrupt-sources = <64>;
+		soft-interrupt-sources = <64>;
+		interrupt-parent = <&cpuintc>;
+	};
+*/
 
 	soc {
 		#address-cells = <1>;
 		#size-cells = <1>;
 		#interrupt-cells = <1>;
 
-		/*
-		 * Declare mips,mips4k since BERI doesn't (yet) have a PIC, so
-		 * we use mips4k coprocessor 0 interrupt management directly.
-		 */
 		compatible = "simple-bus", "mips,mips4k";
 		ranges;
 
@@ -245,7 +256,7 @@
 			dmas = <&msgdma0 0 0 0xffffffff>,
 			       <&msgdma1 1 1 0xffffffff>;
 			dma-names = "tx", "rx";
-			status = "disabled";
+			//status = "disabled";
 		};
 
 		ethernet@7f007000 {
@@ -254,7 +265,7 @@
 			dmas = <&softdma0 0 0 0xffffffff>,
 			       <&softdma1 1 1 0xffffffff>;
 			dma-names = "tx", "rx";
-			//status = "disabled";
+			status = "disabled";
 		};
 
 		ethernet@7f005000 {
@@ -286,6 +297,7 @@
 			// IRQ 4 is DC, IRQ 5 is HC.
 			interrupts = <4 5>;
 			interrupt-parent = <&beripic0>;
+			//status = "disabled";
 		};
 
 		avgen@0x7f009000 {
