@@ -40,7 +40,7 @@ __FBSDID("$FreeBSD$");
 #include <machine/hwfunc.h>
 #include <machine/smp.h>
 
-#include <mips/beri/beri.h>
+#include <mips/beri/beri_mp.h>
 
 #include <dev/fdt/fdt_common.h>
 
