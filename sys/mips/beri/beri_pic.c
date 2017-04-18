@@ -131,14 +131,10 @@ beri_pic_intr(void *arg)
 {
 	struct beripic_softc *sc;
 	struct intr_irqsrc *isrc;
-	struct thread *td;
 	struct hirq *h;
 	uint64_t intr;
 	uint64_t reg;
 	int i;
-
-	td = curthread;
-	//td->td_intr_nesting_level--;
 
 	h = arg;
 	sc = h->sc;
@@ -149,7 +145,6 @@ beri_pic_intr(void *arg)
 		intr &= ~(1u << i);
 
 		isrc = &sc->irqs[i].isrc;
-		//printf("intr %d hard %d\n", i, h->irq);
 
 		reg = bus_read_8(sc->res[BP_CFG], i * 8);
 		if ((reg & BP_CFG_IRQ_M) != h->irq) {
@@ -166,7 +161,6 @@ beri_pic_intr(void *arg)
 		bus_write_8(sc->res[BP_IP_CLEAR], 0, (1 << i));
 	}
 
-	//td->td_intr_nesting_level++;
 	return (FILTER_HANDLED);
 }
 
