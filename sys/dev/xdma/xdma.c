@@ -81,6 +81,12 @@ static struct mtx xdma_mtx;
 static int xchan_bufs_alloc(xdma_channel_t *xchan);
 static int xchan_bufs_free(xdma_channel_t *xchan);
 
+struct seg_load_request {
+	struct bus_dma_segment *seg;
+	uint32_t nsegs;
+	uint32_t error;
+};
+
 static void
 xdma_task(void *arg)
 {
@@ -124,6 +130,7 @@ xchan_bank_init(xdma_channel_t *xchan)
 		    "%s: Can't allocate memory.\n", __func__);
 		return (-1);
 	}
+
 	for (i = 0; i < xchan->xr_num; i++) {
 		xr = &xchan->xr_mem[i];
 		TAILQ_INSERT_TAIL(&xchan->bank, xr, xr_next);
@@ -535,7 +542,8 @@ xdma_prep_sg(xdma_channel_t *xchan, uint32_t xr_num, uint32_t maxsegsize,
 
 	if (xchan->maxnsegs > XDMA_MAX_SEG) {
 		device_printf(xdma->dev,
-		    "%s: Can't prepare sg transfer\n", __func__);
+		    "%s: maxnsegs %d is too big\n",
+		    __func__, xchan->maxnsegs);
 		return (-1);
 	}
 
@@ -653,12 +661,6 @@ xdma_enqueue(xdma_channel_t *xchan, uintptr_t src, uintptr_t dst,
 
 	return (0);
 }
-
-struct seg_load_request {
-	struct bus_dma_segment *seg;
-	uint32_t nsegs;
-	uint32_t error;
-};
 
 static void
 xdma_dmamap_cb(void *arg, bus_dma_segment_t *segs, int nsegs, int error)
@@ -1204,7 +1206,16 @@ xdma_ofw_get(device_t dev, const char *prop)
 	free(cells, M_OFWPROP);
 
 	mtx_init(&xdma->proc_mtx, "xDMA ofw controller", NULL, MTX_DEF);
-	kproc_create(&xdma_task, xdma, &xdma->xdma_proc, 0, 0, "xdma drainer");
+	error = kproc_create(&xdma_task, xdma, &xdma->xdma_proc, 0, 0, "xdma drainer");
+	if (error) {
+		device_printf(dev,
+		    "%s failed to create kproc.\n", __func__);
+
+		/* Cleanup */
+		free(xdma, M_XDMA);
+
+		return (NULL);
+	}
 
 	return (xdma);
 }
