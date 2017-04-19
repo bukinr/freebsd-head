@@ -114,12 +114,12 @@
 		cdns,tslch-ns = <4>;
 
 		partition@qspi-boot {
-			label = "Boot and fpga data";
+			label = "boot";
 			reg = <0x0 0x2720000>;
 		};
 
 		partition@qspi-rootfs {
-			label = "Root Filesystem - JFFS2";
+			label = "rootfs";
 			reg = <0x2720000 0x58E0000>;
 		};
 	};
