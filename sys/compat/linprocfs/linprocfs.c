@@ -425,10 +425,10 @@ linprocfs_dostat(PFS_FILL_ARGS)
 	}
 	sbuf_printf(sb,
 	    "disk 0 0 0 0\n"
-	    "page %u %u\n"
-	    "swap %u %u\n"
-	    "intr %u\n"
-	    "ctxt %u\n"
+	    "page %ju %ju\n"
+	    "swap %ju %ju\n"
+	    "intr %ju\n"
+	    "ctxt %ju\n"
 	    "btime %lld\n",
 	    (uintmax_t)VM_CNT_FETCH(v_vnodepgsin),
 	    (uintmax_t)VM_CNT_FETCH(v_vnodepgsout),
