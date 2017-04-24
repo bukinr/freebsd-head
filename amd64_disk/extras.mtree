@@ -1,0 +1,1 @@
+./etc/fstab type=file uname=root gname=wheel mode=644
