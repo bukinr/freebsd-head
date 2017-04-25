@@ -43,9 +43,8 @@ __FBSDID("$FreeBSD$");
 #include <sys/conf.h>
 #include <sys/uio.h>
 
-#include <machine/bus.h>
-#include <machine/fdt.h>
-#include <machine/cpu.h>
+#include <machine/md_var.h>
+#include <machine/specialreg.h>
 
 struct sgx_softc {
 	struct cdev		*sgx_cdev;
@@ -109,6 +108,22 @@ static struct cdevsw sgx_cdevsw = {
 	.d_name =	"Intel SGX",
 };
 
+static void
+sgx_identify(driver_t *driver, device_t parent)
+{
+
+	if ((cpu_stdext_feature & CPUID_STDEXT_SGX) == 0)
+		return;
+
+	/* Make sure we're not being doubly invoked. */
+	if (device_find_child(parent, "sgx", -1) != NULL)
+		return;
+
+	/* We attach a sgx child for every CPU */
+	if (BUS_ADD_CHILD(parent, 10, "sgx", -1) == NULL)
+		device_printf(parent, "add sgx child failed\n");
+}
+
 static int
 sgx_probe(device_t dev)
 {
@@ -140,6 +155,7 @@ sgx_attach(device_t dev)
 }
 
 static device_method_t sgx_methods[] = {
+	DEVMETHOD(device_identify,	sgx_identify),
 	DEVMETHOD(device_probe,		sgx_probe),
 	DEVMETHOD(device_attach,	sgx_attach),
 	{ 0, 0 }
@@ -153,4 +169,4 @@ static driver_t sgx_driver = {
 
 static devclass_t sgx_devclass;
 
-DRIVER_MODULE(sgx, simplebus, sgx_driver, sgx_devclass, 0, 0);
+DRIVER_MODULE(sgx, cpu, sgx_driver, sgx_devclass, 0, 0);

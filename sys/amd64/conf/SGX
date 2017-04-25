@@ -104,6 +104,9 @@ options 	EARLY_AP_STARTUP
 # CPU frequency control
 device		cpufreq
 
+# Intel SGX support
+device		sgx
+
 # Bus support.
 device		acpi
 options 	ACPI_DMAR
