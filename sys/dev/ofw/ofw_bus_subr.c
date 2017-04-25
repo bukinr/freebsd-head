@@ -250,21 +250,15 @@ ofw_bus_is_compatible(device_t dev, const char *onecompat)
 	const char *compat;
 	int len;
 
-	if ((compat = ofw_bus_get_compat(dev)) == NULL) {
-		//printf("%s: cant get compat\n", __func__);
+	if ((compat = ofw_bus_get_compat(dev)) == NULL)
 		return (0);
-	}
 
-	if ((node = ofw_bus_get_node(dev)) == -1) {
-		//printf("%s: cant get node\n", __func__);
+	if ((node = ofw_bus_get_node(dev)) == -1)
 		return (0);
-	}
 
 	/* Get total 'compatible' prop len */
-	if ((len = OF_getproplen(node, "compatible")) <= 0) {
-		//printf("%s: cant get len\n", __func__);
+	if ((len = OF_getproplen(node, "compatible")) <= 0)
 		return (0);
-	}
 
 	return (ofw_bus_node_is_compatible_int(compat, len, onecompat));
 }
