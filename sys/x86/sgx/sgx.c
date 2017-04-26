@@ -48,6 +48,7 @@ __FBSDID("$FreeBSD$");
 #include <machine/specialreg.h>
 
 #include "sgx.h"
+#include "sgx_user.h"
 
 struct sgx_softc {
 	struct cdev		*sgx_cdev;
@@ -62,6 +63,8 @@ sgx_open(struct cdev *dev, int flags __unused,
 
 	sc = dev->si_drv1;
 
+	//printf("%s\n", __func__);
+
 	return (0);
 }
 
@@ -73,6 +76,32 @@ sgx_close(struct cdev *dev, int flags __unused,
 
 	sc = dev->si_drv1;
 
+	//printf("%s\n", __func__);
+
+	return (0);
+}
+
+static int
+sgx_read(struct cdev *dev, struct uio *uio, int ioflag)
+{
+	struct sgx_softc *sc;
+
+	sc = dev->si_drv1;
+
+	//printf("%s\n", __func__);
+
+	return (0);
+}
+
+static int
+sgx_write(struct cdev *dev, struct uio *uio, int ioflag)
+{
+	struct sgx_softc *sc;
+
+	sc = dev->si_drv1;
+
+	//printf("%s\n", __func__);
+
 	return (0);
 }
 
@@ -80,6 +109,25 @@ static int
 sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
     struct thread *td)
 {
+
+	//printf("%s: %ld\n", __func__, cmd);
+
+	switch (cmd) {
+	case SGX_IOC_ENCLAVE_CREATE:
+		printf("%s: enclave_create\n", __func__);
+		//handler = isgx_ioctl_enclave_create;
+		break;
+	case SGX_IOC_ENCLAVE_ADD_PAGE:
+		printf("%s: enclave_add_page\n", __func__);
+		//handler = isgx_ioctl_enclave_add_page;
+		break;
+	case SGX_IOC_ENCLAVE_INIT:
+		printf("%s: enclave_init\n", __func__);
+		//handler = isgx_ioctl_enclave_init;
+		break;
+	default:
+		return -EINVAL;
+	}
 
 	return (0);
 }
@@ -106,6 +154,8 @@ static struct cdevsw sgx_cdevsw = {
 	.d_version =	D_VERSION,
 	.d_open =	sgx_open,
 	.d_close =	sgx_close,
+	.d_read =	sgx_read,
+	.d_write =	sgx_write,
 	.d_ioctl =	sgx_ioctl,
 	.d_mmap =	sgx_mmap,
 	.d_name =	"Intel SGX",
@@ -145,7 +195,7 @@ sgx_attach(device_t dev)
 	sc->dev = dev;
 
 	sc->sgx_cdev = make_dev(&sgx_cdevsw, 0, UID_ROOT, GID_WHEEL,
-	    0600, "sgx");
+	    0600, "isgx");
 
 	if (sc->sgx_cdev == NULL) {
 		device_printf(dev, "Failed to create character device.\n");
