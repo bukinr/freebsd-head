@@ -35,6 +35,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/errno.h>
 #include <sys/ioctl.h>
 #include <sys/sysctl.h>
+#include <sys/mman.h>
 #include <sys/uio.h>
 
 #include <ctype.h>
@@ -50,12 +51,46 @@ __FBSDID("$FreeBSD$");
 #include <wchar.h>
 #include <wctype.h>
 
+#include <gelf.h>
+
+#define	round_up(x,y) (((x) + (y) - 1) & ~((y)-1))
+#define	round_down(x,y) ((x) & ~((y)-1))
+
 #include "sgx_user.h"
 
-int
-main(int argc __unused, char *argv[] __unused)
+static int
+build_secs(struct secs *m_secs, uint64_t enclave_base_addr, uint64_t enclave_size)
 {
-	uint32_t data;
+
+	memset(m_secs, 0, sizeof(struct secs));
+	m_secs->base = enclave_base_addr;
+	m_secs->isv_svn = 0;
+	m_secs->size = enclave_size;
+	m_secs->misc_select = 0;
+	//m_secs->attributes = 0;
+	m_secs->ssa_frame_size = 0;
+
+#if 0
+	void *p;
+	//p = mmap(NULL, m_secs->size * 2, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_SHARED, fd, 0);
+	p = mmap(NULL, m_secs->size * 2, 0, MAP_SHARED, fd, 0);
+	if (p == MAP_FAILED) {
+		printf("mmap failed\n");
+		return (-1);
+	}
+
+	printf("p is %lx\n", (uint64_t)p);
+	printf("*p is %hhx\n", *(uint8_t *)p);
+	//*(uint64_t *)p = 1;
+#endif
+
+	return (0);
+}
+
+static int
+enclave_create(struct secs *m_secs)
+{
+	uint64_t data;
 	int err;
 	int fd;
 
@@ -65,9 +100,153 @@ main(int argc __unused, char *argv[] __unused)
 		return (1);
 	}
 
+	data = (uint64_t)m_secs;
 	err = ioctl(fd, SGX_IOC_ENCLAVE_CREATE, &data);
 
 	printf("test fd %d err %d\n", fd, err);
+
+	return (0);
+}
+
+int
+main(int argc, char *argv[])
+{
+	struct secs m_secs;
+	char *filename;
+	GElf_Phdr phdr;
+	GElf_Ehdr ehdr;
+	Elf *e;
+	int fd;
+	size_t n;
+	int i;
+
+	if (argc < 2) {
+		printf("supply a binary pls\n");
+		return (1);
+	}
+	filename = argv[1];
+	printf("filename %s\n", filename);
+
+	fd = open(filename, O_RDONLY, 0);
+	if (fd < 0) {
+		printf("Can't open %s\n", filename);
+		return (1);
+	}
+
+	if (elf_version(EV_CURRENT) == EV_NONE) {
+		printf("Elf library init failed\n");
+		return (1);
+	}
+	e = elf_begin(fd, ELF_C_READ, NULL);
+	if (e == NULL) {
+		printf("elf_begin failed\n");
+		return (1);
+	}
+	if (elf_kind(e) != ELF_K_ELF) {
+		printf("elf is not elf\n");
+		return (1);
+	}
+
+	if (gelf_getehdr(e, &ehdr) == NULL) {
+		printf("gelf_getehdr failed\n");
+		return (1);
+	}
+
+	printf("Entry %lx\n", ehdr.e_entry);
+
+	if (elf_getphdrnum(e, &n) != 0) {
+		printf("elf_getphdrnum failed\n");
+		return (1);
+	}
+
+	printf("n segments %zu\n", n);
+
+	void *base_addr;
+	void *entry;
+	uint64_t entry_offset;
+	void *p;
+	unsigned long start, fdataend, fend, mend;
+	int pflags;
+	int cnt;
+
+	cnt = 0;
+	
+	for (i = 0; i < (int)n; i++) {
+		if (gelf_getphdr(e, i, &phdr) != &phdr) {
+			printf("Failed to get segment phdr\n");
+			return (1);
+		}
+		if (phdr.p_type != PT_LOAD) {
+			continue;
+		}
+
+		printf("pt_load seg found %d\n", i);
+		cnt += 1;
+
+		if (cnt > 1) {
+			printf("add support\n");
+			return (1);
+		}
+
+		start = round_down(phdr.p_vaddr, PAGE_SIZE);
+		mend = round_up(phdr.p_vaddr + phdr.p_memsz, PAGE_SIZE);
+		fend  = round_up(phdr.p_vaddr + phdr.p_filesz, PAGE_SIZE);
+		fdataend = phdr.p_vaddr + phdr.p_filesz;
+
+		pflags = 0;
+		if (phdr.p_flags & PF_R) {
+			pflags |= PROT_READ;
+		}
+		if (phdr.p_flags & PF_W) {
+			pflags |= PROT_WRITE;
+		}
+		if (phdr.p_flags & PF_X) {
+			pflags |= PROT_EXEC;
+		}
+		pflags |= PROT_WRITE;
+
+		p = mmap(0, mend-start, pflags, MAP_PRIVATE|MAP_ANONYMOUS,
+		    -1, 0);
+		if (p == NULL) {
+			printf("mmap failed\n");
+			return (1);
+		}
+		printf("p %lx, len %ld\n", (uint64_t)p, mend-start);
+
+		base_addr = p;
+		entry = (void *)(ehdr.e_entry + (unsigned long)p - start);
+		printf("base_addr %lx entry %lx\n", (uint64_t)base_addr, (uint64_t)entry);
+
+		entry_offset = (uint64_t)entry-(uint64_t)base_addr;
+		printf("entry offs %lx\n", entry_offset);
+
+	}
+	uint64_t enclave_base_addr;
+	uint64_t enclave_size;
+
+	enclave_base_addr = (uint64_t)base_addr;
+	enclave_size = 4096*128;
+
+	int tls_npages;
+	struct tcs *tcs;
+	tcs = aligned_alloc(PAGE_SIZE, sizeof(struct tcs));
+	memset(tcs, 0, sizeof(struct tcs));
+
+	tcs->flags = 0;
+	//tcs->ossa =
+	tcs->fslimit = PAGE_SIZE - 1;
+	tcs->gslimit = PAGE_SIZE - 1;
+
+	tcs->ofsbasgx = 0;
+	tcs->ogsbasgx = tcs->ofsbasgx + tcs->fslimit + 1;
+	tcs->nssa = 2;
+	tcs->cssa = 0;
+	tls_npages = ((tcs->fslimit + 1) + (tcs->gslimit + 1)) / 4096;
+	tcs->oentry = ((tls_npages) * PAGE_SIZE) + entry_offset;
+
+	build_secs(&m_secs, enclave_base_addr, enclave_size);
+
+	enclave_create(&m_secs);
 
 	return (0);
 }

@@ -2,5 +2,6 @@
 # $FreeBSD$
 
 PROG=	secure_app
+LIBADD=	elf
 
 .include <bsd.prog.mk>
