@@ -7,14 +7,14 @@ fi
 
 VARS=`make buildenvvars`
 
+cp sys/x86/sgx/sgx_user.h usr.bin/secure_app/
+
 make -C app clean all || exit 1
 make -C usr.bin/secure_app || exit 1
 cp usr.bin/secure_app/secure_app amd64_disk/usr/bin/
 cp app/app amd64_disk/usr/bin/
 
 export DESTDIR=/home/br/world-amd64
-
-cp sys/x86/sgx/sgx_user.h usr.bin/secure_app/
 
 make -j8 KERN${A}=SGX buildkernel || exit 1
 
