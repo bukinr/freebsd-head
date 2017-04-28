@@ -1,5 +1,6 @@
 ./etc/fstab type=file uname=root gname=wheel mode=644
 ./usr/bin/secure_app type=file uname=root gname=wheel mode=755
+./usr/bin/app type=file uname=root gname=wheel mode=755
 ./boot/loader.conf type=file uname=root gname=wheel mode=644
 ./boot/loader.rc type=file uname=root gname=wheel mode=644
 ./boot/loader.4th type=file uname=root gname=wheel mode=644
