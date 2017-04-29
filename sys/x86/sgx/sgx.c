@@ -44,11 +44,16 @@ __FBSDID("$FreeBSD$");
 #include <sys/conf.h>
 #include <sys/uio.h>
 
+#include <vm/vm.h>
+#include <vm/pmap.h>
+
 #include <machine/md_var.h>
 #include <machine/specialreg.h>
 
 #include "sgx.h"
 #include "sgx_user.h"
+
+#define	SGX_CPUID		0x12
 
 struct sgx_softc {
 	struct cdev		*sgx_cdev;
@@ -105,16 +110,66 @@ sgx_write(struct cdev *dev, struct uio *uio, int ioflag)
 	return (0);
 }
 
+struct secs g_secs __aligned(4096);
+struct page_info pginfo __aligned(4096);
+struct secinfo secinfo __aligned(4096);
+
+static int
+sgx_create(struct secs *m_secs)
+{
+
+	memset(&secinfo, 0, sizeof(struct secinfo));
+	memset(&pginfo, 0, sizeof(struct page_info));
+
+#if 1
+	struct secinfo_flags *flags;
+
+	flags = &secinfo.flags;
+	flags->page_type = PT_SECS;
+	flags->r = 1;
+	flags->w = 1;
+	flags->x = 0;
+#endif
+
+	pginfo.linaddr = 0;
+	pginfo.srcpge = (uint64_t)&g_secs;
+	pginfo.secinfo = (uint64_t)&secinfo;
+	pginfo.secs = 0;
+
+	vm_offset_t epc_vaddr;
+	epc_vaddr = (vm_offset_t)pmap_mapdev(0x08000000, 0x02000000);
+	printf("epc_vaddr %lx\n", epc_vaddr);
+	printf("*epc_vaddr %lx\n", *(uint64_t *)epc_vaddr);
+
+	//memset((void *)epc_vaddr, 0, 0x02000000);
+
+	__ecreate(&pginfo, (void *)(epc_vaddr + 8192));
+
+	return (0);
+}
+
 static int
 sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
     struct thread *td)
 {
+	struct secs *m_secs;
+	//struct sgx_enclave_create param;
 
+	m_secs = &g_secs;
 	//printf("%s: %ld\n", __func__, cmd);
 
 	switch (cmd) {
 	case SGX_IOC_ENCLAVE_CREATE:
-		printf("%s: enclave_create\n", __func__);
+		printf("%s: enclave_create: addr %lx flags %d\n", __func__, (uint64_t)addr, flags);
+		printf("%s: val %lx\n", __func__, *(uint64_t *)addr);
+
+		uint64_t uaddr;
+		uaddr = *(uint64_t *)addr;
+		copyin((void *)uaddr, &g_secs, sizeof(struct secs));
+
+		//printf("m_secs.isv_svn %d\n", m_secs.isv_svn);
+		sgx_create(m_secs);
+
 		//handler = isgx_ioctl_enclave_create;
 		break;
 	case SGX_IOC_ENCLAVE_ADD_PAGE:
@@ -137,8 +192,16 @@ sgx_mmap(struct cdev *dev, vm_ooffset_t offset, vm_paddr_t *paddr, int nprot,
     vm_memattr_t *memattr)
 {
 	struct sgx_softc *sc;
+	uintptr_t p;
 
 	sc = dev->si_drv1;
+
+	printf("%s: offs %ld\n", __func__, offset);
+
+	p = (intptr_t)contigmalloc(4096, M_DEVBUF, M_ZERO, 0, ~0, PAGE_SIZE, 0);
+	*paddr = (intptr_t)vtophys(p);
+
+	return (0);
 
 #if 0
 	if (offset < sc->mem_size) {
@@ -203,6 +266,23 @@ sgx_attach(device_t dev)
 	}
 
 	sc->sgx_cdev->si_drv1 = sc;
+
+	u_int cp[4];
+	cpuid_count(SGX_CPUID, 0x2, cp);
+
+	__asm __volatile("cpuid" : : : "eax", "ebx", "ecx", "edx");
+
+	printf("eax & 0xf == %x\n", cp[0] & 0xf);
+
+	uint64_t epc_base;
+	uint64_t epc_size;
+
+	epc_base = ((uint64_t)(cp[1] & 0xfffff) << 32) + (cp[0] & 0xfffff000);
+	epc_size = ((uint64_t)(cp[3] & 0xfffff) << 32) + (cp[2] & 0xfffff000);
+
+	printf("epc_base %lx size %lx\n", epc_base, epc_size);
+
+	//load_cr4(rcr4() | (1 << 15));
 
 	return (0);
 }

@@ -80,13 +80,25 @@ struct sgx_enclave_init {
  * The SECS data structure requires 4K-Bytes alignment.
  */
 
+struct secs_attr {
+	uint8_t reserved1: 1;
+	uint8_t debug: 1;
+	uint8_t mode64bit: 1;
+	uint8_t reserved2: 1;
+	uint8_t provisionkey: 1;
+	uint8_t einittokenkey: 1;
+	uint8_t reserved3: 2;
+	uint8_t reserved4[7];
+	uint64_t xfrm;
+};
+
 struct secs {
 	uint64_t	size;
 	uint64_t	base;
 	uint32_t	ssa_frame_size;
 	uint32_t	misc_select;
 	uint8_t		reserved1[24];
-	uint8_t		attributes[16];
+	struct secs_attr attributes;
 	uint8_t		mr_enclave[32];
 	uint8_t		reserved2[32];
 	uint8_t		mr_signer[32];

@@ -61,14 +61,18 @@ __FBSDID("$FreeBSD$");
 static int
 build_secs(struct secs *m_secs, uint64_t enclave_base_addr, uint64_t enclave_size)
 {
+	struct secs_attr *attributes;
 
 	memset(m_secs, 0, sizeof(struct secs));
 	m_secs->base = enclave_base_addr;
 	m_secs->isv_svn = 0;
 	m_secs->size = enclave_size;
 	m_secs->misc_select = 0;
-	//m_secs->attributes = 0;
-	m_secs->ssa_frame_size = 0;
+	m_secs->ssa_frame_size = 8;
+
+	attributes = &m_secs->attributes;
+	attributes->mode64bit = 1;
+	attributes->xfrm = 3;
 
 #if 0
 	void *p;
@@ -205,7 +209,8 @@ main(int argc, char *argv[])
 		}
 		pflags |= PROT_WRITE;
 
-		p = mmap(0, mend-start, pflags, MAP_PRIVATE|MAP_ANONYMOUS,
+		//p = mmap(0, mend-start, pflags, MAP_PRIVATE | MAP_ANONYMOUS | MAP_ALIGNED(8192),
+		p = mmap(0, 4096*2, pflags, MAP_PRIVATE | MAP_ANONYMOUS | MAP_ALIGNED(13),
 		    -1, 0);
 		if (p == NULL) {
 			printf("mmap failed\n");
@@ -225,7 +230,7 @@ main(int argc, char *argv[])
 	uint64_t enclave_size;
 
 	enclave_base_addr = (uint64_t)base_addr;
-	enclave_size = 4096*128;
+	enclave_size = 4096*2; //at least two pages
 
 	int tls_npages;
 	struct tcs *tcs;
