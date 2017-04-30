@@ -65,14 +65,13 @@ build_secs(struct secs *m_secs, uint64_t enclave_base_addr, uint64_t enclave_siz
 
 	memset(m_secs, 0, sizeof(struct secs));
 	m_secs->base = enclave_base_addr;
-	m_secs->isv_svn = 0;
 	m_secs->size = enclave_size;
 	m_secs->misc_select = 0;
 	m_secs->ssa_frame_size = 8;
 
 	attributes = &m_secs->attributes;
 	attributes->mode64bit = 1;
-	attributes->xfrm = 3;
+	attributes->xfrm = 0x3;
 
 #if 0
 	void *p;
@@ -228,12 +227,12 @@ main(int argc, char *argv[])
 	}
 	uint64_t enclave_base_addr;
 	uint64_t enclave_size;
+	int tls_npages;
+	struct tcs *tcs;
 
 	enclave_base_addr = (uint64_t)base_addr;
 	enclave_size = 4096*2; //at least two pages
 
-	int tls_npages;
-	struct tcs *tcs;
 	tcs = aligned_alloc(PAGE_SIZE, sizeof(struct tcs));
 	memset(tcs, 0, sizeof(struct tcs));
 

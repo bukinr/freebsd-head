@@ -137,6 +137,7 @@ SUBDIR=	alias \
 	rwall \
 	script \
 	sdiff \
+	secure_app \
 	sed \
 	send-pr \
 	seq \

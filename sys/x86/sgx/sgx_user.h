@@ -58,7 +58,7 @@
 #define SGX_POWER_LOST_ENCLAVE		0x40000000
 #define SGX_LE_ROLLBACK			0x40000001
 
-struct sgx_enclave_create  {
+struct sgx_enclave_create {
 	uint64_t	src;
 } __attribute__((packed));
 
@@ -74,5 +74,53 @@ struct sgx_enclave_init {
 	uint64_t	sigstruct;
 	uint64_t	einittoken;
 } __attribute__((packed));
+
+/*
+ * 2.7 SGX ENCLAVE CONTROL STRUCTURE (SECS)
+ * The SECS data structure requires 4K-Bytes alignment.
+ */
+
+struct secs_attr {
+	uint8_t reserved1: 1;
+	uint8_t debug: 1;
+	uint8_t mode64bit: 1;
+	uint8_t reserved2: 1;
+	uint8_t provisionkey: 1;
+	uint8_t einittokenkey: 1;
+	uint8_t reserved3: 2;
+	uint8_t reserved4[7];
+	uint64_t xfrm;			/* X-Feature Request Mask */
+};
+
+struct secs {
+	uint64_t	size;
+	uint64_t	base;
+	uint32_t	ssa_frame_size;
+	uint32_t	misc_select;
+	uint8_t		reserved1[24];
+	struct secs_attr attributes;
+	uint8_t		mr_enclave[32];
+	uint8_t		reserved2[32];
+	uint8_t		mr_signer[32];
+	uint8_t		reserved3[96];
+	uint16_t	isv_prod_id;
+	uint16_t	isv_svn;
+	uint8_t		reserved4[3836];
+};
+
+struct tcs {
+	uint8_t reserved1[8];
+	uint64_t flags;
+	uint64_t ossa;
+	uint32_t cssa;
+	uint32_t nssa;
+	uint64_t oentry;
+	uint8_t reserved2[8];
+	uint64_t ofsbasgx;
+	uint64_t ogsbasgx;
+	uint32_t fslimit;
+	uint32_t gslimit;
+	uint8_t reserved3[4024];
+};
 
 #endif /* _UAPI_ASM_X86_SGX_H */
