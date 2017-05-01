@@ -54,11 +54,37 @@ __FBSDID("$FreeBSD$");
 #include "sgx_user.h"
 
 #define	SGX_CPUID		0x12
+#define	SGX_PAGE_SIZE		4096
+
+struct epc_page {
+	uint64_t base;
+	uint8_t used;
+};
 
 struct sgx_softc {
 	struct cdev		*sgx_cdev;
 	device_t		dev;
+
+	struct epc_page		*epc_pages;
+	uint32_t		npages;
 };
+
+static struct epc_page *
+get_epc_page(struct sgx_softc *sc)
+{
+	struct epc_page *epc;
+	int i;
+
+	for (i = 0; i < sc->npages; i++) {
+		epc = &sc->epc_pages[i];
+		if (epc->used == 0) {
+			epc->used = 1;
+			return (epc);
+		}
+	}
+
+	return (NULL);
+}
 
 static int
 sgx_open(struct cdev *dev, int flags __unused,
@@ -115,7 +141,7 @@ struct page_info pginfo __aligned(4096);
 struct secinfo secinfo __aligned(4096);
 
 static int
-sgx_create(struct secs *m_secs)
+sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 {
 
 	memset(&secinfo, 0, sizeof(struct secinfo));
@@ -136,14 +162,16 @@ sgx_create(struct secs *m_secs)
 	pginfo.secinfo = (uint64_t)&secinfo;
 	pginfo.secs = 0;
 
-	vm_offset_t epc_vaddr;
-	epc_vaddr = (vm_offset_t)pmap_mapdev(0x08000000, 0x02000000);
-	printf("epc_vaddr %lx\n", epc_vaddr);
-	printf("*epc_vaddr %lx\n", *(uint64_t *)epc_vaddr);
+	struct epc_page *epc;
+	epc = get_epc_page(sc);
+	if (epc == NULL) {
+		printf("failed to get epc page\n");
+		return (-1);
+	}
 
-	//memset((void *)epc_vaddr, 0, 0x02000000);
-
-	__ecreate(&pginfo, (void *)(epc_vaddr + 8192));
+	uint64_t ret;
+	ret = __ecreate(&pginfo, (void *)epc->base);
+	printf("ecreate returned %lx\n", ret);
 
 	return (0);
 }
@@ -153,9 +181,12 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
     struct thread *td)
 {
 	struct secs *m_secs;
-	//struct sgx_enclave_create param;
+	struct sgx_softc *sc;
+
+	sc = dev->si_drv1;
 
 	m_secs = &g_secs;
+
 	//printf("%s: %ld\n", __func__, cmd);
 
 	switch (cmd) {
@@ -168,7 +199,7 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 		copyin((void *)uaddr, &g_secs, sizeof(struct secs));
 
 		//printf("m_secs.isv_svn %d\n", m_secs.isv_svn);
-		sgx_create(m_secs);
+		sgx_create(sc, m_secs);
 
 		//handler = isgx_ioctl_enclave_create;
 		break;
@@ -282,7 +313,18 @@ sgx_attach(device_t dev)
 
 	printf("epc_base %lx size %lx\n", epc_base, epc_size);
 
-	//load_cr4(rcr4() | (1 << 15));
+	vm_offset_t epc_base_vaddr;
+	int i;
+
+	epc_base_vaddr = (vm_offset_t)pmap_mapdev(epc_base, epc_size);
+	sc->npages = epc_size / SGX_PAGE_SIZE;
+	sc->epc_pages = malloc(sizeof(struct epc_page) * sc->npages,
+	    M_DEVBUF, M_WAITOK | M_ZERO);
+
+	for (i = 0; i < sc->npages; i++) {
+		sc->epc_pages[i].base = epc_base_vaddr + SGX_PAGE_SIZE * i;
+		sc->epc_pages[i].used = 0;
+	}
 
 	return (0);
 }
