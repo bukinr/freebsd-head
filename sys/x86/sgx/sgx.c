@@ -34,24 +34,57 @@ __FBSDID("$FreeBSD$");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/bus.h>
-#include <sys/kernel.h>
-#include <sys/module.h>
-#include <sys/malloc.h>
-#include <sys/rman.h>
-#include <sys/timeet.h>
-#include <sys/timetc.h>
-#include <sys/conf.h>
 #include <sys/uio.h>
+#include <sys/bus.h>
+#include <sys/malloc.h>
+#include <sys/kernel.h>
+#include <sys/lock.h>
+#include <sys/mutex.h>
+#include <sys/rwlock.h>
+#include <sys/selinfo.h>
+#include <sys/poll.h>
+#include <sys/conf.h>
+#include <sys/fcntl.h>
+#include <sys/ioccom.h>
+#include <sys/rman.h>
+#include <sys/tree.h>
+#include <sys/module.h>
+#include <sys/proc.h>
+#include <sys/bitset.h>
+
 
 #include <vm/vm.h>
-#include <vm/pmap.h>
+#include <vm/vm_param.h>
+#include <vm/vm_extern.h>
+#include <vm/vm_kern.h>
+#include <vm/vm_page.h>
+#include <vm/vm_map.h>
+#include <vm/vm_object.h>
+#include <vm/vm_pager.h>
 
 #include <machine/md_var.h>
 #include <machine/specialreg.h>
 
 #include "sgx.h"
 #include "sgx_user.h"
+
+#ifdef __amd64__
+#define	LOW_MEM_LIMIT	0x100000000ul
+#else
+#define	LOW_MEM_LIMIT	0
+#endif
+
+MALLOC_DEFINE(M_PRIVCMD, "privcmd_dev", "SGX privcmd user-space device");
+
+struct privcmd_map {
+	vm_object_t mem;
+	vm_size_t size;
+	struct resource *phys_res;
+	int phys_res_id;
+	vm_paddr_t phys_base_addr;
+	boolean_t mapped;
+	BITSET_DEFINE_VAR() *err;
+};
 
 #define	SGX_CPUID		0x12
 #define	SGX_PAGE_SIZE		4096
@@ -67,6 +100,73 @@ struct sgx_softc {
 
 	struct epc_page		*epc_pages;
 	uint32_t		npages;
+};
+
+static int
+privcmd_pg_ctor(void *handle, vm_ooffset_t size, vm_prot_t prot,
+    vm_ooffset_t foff, struct ucred *cred, u_short *color)
+{
+
+	printf("%s\n", __func__);
+
+	return (0);
+}
+
+static void
+privcmd_pg_dtor(void *handle)
+{
+
+	printf("%s\n", __func__);
+}
+
+static int
+privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
+    int prot, vm_page_t *mres)
+{
+	struct privcmd_map *map;
+	vm_page_t page;
+	vm_memattr_t memattr;
+	vm_pindex_t pidx;
+	vm_paddr_t paddr;
+
+	map = object->handle;
+
+	printf("%lx\n", SGX_IOC_ENCLAVE_CREATE);
+
+	memattr = object->memattr;
+	pidx = OFF_TO_IDX(offset);
+
+	paddr = map->phys_base_addr + offset;
+
+	printf("%s: offset %lx, paddr %lx\n", __func__, offset, paddr);
+
+	if (((*mres)->flags & PG_FICTITIOUS) != 0) {
+		printf("fake page\n");
+
+		page = *mres;
+		vm_page_updatefake(page, paddr, memattr);
+	} else {
+
+		VM_OBJECT_WUNLOCK(object);
+		page = vm_page_getfake(paddr, memattr);
+		VM_OBJECT_WLOCK(object);
+		vm_page_lock(*mres);
+		vm_page_free(*mres);
+		vm_page_unlock(*mres);
+		*mres = page;
+		vm_page_insert(page, object, pidx);
+	}
+
+	DELAY(50000);
+
+	page->valid = VM_PAGE_BITS_ALL;
+	return (VM_PAGER_OK);
+}
+
+static struct cdev_pager_ops privcmd_pg_ops = {
+	.cdev_pg_fault = privcmd_pg_fault,
+	.cdev_pg_ctor = privcmd_pg_ctor,
+	.cdev_pg_dtor = privcmd_pg_dtor,
 };
 
 static struct epc_page *
@@ -180,6 +280,8 @@ static int
 sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
     struct thread *td)
 {
+	struct sgx_enclave_create *param;
+	struct sgx_enclave_add_page *addp;
 	struct secs *m_secs;
 	struct sgx_softc *sc;
 
@@ -193,18 +295,24 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 	case SGX_IOC_ENCLAVE_CREATE:
 		printf("%s: enclave_create: addr %lx flags %d\n", __func__, (uint64_t)addr, flags);
 		printf("%s: val %lx\n", __func__, *(uint64_t *)addr);
+		//uint64_t uaddr;
+		//uaddr = *(uint64_t *)addr;
 
-		uint64_t uaddr;
-		uaddr = *(uint64_t *)addr;
-		copyin((void *)uaddr, &g_secs, sizeof(struct secs));
-
-		//printf("m_secs.isv_svn %d\n", m_secs.isv_svn);
+		param = (struct sgx_enclave_create *)addr;
+		copyin((void *)param->src, &g_secs, sizeof(struct secs));
 		sgx_create(sc, m_secs);
 
+		//printf("m_secs.isv_svn %d\n", m_secs.isv_svn);
 		//handler = isgx_ioctl_enclave_create;
 		break;
 	case SGX_IOC_ENCLAVE_ADD_PAGE:
 		printf("%s: enclave_add_page\n", __func__);
+
+		addp = (struct sgx_enclave_add_page *)addr;
+		printf("%s: addr %lx src %lx secinfo %lx mrmask %x\n", __func__,
+		    addp->addr, addp->src, addp->secinfo, addp->mrmask);
+		//sgx_add_page(sc, addp);
+
 		//handler = isgx_ioctl_enclave_add_page;
 		break;
 	case SGX_IOC_ENCLAVE_INIT:
@@ -218,19 +326,78 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 	return (0);
 }
 
+static struct resource *
+sgx_alloc(device_t dev, int *res_id, size_t size)
+{
+	struct resource *res;
+
+	res = bus_alloc_resource(dev, SYS_RES_MEMORY, res_id, LOW_MEM_LIMIT,
+		~0, size, RF_ACTIVE);
+	if (res == NULL) {
+		return (NULL);
+	}
+
+	return (res);
+}
+
+static int
+sgx_mmap_single(struct cdev *cdev, vm_ooffset_t *offset, vm_size_t mapsize,
+    struct vm_object **objp, int nprot)
+{
+	struct privcmd_map *map;
+	struct sgx_softc *sc;
+
+	map = malloc(sizeof(*map), M_PRIVCMD, M_WAITOK | M_ZERO);
+
+	printf("%s: mapsize %ld\n", __func__, mapsize);
+
+	sc = cdev->si_drv1;
+
+	map->phys_res_id = 0;
+
+	map->phys_res = sgx_alloc(sc->dev, &map->phys_res_id, mapsize);
+	if (map->phys_res == NULL) {
+		printf("Can't alloc phys mem\n");
+		return (EINVAL);
+	}
+
+	map->phys_base_addr = rman_get_start(map->phys_res);
+	printf("phys addr %lx\n", (uint64_t)map->phys_base_addr);
+
+	//map->mem = cdev_pager_allocate(map, OBJT_MGTDEVICE, &privcmd_pg_ops,
+	map->mem = cdev_pager_allocate(map, OBJT_DEVICE, &privcmd_pg_ops,
+	    mapsize, nprot, *offset, NULL);
+	if (map->mem == NULL) {
+		//xenmem_free(privcmd_dev, map->phys_res_id,
+		//    map->phys_res);
+		free(map, M_PRIVCMD);
+		return (ENOMEM);
+	}
+
+	*objp = map->mem;
+
+	//int error;
+
+	return (0);
+}
+
+#if 0
 static int
 sgx_mmap(struct cdev *dev, vm_ooffset_t offset, vm_paddr_t *paddr, int nprot,
     vm_memattr_t *memattr)
 {
 	struct sgx_softc *sc;
-	uintptr_t p;
+	//uintptr_t p;
 
 	sc = dev->si_drv1;
 
+	printf("]");
+#if 0
 	printf("%s: offs %ld\n", __func__, offset);
 
 	p = (intptr_t)contigmalloc(4096, M_DEVBUF, M_ZERO, 0, ~0, PAGE_SIZE, 0);
 	*paddr = (intptr_t)vtophys(p);
+#endif
 
 	return (0);
 
@@ -243,16 +410,18 @@ sgx_mmap(struct cdev *dev, vm_ooffset_t offset, vm_paddr_t *paddr, int nprot,
 
 	return (EINVAL);
 }
+#endif
 
 static struct cdevsw sgx_cdevsw = {
-	.d_version =	D_VERSION,
-	.d_open =	sgx_open,
-	.d_close =	sgx_close,
-	.d_read =	sgx_read,
-	.d_write =	sgx_write,
-	.d_ioctl =	sgx_ioctl,
-	.d_mmap =	sgx_mmap,
-	.d_name =	"Intel SGX",
+	.d_version =		D_VERSION,
+	.d_open =		sgx_open,
+	.d_close =		sgx_close,
+	.d_read =		sgx_read,
+	.d_write =		sgx_write,
+	.d_ioctl =		sgx_ioctl,
+	//.d_mmap =		sgx_mmap,
+	.d_mmap_single =	sgx_mmap_single,
+	.d_name =		"Intel SGX",
 };
 
 static void
@@ -344,4 +513,5 @@ static driver_t sgx_driver = {
 
 static devclass_t sgx_devclass;
 
-DRIVER_MODULE(sgx, cpu, sgx_driver, sgx_devclass, 0, 0);
+//DRIVER_MODULE(sgx, cpu, sgx_driver, sgx_devclass, 0, 0);
+DRIVER_MODULE(sgx, nexus, sgx_driver, sgx_devclass, 0, 0);
