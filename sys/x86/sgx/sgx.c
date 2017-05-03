@@ -34,6 +34,7 @@ __FBSDID("$FreeBSD$");
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/capsicum.h>
 #include <sys/uio.h>
 #include <sys/bus.h>
 #include <sys/malloc.h>
@@ -51,7 +52,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/module.h>
 #include <sys/proc.h>
 #include <sys/bitset.h>
-
 
 #include <vm/vm.h>
 #include <vm/vm_param.h>
@@ -131,14 +131,14 @@ privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
 
 	map = object->handle;
 
-	printf("%lx\n", SGX_IOC_ENCLAVE_CREATE);
+	//printf("%lx %lx %lx\n", SGX_IOC_ENCLAVE_CREATE, SGX_IOC_ENCLAVE_ADD_PAGE, SGX_IOC_ENCLAVE_INIT);
 
 	memattr = object->memattr;
 	pidx = OFF_TO_IDX(offset);
 
 	paddr = map->phys_base_addr + offset;
 
-	printf("%s: offset %lx, paddr %lx\n", __func__, offset, paddr);
+	//printf("%s: offset %lx, paddr %lx\n", __func__, offset, paddr);
 
 	if (((*mres)->flags & PG_FICTITIOUS) != 0) {
 		printf("fake page\n");
@@ -276,6 +276,10 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 	return (0);
 }
 
+#define	_SGX_IOC_ENCLAVE_CREATE		0xa400
+#define	_SGX_IOC_ENCLAVE_ADD_PAGE	0xa401
+#define	_SGX_IOC_ENCLAVE_INIT		0xa402
+
 static int
 sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
     struct thread *td)
@@ -291,8 +295,8 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 
 	//printf("%s: %ld\n", __func__, cmd);
 
-	switch (cmd) {
-	case SGX_IOC_ENCLAVE_CREATE:
+	switch (cmd & 0xffff) {
+	case _SGX_IOC_ENCLAVE_CREATE:
 		printf("%s: enclave_create: addr %lx flags %d\n", __func__, (uint64_t)addr, flags);
 		printf("%s: val %lx\n", __func__, *(uint64_t *)addr);
 		//uint64_t uaddr;
@@ -305,7 +309,7 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 		//printf("m_secs.isv_svn %d\n", m_secs.isv_svn);
 		//handler = isgx_ioctl_enclave_create;
 		break;
-	case SGX_IOC_ENCLAVE_ADD_PAGE:
+	case _SGX_IOC_ENCLAVE_ADD_PAGE:
 		printf("%s: enclave_add_page\n", __func__);
 
 		addp = (struct sgx_enclave_add_page *)addr;
@@ -315,7 +319,7 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 
 		//handler = isgx_ioctl_enclave_add_page;
 		break;
-	case SGX_IOC_ENCLAVE_INIT:
+	case _SGX_IOC_ENCLAVE_INIT:
 		printf("%s: enclave_init\n", __func__);
 		//handler = isgx_ioctl_enclave_init;
 		break;
@@ -381,37 +385,6 @@ sgx_mmap_single(struct cdev *cdev, vm_ooffset_t *offset, vm_size_t mapsize,
 	return (0);
 }
 
-#if 0
-static int
-sgx_mmap(struct cdev *dev, vm_ooffset_t offset, vm_paddr_t *paddr, int nprot,
-    vm_memattr_t *memattr)
-{
-	struct sgx_softc *sc;
-	//uintptr_t p;
-
-	sc = dev->si_drv1;
-
-	printf("]");
-#if 0
-	printf("%s: offs %ld\n", __func__, offset);
-
-	p = (intptr_t)contigmalloc(4096, M_DEVBUF, M_ZERO, 0, ~0, PAGE_SIZE, 0);
-	*paddr = (intptr_t)vtophys(p);
-#endif
-
-	return (0);
-
-#if 0
-	if (offset < sc->mem_size) {
-		*paddr = sc->mem_start + offset;
-		return (0);
-        }
-#endif
-
-	return (EINVAL);
-}
-#endif
-
 static struct cdevsw sgx_cdevsw = {
 	.d_version =		D_VERSION,
 	.d_open =		sgx_open,
@@ -419,7 +392,6 @@ static struct cdevsw sgx_cdevsw = {
 	.d_read =		sgx_read,
 	.d_write =		sgx_write,
 	.d_ioctl =		sgx_ioctl,
-	//.d_mmap =		sgx_mmap,
 	.d_mmap_single =	sgx_mmap_single,
 	.d_name =		"Intel SGX",
 };
@@ -513,5 +485,4 @@ static driver_t sgx_driver = {
 
 static devclass_t sgx_devclass;
 
-//DRIVER_MODULE(sgx, cpu, sgx_driver, sgx_devclass, 0, 0);
 DRIVER_MODULE(sgx, nexus, sgx_driver, sgx_devclass, 0, 0);
