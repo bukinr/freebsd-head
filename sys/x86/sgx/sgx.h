@@ -138,7 +138,10 @@ __ecreate(struct page_info *pginfo, void *secs)
 
 	__encls(ECREATE, tmp, pginfo, secs, 0);
 
-	return (0);
+	printf("%s: %x %lx %lx %lx\n",
+	    __func__, tmp.oeax, tmp.orbx, tmp.orcx, tmp.ordx);
+
+	return (tmp.oeax);
 }
 #endif
 
