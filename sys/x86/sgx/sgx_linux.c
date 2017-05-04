@@ -49,15 +49,9 @@ __FBSDID("$FreeBSD$");
 #endif
 #include <compat/linux/linux_ioctl.h>
 
-static int
-sgx_linux_modevent(module_t mod, int type, void *data)
-{
-
-	return (0);
-}
-
-DEV_MODULE(sgx_linux, sgx_linux_modevent, NULL);
-MODULE_DEPEND(sgx_linux, linux64, 1, 1, 1);
+/* There are three ioctls only. */
+#define SGX_LINUX_IOCTL_MIN  0xa400
+#define SGX_LINUX_IOCTL_MAX  0xa402
 
 static int
 sgx_linux_ioctl(struct thread *td, struct linux_ioctl_args *args)
@@ -68,24 +62,17 @@ sgx_linux_ioctl(struct thread *td, struct linux_ioctl_args *args)
 	int error;
 
 	error = fget(td, args->fd, cap_rights_init(&rights, CAP_IOCTL), &fp);
-	if (error != 0)
+	if (error != 0) {
 		return (error);
+	}
 	cmd = args->cmd;
 
-	/*
-	 * Pass the ioctl off to our standard handler.
-	 */
 	error = (fo_ioctl(fp, cmd, (caddr_t)args->arg, td->td_ucred, td));
 	fdrop(fp, td);
 
 	return (error);
 }
 
-/* There are multiple ioctl number ranges that need to be handled */
-#define SGX_LINUX_IOCTL_MIN  0xa400
-#define SGX_LINUX_IOCTL_MAX  0xa402
-
-static linux_ioctl_function_t sgx_linux_ioctl;
 static struct linux_ioctl_handler sgx_linux_handler = {
 	sgx_linux_ioctl,
 	SGX_LINUX_IOCTL_MIN,
@@ -96,3 +83,13 @@ SYSINIT(sgx_linux_register, SI_SUB_KLD, SI_ORDER_MIDDLE,
     linux_ioctl_register_handler, &sgx_linux_handler);
 SYSUNINIT(sgx_linux_unregister, SI_SUB_KLD, SI_ORDER_MIDDLE,
     linux_ioctl_unregister_handler, &sgx_linux_handler);
+
+static int
+sgx_linux_modevent(module_t mod, int type, void *data)
+{
+
+	return (0);
+}
+
+DEV_MODULE(sgx_linux, sgx_linux_modevent, NULL);
+MODULE_DEPEND(sgx_linux, linux64, 1, 1, 1);
