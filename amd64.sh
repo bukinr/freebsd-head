@@ -29,6 +29,10 @@ make -j8 KERN${A}=SGX buildkernel || exit 1
 
 #make -j8 -DNO_ROOT KERN${A}=SGX installkernel || exit 1
 cp -f /home/br/obj/usr/home/br/dev/freebsd-head/sys/SGX/kernel $DESTDIR/boot/kernel/kernel
+cp -f /home/br/obj/usr/home/br/dev/freebsd-head/sys/SGX/modules/usr/home/br/dev/freebsd-head/sys/modules/sgx_linux/sgx_linux.ko $DESTDIR/boot/kernel/
+cp -f /home/br/obj/usr/home/br/dev/freebsd-head/sys/SGX/modules/usr/home/br/dev/freebsd-head/sys/modules/linux/linux.ko $DESTDIR/boot/kernel/
+cp -f /home/br/obj/usr/home/br/dev/freebsd-head/sys/SGX/modules/usr/home/br/dev/freebsd-head/sys/modules/linux_common/linux_common.ko $DESTDIR/boot/kernel/
+cp -f /home/br/obj/usr/home/br/dev/freebsd-head/sys/SGX/modules/usr/home/br/dev/freebsd-head/sys/modules/linux64/linux64.ko $DESTDIR/boot/kernel/
 
 rm -f disk_amd64_.img disk_amd64_.img.gz
 tools/tools/makeroot/makeroot.sh -s 120m -f amd64_disk/basic.files -e amd64_disk/extras.mtree amd64.img /home/br/world-amd64/ && \

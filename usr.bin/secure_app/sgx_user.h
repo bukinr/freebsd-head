@@ -89,7 +89,7 @@ struct secs_attr {
 	uint8_t einittokenkey: 1;
 	uint8_t reserved3: 2;
 	uint8_t reserved4[7];
-	uint64_t xfrm;
+	uint64_t xfrm;			/* X-Feature Request Mask */
 };
 
 struct secs {

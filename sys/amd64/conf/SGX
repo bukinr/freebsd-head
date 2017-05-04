@@ -24,7 +24,7 @@ ident		SGX
 makeoptions	DEBUG=-g		# Build kernel with gdb(1) debug symbols
 makeoptions	WITH_CTF=1		# Run ctfconvert(1) for DTrace support
 #makeoptions	NO_MODULES
-makeoptions	MODULES_OVERRIDE="linux linux_common linux64 linuxkpi"
+makeoptions	MODULES_OVERRIDE="linux linux_common linux64 linuxkpi sgx_linux"
 
 options 	SCHED_ULE		# ULE scheduler
 options 	PREEMPTION		# Enable kernel thread preemption
@@ -197,27 +197,19 @@ device		psm			# PS/2 mouse
 
 device		kbdmux			# keyboard multiplexer
 
-device		vga			# VGA video card driver
-options 	VESA			# Add support for VESA BIOS Extensions (VBE)
+#device		vga			# VGA video card driver
+#options 	VESA			# Add support for VESA BIOS Extensions (VBE)
 
 device		splash			# Splash screen and screen saver support
 
 # syscons is the default console driver, resembling an SCO console
-device		sc
-options 	SC_PIXEL_MODE		# add support for the raster text mode
+#device		sc
+#options 	SC_PIXEL_MODE		# add support for the raster text mode
 
 # vt is the new video console driver
-device		vt
-device		vt_vga
-device		vt_efifb
-
-device		agp			# support several AGP chipsets
-
-# PCCARD (PCMCIA) support
-# PCMCIA and cardbus bridge support
-device		cbb			# cardbus (yenta) bridge
-device		pccard			# PC Card (16-bit) bus
-device		cardbus			# CardBus (32-bit) bus
+#device		vt
+#device		vt_vga
+#device		vt_efifb
 
 # Serial (COM) ports
 device		uart			# Generic UART driver

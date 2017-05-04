@@ -251,6 +251,7 @@ main(int argc, char *argv[])
 	build_secs(&m_secs, enclave_base_addr, enclave_size);
 
 	enclave_create(&m_secs);
+	//enclave_add_page(secs, tcs);
 
 	return (0);
 }
