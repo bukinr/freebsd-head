@@ -22,10 +22,9 @@ bin/stty
 bin/tcsh
 boot/kernel/kernel
 boot/kernel/linux_common.ko
-boot/kernel/linux.ko
 boot/kernel/linux64.ko
 boot/kernel/linuxkpi.ko
-boot/kernel/linker.hints
+boot/kernel/sgx_linux.ko
 boot/loader
 dev
 etc/defaults/rc.conf
@@ -48,7 +47,7 @@ etc/passwd
 etc/pccard_ether
 etc/protocols
 etc/pwd.db
-etc/ttys
+#etc/ttys
 etc/rc
 etc/rc.d
 etc/rc.d/DAEMON

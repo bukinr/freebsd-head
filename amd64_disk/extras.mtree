@@ -1,4 +1,5 @@
 ./etc/fstab type=file uname=root gname=wheel mode=644
+./etc/ttys type=file uname=root gname=wheel mode=644
 #./usr/bin/secure_app type=file uname=root gname=wheel mode=755
 #./usr/bin/app type=file uname=root gname=wheel mode=755
 #./usr/bin/libsgx_urts type=file uname=root gname=wheel mode=755
