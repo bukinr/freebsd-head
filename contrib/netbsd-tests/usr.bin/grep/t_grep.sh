@@ -399,11 +399,6 @@ wflag_emptypat_head()
 }
 wflag_emptypat_body()
 {
-	grep_type
-	if [ $? -eq $GREP_TYPE_GNU_FREEBSD ]; then
-		atf_expect_fail "this test does not pass with GNU grep in base"
-	fi
-
 	printf "" > test1
 	printf "\n" > test2
 	printf "qaz" > test3
@@ -494,6 +489,91 @@ wv_combo_break_body()
 	atf_check -s exit:1 grep -v -w "x" test1
 	atf_check -s exit:1 grep -v -w "x" test2
 }
+
+atf_test_case grep_nomatch_flags
+grep_nomatch_flags_head()
+{
+	atf_set "descr" "Check for no match (-c, -l, -L, -q) flags not producing line matches or context (PR 219077)"
+}
+
+grep_nomatch_flags_body()
+{
+	printf "A\nB\nC\n" > test1
+
+	atf_check -o inline:"1\n" grep -c -C 1 -e "B" test1
+	atf_check -o inline:"1\n" grep -c -B 1 -e "B" test1
+	atf_check -o inline:"1\n" grep -c -A 1 -e "B" test1
+	atf_check -o inline:"1\n" grep -c -C 1 -e "B" test1
+
+	atf_check -o inline:"test1\n" grep -l -e "B" test1
+	atf_check -o inline:"test1\n" grep -l -B 1 -e "B" test1
+	atf_check -o inline:"test1\n" grep -l -A 1 -e "B" test1
+	atf_check -o inline:"test1\n" grep -l -C 1 -e "B" test1
+
+	atf_check -s exit:1 -o inline:"test1\n" grep -L -e "D" test1
+
+	atf_check -o empty grep -q -e "B" test1
+	atf_check -o empty grep -q -B 1 -e "B" test1
+	atf_check -o empty grep -q -A 1 -e "B" test1
+	atf_check -o empty grep -q -C 1 -e "B" test1
+}
+
+atf_test_case badcontext
+badcontext_head()
+{
+	atf_set "descr" "Check for handling of invalid context arguments"
+}
+badcontext_body()
+{
+	printf "A\nB\nC\n" > test1
+
+	atf_check -s not-exit:0 -e ignore grep -A "-1" "B" test1
+
+	atf_check -s not-exit:0 -e ignore grep -B "-1" "B" test1
+
+	atf_check -s not-exit:0 -e ignore grep -C "-1" "B" test1
+
+	atf_check -s not-exit:0 -e ignore grep -A "B" "B" test1
+
+	atf_check -s not-exit:0 -e ignore grep -B "B" "B" test1
+
+	atf_check -s not-exit:0 -e ignore grep -C "B" "B" test1
+}
+
+atf_test_case binary_flags
+binary_flags_head()
+{
+	atf_set "descr" "Check output for binary flags (-a, -I, -U, --binary-files)"
+}
+binary_flags_body()
+{
+	printf "A\000B\000C" > test1
+	printf "A\n\000B\n\000C" > test2
+	binmatchtext="Binary file test1 matches\n"
+
+	# Binaries not treated as text (default, -U)
+	atf_check -o inline:"${binmatchtext}" grep 'B' test1
+	atf_check -o inline:"${binmatchtext}" grep 'B' -C 1 test1
+
+	atf_check -o inline:"${binmatchtext}" grep -U 'B' test1
+	atf_check -o inline:"${binmatchtext}" grep -U 'B' -C 1 test1
+
+	# Binary, -a, no newlines
+	atf_check -o inline:"A\000B\000C\n" grep -a 'B' test1
+	atf_check -o inline:"A\000B\000C\n" grep -a 'B' -C 1 test1
+
+	# Binary, -a, newlines
+	atf_check -o inline:"\000B\n" grep -a 'B' test2
+	atf_check -o inline:"A\n\000B\n\000C\n" grep -a 'B' -C 1 test2
+
+	# Binary files ignored
+	atf_check -s exit:1 grep -I 'B' test2
+
+	# --binary-files equivalence
+	atf_check -o inline:"${binmatchtext}" grep --binary-files=binary 'B' test1
+	atf_check -o inline:"A\000B\000C\n" grep --binary-files=text 'B' test1
+	atf_check -s exit:1 grep --binary-files=without-match 'B' test2
+}
 # End FreeBSD
 
 atf_init_test_cases()
@@ -527,5 +607,8 @@ atf_init_test_cases()
 	atf_add_test_case fgrep_sanity
 	atf_add_test_case egrep_sanity
 	atf_add_test_case grep_sanity
+	atf_add_test_case grep_nomatch_flags
+	atf_add_test_case binary_flags
+	atf_add_test_case badcontext
 # End FreeBSD
 }
