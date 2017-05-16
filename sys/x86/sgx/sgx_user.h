@@ -58,6 +58,11 @@
 #define SGX_POWER_LOST_ENCLAVE		0x40000000
 #define SGX_LE_ROLLBACK			0x40000001
 
+struct sgx_secinfo {
+	uint64_t flags;
+	uint64_t reserved[7];
+} __attribute__((aligned(128)));
+
 struct sgx_enclave_create {
 	uint64_t	src;
 } __attribute__((packed));

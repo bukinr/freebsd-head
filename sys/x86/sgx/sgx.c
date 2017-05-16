@@ -157,7 +157,7 @@ privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
 		vm_page_insert(page, object, pidx);
 	}
 
-	DELAY(50000);
+	DELAY(5000);
 
 	page->valid = VM_PAGE_BITS_ALL;
 	return (VM_PAGER_OK);
@@ -276,6 +276,29 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 	return (0);
 }
 
+/*
+ * struct sgx_enclave_add_page {
+ *       uint64_t        addr;
+ *       uint64_t        src;
+ *       uint64_t        secinfo;
+ *       uint16_t        mrmask;
+ * } __attribute__((packed));
+ */
+
+static int
+sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
+{
+	struct sgx_secinfo secinfo;
+
+	//printf("%s\n", __func__);
+	printf("%s: add page addr %lx src %lx secinfo %lx mrmask %x\n", __func__,
+	    addp->addr, addp->src, addp->secinfo, addp->mrmask);
+
+	copyin((void *)addp->secinfo, &secinfo, sizeof(struct sgx_secinfo));
+
+	return (0);
+}
+
 #define	_SGX_IOC_ENCLAVE_CREATE		0xa400
 #define	_SGX_IOC_ENCLAVE_ADD_PAGE	0xa401
 #define	_SGX_IOC_ENCLAVE_INIT		0xa402
@@ -310,12 +333,10 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 		//handler = isgx_ioctl_enclave_create;
 		break;
 	case _SGX_IOC_ENCLAVE_ADD_PAGE:
-		printf("%s: enclave_add_page\n", __func__);
+		//printf("%s: enclave_add_page\n", __func__);
 
 		addp = (struct sgx_enclave_add_page *)addr;
-		printf("%s: addr %lx src %lx secinfo %lx mrmask %x\n", __func__,
-		    addp->addr, addp->src, addp->secinfo, addp->mrmask);
-		//sgx_add_page(sc, addp);
+		sgx_add_page(sc, addp);
 
 		//handler = isgx_ioctl_enclave_add_page;
 		break;
@@ -366,7 +387,7 @@ sgx_mmap_single(struct cdev *cdev, vm_ooffset_t *offset, vm_size_t mapsize,
 	}
 
 	map->phys_base_addr = rman_get_start(map->phys_res);
-	printf("phys addr %lx\n", (uint64_t)map->phys_base_addr);
+	printf("%s: phys addr 0x%lx\n", __func__, (uint64_t)map->phys_base_addr);
 
 	//map->mem = cdev_pager_allocate(map, OBJT_MGTDEVICE, &privcmd_pg_ops,
 	map->mem = cdev_pager_allocate(map, OBJT_DEVICE, &privcmd_pg_ops,
@@ -452,7 +473,7 @@ sgx_attach(device_t dev)
 	epc_base = ((uint64_t)(cp[1] & 0xfffff) << 32) + (cp[0] & 0xfffff000);
 	epc_size = ((uint64_t)(cp[3] & 0xfffff) << 32) + (cp[2] & 0xfffff000);
 
-	printf("epc_base %lx size %lx\n", epc_base, epc_size);
+	printf("%s: epc_base %lx size %lx\n", __func__, epc_base, epc_size);
 
 	vm_offset_t epc_base_vaddr;
 	int i;
