@@ -64,6 +64,7 @@ __FBSDID("$FreeBSD$");
 
 #include <machine/md_var.h>
 #include <machine/specialreg.h>
+#include <machine/bus.h>
 
 #include "sgx.h"
 #include "sgx_user.h"
@@ -262,6 +263,9 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 	pginfo.secinfo = (uint64_t)&secinfo;
 	pginfo.secs = 0;
 
+
+	printf("%s: secs->base 0x%lx, secs->size 0x%lx\n", __func__, g_secs.base, g_secs.size);
+
 	struct epc_page *epc;
 	epc = get_epc_page(sc);
 	if (epc == NULL) {
@@ -285,16 +289,40 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
  * } __attribute__((packed));
  */
 
+#define	GFP_NATIVE_MASK	(M_NOWAIT | M_WAITOK | M_USE_RESERVE | M_ZERO)
+
 static int
 sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 {
 	struct sgx_secinfo secinfo;
+	int ret;
 
 	//printf("%s\n", __func__);
 	printf("%s: add page addr %lx src %lx secinfo %lx mrmask %x\n", __func__,
 	    addp->addr, addp->src, addp->secinfo, addp->mrmask);
 
-	copyin((void *)addp->secinfo, &secinfo, sizeof(struct sgx_secinfo));
+	ret = copyin((void *)addp->secinfo, &secinfo, sizeof(struct sgx_secinfo));
+	if (ret != 0) {
+		printf("%s: failed to copy secinfo\n", __func__);
+	}
+
+	uint32_t size;
+	uint32_t flags;
+	vm_offset_t tmp_vaddr;
+
+	size = PAGE_SIZE;
+	flags = 0;
+
+	tmp_vaddr = kmem_alloc_contig(kmem_arena, size,
+	    flags & GFP_NATIVE_MASK, 0, BUS_SPACE_MAXADDR_32BIT,
+	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
+
+	ret = copyin((void *)addp->src, (void *)tmp_vaddr, PAGE_SIZE);
+	if (ret != 0) {
+		printf("%s: failed to copy page\n", __func__);
+	}
+
+	kmem_free(kmem_arena, tmp_vaddr, size);
 
 	return (0);
 }
