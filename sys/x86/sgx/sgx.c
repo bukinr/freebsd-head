@@ -78,9 +78,19 @@ __FBSDID("$FreeBSD$");
 MALLOC_DEFINE(M_SGX, "sgx", "SGX driver");
 MALLOC_DEFINE(M_PRIVCMD, "privcmd_dev", "SGX privcmd user-space device");
 
+struct epc_page {
+	uint64_t base;
+	uint8_t used;
+};
+
+struct sgx_enclave_page {
+	struct epc_page *epc_page;
+};
+
 struct sgx_enclave {
-	uint64_t	base;
-	uint64_t	size;
+	uint64_t			base;
+	uint64_t			size;
+	struct sgx_enclave_page		secs_page;
 	TAILQ_ENTRY(sgx_enclave)	next;
 };
 
@@ -96,11 +106,6 @@ struct privcmd_map {
 
 #define	SGX_CPUID		0x12
 #define	SGX_PAGE_SIZE		4096
-
-struct epc_page {
-	uint64_t base;
-	uint8_t used;
-};
 
 struct sgx_softc {
 	struct cdev		*sgx_cdev;
@@ -246,6 +251,8 @@ sgx_write(struct cdev *dev, struct uio *uio, int ioflag)
 	return (0);
 }
 
+/* SGX Enclave Control Structure (SECS) */
+
 struct secs g_secs __aligned(4096);
 struct page_info pginfo __aligned(4096);
 struct secinfo secinfo __aligned(4096);
@@ -289,6 +296,7 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 	enclave = malloc(sizeof(struct sgx_enclave), M_SGX, M_WAITOK | M_ZERO);
 	enclave->base = g_secs.base;
 	enclave->size = g_secs.size;
+	enclave->secs_page.epc_page = epc;
 	TAILQ_INSERT_TAIL(&sc->enclaves, enclave, next);
 
 	return (0);
@@ -350,6 +358,23 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	}
 
 	kmem_free(kmem_arena, tmp_vaddr, size);
+
+	struct epc_page *epc;
+	epc = get_epc_page(sc);
+	if (epc == NULL) {
+		printf("failed to get epc page\n");
+		return (-1);
+	}
+
+	memset(&pginfo, 0, sizeof(struct page_info));
+
+	pginfo.linaddr = (uint64_t)addp->addr;
+	pginfo.srcpge = (uint64_t)addp->src;
+	pginfo.secinfo = (uint64_t)&secinfo;
+	pginfo.secs = (uint64_t)enclave->secs_page.epc_page;
+
+	ret = __eadd(&pginfo, (void *)epc->base);
+	printf("__eadd retured %d\n", ret);
 
 	return (0);
 }

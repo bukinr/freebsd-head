@@ -143,6 +143,20 @@ __ecreate(struct page_info *pginfo, void *secs)
 
 	return (tmp.oeax);
 }
+
+static inline u_long
+__eadd(struct page_info *pginfo, void *epc)
+{
+
+	struct out_regs tmp;
+
+	__encls(EADD, tmp, pginfo, epc, 0);
+
+	printf("%s: %x %lx %lx %lx\n",
+	    __func__, tmp.oeax, tmp.orbx, tmp.orcx, tmp.ordx);
+
+	return (tmp.oeax);
+}
 #endif
 
 #endif /* !_X86_SGX_SGX_H_ */
