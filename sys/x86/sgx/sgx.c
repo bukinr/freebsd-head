@@ -386,7 +386,10 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	pginfo.linaddr = (uint64_t)addp->addr;
 	pginfo.srcpge = (uint64_t)addp->src;
 	pginfo.secinfo = (uint64_t)&secinfo;
-	pginfo.secs = (uint64_t)enclave->secs_page.epc_page;
+
+	struct epc_page *secs_epc_page;
+	secs_epc_page = enclave->secs_page.epc_page;
+	pginfo.secs = (uint64_t)secs_epc_page->base;
 
 	dump_pginfo(&pginfo);
 	printf("pginfo %lx epc %lx\n", (uint64_t)&pginfo, (uint64_t)epc->base);
