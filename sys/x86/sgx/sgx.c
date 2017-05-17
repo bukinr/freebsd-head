@@ -75,7 +75,14 @@ __FBSDID("$FreeBSD$");
 #define	LOW_MEM_LIMIT	0
 #endif
 
+MALLOC_DEFINE(M_SGX, "sgx", "SGX driver");
 MALLOC_DEFINE(M_PRIVCMD, "privcmd_dev", "SGX privcmd user-space device");
+
+struct sgx_enclave {
+	uint64_t	base;
+	uint64_t	size;
+	TAILQ_ENTRY(sgx_enclave)	next;
+};
 
 struct privcmd_map {
 	vm_object_t mem;
@@ -101,6 +108,8 @@ struct sgx_softc {
 
 	struct epc_page		*epc_pages;
 	uint32_t		npages;
+
+	TAILQ_HEAD(, sgx_enclave)	enclaves;
 };
 
 static int
@@ -244,6 +253,7 @@ struct secinfo secinfo __aligned(4096);
 static int
 sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 {
+	struct sgx_enclave *enclave;
 
 	memset(&secinfo, 0, sizeof(struct secinfo));
 	memset(&pginfo, 0, sizeof(struct page_info));
@@ -263,7 +273,6 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 	pginfo.secinfo = (uint64_t)&secinfo;
 	pginfo.secs = 0;
 
-
 	printf("%s: secs->base 0x%lx, secs->size 0x%lx\n", __func__, g_secs.base, g_secs.size);
 
 	struct epc_page *epc;
@@ -276,6 +285,11 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 	uint64_t ret;
 	ret = __ecreate(&pginfo, (void *)epc->base);
 	printf("ecreate returned %lx\n", ret);
+
+	enclave = malloc(sizeof(struct sgx_enclave), M_SGX, M_WAITOK | M_ZERO);
+	enclave->base = g_secs.base;
+	enclave->size = g_secs.size;
+	TAILQ_INSERT_TAIL(&sc->enclaves, enclave, next);
 
 	return (0);
 }
@@ -294,8 +308,21 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 static int
 sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 {
+	struct sgx_enclave *enclave_tmp;
+	struct sgx_enclave *enclave;
 	struct sgx_secinfo secinfo;
 	int ret;
+
+	TAILQ_FOREACH_SAFE(enclave, &sc->enclaves, next, enclave_tmp) {
+		if ((addp->addr >= enclave->base) && \
+		    (addp->addr < (enclave->base + enclave->size))) {
+			printf("enclave found\n");
+			break;
+		}
+	}
+	if (enclave == NULL) {
+		printf("enclave not found\n");
+	}
 
 	//printf("%s\n", __func__);
 	printf("%s: add page addr %lx src %lx secinfo %lx mrmask %x\n", __func__,
@@ -515,6 +542,8 @@ sgx_attach(device_t dev)
 		sc->epc_pages[i].base = epc_base_vaddr + SGX_PAGE_SIZE * i;
 		sc->epc_pages[i].used = 0;
 	}
+
+	TAILQ_INIT(&sc->enclaves);
 
 	return (0);
 }
