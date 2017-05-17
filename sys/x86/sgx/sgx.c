@@ -118,6 +118,18 @@ struct sgx_softc {
 };
 
 static int
+dump_pginfo(struct page_info *pginfo)
+{
+
+	printf("pginfo->linaddr = %lx\n", pginfo->linaddr);
+	printf("pginfo->srcpge = %lx\n", pginfo->srcpge);
+	printf("pginfo->secinfo = %lx\n", pginfo->secinfo);
+	printf("pginfo->secs = %lx\n", pginfo->secs);
+
+	return (0);
+}
+
+static int
 privcmd_pg_ctor(void *handle, vm_ooffset_t size, vm_prot_t prot,
     vm_ooffset_t foff, struct ucred *cred, u_short *color)
 {
@@ -280,6 +292,8 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 	pginfo.secinfo = (uint64_t)&secinfo;
 	pginfo.secs = 0;
 
+	dump_pginfo(&pginfo);
+
 	printf("%s: secs->base 0x%lx, secs->size 0x%lx\n", __func__, g_secs.base, g_secs.size);
 
 	struct epc_page *epc;
@@ -318,7 +332,7 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 {
 	struct sgx_enclave *enclave_tmp;
 	struct sgx_enclave *enclave;
-	struct sgx_secinfo secinfo;
+	//struct sgx_secinfo secinfo;
 	int ret;
 
 	TAILQ_FOREACH_SAFE(enclave, &sc->enclaves, next, enclave_tmp) {
@@ -336,6 +350,7 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	printf("%s: add page addr %lx src %lx secinfo %lx mrmask %x\n", __func__,
 	    addp->addr, addp->src, addp->secinfo, addp->mrmask);
 
+	memset(&secinfo, 0, sizeof(struct secinfo));
 	ret = copyin((void *)addp->secinfo, &secinfo, sizeof(struct sgx_secinfo));
 	if (ret != 0) {
 		printf("%s: failed to copy secinfo\n", __func__);
@@ -372,6 +387,9 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	pginfo.srcpge = (uint64_t)addp->src;
 	pginfo.secinfo = (uint64_t)&secinfo;
 	pginfo.secs = (uint64_t)enclave->secs_page.epc_page;
+
+	dump_pginfo(&pginfo);
+	printf("pginfo %lx epc %lx\n", (uint64_t)&pginfo, (uint64_t)epc->base);
 
 	ret = __eadd(&pginfo, (void *)epc->base);
 	printf("__eadd retured %d\n", ret);
