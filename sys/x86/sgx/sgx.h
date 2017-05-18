@@ -181,6 +181,18 @@ __einit(void *sigstruct, void *secs, struct sgx_einittoken *einittoken)
 	return (tmp.oeax);
 }
 
+static inline int
+__eextend(void *secs, void *epc)
+{
+	struct out_regs tmp;
+
+	__encls(EEXTEND, tmp, secs, epc, 0);
+
+	printf("%s: %x %lx %lx %lx\n",
+	    __func__, tmp.oeax, tmp.orbx, tmp.orcx, tmp.ordx);
+
+	return (tmp.oeax);
+}
 #endif
 
 #endif /* !_X86_SGX_SGX_H_ */
