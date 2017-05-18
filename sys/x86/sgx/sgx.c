@@ -327,6 +327,8 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 
 #define	GFP_NATIVE_MASK	(M_NOWAIT | M_WAITOK | M_USE_RESERVE | M_ZERO)
 
+//uint8_t tmp_page[4096] __aligned(4096);
+
 static int
 sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 {
@@ -372,8 +374,6 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 		printf("%s: failed to copy page\n", __func__);
 	}
 
-	kmem_free(kmem_arena, tmp_vaddr, size);
-
 	struct epc_page *epc;
 	epc = get_epc_page(sc);
 	if (epc == NULL) {
@@ -384,7 +384,8 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	memset(&pginfo, 0, sizeof(struct page_info));
 
 	pginfo.linaddr = (uint64_t)addp->addr;
-	pginfo.srcpge = (uint64_t)addp->src;
+	//pginfo.srcpge = (uint64_t)addp->src;
+	pginfo.srcpge = (uint64_t)tmp_vaddr;
 	pginfo.secinfo = (uint64_t)&secinfo;
 
 	struct epc_page *secs_epc_page;
@@ -397,6 +398,27 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	ret = __eadd(&pginfo, (void *)epc->base);
 	printf("__eadd retured %d\n", ret);
 
+	kmem_free(kmem_arena, tmp_vaddr, size);
+
+	return (0);
+}
+
+/*
+ * struct sgx_enclave_init {
+ *       uint64_t        addr;
+ *       uint64_t        sigstruct;
+ *       uint64_t        einittoken;
+ * } __attribute__((packed));
+ */
+
+static int
+sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
+{
+
+	printf("%s: addr %lx\n", __func__, initp->addr);
+	printf("%s: sigstruct %lx\n", __func__, initp->sigstruct);
+	printf("%s: einittoken %lx\n", __func__, initp->einittoken);
+
 	return (0);
 }
 
@@ -408,8 +430,10 @@ static int
 sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
     struct thread *td)
 {
-	struct sgx_enclave_create *param;
 	struct sgx_enclave_add_page *addp;
+	struct sgx_enclave_create *param;
+	struct sgx_enclave_init *initp;
+
 	struct secs *m_secs;
 	struct sgx_softc *sc;
 
@@ -442,6 +466,10 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 		//handler = isgx_ioctl_enclave_add_page;
 		break;
 	case _SGX_IOC_ENCLAVE_INIT:
+
+		initp = (struct sgx_enclave_init *)addr;
+		sgx_init(sc, initp);
+
 		printf("%s: enclave_init\n", __func__);
 		//handler = isgx_ioctl_enclave_init;
 		break;
