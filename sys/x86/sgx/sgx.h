@@ -90,6 +90,9 @@ struct out_regs {
 	uint64_t ordx;
 };
 
+#define	SIGSTRUCT_SIZE	1808
+#define	EINITTOKEN_SIZE	304
+
 #if 0
 #define __encls(rax, rbx, rcx, rdx...)  \
         ({                              \
