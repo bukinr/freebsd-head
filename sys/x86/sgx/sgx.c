@@ -361,10 +361,10 @@ sgx_measure_page(struct epc_page *secs, struct epc_page *epc,
 			continue;
 		}
 
-		ret = __eextend((void *)secs->base, (void *)((uint64_t)epc->base + i));
+		__eextend((void *)secs->base, (void *)((uint64_t)epc->base + i));
 	}
 
-	return ret;
+	return (0);
 }
 
 
@@ -430,12 +430,12 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	ret = __eadd(&pginfo, (void *)epc->base);
 	printf("__eadd retured %d\n", ret);
 
-	kmem_free(kmem_arena, tmp_vaddr, size);
-
 	ret = sgx_measure_page(enclave->secs_page.epc_page, epc, addp->mrmask);
 	if (ret != 0) {
 		printf("sgx_measure_page returned %d\n", ret);
 	}
+
+	//kmem_free(kmem_arena, tmp_vaddr, size);
 
 	return (0);
 }
@@ -496,6 +496,12 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	switch (ret) {
 	case SGX_INVALID_MEASUREMENT:
 		printf("Invalid measurement\n");
+		break;
+	case SGX_UNMASKED_EVENT:
+		printf("Unmasked event\n");
+		break;
+	case SGX_INVALID_ATTRIBUTE:
+		printf("Invalid attr\n");
 		break;
 	default:
 		printf("Err is unknown\n");
