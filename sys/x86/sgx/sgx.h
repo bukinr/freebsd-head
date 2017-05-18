@@ -73,6 +73,13 @@ struct secinfo {
 	uint8_t reserved[56];
 };
 
+struct sgx_einittoken {
+	uint32_t	valid;
+	uint8_t		reserved1[206];
+	uint16_t	isvsvnle;
+	uint8_t		reserved2[92];
+} __attribute__((aligned(512)));
+
 struct page_info {
 	uint64_t linaddr;
 	uint64_t srcpge;
@@ -160,6 +167,21 @@ __eadd(struct page_info *pginfo, void *epc)
 
 	return (tmp.oeax);
 }
+
+static inline int
+__einit(void *sigstruct, struct sgx_einittoken *einittoken,
+    void *secs)
+{
+	struct out_regs tmp;
+
+	__encls(EINIT, tmp, sigstruct, secs, einittoken);
+
+	printf("%s: %x %lx %lx %lx\n",
+	    __func__, tmp.oeax, tmp.orbx, tmp.orcx, tmp.ordx);
+
+	return (tmp.oeax);
+}
+
 #endif
 
 #endif /* !_X86_SGX_SGX_H_ */
