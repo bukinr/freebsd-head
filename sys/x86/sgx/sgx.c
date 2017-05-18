@@ -348,6 +348,27 @@ enclave_get(struct sgx_softc *sc, uint64_t addr, struct sgx_enclave **encl)
 }
 
 static int
+sgx_measure_page(struct epc_page *secs, struct epc_page *epc,
+    uint16_t mrmask)
+{
+	int i, j;
+	int ret;
+
+	ret = 0;
+
+	for (i = 0, j = 1; i < 0x1000 && !ret; i += 0x100, j <<= 1) {
+		if (!(j & mrmask)) {
+			continue;
+		}
+
+		ret = __eextend((void *)secs->base, (void *)((uint64_t)epc->base + i));
+	}
+
+	return ret;
+}
+
+
+static int
 sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 {
 	struct sgx_enclave *enclave;
@@ -410,6 +431,11 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	printf("__eadd retured %d\n", ret);
 
 	kmem_free(kmem_arena, tmp_vaddr, size);
+
+	ret = sgx_measure_page(enclave->secs_page.epc_page, epc, addp->mrmask);
+	if (ret != 0) {
+		printf("sgx_measure_page returned %d\n", ret);
+	}
 
 	return (0);
 }
