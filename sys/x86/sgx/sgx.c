@@ -330,22 +330,35 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 //uint8_t tmp_page[4096] __aligned(4096);
 
 static int
-sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
+enclave_get(struct sgx_softc *sc, uint64_t addr, struct sgx_enclave **encl)
 {
 	struct sgx_enclave *enclave_tmp;
+	struct sgx_enclave *enclave;
+
+	TAILQ_FOREACH_SAFE(enclave, &sc->enclaves, next, enclave_tmp) {
+		if ((addr >= enclave->base) && \
+		    (addr < (enclave->base + enclave->size))) {
+			printf("enclave found\n");
+			*encl = enclave;
+			return (0);
+		}
+	}
+
+	printf("enclave not found\n");
+
+	return (-1);
+}
+
+static int
+sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
+{
 	struct sgx_enclave *enclave;
 	//struct sgx_secinfo secinfo;
 	int ret;
 
-	TAILQ_FOREACH_SAFE(enclave, &sc->enclaves, next, enclave_tmp) {
-		if ((addp->addr >= enclave->base) && \
-		    (addp->addr < (enclave->base + enclave->size))) {
-			printf("enclave found\n");
-			break;
-		}
-	}
-	if (enclave == NULL) {
-		printf("enclave not found\n");
+	ret = enclave_get(sc, addp->addr, &enclave);
+	if (ret != 0) {
+		printf("Failed to get enclave\n");
 	}
 
 	//printf("%s\n", __func__);
@@ -414,10 +427,17 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 static int
 sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 {
+	struct sgx_enclave *enclave;
+	int ret;
 
 	printf("%s: addr %lx\n", __func__, initp->addr);
 	printf("%s: sigstruct %lx\n", __func__, initp->sigstruct);
 	printf("%s: einittoken %lx\n", __func__, initp->einittoken);
+
+	ret = enclave_get(sc, initp->addr, &enclave);
+	if (ret != 0) {
+		printf("Failed to get enclave\n");
+	}
 
 	return (0);
 }
