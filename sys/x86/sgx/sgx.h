@@ -169,8 +169,7 @@ __eadd(struct page_info *pginfo, void *epc)
 }
 
 static inline int
-__einit(void *sigstruct, struct sgx_einittoken *einittoken,
-    void *secs)
+__einit(void *sigstruct, void *secs, struct sgx_einittoken *einittoken)
 {
 	struct out_regs tmp;
 

@@ -440,6 +440,7 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	ret = enclave_get(sc, initp->addr, &enclave);
 	if (ret != 0) {
 		printf("Failed to get enclave\n");
+		return (-1);
 	}
 
 	secs_epc_page = enclave->secs_page.epc_page;
@@ -461,9 +462,19 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 
 	printf("%s: sigstruct addr %lx\n", __func__, (uint64_t)sigstruct);
 	printf("%s: einittoken addr %lx\n", __func__, (uint64_t)einittoken);
+	printf("%s: secs_epc_page addr %lx\n", __func__, (uint64_t)secs_epc_page->base);
 
-	ret = __einit(sigstruct, secs_epc_page, einittoken);
+	ret = __einit(sigstruct, (void *)secs_epc_page->base, einittoken);
 	printf("__einit ret %d\n", ret);
+
+	switch (ret) {
+	case SGX_INVALID_MEASUREMENT:
+		printf("Invalid measurement\n");
+		break;
+	default:
+		printf("Err is unknown\n");
+		break;
+	};
 
 	return (0);
 }
