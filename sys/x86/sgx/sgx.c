@@ -327,8 +327,6 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 
 #define	GFP_NATIVE_MASK	(M_NOWAIT | M_WAITOK | M_USE_RESERVE | M_ZERO)
 
-//uint8_t tmp_page[4096] __aligned(4096);
-
 static int
 enclave_get(struct sgx_softc *sc, uint64_t addr, struct sgx_enclave **encl)
 {
@@ -424,10 +422,15 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
  * } __attribute__((packed));
  */
 
+uint8_t tmp_page[4096] __aligned(4096);
+
 static int
 sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 {
+	struct epc_page *secs_epc_page;
 	struct sgx_enclave *enclave;
+	struct sgx_einittoken *einittoken;
+	void *sigstruct;
 	int ret;
 
 	printf("%s: addr %lx\n", __func__, initp->addr);
@@ -438,6 +441,29 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	if (ret != 0) {
 		printf("Failed to get enclave\n");
 	}
+
+	secs_epc_page = enclave->secs_page.epc_page;
+
+	sigstruct = (void *)&tmp_page[0];
+	einittoken = (struct sgx_einittoken *) ((uint64_t)sigstruct + PAGE_SIZE / 2);
+
+	ret = copyin((void *)initp->sigstruct, sigstruct,
+	    SIGSTRUCT_SIZE);
+	if (ret != 0) {
+		printf("%s: failed to copy SIGSTRUCT page\n", __func__);
+	}
+
+	ret = copyin((void *)initp->einittoken, einittoken,
+	    EINITTOKEN_SIZE);
+	if (ret != 0) {
+		printf("%s: failed to copy EINITTOKEN page\n", __func__);
+	}
+
+	printf("%s: sigstruct addr %lx\n", __func__, (uint64_t)sigstruct);
+	printf("%s: einittoken addr %lx\n", __func__, (uint64_t)einittoken);
+
+	ret = __einit(sigstruct, secs_epc_page, einittoken);
+	printf("__einit ret %d\n", ret);
 
 	return (0);
 }
