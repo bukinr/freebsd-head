@@ -57,6 +57,7 @@ enum {
 	PT_TRIM = 0x04,
 };
 
+#if 0
 struct secinfo_flags {
 	uint8_t r:1;
 	uint8_t w:1;
@@ -72,6 +73,7 @@ struct secinfo {
 	struct secinfo_flags flags;
 	uint8_t reserved[56];
 };
+#endif
 
 struct sgx_einittoken {
 	uint32_t	valid;

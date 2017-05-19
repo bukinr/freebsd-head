@@ -267,17 +267,17 @@ sgx_write(struct cdev *dev, struct uio *uio, int ioflag)
 
 struct secs g_secs __aligned(4096);
 struct page_info pginfo __aligned(4096);
-struct secinfo secinfo __aligned(4096);
+struct sgx_secinfo secinfo __aligned(4096);
 
 static int
 sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 {
 	struct sgx_enclave *enclave;
+	struct epc_page *epc;
 
-	memset(&secinfo, 0, sizeof(struct secinfo));
-	memset(&pginfo, 0, sizeof(struct page_info));
+	memset(&secinfo, 0, sizeof(struct sgx_secinfo));
 
-#if 1
+#if 0
 	struct secinfo_flags *flags;
 
 	flags = &secinfo.flags;
@@ -287,6 +287,7 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 	flags->x = 0;
 #endif
 
+	memset(&pginfo, 0, sizeof(struct page_info));
 	pginfo.linaddr = 0;
 	pginfo.srcpge = (uint64_t)&g_secs;
 	pginfo.secinfo = (uint64_t)&secinfo;
@@ -296,7 +297,6 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 
 	printf("%s: secs->base 0x%lx, secs->size 0x%lx\n", __func__, g_secs.base, g_secs.size);
 
-	struct epc_page *epc;
 	epc = get_epc_page(sc);
 	if (epc == NULL) {
 		printf("failed to get epc page\n");
@@ -371,6 +371,7 @@ sgx_measure_page(struct epc_page *secs, struct epc_page *epc,
 static int
 sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 {
+	struct epc_page *secs_epc_page;
 	struct sgx_enclave *enclave;
 	//struct sgx_secinfo secinfo;
 	int ret;
@@ -384,10 +385,11 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	printf("%s: add page addr %lx src %lx secinfo %lx mrmask %x\n", __func__,
 	    addp->addr, addp->src, addp->secinfo, addp->mrmask);
 
-	memset(&secinfo, 0, sizeof(struct secinfo));
+	memset(&secinfo, 0, sizeof(struct sgx_secinfo));
 	ret = copyin((void *)addp->secinfo, &secinfo, sizeof(struct sgx_secinfo));
 	if (ret != 0) {
 		printf("%s: failed to copy secinfo\n", __func__);
+		return (-1);
 	}
 
 	uint32_t size;
@@ -404,6 +406,7 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	ret = copyin((void *)addp->src, (void *)tmp_vaddr, PAGE_SIZE);
 	if (ret != 0) {
 		printf("%s: failed to copy page\n", __func__);
+		return (-1);
 	}
 
 	struct epc_page *epc;
@@ -413,15 +416,12 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 		return (-1);
 	}
 
-	memset(&pginfo, 0, sizeof(struct page_info));
+	secs_epc_page = enclave->secs_page.epc_page;
 
+	memset(&pginfo, 0, sizeof(struct page_info));
 	pginfo.linaddr = (uint64_t)addp->addr;
-	//pginfo.srcpge = (uint64_t)addp->src;
 	pginfo.srcpge = (uint64_t)tmp_vaddr;
 	pginfo.secinfo = (uint64_t)&secinfo;
-
-	struct epc_page *secs_epc_page;
-	secs_epc_page = enclave->secs_page.epc_page;
 	pginfo.secs = (uint64_t)secs_epc_page->base;
 
 	dump_pginfo(&pginfo);
@@ -430,12 +430,12 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	ret = __eadd(&pginfo, (void *)epc->base);
 	printf("__eadd retured %d\n", ret);
 
+	kmem_free(kmem_arena, tmp_vaddr, size);
+
 	ret = sgx_measure_page(enclave->secs_page.epc_page, epc, addp->mrmask);
 	if (ret != 0) {
 		printf("sgx_measure_page returned %d\n", ret);
 	}
-
-	//kmem_free(kmem_arena, tmp_vaddr, size);
 
 	return (0);
 }
@@ -448,14 +448,13 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
  * } __attribute__((packed));
  */
 
-uint8_t tmp_page[4096] __aligned(4096);
-
 static int
 sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 {
+	struct sgx_einittoken *einittoken;
 	struct epc_page *secs_epc_page;
 	struct sgx_enclave *enclave;
-	struct sgx_einittoken *einittoken;
+	vm_offset_t tmp_vaddr;
 	void *sigstruct;
 	int ret;
 
@@ -469,26 +468,44 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 		return (-1);
 	}
 
+	printf("%s: enclave_id %lx\n", __func__, initp->addr);
+
 	secs_epc_page = enclave->secs_page.epc_page;
 
-	sigstruct = (void *)&tmp_page[0];
+	tmp_vaddr = kmem_alloc_contig(kmem_arena, PAGE_SIZE,
+	    0/*flags*/, 0, BUS_SPACE_MAXADDR_32BIT,
+	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
+
+	sigstruct = (void *)tmp_vaddr;
 	einittoken = (struct sgx_einittoken *) ((uint64_t)sigstruct + PAGE_SIZE / 2);
 
 	ret = copyin((void *)initp->sigstruct, sigstruct,
 	    SIGSTRUCT_SIZE);
 	if (ret != 0) {
 		printf("%s: failed to copy SIGSTRUCT page\n", __func__);
+		return (-1);
 	}
 
 	ret = copyin((void *)initp->einittoken, einittoken,
 	    EINITTOKEN_SIZE);
 	if (ret != 0) {
 		printf("%s: failed to copy EINITTOKEN page\n", __func__);
+		return (-1);
 	}
 
 	printf("%s: sigstruct addr %lx\n", __func__, (uint64_t)sigstruct);
 	printf("%s: einittoken addr %lx\n", __func__, (uint64_t)einittoken);
 	printf("%s: secs_epc_page addr %lx\n", __func__, (uint64_t)secs_epc_page->base);
+
+	//ATTRIBUTES  48  16
+	uint32_t *addr;
+	int i;
+
+	addr = (void *)secs_epc_page->base;
+	addr = (void *)&g_secs;
+	for (i = 0; i < 32; i++) {
+		printf("secs base[%d] %x\n", i, addr[i]);
+	}
 
 	ret = __einit(sigstruct, (void *)secs_epc_page->base, einittoken);
 	printf("__einit ret %d\n", ret);
@@ -504,7 +521,7 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 		printf("Invalid attr\n");
 		break;
 	default:
-		printf("Err is unknown\n");
+		printf("%s: err %d\n", __func__, ret);
 		break;
 	};
 
@@ -544,7 +561,6 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 		sgx_create(sc, m_secs);
 
 		//printf("m_secs.isv_svn %d\n", m_secs.isv_svn);
-		//handler = isgx_ioctl_enclave_create;
 		break;
 	case _SGX_IOC_ENCLAVE_ADD_PAGE:
 		//printf("%s: enclave_add_page\n", __func__);
@@ -552,15 +568,13 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 		addp = (struct sgx_enclave_add_page *)addr;
 		sgx_add_page(sc, addp);
 
-		//handler = isgx_ioctl_enclave_add_page;
 		break;
 	case _SGX_IOC_ENCLAVE_INIT:
 
+		printf("%s: enclave_init\n", __func__);
 		initp = (struct sgx_enclave_init *)addr;
 		sgx_init(sc, initp);
 
-		printf("%s: enclave_init\n", __func__);
-		//handler = isgx_ioctl_enclave_init;
 		break;
 	default:
 		return -EINVAL;
