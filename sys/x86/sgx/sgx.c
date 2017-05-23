@@ -80,11 +80,18 @@ MALLOC_DEFINE(M_PRIVCMD, "privcmd_dev", "SGX privcmd user-space device");
 
 struct epc_page {
 	uint64_t base;
+	uint64_t phys;
 	uint8_t used;
+};
+
+/* Version-Array slot */
+struct va_page {
+	struct epc_page *epc_page;
 };
 
 struct sgx_enclave_page {
 	struct epc_page *epc_page;
+	struct va_page *va_page;
 };
 
 struct sgx_enclave {
@@ -95,6 +102,7 @@ struct sgx_enclave {
 };
 
 struct privcmd_map {
+	struct sgx_softc *sc;
 	vm_object_t mem;
 	vm_size_t size;
 	struct resource *phys_res;
@@ -127,6 +135,23 @@ dump_pginfo(struct page_info *pginfo)
 	printf("pginfo->secs = %lx\n", pginfo->secs);
 
 	return (0);
+}
+
+static struct epc_page *
+get_epc_page(struct sgx_softc *sc)
+{
+	struct epc_page *epc;
+	int i;
+
+	for (i = 0; i < sc->npages; i++) {
+		epc = &sc->epc_pages[i];
+		if (epc->used == 0) {
+			epc->used = 1;
+			return (epc);
+		}
+	}
+
+	return (NULL);
 }
 
 static int
@@ -165,7 +190,17 @@ privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
 
 	paddr = map->phys_base_addr + offset;
 
-	//printf("%s: offset %lx, paddr %lx\n", __func__, offset, paddr);
+#if 1
+	struct epc_page *epc;
+	epc = get_epc_page(map->sc);
+	if (epc == NULL) {
+		printf("%s: failed to get epc page\n", __func__);
+		return (-1);
+	}
+	paddr = epc->phys;
+#endif
+
+	printf("%s: offset %lx, paddr %lx\n", __func__, offset, paddr);
 
 	if (((*mres)->flags & PG_FICTITIOUS) != 0) {
 		printf("fake page\n");
@@ -195,23 +230,6 @@ static struct cdev_pager_ops privcmd_pg_ops = {
 	.cdev_pg_ctor = privcmd_pg_ctor,
 	.cdev_pg_dtor = privcmd_pg_dtor,
 };
-
-static struct epc_page *
-get_epc_page(struct sgx_softc *sc)
-{
-	struct epc_page *epc;
-	int i;
-
-	for (i = 0; i < sc->npages; i++) {
-		epc = &sc->epc_pages[i];
-		if (epc->used == 0) {
-			epc->used = 1;
-			return (epc);
-		}
-	}
-
-	return (NULL);
-}
 
 static int
 sgx_open(struct cdev *dev, int flags __unused,
@@ -270,10 +288,41 @@ struct page_info pginfo __aligned(4096);
 struct sgx_secinfo secinfo __aligned(4096);
 
 static int
+sgx_construct_page(struct sgx_softc *sc,
+    struct sgx_enclave_page *enclave_page)
+{
+	struct va_page *va_page;
+	struct epc_page *epc;
+
+	epc = get_epc_page(sc);
+	if (epc == NULL) {
+		printf("failed to get epc page\n");
+		return (-1);
+	}
+
+	va_page = malloc(sizeof(struct va_page), M_SGX, M_WAITOK | M_ZERO);
+	va_page->epc_page = epc;
+
+	printf("EPA call\n");
+	__epa((void *)epc->base);
+	printf("EPA call done\n");
+
+	enclave_page->va_page = va_page;
+
+	return (0);
+}
+
+static int
 sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 {
+	struct sgx_enclave_page *secs_page;
 	struct sgx_enclave *enclave;
 	struct epc_page *epc;
+	uint64_t ret;
+
+	enclave = malloc(sizeof(struct sgx_enclave), M_SGX, M_WAITOK | M_ZERO);
+	enclave->base = g_secs.base;
+	enclave->size = g_secs.size;
 
 	memset(&secinfo, 0, sizeof(struct sgx_secinfo));
 
@@ -303,14 +352,14 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 		return (-1);
 	}
 
-	uint64_t ret;
+	sgx_construct_page(sc, &enclave->secs_page);
+
+	secs_page = &enclave->secs_page;
+	secs_page->epc_page = epc;
+
 	ret = __ecreate(&pginfo, (void *)epc->base);
 	printf("ecreate returned %lx\n", ret);
 
-	enclave = malloc(sizeof(struct sgx_enclave), M_SGX, M_WAITOK | M_ZERO);
-	enclave->base = g_secs.base;
-	enclave->size = g_secs.size;
-	enclave->secs_page.epc_page = epc;
 	TAILQ_INSERT_TAIL(&sc->enclaves, enclave, next);
 
 	return (0);
@@ -371,8 +420,10 @@ sgx_measure_page(struct epc_page *secs, struct epc_page *epc,
 static int
 sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 {
+	struct sgx_enclave_page *enclave_page;
 	struct epc_page *secs_epc_page;
 	struct sgx_enclave *enclave;
+	struct epc_page *epc;
 	//struct sgx_secinfo secinfo;
 	int ret;
 
@@ -409,12 +460,15 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 		return (-1);
 	}
 
-	struct epc_page *epc;
+	enclave_page = malloc(sizeof(struct sgx_enclave_page), M_SGX, M_WAITOK | M_ZERO);
+
 	epc = get_epc_page(sc);
 	if (epc == NULL) {
 		printf("failed to get epc page\n");
 		return (-1);
 	}
+	sgx_construct_page(sc, enclave_page);
+	enclave_page->epc_page = epc;
 
 	secs_epc_page = enclave->secs_page.epc_page;
 
@@ -435,6 +489,7 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	ret = sgx_measure_page(enclave->secs_page.epc_page, epc, addp->mrmask);
 	if (ret != 0) {
 		printf("sgx_measure_page returned %d\n", ret);
+		return (-1);
 	}
 
 	return (0);
@@ -451,7 +506,7 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 static int
 sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 {
-	struct sgx_einittoken *einittoken;
+	einittoken_t *einittoken;
 	struct epc_page *secs_epc_page;
 	struct sgx_enclave *enclave;
 	vm_offset_t tmp_vaddr;
@@ -477,7 +532,10 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
 
 	sigstruct = (void *)tmp_vaddr;
-	einittoken = (struct sgx_einittoken *) ((uint64_t)sigstruct + PAGE_SIZE / 2);
+	einittoken = (einittoken_t *)((uint64_t)sigstruct + PAGE_SIZE / 2);
+
+	printf("%s: initp->sigstruct addr %lx\n", __func__, initp->sigstruct);
+	printf("%s: initp->einittoken addr %lx\n", __func__, initp->einittoken);
 
 	ret = copyin((void *)initp->sigstruct, sigstruct,
 	    SIGSTRUCT_SIZE);
@@ -493,20 +551,53 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 		return (-1);
 	}
 
+#if 0
+	uint32_t *eaddr;
+	int i;
+
+	eaddr = (void *)sigstruct;
+	for (i = 0; i < SIGSTRUCT_SIZE / 4; i++) {
+		printf("sigstruct[%d] == %x\n", i, eaddr[i]);
+	}
+
+	eaddr = (void *)einittoken;
+	for (i = 0; i < sizeof(einittoken_t) / 4; i++) {
+		printf("einittoken[%d] == %d\n", i, eaddr[i]);
+	}
+#endif
+
+	uint16_t isgx_isvsvnle_min;
+	isgx_isvsvnle_min = 0;
+	if (einittoken->body.valid && einittoken->isv_svn_le < isgx_isvsvnle_min) {
+		printf("ROLLBACK\n");
+	}
+
 	printf("%s: sigstruct addr %lx\n", __func__, (uint64_t)sigstruct);
 	printf("%s: einittoken addr %lx\n", __func__, (uint64_t)einittoken);
 	printf("%s: secs_epc_page addr %lx\n", __func__, (uint64_t)secs_epc_page->base);
 
 	//ATTRIBUTES  48  16
 	uint32_t *addr;
-	int i;
 
 	addr = (void *)secs_epc_page->base;
 	addr = (void *)&g_secs;
+#if 0
 	for (i = 0; i < 32; i++) {
 		printf("secs base[%d] %x\n", i, addr[i]);
 	}
+#endif
 
+	secs_t *new_secs;
+	new_secs = (void *)&g_secs;
+	ret = memcmp(&new_secs->attributes, &einittoken->body.attributes, sizeof(sgx_attributes_t));
+	printf("memcmp returned %d\n", ret);
+
+	printf("&new_secs->attributes flags %lx\n", new_secs->attributes.flags);
+	printf("&new_secs->attributes xfrm %lx\n", new_secs->attributes.xfrm);
+	printf("&einittoken->body.attributes flags %lx\n", einittoken->body.attributes.flags);
+	printf("&einittoken->body.attributes xfrm %lx\n", einittoken->body.attributes.xfrm);
+
+	printf("%s: secs_epc_page->base %lx\n", __func__, secs_epc_page->base);
 	ret = __einit(sigstruct, (void *)secs_epc_page->base, einittoken);
 	printf("__einit ret %d\n", ret);
 
@@ -610,8 +701,8 @@ sgx_mmap_single(struct cdev *cdev, vm_ooffset_t *offset, vm_size_t mapsize,
 
 	sc = cdev->si_drv1;
 
+	map->sc = sc;
 	map->phys_res_id = 0;
-
 	map->phys_res = sgx_alloc(sc->dev, &map->phys_res_id, mapsize);
 	if (map->phys_res == NULL) {
 		printf("Can't alloc phys mem\n");
@@ -717,10 +808,25 @@ sgx_attach(device_t dev)
 
 	for (i = 0; i < sc->npages; i++) {
 		sc->epc_pages[i].base = epc_base_vaddr + SGX_PAGE_SIZE * i;
+		sc->epc_pages[i].phys = epc_base + SGX_PAGE_SIZE * i;
 		sc->epc_pages[i].used = 0;
 	}
 
 	TAILQ_INIT(&sc->enclaves);
+
+	unsigned regs[4];
+	do_cpuid(1, regs);
+	if (regs[2] & CPUID2_OSXSAVE) {
+		printf("OSXSAVE found\n");
+	} else {
+		printf("OSXSAVE not found\n");
+	}
+
+	if (rcr4() & CR4_XSAVE) {
+		printf("CR4_XSAVE found\n");
+	} else {
+		printf("CR4_XSAVE not found\n");
+	}
 
 	return (0);
 }
