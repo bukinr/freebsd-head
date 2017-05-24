@@ -269,8 +269,8 @@ __eextend(void *secs, void *epc)
 
 	__encls(EEXTEND, tmp, secs, epc, 0);
 
-	printf("%s: %x %lx %lx %lx\n",
-	    __func__, tmp.oeax, tmp.orbx, tmp.orcx, tmp.ordx);
+	//printf("%s: %x %lx %lx %lx\n",
+	//    __func__, tmp.oeax, tmp.orbx, tmp.orcx, tmp.ordx);
 
 	return (tmp.oeax);
 }

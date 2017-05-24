@@ -219,7 +219,7 @@ privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
 		vm_page_insert(page, object, pidx);
 	}
 
-	DELAY(5000);
+	//DELAY(5000);
 
 	page->valid = VM_PAGE_BITS_ALL;
 	return (VM_PAGER_OK);
@@ -285,6 +285,7 @@ sgx_write(struct cdev *dev, struct uio *uio, int ioflag)
 
 struct secs g_secs __aligned(4096);
 struct page_info pginfo __aligned(4096);
+struct sgx_secinfo secinfo0 __aligned(4096);
 struct sgx_secinfo secinfo __aligned(4096);
 
 static int
@@ -324,7 +325,9 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 	enclave->base = g_secs.base;
 	enclave->size = g_secs.size;
 
-	memset(&secinfo, 0, sizeof(struct sgx_secinfo));
+	memset(&secinfo0, 0, sizeof(struct sgx_secinfo));
+
+	//printf("enclave->base phys %lx\n", vtophys(enclave->base));
 
 #if 0
 	struct secinfo_flags *flags;
@@ -339,7 +342,7 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 	memset(&pginfo, 0, sizeof(struct page_info));
 	pginfo.linaddr = 0;
 	pginfo.srcpge = (uint64_t)&g_secs;
-	pginfo.secinfo = (uint64_t)&secinfo;
+	pginfo.secinfo = (uint64_t)&secinfo0;
 	pginfo.secs = 0;
 
 	dump_pginfo(&pginfo);
@@ -416,6 +419,25 @@ sgx_measure_page(struct epc_page *secs, struct epc_page *epc,
 	return (0);
 }
 
+static int validate_tcs(struct tcs *tcs)
+{
+	int i;
+
+	/* If FLAGS is not zero, ECALL will fail. */
+	if ((tcs->flags != 0) ||
+	    (tcs->ossa & (PAGE_SIZE - 1)) ||
+	    (tcs->ofsbasgx & (PAGE_SIZE - 1)) ||
+	    (tcs->ogsbasgx & (PAGE_SIZE - 1)) ||
+	    ((tcs->fslimit & 0xFFF) != 0xFFF) ||
+	    ((tcs->gslimit & 0xFFF) != 0xFFF))
+		return -EINVAL;
+
+	for (i = 0; i < sizeof(tcs->reserved)/sizeof(uint64_t); i++)
+		if (tcs->reserved[i])
+			return -EINVAL;
+
+	return 0;
+}
 
 static int
 sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
@@ -425,6 +447,11 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	struct sgx_enclave *enclave;
 	struct epc_page *epc;
 	//struct sgx_secinfo secinfo;
+	uint32_t size;
+	uint32_t flags;
+	vm_offset_t tmp_vaddr;
+	uint64_t page_type;
+
 	int ret;
 
 	ret = enclave_get(sc, addp->addr, &enclave);
@@ -443,10 +470,6 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 		return (-1);
 	}
 
-	uint32_t size;
-	uint32_t flags;
-	vm_offset_t tmp_vaddr;
-
 	size = PAGE_SIZE;
 	flags = 0;
 
@@ -458,6 +481,17 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	if (ret != 0) {
 		printf("%s: failed to copy page\n", __func__);
 		return (-1);
+	}
+
+	page_type = (secinfo.flags >> 8) & 0xff;
+	printf("page_type %ld\n", page_type);
+	if (page_type == PT_TCS) {
+		printf("TCS page\n");
+		if (validate_tcs((struct tcs *)tmp_vaddr) == 0) {
+			printf("validated\n");
+		} else {
+			printf("fail\n");
+		}
 	}
 
 	enclave_page = malloc(sizeof(struct sgx_enclave_page), M_SGX, M_WAITOK | M_ZERO);
@@ -827,6 +861,14 @@ sgx_attach(device_t dev)
 	} else {
 		printf("CR4_XSAVE not found\n");
 	}
+
+	if (rcr4() & CR4_FXSR) {
+		printf("CR4_FXSR found\n");
+	} else {
+		printf("CR4_FXSR not found\n");
+	}
+
+	printf("RXCR0: %lx\n", rxcr(0));
 
 	return (0);
 }
