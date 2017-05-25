@@ -69,6 +69,10 @@ __FBSDID("$FreeBSD$");
 #include "sgx.h"
 #include "sgx_user.h"
 
+#define	_SGX_IOC_ENCLAVE_CREATE		0xa400
+#define	_SGX_IOC_ENCLAVE_ADD_PAGE	0xa401
+#define	_SGX_IOC_ENCLAVE_INIT		0xa402
+
 #ifdef __amd64__
 #define	LOW_MEM_LIMIT	0x100000000ul
 #else
@@ -92,6 +96,7 @@ struct va_page {
 struct sgx_enclave_page {
 	struct epc_page *epc_page;
 	struct va_page *va_page;
+	TAILQ_ENTRY(sgx_enclave_page)	next;
 };
 
 struct sgx_enclave {
@@ -99,6 +104,7 @@ struct sgx_enclave {
 	uint64_t			size;
 	struct sgx_enclave_page		secs_page;
 	TAILQ_ENTRY(sgx_enclave)	next;
+	TAILQ_HEAD(, sgx_enclave_page)	pages;
 };
 
 struct privcmd_map {
@@ -176,19 +182,40 @@ privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
     int prot, vm_page_t *mres)
 {
 	struct privcmd_map *map;
+	struct sgx_softc *sc;
 	vm_page_t page;
 	vm_memattr_t memattr;
 	vm_pindex_t pidx;
 	vm_paddr_t paddr;
 
 	map = object->handle;
+	sc = map->sc;
 
 	//printf("%lx %lx %lx\n", SGX_IOC_ENCLAVE_CREATE, SGX_IOC_ENCLAVE_ADD_PAGE, SGX_IOC_ENCLAVE_INIT);
 
 	memattr = object->memattr;
 	pidx = OFF_TO_IDX(offset);
 
-	paddr = map->phys_base_addr + offset;
+	//paddr = map->phys_base_addr + offset;
+
+	struct sgx_enclave_page *enclave_page_tmp;
+	struct sgx_enclave_page *enclave_page;
+	struct sgx_enclave *enclave_tmp;
+	struct sgx_enclave *enclave;
+
+	TAILQ_FOREACH_SAFE(enclave, &sc->enclaves, next, enclave_tmp) {
+		TAILQ_FOREACH_SAFE(enclave_page, &enclave->pages, next, enclave_page_tmp) {
+			//enclave_page->epc_page
+#if 0
+			if ((addr >= enclave->base) && \
+			    (addr < (enclave->base + enclave->size))) {
+				printf("enclave found\n");
+				*encl = enclave;
+				return (0);
+			}
+#endif
+		}
+	}
 
 #if 1
 	struct epc_page *epc;
@@ -319,15 +346,21 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 	struct sgx_enclave_page *secs_page;
 	struct sgx_enclave *enclave;
 	struct epc_page *epc;
-	uint64_t ret;
 
 	enclave = malloc(sizeof(struct sgx_enclave), M_SGX, M_WAITOK | M_ZERO);
+	TAILQ_INIT(&enclave->pages);
 	enclave->base = g_secs.base;
 	enclave->size = g_secs.size;
 
 	memset(&secinfo0, 0, sizeof(struct sgx_secinfo));
 
 	//printf("enclave->base phys %lx\n", vtophys(enclave->base));
+
+	struct proc *proc;
+	pmap_t pmap;
+	proc = curthread->td_proc;
+	pmap = vm_map_pmap(&proc->p_vmspace->vm_map);
+	printf("enclave->base phys %lx\n", pmap_extract(pmap, enclave->base));
 
 #if 0
 	struct secinfo_flags *flags;
@@ -360,8 +393,7 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 	secs_page = &enclave->secs_page;
 	secs_page->epc_page = epc;
 
-	ret = __ecreate(&pginfo, (void *)epc->base);
-	printf("ecreate returned %lx\n", ret);
+	__ecreate(&pginfo, (void *)epc->base);
 
 	TAILQ_INSERT_TAIL(&sc->enclaves, enclave, next);
 
@@ -457,7 +489,14 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	ret = enclave_get(sc, addp->addr, &enclave);
 	if (ret != 0) {
 		printf("Failed to get enclave\n");
+		return (-1);
 	}
+
+	struct proc *proc;
+	pmap_t pmap;
+	proc = curthread->td_proc;
+	pmap = vm_map_pmap(&proc->p_vmspace->vm_map);
+	printf("addp->addr phys %lx\n", pmap_extract(pmap, addp->addr));
 
 	//printf("%s\n", __func__);
 	printf("%s: add page addr %lx src %lx secinfo %lx mrmask %x\n", __func__,
@@ -475,7 +514,7 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 
 	tmp_vaddr = kmem_alloc_contig(kmem_arena, size,
 	    flags & GFP_NATIVE_MASK, 0, BUS_SPACE_MAXADDR_32BIT,
-	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
+	    PAGE_SIZE, 0, VM_MEMATTR_UNCACHEABLE); //DEFAULT);
 
 	ret = copyin((void *)addp->src, (void *)tmp_vaddr, PAGE_SIZE);
 	if (ret != 0) {
@@ -487,11 +526,25 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	printf("page_type %ld\n", page_type);
 	if (page_type == PT_TCS) {
 		printf("TCS page\n");
-		if (validate_tcs((struct tcs *)tmp_vaddr) == 0) {
+		struct tcs *t;
+		t = (struct tcs *)tmp_vaddr;
+		if (validate_tcs(t) == 0) {
 			printf("validated\n");
 		} else {
-			printf("fail\n");
+			printf("TCS validation failed\n");
+			return (-1);
 		}
+		printf("t->state %lx\n", t->state);
+		printf("t->flags %lx\n", t->flags);
+		printf("t->ossa %lx\n", t->ossa);
+		printf("t->cssa %x\n", t->cssa);
+		printf("t->nssa %x\n", t->nssa);
+		printf("t->oentry %lx\n", t->oentry);
+		printf("t->aep %lx\n", t->aep);
+		printf("t->ofsbasgx %lx\n", t->ofsbasgx);
+		printf("t->ogsbasgx %lx\n", t->ogsbasgx);
+		printf("t->fslimit %x\n", t->fslimit);
+		printf("t->gslimit %x\n", t->gslimit);
 	}
 
 	enclave_page = malloc(sizeof(struct sgx_enclave_page), M_SGX, M_WAITOK | M_ZERO);
@@ -515,16 +568,19 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	dump_pginfo(&pginfo);
 	printf("pginfo %lx epc %lx\n", (uint64_t)&pginfo, (uint64_t)epc->base);
 
-	ret = __eadd(&pginfo, (void *)epc->base);
-	printf("__eadd retured %d\n", ret);
+	printf("%s: __eadd\n", __func__);
+	__eadd(&pginfo, (void *)epc->base);
 
-	kmem_free(kmem_arena, tmp_vaddr, size);
-
+	printf("%s: sgx_measure_page\n", __func__);
 	ret = sgx_measure_page(enclave->secs_page.epc_page, epc, addp->mrmask);
 	if (ret != 0) {
 		printf("sgx_measure_page returned %d\n", ret);
 		return (-1);
 	}
+
+	kmem_free(kmem_arena, tmp_vaddr, size);
+
+	TAILQ_INSERT_TAIL(&enclave->pages, enclave_page, next);
 
 	return (0);
 }
@@ -563,7 +619,7 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 
 	tmp_vaddr = kmem_alloc_contig(kmem_arena, PAGE_SIZE,
 	    0/*flags*/, 0, BUS_SPACE_MAXADDR_32BIT,
-	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
+	    PAGE_SIZE, 0, VM_MEMATTR_UNCACHEABLE); //VM_MEMATTR_DEFAULT);
 
 	sigstruct = (void *)tmp_vaddr;
 	einittoken = (einittoken_t *)((uint64_t)sigstruct + PAGE_SIZE / 2);
@@ -610,19 +666,20 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	printf("%s: einittoken addr %lx\n", __func__, (uint64_t)einittoken);
 	printf("%s: secs_epc_page addr %lx\n", __func__, (uint64_t)secs_epc_page->base);
 
+#if 0
 	//ATTRIBUTES  48  16
 	uint32_t *addr;
 
 	addr = (void *)secs_epc_page->base;
 	addr = (void *)&g_secs;
-#if 0
 	for (i = 0; i < 32; i++) {
 		printf("secs base[%d] %x\n", i, addr[i]);
 	}
 #endif
 
-	secs_t *new_secs;
-	new_secs = (void *)&g_secs;
+	secs_t *secs;
+	secs = (void *)&g_secs;
+#if 0
 	ret = memcmp(&new_secs->attributes, &einittoken->body.attributes, sizeof(sgx_attributes_t));
 	printf("memcmp returned %d\n", ret);
 
@@ -630,10 +687,17 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	printf("&new_secs->attributes xfrm %lx\n", new_secs->attributes.xfrm);
 	printf("&einittoken->body.attributes flags %lx\n", einittoken->body.attributes.flags);
 	printf("&einittoken->body.attributes xfrm %lx\n", einittoken->body.attributes.xfrm);
+#endif
+
+	printf("secs->attributes flags %lx\n", secs->attributes.flags);
+	printf("secs->attributes xfrm %lx\n", secs->attributes.xfrm);
 
 	printf("%s: secs_epc_page->base %lx\n", __func__, secs_epc_page->base);
 	ret = __einit(sigstruct, (void *)secs_epc_page->base, einittoken);
-	printf("__einit ret %d\n", ret);
+	printf("__einit returned %d\n", ret);
+	if (ret != 0) {
+		printf("Failed to init enclave\n");
+	}
 
 	switch (ret) {
 	case SGX_INVALID_MEASUREMENT:
@@ -650,12 +714,11 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 		break;
 	};
 
-	return (0);
-}
+	printf("CR0: %lx\n", rcr0());
+	printf("CR4: %lx\n", rcr4());
 
-#define	_SGX_IOC_ENCLAVE_CREATE		0xa400
-#define	_SGX_IOC_ENCLAVE_ADD_PAGE	0xa401
-#define	_SGX_IOC_ENCLAVE_INIT		0xa402
+	return (ret);
+}
 
 static int
 sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
@@ -664,6 +727,7 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 	struct sgx_enclave_add_page *addp;
 	struct sgx_enclave_create *param;
 	struct sgx_enclave_init *initp;
+	int ret;
 
 	struct secs *m_secs;
 	struct sgx_softc *sc;
@@ -682,7 +746,17 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 		//uaddr = *(uint64_t *)addr;
 
 		param = (struct sgx_enclave_create *)addr;
-		copyin((void *)param->src, &g_secs, sizeof(struct secs));
+		ret = copyin((void *)param->src, &g_secs, sizeof(struct secs));
+		if (ret != 0) {
+			printf("Can't copy SECS\n");
+			return (-1);
+		}
+		printf("secs (%ld bytes) copied\n", sizeof(struct secs));
+
+		//secs_t *secs;
+		//secs = (void *)&g_secs;
+		//secs->attributes.flags = 0x24;
+
 		sgx_create(sc, m_secs);
 
 		//printf("m_secs.isv_svn %d\n", m_secs.isv_svn);
@@ -732,10 +806,12 @@ sgx_mmap_single(struct cdev *cdev, vm_ooffset_t *offset, vm_size_t mapsize,
 	map = malloc(sizeof(*map), M_PRIVCMD, M_WAITOK | M_ZERO);
 
 	printf("%s: mapsize %ld\n", __func__, mapsize);
+	//printf("%s: offset %ld\n", __func__, *offset);
 
 	sc = cdev->si_drv1;
 
 	map->sc = sc;
+#if 0
 	map->phys_res_id = 0;
 	map->phys_res = sgx_alloc(sc->dev, &map->phys_res_id, mapsize);
 	if (map->phys_res == NULL) {
@@ -745,6 +821,7 @@ sgx_mmap_single(struct cdev *cdev, vm_ooffset_t *offset, vm_size_t mapsize,
 
 	map->phys_base_addr = rman_get_start(map->phys_res);
 	printf("%s: phys addr 0x%lx\n", __func__, (uint64_t)map->phys_base_addr);
+#endif
 
 	//map->mem = cdev_pager_allocate(map, OBJT_MGTDEVICE, &privcmd_pg_ops,
 	map->mem = cdev_pager_allocate(map, OBJT_DEVICE, &privcmd_pg_ops,
@@ -869,6 +946,9 @@ sgx_attach(device_t dev)
 	}
 
 	printf("RXCR0: %lx\n", rxcr(0));
+
+	printf("CR0: %lx\n", rcr0());
+	printf("CR4: %lx\n", rcr4());
 
 	return (0);
 }
