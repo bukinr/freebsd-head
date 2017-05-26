@@ -93,9 +93,23 @@ struct va_page {
 	struct epc_page *epc_page;
 };
 
+struct privcmd_map {
+	struct sgx_softc *sc;
+	vm_object_t mem;
+	uint64_t base;
+	vm_size_t size;
+	struct resource *phys_res;
+	int phys_res_id;
+	vm_paddr_t phys_base_addr;
+	boolean_t mapped;
+	BITSET_DEFINE_VAR() *err;
+	struct sgx_enclave *enclave;
+};
+
 struct sgx_enclave_page {
 	struct epc_page *epc_page;
 	struct va_page *va_page;
+	uint64_t			addr;
 	TAILQ_ENTRY(sgx_enclave_page)	next;
 };
 
@@ -103,19 +117,9 @@ struct sgx_enclave {
 	uint64_t			base;
 	uint64_t			size;
 	struct sgx_enclave_page		secs_page;
+	struct privcmd_map		*map;
 	TAILQ_ENTRY(sgx_enclave)	next;
 	TAILQ_HEAD(, sgx_enclave_page)	pages;
-};
-
-struct privcmd_map {
-	struct sgx_softc *sc;
-	vm_object_t mem;
-	vm_size_t size;
-	struct resource *phys_res;
-	int phys_res_id;
-	vm_paddr_t phys_base_addr;
-	boolean_t mapped;
-	BITSET_DEFINE_VAR() *err;
 };
 
 #define	SGX_CPUID		0x12
@@ -164,8 +168,11 @@ static int
 privcmd_pg_ctor(void *handle, vm_ooffset_t size, vm_prot_t prot,
     vm_ooffset_t foff, struct ucred *cred, u_short *color)
 {
+	struct privcmd_map *map;
 
-	printf("%s\n", __func__);
+	printf("%s: foff 0x%lx size 0x%lx\n", __func__, foff, size);
+
+	map = handle;
 
 	return (0);
 }
@@ -173,14 +180,18 @@ privcmd_pg_ctor(void *handle, vm_ooffset_t size, vm_prot_t prot,
 static void
 privcmd_pg_dtor(void *handle)
 {
+	struct privcmd_map *map;
 
 	printf("%s\n", __func__);
+
+	map = handle;
 }
 
 static int
 privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
     int prot, vm_page_t *mres)
 {
+	struct sgx_enclave *enclave;
 	struct privcmd_map *map;
 	struct sgx_softc *sc;
 	vm_page_t page;
@@ -190,6 +201,9 @@ privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
 
 	map = object->handle;
 	sc = map->sc;
+	enclave = map->enclave;
+
+	printf("%s: offset 0x%lx\n", __func__, offset);
 
 	//printf("%lx %lx %lx\n", SGX_IOC_ENCLAVE_CREATE, SGX_IOC_ENCLAVE_ADD_PAGE, SGX_IOC_ENCLAVE_INIT);
 
@@ -200,9 +214,28 @@ privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
 
 	struct sgx_enclave_page *enclave_page_tmp;
 	struct sgx_enclave_page *enclave_page;
+	int found;
+
+	found = 0;
+	TAILQ_FOREACH_SAFE(enclave_page, &enclave->pages, next, enclave_page_tmp) {
+		printf("%s: page addr %lx\n", __func__, enclave_page->addr);
+		if ((map->base + offset) == enclave_page->addr) {
+			printf("page found\n");
+			found = 1;
+			break;
+		}
+	}
+	if (found == 0) {
+		printf("Error: page not found\n");
+		return (-1);
+	}
+	struct epc_page *epc;
+	epc = enclave_page->epc_page;
+	paddr = epc->phys;
+
+#if 0
 	struct sgx_enclave *enclave_tmp;
 	struct sgx_enclave *enclave;
-
 	TAILQ_FOREACH_SAFE(enclave, &sc->enclaves, next, enclave_tmp) {
 		TAILQ_FOREACH_SAFE(enclave_page, &enclave->pages, next, enclave_page_tmp) {
 			//enclave_page->epc_page
@@ -216,8 +249,9 @@ privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
 #endif
 		}
 	}
+#endif
 
-#if 1
+#if 0
 	struct epc_page *epc;
 	epc = get_epc_page(map->sc);
 	if (epc == NULL) {
@@ -226,8 +260,6 @@ privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
 	}
 	paddr = epc->phys;
 #endif
-
-	printf("%s: offset %lx, paddr %lx\n", __func__, offset, paddr);
 
 	if (((*mres)->flags & PG_FICTITIOUS) != 0) {
 		printf("fake page\n");
@@ -362,6 +394,34 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 	pmap = vm_map_pmap(&proc->p_vmspace->vm_map);
 	printf("enclave->base phys %lx\n", pmap_extract(pmap, enclave->base));
 
+	int error;
+	vm_map_t map;
+	vm_map_entry_t entry;
+	vm_object_t mem;
+	vm_pindex_t pindex;
+	vm_prot_t prot;
+	boolean_t wired;
+	struct privcmd_map *priv_map;
+
+	map = &proc->p_vmspace->vm_map;
+	error = vm_map_lookup(&map, g_secs.base, VM_PROT_NONE, &entry,
+	    &mem, &pindex, &prot, &wired);
+	vm_map_lookup_done(map, entry);
+	if (error != 0) {
+		printf("Can't find vm_map\n");
+		return (-1);
+	}
+
+	printf("%s: vm_map_lookup: entry->start 0x%lx, entry->end 0x%lx, entry->offset 0x%lx pindex 0x%lx\n",
+	    __func__, entry->start, entry->end, entry->offset, (uint64_t)pindex);
+
+	printf("vm_map->root->start %lx\n", map->root->start);
+	priv_map = mem->handle;
+	printf("vm_map found, size 0x%lx\n", priv_map->size);
+	enclave->map = priv_map;
+	priv_map->enclave = enclave;
+	priv_map->base = (entry->start - entry->offset);
+
 #if 0
 	struct secinfo_flags *flags;
 
@@ -399,15 +459,6 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 
 	return (0);
 }
-
-/*
- * struct sgx_enclave_add_page {
- *       uint64_t        addr;
- *       uint64_t        src;
- *       uint64_t        secinfo;
- *       uint16_t        mrmask;
- * } __attribute__((packed));
- */
 
 #define	GFP_NATIVE_MASK	(M_NOWAIT | M_WAITOK | M_USE_RESERVE | M_ZERO)
 
@@ -470,6 +521,15 @@ static int validate_tcs(struct tcs *tcs)
 
 	return 0;
 }
+
+/*
+ * struct sgx_enclave_add_page {
+ *       uint64_t        addr;
+ *       uint64_t        src;
+ *       uint64_t        secinfo;
+ *       uint16_t        mrmask;
+ * } __attribute__((packed));
+ */
 
 static int
 sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
@@ -556,6 +616,7 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	}
 	sgx_construct_page(sc, enclave_page);
 	enclave_page->epc_page = epc;
+	enclave_page->addr = addp->addr;
 
 	secs_epc_page = enclave->secs_page.epc_page;
 
@@ -823,7 +884,25 @@ sgx_mmap_single(struct cdev *cdev, vm_ooffset_t *offset, vm_size_t mapsize,
 	printf("%s: phys addr 0x%lx\n", __func__, (uint64_t)map->phys_base_addr);
 #endif
 
+#if 0
+	struct epc_page *epc;
+	int i;
+
+	for (i = 0; i < mapsize; i += PAGE_SIZE) {
+		epc = get_epc_page(map->sc);
+		if (epc == NULL) {
+			printf("%s: failed to get epc page\n", __func__);
+			return (-1);
+		}
+
+		enclave_page = malloc(sizeof(struct sgx_enclave_page), M_SGX, M_WAITOK | M_ZERO);
+		enclave_page->epc_page = epc;
+		TAILQ_INSERT_TAIL(&enclave->pages, enclave_page, next);
+	}
+#endif
+
 	//map->mem = cdev_pager_allocate(map, OBJT_MGTDEVICE, &privcmd_pg_ops,
+	map->size = mapsize;
 	map->mem = cdev_pager_allocate(map, OBJT_DEVICE, &privcmd_pg_ops,
 	    mapsize, nprot, *offset, NULL);
 	if (map->mem == NULL) {
