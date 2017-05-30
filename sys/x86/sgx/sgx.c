@@ -181,10 +181,14 @@ static void
 privcmd_pg_dtor(void *handle)
 {
 	struct privcmd_map *map;
-
-	printf("%s\n", __func__);
+	struct epc_page *secs_epc_page;
+	struct sgx_enclave *enclave;
 
 	map = handle;
+	enclave = map->enclave;
+
+	secs_epc_page = enclave->secs_page.epc_page;
+	printf("%s: enclave->secs_page.epc_page %lx\n", __func__, (uint64_t)secs_epc_page->base);
 }
 
 static int
@@ -277,8 +281,6 @@ privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
 		*mres = page;
 		vm_page_insert(page, object, pidx);
 	}
-
-	//DELAY(5000);
 
 	page->valid = VM_PAGE_BITS_ALL;
 	return (VM_PAGER_OK);
@@ -780,8 +782,11 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 #endif
 
 	printf("%s: secs_epc_page->base %lx\n", __func__, secs_epc_page->base);
-	ret = __einit(sigstruct, (void *)secs_epc_page->base, einittoken);
-	printf("__einit returned %d\n", ret);
+	do {
+		ret = __einit(sigstruct, (void *)secs_epc_page->base, einittoken);
+		printf("__einit returned %d\n", ret);
+	} while (ret == SGX_UNMASKED_EVENT);
+
 	if (ret != 0) {
 		printf("Failed to init enclave\n");
 	}
