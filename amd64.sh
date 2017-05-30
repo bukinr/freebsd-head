@@ -17,7 +17,10 @@ cp app/app amd64_disk/usr/bin/
 
 cp /home/br/dev/sgx/app amd64_disk/usr/bin/sgx_app
 cp /home/br/dev/sgx/libsgx_urts amd64_disk/usr/bin/
+
 cp /home/br/dev/sgx/libenclave1.so amd64_disk/usr/bin/
+cp /home/br/dev/sgx/libenclave2.so amd64_disk/usr/bin/
+cp /home/br/dev/sgx/libenclave3.so amd64_disk/usr/bin/
 
 cp /home/br/dev/sgx/le_prod_css.bin amd64_disk/opt/intel/sgxpsw/aesm/
 cp /home/br/dev/sgx/libsgx_le.signed.so amd64_disk/opt/intel/sgxpsw/aesm/

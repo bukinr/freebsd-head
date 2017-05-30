@@ -218,9 +218,9 @@ privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
 
 	found = 0;
 	TAILQ_FOREACH_SAFE(enclave_page, &enclave->pages, next, enclave_page_tmp) {
-		printf("%s: page addr %lx\n", __func__, enclave_page->addr);
+		//printf("%s: page addr %lx\n", __func__, enclave_page->addr);
 		if ((map->base + offset) == enclave_page->addr) {
-			printf("page found\n");
+			//printf("page found\n");
 			found = 1;
 			break;
 		}
@@ -411,7 +411,6 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 		printf("Can't find vm_map\n");
 		return (-1);
 	}
-
 	printf("%s: vm_map_lookup: entry->start 0x%lx, entry->end 0x%lx, entry->offset 0x%lx pindex 0x%lx\n",
 	    __func__, entry->start, entry->end, entry->offset, (uint64_t)pindex);
 
@@ -465,9 +464,35 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 static int
 enclave_get(struct sgx_softc *sc, uint64_t addr, struct sgx_enclave **encl)
 {
-	struct sgx_enclave *enclave_tmp;
-	struct sgx_enclave *enclave;
+	//struct sgx_enclave *enclave_tmp;
+	//struct sgx_enclave *enclave;
 
+	int error;
+	vm_map_t map;
+	vm_map_entry_t entry;
+	vm_object_t mem;
+	vm_pindex_t pindex;
+	vm_prot_t prot;
+	boolean_t wired;
+	struct privcmd_map *priv_map;
+	struct proc *proc;
+	//pmap_t pmap;
+
+	proc = curthread->td_proc;
+
+	map = &proc->p_vmspace->vm_map;
+	error = vm_map_lookup(&map, addr, VM_PROT_NONE, &entry,
+	    &mem, &pindex, &prot, &wired);
+	vm_map_lookup_done(map, entry);
+	if (error != 0) {
+		printf("Can't find enclave\n");
+		return (-1);
+	}
+	priv_map = mem->handle;
+	*encl = priv_map->enclave;
+	return (0);
+
+#if 0
 	TAILQ_FOREACH_SAFE(enclave, &sc->enclaves, next, enclave_tmp) {
 		if ((addr >= enclave->base) && \
 		    (addr < (enclave->base + enclave->size))) {
@@ -476,6 +501,7 @@ enclave_get(struct sgx_softc *sc, uint64_t addr, struct sgx_enclave **encl)
 			return (0);
 		}
 	}
+#endif
 
 	printf("enclave not found\n");
 
@@ -738,9 +764,9 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	}
 #endif
 
+#if 0
 	secs_t *secs;
 	secs = (void *)&g_secs;
-#if 0
 	ret = memcmp(&new_secs->attributes, &einittoken->body.attributes, sizeof(sgx_attributes_t));
 	printf("memcmp returned %d\n", ret);
 
@@ -748,10 +774,10 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	printf("&new_secs->attributes xfrm %lx\n", new_secs->attributes.xfrm);
 	printf("&einittoken->body.attributes flags %lx\n", einittoken->body.attributes.flags);
 	printf("&einittoken->body.attributes xfrm %lx\n", einittoken->body.attributes.xfrm);
-#endif
 
 	printf("secs->attributes flags %lx\n", secs->attributes.flags);
 	printf("secs->attributes xfrm %lx\n", secs->attributes.xfrm);
+#endif
 
 	printf("%s: secs_epc_page->base %lx\n", __func__, secs_epc_page->base);
 	ret = __einit(sigstruct, (void *)secs_epc_page->base, einittoken);
@@ -833,7 +859,7 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 
 		printf("%s: enclave_init\n", __func__);
 		initp = (struct sgx_enclave_init *)addr;
-		sgx_init(sc, initp);
+		return (sgx_init(sc, initp));
 
 		break;
 	default:
