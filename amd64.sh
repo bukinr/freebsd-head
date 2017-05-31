@@ -37,9 +37,13 @@ cp -f /home/br/obj/usr/home/br/dev/freebsd-head/sys/SGX/modules/usr/home/br/dev/
 cp -f /home/br/obj/usr/home/br/dev/freebsd-head/sys/SGX/modules/usr/home/br/dev/freebsd-head/sys/modules/linux_common/linux_common.ko $DESTDIR/boot/kernel/
 cp -f /home/br/obj/usr/home/br/dev/freebsd-head/sys/SGX/modules/usr/home/br/dev/freebsd-head/sys/modules/linux64/linux64.ko $DESTDIR/boot/kernel/
 
+MD=`sudo mdconfig -n disk_amd64.img`
+
 rm -f disk_amd64_.img disk_amd64_.img.gz
 tools/tools/makeroot/makeroot.sh -s 120m -f amd64_disk/basic.files -e amd64_disk/extras.mtree amd64.img /home/br/world-amd64/ && \
-sudo dd if=amd64.img of=/dev/md0p2 bs=1m || exit 1
+sudo dd if=amd64.img of=/dev/md${MD}p2 bs=1m || exit 1
 cp disk_amd64.img disk_amd64_.img
 gzip disk_amd64_.img
 scp disk_amd64_.img.gz 10.5.0.85:~/
+
+sudo mdconfig -d -u ${MD}

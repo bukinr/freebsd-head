@@ -58,6 +58,11 @@
 #define SGX_POWER_LOST_ENCLAVE		0x40000000
 #define SGX_LE_ROLLBACK			0x40000001
 
+struct sgx_secinfo {
+	uint64_t flags;
+	uint64_t reserved[7];
+} __attribute__((aligned(128)));
+
 struct sgx_enclave_create {
 	uint64_t	src;
 } __attribute__((packed));
@@ -109,18 +114,18 @@ struct secs {
 };
 
 struct tcs {
-	uint8_t reserved1[8];
+	uint64_t state;
 	uint64_t flags;
 	uint64_t ossa;
 	uint32_t cssa;
 	uint32_t nssa;
 	uint64_t oentry;
-	uint8_t reserved2[8];
+	uint64_t aep;
 	uint64_t ofsbasgx;
 	uint64_t ogsbasgx;
 	uint32_t fslimit;
 	uint32_t gslimit;
-	uint8_t reserved3[4024];
+	uint64_t reserved[503];
 };
 
 #endif /* _UAPI_ASM_X86_SGX_H */
