@@ -344,7 +344,6 @@ sgx_write(struct cdev *dev, struct uio *uio, int ioflag)
 
 /* SGX Enclave Control Structure (SECS) */
 
-struct page_info pginfo __aligned(4096);
 struct sgx_secinfo secinfo0 __aligned(4096);
 struct sgx_secinfo secinfo __aligned(4096);
 
@@ -377,6 +376,7 @@ static int
 sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 {
 	struct sgx_enclave_page *secs_page;
+	struct page_info pginfo;
 	struct sgx_enclave *enclave;
 	struct epc_page *epc;
 
@@ -565,6 +565,7 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	struct epc_page *secs_epc_page;
 	struct sgx_enclave *enclave;
 	struct epc_page *epc;
+	struct page_info pginfo;
 	//struct sgx_secinfo secinfo;
 	uint32_t size;
 	uint32_t flags;
