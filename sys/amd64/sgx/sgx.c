@@ -344,7 +344,6 @@ sgx_write(struct cdev *dev, struct uio *uio, int ioflag)
 
 /* SGX Enclave Control Structure (SECS) */
 
-struct secs g_secs __aligned(4096);
 struct page_info pginfo __aligned(4096);
 struct sgx_secinfo secinfo0 __aligned(4096);
 struct sgx_secinfo secinfo __aligned(4096);
@@ -383,8 +382,8 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 
 	enclave = malloc(sizeof(struct sgx_enclave), M_SGX, M_WAITOK | M_ZERO);
 	TAILQ_INIT(&enclave->pages);
-	enclave->base = g_secs.base;
-	enclave->size = g_secs.size;
+	enclave->base = m_secs->base;
+	enclave->size = m_secs->size;
 
 	memset(&secinfo0, 0, sizeof(struct sgx_secinfo));
 
@@ -406,7 +405,7 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 	struct privcmd_map *priv_map;
 
 	map = &proc->p_vmspace->vm_map;
-	error = vm_map_lookup(&map, g_secs.base, VM_PROT_NONE, &entry,
+	error = vm_map_lookup(&map, m_secs->base, VM_PROT_NONE, &entry,
 	    &mem, &pindex, &prot, &wired);
 	vm_map_lookup_done(map, entry);
 	if (error != 0) {
@@ -435,13 +434,13 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 
 	memset(&pginfo, 0, sizeof(struct page_info));
 	pginfo.linaddr = 0;
-	pginfo.srcpge = (uint64_t)&g_secs;
+	pginfo.srcpge = (uint64_t)m_secs;
 	pginfo.secinfo = (uint64_t)&secinfo0;
 	pginfo.secs = 0;
 
 	dump_pginfo(&pginfo);
 
-	printf("%s: secs->base 0x%lx, secs->size 0x%lx\n", __func__, g_secs.base, g_secs.size);
+	printf("%s: secs->base 0x%lx, secs->size 0x%lx\n", __func__, m_secs->base, m_secs->size);
 
 	epc = get_epc_page(sc);
 	if (epc == NULL) {
@@ -602,7 +601,7 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 
 	tmp_vaddr = kmem_alloc_contig(kmem_arena, size,
 	    flags & GFP_NATIVE_MASK, 0, BUS_SPACE_MAXADDR_32BIT,
-	    PAGE_SIZE, 0, VM_MEMATTR_UNCACHEABLE); //DEFAULT);
+	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
 
 	ret = copyin((void *)addp->src, (void *)tmp_vaddr, PAGE_SIZE);
 	if (ret != 0) {
@@ -708,7 +707,7 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 
 	tmp_vaddr = kmem_alloc_contig(kmem_arena, PAGE_SIZE,
 	    0/*flags*/, 0, BUS_SPACE_MAXADDR_32BIT,
-	    PAGE_SIZE, 0, VM_MEMATTR_UNCACHEABLE); //VM_MEMATTR_DEFAULT);
+	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
 
 	sigstruct = (void *)tmp_vaddr;
 	einittoken = (einittoken_t *)((uint64_t)sigstruct + PAGE_SIZE / 2);
@@ -760,7 +759,7 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	uint32_t *addr;
 
 	addr = (void *)secs_epc_page->base;
-	addr = (void *)&g_secs;
+	addr = m_secs;
 	for (i = 0; i < 32; i++) {
 		printf("secs base[%d] %x\n", i, addr[i]);
 	}
@@ -768,7 +767,7 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 
 #if 0
 	secs_t *secs;
-	secs = (void *)&g_secs;
+	secs = m_secs;
 	ret = memcmp(&new_secs->attributes, &einittoken->body.attributes, sizeof(sgx_attributes_t));
 	printf("memcmp returned %d\n", ret);
 
@@ -826,9 +825,11 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 
 	sc = dev->si_drv1;
 
-	m_secs = &g_secs;
+	m_secs = (struct secs *)kmem_alloc_contig(kmem_arena, PAGE_SIZE,
+	    0/*flags*/, 0, BUS_SPACE_MAXADDR_32BIT,
+	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
 
-	//printf("%s: %ld\n", __func__, cmd);
+	printf("%s: %ld, m_secs %lx\n", __func__, cmd, (uint64_t)m_secs);
 
 	switch (cmd & 0xffff) {
 	case _SGX_IOC_ENCLAVE_CREATE:
@@ -838,16 +839,12 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 		//uaddr = *(uint64_t *)addr;
 
 		param = (struct sgx_enclave_create *)addr;
-		ret = copyin((void *)param->src, &g_secs, sizeof(struct secs));
+		ret = copyin((void *)param->src, m_secs, sizeof(struct secs));
 		if (ret != 0) {
 			printf("Can't copy SECS\n");
 			return (-1);
 		}
 		printf("secs (%ld bytes) copied\n", sizeof(struct secs));
-
-		//secs_t *secs;
-		//secs = (void *)&g_secs;
-		//secs->attributes.flags = 0x24;
 
 		sgx_create(sc, m_secs);
 
