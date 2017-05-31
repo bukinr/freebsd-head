@@ -342,11 +342,6 @@ sgx_write(struct cdev *dev, struct uio *uio, int ioflag)
 	return (0);
 }
 
-/* SGX Enclave Control Structure (SECS) */
-
-struct sgx_secinfo secinfo0 __aligned(4096);
-struct sgx_secinfo secinfo __aligned(4096);
-
 static int
 sgx_construct_page(struct sgx_softc *sc,
     struct sgx_enclave_page *enclave_page)
@@ -377,6 +372,7 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 {
 	struct sgx_enclave_page *secs_page;
 	struct page_info pginfo;
+	struct sgx_secinfo secinfo;
 	struct sgx_enclave *enclave;
 	struct epc_page *epc;
 
@@ -385,7 +381,7 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 	enclave->base = m_secs->base;
 	enclave->size = m_secs->size;
 
-	memset(&secinfo0, 0, sizeof(struct sgx_secinfo));
+	memset(&secinfo, 0, sizeof(struct sgx_secinfo));
 
 	//printf("enclave->base phys %lx\n", vtophys(enclave->base));
 
@@ -435,7 +431,7 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 	memset(&pginfo, 0, sizeof(struct page_info));
 	pginfo.linaddr = 0;
 	pginfo.srcpge = (uint64_t)m_secs;
-	pginfo.secinfo = (uint64_t)&secinfo0;
+	pginfo.secinfo = (uint64_t)&secinfo;
 	pginfo.secs = 0;
 
 	dump_pginfo(&pginfo);
@@ -566,7 +562,7 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	struct sgx_enclave *enclave;
 	struct epc_page *epc;
 	struct page_info pginfo;
-	//struct sgx_secinfo secinfo;
+	struct sgx_secinfo secinfo;
 	uint32_t size;
 	uint32_t flags;
 	vm_offset_t tmp_vaddr;
@@ -826,6 +822,7 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 
 	sc = dev->si_drv1;
 
+	/* SGX Enclave Control Structure (SECS) */
 	m_secs = (struct secs *)kmem_alloc_contig(kmem_arena, PAGE_SIZE,
 	    0/*flags*/, 0, BUS_SPACE_MAXADDR_32BIT,
 	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
