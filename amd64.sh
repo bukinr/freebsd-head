@@ -7,7 +7,7 @@ fi
 
 VARS=`make buildenvvars`
 
-cp sys/x86/sgx/sgx_user.h usr.bin/secure_app/
+cp sys/amd64/sgx/sgx_user.h usr.bin/secure_app/
 
 make -C app clean all || exit 1
 make -C usr.bin/secure_app || exit 1
