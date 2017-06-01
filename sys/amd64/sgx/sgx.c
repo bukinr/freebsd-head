@@ -292,6 +292,7 @@ static struct cdev_pager_ops privcmd_pg_ops = {
 	.cdev_pg_dtor = privcmd_pg_dtor,
 };
 
+#if 0
 static int
 sgx_open(struct cdev *dev, int flags __unused,
     int fmt __unused, struct thread *td __unused)
@@ -341,6 +342,7 @@ sgx_write(struct cdev *dev, struct uio *uio, int ioflag)
 
 	return (0);
 }
+#endif
 
 static int
 sgx_construct_page(struct sgx_softc *sc,
@@ -368,13 +370,28 @@ sgx_construct_page(struct sgx_softc *sc,
 }
 
 static int
-sgx_create(struct sgx_softc *sc, struct secs *m_secs)
+sgx_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 {
 	struct sgx_enclave_page *secs_page;
 	struct page_info pginfo;
 	struct sgx_secinfo secinfo;
 	struct sgx_enclave *enclave;
 	struct epc_page *epc;
+	struct secs *m_secs;
+	int ret;
+
+	/* SGX Enclave Control Structure (SECS) */
+	m_secs = (struct secs *)kmem_alloc_contig(kmem_arena, PAGE_SIZE,
+	    0/*flags*/, 0, BUS_SPACE_MAXADDR_32BIT,
+	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
+
+	ret = copyin((void *)param->src, m_secs, sizeof(struct secs));
+	if (ret != 0) {
+		printf("Can't copy SECS\n");
+		return (-1);
+	}
+	printf("secs (%ld bytes) copied\n", sizeof(struct secs));
+
 
 	enclave = malloc(sizeof(struct sgx_enclave), M_SGX, M_WAITOK | M_ZERO);
 	TAILQ_INIT(&enclave->pages);
@@ -802,38 +819,22 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 	struct sgx_enclave_add_page *addp;
 	struct sgx_enclave_create *param;
 	struct sgx_enclave_init *initp;
-	int ret;
-
-	struct secs *m_secs;
 	struct sgx_softc *sc;
+	int ret;
 
 	sc = dev->si_drv1;
 
-	/* SGX Enclave Control Structure (SECS) */
-	m_secs = (struct secs *)kmem_alloc_contig(kmem_arena, PAGE_SIZE,
-	    0/*flags*/, 0, BUS_SPACE_MAXADDR_32BIT,
-	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
+	printf("%s: %ld\n", __func__, cmd);
 
-	printf("%s: %ld, m_secs %lx\n", __func__, cmd, (uint64_t)m_secs);
+	ret = 0;
 
 	switch (cmd & 0xffff) {
 	case _SGX_IOC_ENCLAVE_CREATE:
-		printf("%s: enclave_create: addr %lx flags %d\n", __func__, (uint64_t)addr, flags);
-		printf("%s: val %lx\n", __func__, *(uint64_t *)addr);
-		//uint64_t uaddr;
-		//uaddr = *(uint64_t *)addr;
+		//printf("%s: enclave_create: addr %lx flags %d\n", __func__, (uint64_t)addr, flags);
 
 		param = (struct sgx_enclave_create *)addr;
-		ret = copyin((void *)param->src, m_secs, sizeof(struct secs));
-		if (ret != 0) {
-			printf("Can't copy SECS\n");
-			return (-1);
-		}
-		printf("secs (%ld bytes) copied\n", sizeof(struct secs));
+		sgx_create(sc, param);
 
-		sgx_create(sc, m_secs);
-
-		//printf("m_secs.isv_svn %d\n", m_secs.isv_svn);
 		break;
 	case _SGX_IOC_ENCLAVE_ADD_PAGE:
 		//printf("%s: enclave_add_page\n", __func__);
@@ -843,17 +844,17 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 
 		break;
 	case _SGX_IOC_ENCLAVE_INIT:
+		//printf("%s: enclave_init\n", __func__);
 
-		printf("%s: enclave_init\n", __func__);
 		initp = (struct sgx_enclave_init *)addr;
-		return (sgx_init(sc, initp));
+		ret = sgx_init(sc, initp);
 
 		break;
 	default:
 		return -EINVAL;
 	}
 
-	return (0);
+	return (ret);
 }
 
 static int
@@ -866,53 +867,31 @@ sgx_mmap_single(struct cdev *cdev, vm_ooffset_t *offset, vm_size_t mapsize,
 	map = malloc(sizeof(*map), M_PRIVCMD, M_WAITOK | M_ZERO);
 
 	printf("%s: mapsize %ld\n", __func__, mapsize);
-	//printf("%s: offset %ld\n", __func__, *offset);
 
 	sc = cdev->si_drv1;
 
 	map->sc = sc;
-
-#if 0
-	struct epc_page *epc;
-	int i;
-
-	for (i = 0; i < mapsize; i += PAGE_SIZE) {
-		epc = get_epc_page(map->sc);
-		if (epc == NULL) {
-			printf("%s: failed to get epc page\n", __func__);
-			return (-1);
-		}
-
-		enclave_page = malloc(sizeof(struct sgx_enclave_page), M_SGX, M_WAITOK | M_ZERO);
-		enclave_page->epc_page = epc;
-		TAILQ_INSERT_TAIL(&enclave->pages, enclave_page, next);
-	}
-#endif
-
-	//map->mem = cdev_pager_allocate(map, OBJT_MGTDEVICE, &privcmd_pg_ops,
 	map->size = mapsize;
 	map->mem = cdev_pager_allocate(map, OBJT_DEVICE, &privcmd_pg_ops,
 	    mapsize, nprot, *offset, NULL);
 	if (map->mem == NULL) {
-		//xenmem_free(privcmd_dev, map->phys_res_id,
-		//    map->phys_res);
 		free(map, M_PRIVCMD);
 		return (ENOMEM);
 	}
 
 	*objp = map->mem;
 
-	//int error;
-
 	return (0);
 }
 
 static struct cdevsw sgx_cdevsw = {
 	.d_version =		D_VERSION,
+#if 0
 	.d_open =		sgx_open,
 	.d_close =		sgx_close,
 	.d_read =		sgx_read,
 	.d_write =		sgx_write,
+#endif
 	.d_ioctl =		sgx_ioctl,
 	.d_mmap_single =	sgx_mmap_single,
 	.d_name =		"Intel SGX",
