@@ -459,21 +459,18 @@ sgx_create(struct sgx_softc *sc, struct secs *m_secs)
 #define	GFP_NATIVE_MASK	(M_NOWAIT | M_WAITOK | M_USE_RESERVE | M_ZERO)
 
 static int
-enclave_get(struct sgx_softc *sc, uint64_t addr, struct sgx_enclave **encl)
+enclave_get(struct sgx_softc *sc, uint64_t addr,
+    struct sgx_enclave **encl)
 {
-	//struct sgx_enclave *enclave_tmp;
-	//struct sgx_enclave *enclave;
-
-	int error;
+	struct privcmd_map *priv_map;
+	struct proc *proc;
 	vm_map_t map;
 	vm_map_entry_t entry;
 	vm_object_t mem;
 	vm_pindex_t pindex;
 	vm_prot_t prot;
 	boolean_t wired;
-	struct privcmd_map *priv_map;
-	struct proc *proc;
-	//pmap_t pmap;
+	int error;
 
 	proc = curthread->td_proc;
 
@@ -485,24 +482,11 @@ enclave_get(struct sgx_softc *sc, uint64_t addr, struct sgx_enclave **encl)
 		printf("Can't find enclave\n");
 		return (-1);
 	}
+
 	priv_map = mem->handle;
 	*encl = priv_map->enclave;
+
 	return (0);
-
-#if 0
-	TAILQ_FOREACH_SAFE(enclave, &sc->enclaves, next, enclave_tmp) {
-		if ((addr >= enclave->base) && \
-		    (addr < (enclave->base + enclave->size))) {
-			printf("enclave found\n");
-			*encl = enclave;
-			return (0);
-		}
-	}
-#endif
-
-	printf("enclave not found\n");
-
-	return (-1);
 }
 
 static int
@@ -525,24 +509,27 @@ sgx_measure_page(struct epc_page *secs, struct epc_page *epc,
 	return (0);
 }
 
-static int validate_tcs(struct tcs *tcs)
+static int
+validate_tcs(struct tcs *tcs)
 {
 	int i;
 
-	/* If FLAGS is not zero, ECALL will fail. */
 	if ((tcs->flags != 0) ||
 	    (tcs->ossa & (PAGE_SIZE - 1)) ||
 	    (tcs->ofsbasgx & (PAGE_SIZE - 1)) ||
 	    (tcs->ogsbasgx & (PAGE_SIZE - 1)) ||
 	    ((tcs->fslimit & 0xFFF) != 0xFFF) ||
-	    ((tcs->gslimit & 0xFFF) != 0xFFF))
-		return -EINVAL;
+	    ((tcs->gslimit & 0xFFF) != 0xFFF)) {
+		return (-1);
+	}
 
-	for (i = 0; i < sizeof(tcs->reserved)/sizeof(uint64_t); i++)
-		if (tcs->reserved[i])
-			return -EINVAL;
+	for (i = 0; i < sizeof(tcs->reserved)/sizeof(uint64_t); i++) {
+		if (tcs->reserved[i]) {
+			return (-1);
+		}
+	}
 
-	return 0;
+	return (0);
 }
 
 /*
