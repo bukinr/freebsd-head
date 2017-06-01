@@ -292,58 +292,6 @@ static struct cdev_pager_ops privcmd_pg_ops = {
 	.cdev_pg_dtor = privcmd_pg_dtor,
 };
 
-#if 0
-static int
-sgx_open(struct cdev *dev, int flags __unused,
-    int fmt __unused, struct thread *td __unused)
-{
-	struct sgx_softc *sc;
-
-	sc = dev->si_drv1;
-
-	//printf("%s\n", __func__);
-
-	return (0);
-}
-
-static int
-sgx_close(struct cdev *dev, int flags __unused,
-    int fmt __unused, struct thread *td __unused)
-{
-	struct sgx_softc *sc;
-
-	sc = dev->si_drv1;
-
-	//printf("%s\n", __func__);
-
-	return (0);
-}
-
-static int
-sgx_read(struct cdev *dev, struct uio *uio, int ioflag)
-{
-	struct sgx_softc *sc;
-
-	sc = dev->si_drv1;
-
-	//printf("%s\n", __func__);
-
-	return (0);
-}
-
-static int
-sgx_write(struct cdev *dev, struct uio *uio, int ioflag)
-{
-	struct sgx_softc *sc;
-
-	sc = dev->si_drv1;
-
-	//printf("%s\n", __func__);
-
-	return (0);
-}
-#endif
-
 static int
 sgx_construct_page(struct sgx_softc *sc,
     struct sgx_enclave_page *enclave_page)
@@ -886,12 +834,6 @@ sgx_mmap_single(struct cdev *cdev, vm_ooffset_t *offset, vm_size_t mapsize,
 
 static struct cdevsw sgx_cdevsw = {
 	.d_version =		D_VERSION,
-#if 0
-	.d_open =		sgx_open,
-	.d_close =		sgx_close,
-	.d_read =		sgx_read,
-	.d_write =		sgx_write,
-#endif
 	.d_ioctl =		sgx_ioctl,
 	.d_mmap_single =	sgx_mmap_single,
 	.d_name =		"Intel SGX",
