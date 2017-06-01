@@ -561,6 +561,7 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	struct sgx_enclave *enclave;
 	vm_offset_t tmp_vaddr;
 	void *sigstruct;
+	int retry;
 	int ret;
 
 	printf("%s: addr %lx\n", __func__, initp->addr);
@@ -601,65 +602,15 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 		return (-1);
 	}
 
-#if 0
-	uint32_t *eaddr;
-	int i;
+	retry = 16;
 
-	eaddr = (void *)sigstruct;
-	for (i = 0; i < SIGSTRUCT_SIZE / 4; i++) {
-		printf("sigstruct[%d] == %x\n", i, eaddr[i]);
-	}
-
-	eaddr = (void *)einittoken;
-	for (i = 0; i < sizeof(einittoken_t) / 4; i++) {
-		printf("einittoken[%d] == %d\n", i, eaddr[i]);
-	}
-#endif
-
-	uint16_t isgx_isvsvnle_min;
-	isgx_isvsvnle_min = 0;
-	if (einittoken->body.valid && einittoken->isv_svn_le < isgx_isvsvnle_min) {
-		printf("ROLLBACK\n");
-	}
-
-	printf("%s: sigstruct addr %lx\n", __func__, (uint64_t)sigstruct);
-	printf("%s: einittoken addr %lx\n", __func__, (uint64_t)einittoken);
-	printf("%s: secs_epc_page addr %lx\n", __func__, (uint64_t)secs_epc_page->base);
-
-#if 0
-	//ATTRIBUTES  48  16
-	uint32_t *addr;
-
-	addr = (void *)secs_epc_page->base;
-	addr = m_secs;
-	for (i = 0; i < 32; i++) {
-		printf("secs base[%d] %x\n", i, addr[i]);
-	}
-#endif
-
-#if 0
-	secs_t *secs;
-	secs = m_secs;
-	ret = memcmp(&new_secs->attributes, &einittoken->body.attributes, sizeof(sgx_attributes_t));
-	printf("memcmp returned %d\n", ret);
-
-	printf("&new_secs->attributes flags %lx\n", new_secs->attributes.flags);
-	printf("&new_secs->attributes xfrm %lx\n", new_secs->attributes.xfrm);
-	printf("&einittoken->body.attributes flags %lx\n", einittoken->body.attributes.flags);
-	printf("&einittoken->body.attributes xfrm %lx\n", einittoken->body.attributes.xfrm);
-
-	printf("secs->attributes flags %lx\n", secs->attributes.flags);
-	printf("secs->attributes xfrm %lx\n", secs->attributes.xfrm);
-#endif
-
-	printf("%s: secs_epc_page->base %lx\n", __func__, secs_epc_page->base);
 	do {
 		ret = __einit(sigstruct, (void *)secs_epc_page->base, einittoken);
 		printf("__einit returned %d\n", ret);
-	} while (ret == SGX_UNMASKED_EVENT);
+	} while (ret == SGX_UNMASKED_EVENT && retry--);
 
 	if (ret != 0) {
-		printf("Failed to init enclave\n");
+		printf("Failed to init enclave: %d\n", ret);
 	}
 
 	switch (ret) {
@@ -676,9 +627,6 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 		printf("%s: err %d\n", __func__, ret);
 		break;
 	};
-
-	printf("CR0: %lx\n", rcr0());
-	printf("CR4: %lx\n", rcr4());
 
 	return (ret);
 }
