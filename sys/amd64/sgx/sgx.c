@@ -985,6 +985,8 @@ static int
 sgx_attach(device_t dev)
 {
 	struct sgx_softc *sc;
+	uint64_t epc_base;
+	uint64_t epc_size;
 
 	sc = device_get_softc(dev);
 	sc->dev = dev;
@@ -1005,9 +1007,6 @@ sgx_attach(device_t dev)
 	__asm __volatile("cpuid" : : : "eax", "ebx", "ecx", "edx");
 
 	printf("eax & 0xf == %x\n", cp[0] & 0xf);
-
-	uint64_t epc_base;
-	uint64_t epc_size;
 
 	epc_base = ((uint64_t)(cp[1] & 0xfffff) << 32) + (cp[0] & 0xfffff000);
 	epc_size = ((uint64_t)(cp[3] & 0xfffff) << 32) + (cp[2] & 0xfffff000);
