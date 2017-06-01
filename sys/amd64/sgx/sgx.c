@@ -73,14 +73,10 @@ __FBSDID("$FreeBSD$");
 #define	_SGX_IOC_ENCLAVE_ADD_PAGE	0xa401
 #define	_SGX_IOC_ENCLAVE_INIT		0xa402
 
-#ifdef __amd64__
-#define	LOW_MEM_LIMIT	0x100000000ul
-#else
-#define	LOW_MEM_LIMIT	0
-#endif
+#define	SGX_CPUID			0x12
+#define	SGX_PAGE_SIZE			4096
 
 MALLOC_DEFINE(M_SGX, "sgx", "SGX driver");
-MALLOC_DEFINE(M_PRIVCMD, "privcmd_dev", "SGX privcmd user-space device");
 
 struct epc_page {
 	uint64_t base;
@@ -121,9 +117,6 @@ struct sgx_enclave {
 	TAILQ_ENTRY(sgx_enclave)	next;
 	TAILQ_HEAD(, sgx_enclave_page)	pages;
 };
-
-#define	SGX_CPUID		0x12
-#define	SGX_PAGE_SIZE		4096
 
 struct sgx_softc {
 	struct cdev		*sgx_cdev;
@@ -395,8 +388,6 @@ sgx_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	return (0);
 }
 
-#define	GFP_NATIVE_MASK	(M_NOWAIT | M_WAITOK | M_USE_RESERVE | M_ZERO)
-
 static int
 enclave_get(struct sgx_softc *sc, uint64_t addr,
     struct sgx_enclave **encl)
@@ -471,15 +462,6 @@ validate_tcs(struct tcs *tcs)
 	return (0);
 }
 
-/*
- * struct sgx_enclave_add_page {
- *       uint64_t        addr;
- *       uint64_t        src;
- *       uint64_t        secinfo;
- *       uint16_t        mrmask;
- * } __attribute__((packed));
- */
-
 static int
 sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 {
@@ -523,7 +505,7 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	flags = 0;
 
 	tmp_vaddr = kmem_alloc_contig(kmem_arena, size,
-	    flags & GFP_NATIVE_MASK, 0, BUS_SPACE_MAXADDR_32BIT,
+	    flags, 0, BUS_SPACE_MAXADDR_32BIT,
 	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
 
 	ret = copyin((void *)addp->src, (void *)tmp_vaddr, PAGE_SIZE);
@@ -595,14 +577,6 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 
 	return (0);
 }
-
-/*
- * struct sgx_enclave_init {
- *       uint64_t        addr;
- *       uint64_t        sigstruct;
- *       uint64_t        einittoken;
- * } __attribute__((packed));
- */
 
 static int
 sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
@@ -786,7 +760,7 @@ sgx_mmap_single(struct cdev *cdev, vm_ooffset_t *offset, vm_size_t mapsize,
 	struct privcmd_map *map;
 	struct sgx_softc *sc;
 
-	map = malloc(sizeof(*map), M_PRIVCMD, M_WAITOK | M_ZERO);
+	map = malloc(sizeof(*map), M_SGX, M_WAITOK | M_ZERO);
 
 	printf("%s: mapsize %ld\n", __func__, mapsize);
 
@@ -797,7 +771,7 @@ sgx_mmap_single(struct cdev *cdev, vm_ooffset_t *offset, vm_size_t mapsize,
 	map->mem = cdev_pager_allocate(map, OBJT_DEVICE, &privcmd_pg_ops,
 	    mapsize, nprot, *offset, NULL);
 	if (map->mem == NULL) {
-		free(map, M_PRIVCMD);
+		free(map, M_SGX);
 		return (ENOMEM);
 	}
 
