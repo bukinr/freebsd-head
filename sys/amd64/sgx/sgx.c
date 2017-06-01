@@ -34,24 +34,15 @@ __FBSDID("$FreeBSD$");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/capsicum.h>
-#include <sys/uio.h>
 #include <sys/bus.h>
 #include <sys/malloc.h>
 #include <sys/kernel.h>
 #include <sys/lock.h>
 #include <sys/mutex.h>
 #include <sys/rwlock.h>
-#include <sys/selinfo.h>
-#include <sys/poll.h>
 #include <sys/conf.h>
-#include <sys/fcntl.h>
-#include <sys/ioccom.h>
-#include <sys/rman.h>
-#include <sys/tree.h>
 #include <sys/module.h>
 #include <sys/proc.h>
-#include <sys/bitset.h>
 
 #include <vm/vm.h>
 #include <vm/vm_param.h>
@@ -183,23 +174,19 @@ privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
 	vm_memattr_t memattr;
 	vm_pindex_t pidx;
 	vm_paddr_t paddr;
+	struct sgx_enclave_page *enclave_page_tmp;
+	struct sgx_enclave_page *enclave_page;
+	struct epc_page *epc;
+	int found;
 
 	map = object->handle;
 	sc = map->sc;
 	enclave = map->enclave;
 
-	printf("%s: offset 0x%lx\n", __func__, offset);
-
-	//printf("%lx %lx %lx\n", SGX_IOC_ENCLAVE_CREATE, SGX_IOC_ENCLAVE_ADD_PAGE, SGX_IOC_ENCLAVE_INIT);
+	//printf("%s: offset 0x%lx\n", __func__, offset);
 
 	memattr = object->memattr;
 	pidx = OFF_TO_IDX(offset);
-
-	//paddr = map->phys_base_addr + offset;
-
-	struct sgx_enclave_page *enclave_page_tmp;
-	struct sgx_enclave_page *enclave_page;
-	int found;
 
 	found = 0;
 	TAILQ_FOREACH_SAFE(enclave_page, &enclave->pages, next, enclave_page_tmp) {
@@ -215,7 +202,6 @@ privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
 		return (-1);
 	}
 
-	struct epc_page *epc;
 	epc = enclave_page->epc_page;
 	paddr = epc->phys;
 
@@ -225,7 +211,6 @@ privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
 		page = *mres;
 		vm_page_updatefake(page, paddr, memattr);
 	} else {
-
 		VM_OBJECT_WUNLOCK(object);
 		page = vm_page_getfake(paddr, memattr);
 		VM_OBJECT_WLOCK(object);
@@ -235,7 +220,6 @@ privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
 		*mres = page;
 		vm_page_insert(page, object, pidx);
 	}
-
 	page->valid = VM_PAGE_BITS_ALL;
 
 	return (VM_PAGER_OK);
@@ -286,16 +270,14 @@ sgx_construct_page(struct sgx_softc *sc,
 
 	epc = get_epc_page(sc);
 	if (epc == NULL) {
-		printf("failed to get epc page\n");
+		printf("No free epc pages available\n");
 		return (-1);
 	}
 
 	va_page = malloc(sizeof(struct va_page), M_SGX, M_WAITOK | M_ZERO);
 	va_page->epc_page = epc;
 
-	printf("EPA call\n");
 	__epa((void *)epc->base);
-	printf("EPA call done\n");
 
 	enclave_page->va_page = va_page;
 
@@ -361,11 +343,15 @@ sgx_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 
 	epc = get_epc_page(sc);
 	if (epc == NULL) {
-		printf("failed to get epc page\n");
+		printf("%s: failed to get epc page\n", __func__);
 		return (-1);
 	}
 
-	sgx_construct_page(sc, &enclave->secs_page);
+	ret = sgx_construct_page(sc, &enclave->secs_page);
+	if (ret != 0) {
+		printf("can't construct page\n");
+		return (-1);
+	}
 
 	secs_page = &enclave->secs_page;
 	secs_page->epc_page = epc;
@@ -483,18 +469,18 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	ret = copyin((void *)addp->src, (void *)tmp_vaddr, PAGE_SIZE);
 	if (ret != 0) {
 		printf("%s: Failed to copy page\n", __func__);
+		kmem_free(kmem_arena, tmp_vaddr, PAGE_SIZE);
 		return (-1);
 	}
 
 	page_type = (secinfo.flags >> 8) & 0xff;
-	printf("page_type %ld\n", page_type);
+	//printf("page_type %ld\n", page_type);
+
+	struct tcs *t;
 	if (page_type == PT_TCS) {
-		printf("TCS page\n");
-		struct tcs *t;
+
 		t = (struct tcs *)tmp_vaddr;
-		if (validate_tcs(t) == 0) {
-			printf("validated\n");
-		} else {
+		if (validate_tcs(t) != 0) {
 			printf("TCS validation failed\n");
 			return (-1);
 		}
@@ -514,13 +500,22 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	}
 
 	enclave_page = malloc(sizeof(struct sgx_enclave_page), M_SGX, M_WAITOK | M_ZERO);
+	if (enclave_page == NULL) {
+		printf("Can't allocate enclave page\n");
+		return (-1);
+	}
 
 	epc = get_epc_page(sc);
 	if (epc == NULL) {
-		printf("failed to get epc page\n");
+		printf("%s: failed to get epc page\n", __func__);
 		return (-1);
 	}
-	sgx_construct_page(sc, enclave_page);
+
+	ret = sgx_construct_page(sc, enclave_page);
+	if (ret != 0) {
+		printf("can't construct page\n");
+		return (-1);
+	}
 	enclave_page->epc_page = epc;
 	enclave_page->addr = addp->addr;
 
@@ -638,7 +633,7 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 
 	sc = dev->si_drv1;
 
-	printf("%s: %ld\n", __func__, cmd);
+	//printf("%s: %ld\n", __func__, cmd);
 
 	ret = 0;
 
@@ -647,14 +642,14 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 		//printf("%s: enclave_create: addr %lx flags %d\n", __func__, (uint64_t)addr, flags);
 
 		param = (struct sgx_enclave_create *)addr;
-		sgx_create(sc, param);
+		ret = sgx_create(sc, param);
 
 		break;
 	case _SGX_IOC_ENCLAVE_ADD_PAGE:
 		//printf("%s: enclave_add_page\n", __func__);
 
 		addp = (struct sgx_enclave_add_page *)addr;
-		sgx_add_page(sc, addp);
+		ret = sgx_add_page(sc, addp);
 
 		break;
 	case _SGX_IOC_ENCLAVE_INIT:
