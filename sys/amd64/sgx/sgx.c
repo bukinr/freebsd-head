@@ -233,37 +233,10 @@ privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
 		printf("Error: page not found\n");
 		return (-1);
 	}
+
 	struct epc_page *epc;
 	epc = enclave_page->epc_page;
 	paddr = epc->phys;
-
-#if 0
-	struct sgx_enclave *enclave_tmp;
-	struct sgx_enclave *enclave;
-	TAILQ_FOREACH_SAFE(enclave, &sc->enclaves, next, enclave_tmp) {
-		TAILQ_FOREACH_SAFE(enclave_page, &enclave->pages, next, enclave_page_tmp) {
-			//enclave_page->epc_page
-#if 0
-			if ((addr >= enclave->base) && \
-			    (addr < (enclave->base + enclave->size))) {
-				printf("enclave found\n");
-				*encl = enclave;
-				return (0);
-			}
-#endif
-		}
-	}
-#endif
-
-#if 0
-	struct epc_page *epc;
-	epc = get_epc_page(map->sc);
-	if (epc == NULL) {
-		printf("%s: failed to get epc page\n", __func__);
-		return (-1);
-	}
-	paddr = epc->phys;
-#endif
 
 	if (((*mres)->flags & PG_FICTITIOUS) != 0) {
 		printf("fake page\n");
@@ -283,6 +256,7 @@ privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
 	}
 
 	page->valid = VM_PAGE_BITS_ALL;
+
 	return (VM_PAGER_OK);
 }
 
