@@ -355,7 +355,9 @@ sgx_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	pginfo.secinfo = (uint64_t)&secinfo;
 	pginfo.secs = 0;
 
+#if 0
 	printf("%s: secs->base 0x%lx, secs->size 0x%lx\n", __func__, m_secs->base, m_secs->size);
+#endif
 
 	epc = get_epc_page(sc);
 	if (epc == NULL) {
@@ -447,11 +449,10 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	struct epc_page *epc;
 	struct page_info pginfo;
 	struct sgx_secinfo secinfo;
-	uint32_t size;
-	uint32_t flags;
 	vm_offset_t tmp_vaddr;
 	uint64_t page_type;
-
+	struct proc *proc;
+	pmap_t pmap;
 	int ret;
 
 	ret = enclave_get(sc, addp->addr, &enclave);
@@ -460,33 +461,28 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 		return (-1);
 	}
 
-	struct proc *proc;
-	pmap_t pmap;
 	proc = curthread->td_proc;
 	pmap = vm_map_pmap(&proc->p_vmspace->vm_map);
-	printf("addp->addr phys %lx\n", pmap_extract(pmap, addp->addr));
 
+	//printf("addp->addr phys %lx\n", pmap_extract(pmap, addp->addr));
 	//printf("%s\n", __func__);
-	printf("%s: add page addr %lx src %lx secinfo %lx mrmask %x\n", __func__,
-	    addp->addr, addp->src, addp->secinfo, addp->mrmask);
+	//printf("%s: add page addr %lx src %lx secinfo %lx mrmask %x\n", __func__,
+	//    addp->addr, addp->src, addp->secinfo, addp->mrmask);
 
 	memset(&secinfo, 0, sizeof(struct sgx_secinfo));
 	ret = copyin((void *)addp->secinfo, &secinfo, sizeof(struct sgx_secinfo));
 	if (ret != 0) {
-		printf("%s: failed to copy secinfo\n", __func__);
+		printf("%s: Failed to copy secinfo\n", __func__);
 		return (-1);
 	}
 
-	size = PAGE_SIZE;
-	flags = 0;
-
-	tmp_vaddr = kmem_alloc_contig(kmem_arena, size,
-	    flags, 0, BUS_SPACE_MAXADDR_32BIT,
+	tmp_vaddr = kmem_alloc_contig(kmem_arena, PAGE_SIZE,
+	    0/* flags */, 0, BUS_SPACE_MAXADDR_32BIT,
 	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
 
 	ret = copyin((void *)addp->src, (void *)tmp_vaddr, PAGE_SIZE);
 	if (ret != 0) {
-		printf("%s: failed to copy page\n", __func__);
+		printf("%s: Failed to copy page\n", __func__);
 		return (-1);
 	}
 
@@ -502,6 +498,7 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 			printf("TCS validation failed\n");
 			return (-1);
 		}
+#if 0
 		printf("t->state %lx\n", t->state);
 		printf("t->flags %lx\n", t->flags);
 		printf("t->ossa %lx\n", t->ossa);
@@ -513,6 +510,7 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 		printf("t->ogsbasgx %lx\n", t->ogsbasgx);
 		printf("t->fslimit %x\n", t->fslimit);
 		printf("t->gslimit %x\n", t->gslimit);
+#endif
 	}
 
 	enclave_page = malloc(sizeof(struct sgx_enclave_page), M_SGX, M_WAITOK | M_ZERO);
@@ -534,19 +532,23 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	pginfo.secinfo = (uint64_t)&secinfo;
 	pginfo.secs = (uint64_t)secs_epc_page->base;
 
+#if 0
 	printf("pginfo %lx epc %lx\n", (uint64_t)&pginfo, (uint64_t)epc->base);
-
 	printf("%s: __eadd\n", __func__);
+#endif
+
 	__eadd(&pginfo, (void *)epc->base);
 
+#if 0
 	printf("%s: sgx_measure_page\n", __func__);
+#endif
 	ret = sgx_measure_page(enclave->secs_page.epc_page, epc, addp->mrmask);
 	if (ret != 0) {
 		printf("sgx_measure_page returned %d\n", ret);
 		return (-1);
 	}
 
-	kmem_free(kmem_arena, tmp_vaddr, size);
+	kmem_free(kmem_arena, tmp_vaddr, PAGE_SIZE);
 
 	TAILQ_INSERT_TAIL(&enclave->pages, enclave_page, next);
 
@@ -574,36 +576,29 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 		return (-1);
 	}
 
-	printf("%s: enclave_id %lx\n", __func__, initp->addr);
-
 	secs_epc_page = enclave->secs_page.epc_page;
 
 	tmp_vaddr = kmem_alloc_contig(kmem_arena, PAGE_SIZE,
-	    0/*flags*/, 0, BUS_SPACE_MAXADDR_32BIT,
+	    0/* flags */, 0, BUS_SPACE_MAXADDR_32BIT,
 	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
-
 	sigstruct = (void *)tmp_vaddr;
 	einittoken = (einittoken_t *)((uint64_t)sigstruct + PAGE_SIZE / 2);
-
-	printf("%s: initp->sigstruct addr %lx\n", __func__, initp->sigstruct);
-	printf("%s: initp->einittoken addr %lx\n", __func__, initp->einittoken);
 
 	ret = copyin((void *)initp->sigstruct, sigstruct,
 	    SIGSTRUCT_SIZE);
 	if (ret != 0) {
-		printf("%s: failed to copy SIGSTRUCT page\n", __func__);
+		printf("%s: Failed to copy SIGSTRUCT page\n", __func__);
 		return (-1);
 	}
 
 	ret = copyin((void *)initp->einittoken, einittoken,
 	    EINITTOKEN_SIZE);
 	if (ret != 0) {
-		printf("%s: failed to copy EINITTOKEN page\n", __func__);
+		printf("%s: Failed to copy EINITTOKEN page\n", __func__);
 		return (-1);
 	}
 
 	retry = 16;
-
 	do {
 		ret = __einit(sigstruct, (void *)secs_epc_page->base, einittoken);
 		printf("__einit returned %d\n", ret);
@@ -721,11 +716,10 @@ sgx_get_epc_area(struct sgx_softc *sc)
 
 	cpuid_count(SGX_CPUID, 0x2, cp);
 
-	//__asm __volatile("cpuid" : : : "eax", "ebx", "ecx", "edx");
-	//printf("eax & 0xf == %x\n", cp[0] & 0xf);
-
-	epc_base = ((uint64_t)(cp[1] & 0xfffff) << 32) + (cp[0] & 0xfffff000);
-	epc_size = ((uint64_t)(cp[3] & 0xfffff) << 32) + (cp[2] & 0xfffff000);
+	epc_base = ((uint64_t)(cp[1] & 0xfffff) << 32) + \
+	    (cp[0] & 0xfffff000);
+	epc_size = ((uint64_t)(cp[3] & 0xfffff) << 32) + \
+	    (cp[2] & 0xfffff000);
 
 	printf("%s: epc_base %lx size %lx\n", __func__, epc_base, epc_size);
 
