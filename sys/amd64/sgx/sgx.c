@@ -128,18 +128,6 @@ struct sgx_softc {
 	TAILQ_HEAD(, sgx_enclave)	enclaves;
 };
 
-static int
-dump_pginfo(struct page_info *pginfo)
-{
-
-	printf("pginfo->linaddr = %lx\n", pginfo->linaddr);
-	printf("pginfo->srcpge = %lx\n", pginfo->srcpge);
-	printf("pginfo->secinfo = %lx\n", pginfo->secinfo);
-	printf("pginfo->secs = %lx\n", pginfo->secs);
-
-	return (0);
-}
-
 static struct epc_page *
 get_epc_page(struct sgx_softc *sc)
 {
@@ -305,8 +293,6 @@ sgx_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 		printf("Can't copy SECS\n");
 		return (-1);
 	}
-	printf("secs (%ld bytes) copied\n", sizeof(struct secs));
-
 
 	enclave = malloc(sizeof(struct sgx_enclave), M_SGX, M_WAITOK | M_ZERO);
 	TAILQ_INIT(&enclave->pages);
@@ -350,23 +336,11 @@ sgx_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	priv_map->enclave = enclave;
 	priv_map->base = (entry->start - entry->offset);
 
-#if 0
-	struct secinfo_flags *flags;
-
-	flags = &secinfo.flags;
-	flags->page_type = PT_SECS;
-	flags->r = 1;
-	flags->w = 1;
-	flags->x = 0;
-#endif
-
 	memset(&pginfo, 0, sizeof(struct page_info));
 	pginfo.linaddr = 0;
 	pginfo.srcpge = (uint64_t)m_secs;
 	pginfo.secinfo = (uint64_t)&secinfo;
 	pginfo.secs = 0;
-
-	dump_pginfo(&pginfo);
 
 	printf("%s: secs->base 0x%lx, secs->size 0x%lx\n", __func__, m_secs->base, m_secs->size);
 
@@ -558,7 +532,6 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	pginfo.secinfo = (uint64_t)&secinfo;
 	pginfo.secs = (uint64_t)secs_epc_page->base;
 
-	dump_pginfo(&pginfo);
 	printf("pginfo %lx epc %lx\n", (uint64_t)&pginfo, (uint64_t)epc->base);
 
 	printf("%s: __eadd\n", __func__);
