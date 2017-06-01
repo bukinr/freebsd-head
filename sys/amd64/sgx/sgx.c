@@ -869,20 +869,6 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 	return (0);
 }
 
-static struct resource *
-sgx_alloc(device_t dev, int *res_id, size_t size)
-{
-	struct resource *res;
-
-	res = bus_alloc_resource(dev, SYS_RES_MEMORY, res_id, LOW_MEM_LIMIT,
-		~0, size, RF_ACTIVE);
-	if (res == NULL) {
-		return (NULL);
-	}
-
-	return (res);
-}
-
 static int
 sgx_mmap_single(struct cdev *cdev, vm_ooffset_t *offset, vm_size_t mapsize,
     struct vm_object **objp, int nprot)
@@ -898,17 +884,6 @@ sgx_mmap_single(struct cdev *cdev, vm_ooffset_t *offset, vm_size_t mapsize,
 	sc = cdev->si_drv1;
 
 	map->sc = sc;
-#if 0
-	map->phys_res_id = 0;
-	map->phys_res = sgx_alloc(sc->dev, &map->phys_res_id, mapsize);
-	if (map->phys_res == NULL) {
-		printf("Can't alloc phys mem\n");
-		return (EINVAL);
-	}
-
-	map->phys_base_addr = rman_get_start(map->phys_res);
-	printf("%s: phys addr 0x%lx\n", __func__, (uint64_t)map->phys_base_addr);
-#endif
 
 #if 0
 	struct epc_page *epc;
