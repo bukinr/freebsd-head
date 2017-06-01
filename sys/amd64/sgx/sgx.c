@@ -85,11 +85,6 @@ struct privcmd_map {
 	vm_object_t mem;
 	uint64_t base;
 	vm_size_t size;
-	struct resource *phys_res;
-	int phys_res_id;
-	vm_paddr_t phys_base_addr;
-	boolean_t mapped;
-	BITSET_DEFINE_VAR() *err;
 	struct sgx_enclave *enclave;
 };
 
