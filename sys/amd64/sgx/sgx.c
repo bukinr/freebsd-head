@@ -956,6 +956,41 @@ static struct cdevsw sgx_cdevsw = {
 	.d_name =		"Intel SGX",
 };
 
+static int
+sgx_get_epc_area(struct sgx_softc *sc)
+{
+	vm_offset_t epc_base_vaddr;
+	uint64_t epc_base;
+	uint64_t epc_size;
+	u_int cp[4];
+	int i;
+
+	cpuid_count(SGX_CPUID, 0x2, cp);
+
+	//__asm __volatile("cpuid" : : : "eax", "ebx", "ecx", "edx");
+	//printf("eax & 0xf == %x\n", cp[0] & 0xf);
+
+	epc_base = ((uint64_t)(cp[1] & 0xfffff) << 32) + (cp[0] & 0xfffff000);
+	epc_size = ((uint64_t)(cp[3] & 0xfffff) << 32) + (cp[2] & 0xfffff000);
+
+	printf("%s: epc_base %lx size %lx\n", __func__, epc_base, epc_size);
+
+	epc_base_vaddr = (vm_offset_t)pmap_mapdev(epc_base, epc_size);
+
+	sc->npages = epc_size / SGX_PAGE_SIZE;
+
+	sc->epc_pages = malloc(sizeof(struct epc_page) * sc->npages,
+	    M_DEVBUF, M_WAITOK | M_ZERO);
+
+	for (i = 0; i < sc->npages; i++) {
+		sc->epc_pages[i].base = epc_base_vaddr + SGX_PAGE_SIZE * i;
+		sc->epc_pages[i].phys = epc_base + SGX_PAGE_SIZE * i;
+		sc->epc_pages[i].used = 0;
+	}
+
+	return (0);
+}
+
 static void
 sgx_identify(driver_t *driver, device_t parent)
 {
@@ -985,50 +1020,28 @@ static int
 sgx_attach(device_t dev)
 {
 	struct sgx_softc *sc;
-	uint64_t epc_base;
-	uint64_t epc_size;
+	int ret;
 
 	sc = device_get_softc(dev);
 	sc->dev = dev;
 
+	ret = sgx_get_epc_area(sc);
+	if (ret != 0) {
+		printf("Failed to get EPC area\n");
+		return (ENXIO);
+	}
+
 	sc->sgx_cdev = make_dev(&sgx_cdevsw, 0, UID_ROOT, GID_WHEEL,
 	    0600, "isgx");
-
 	if (sc->sgx_cdev == NULL) {
 		device_printf(dev, "Failed to create character device.\n");
 		return (ENXIO);
 	}
-
 	sc->sgx_cdev->si_drv1 = sc;
-
-	u_int cp[4];
-	cpuid_count(SGX_CPUID, 0x2, cp);
-
-	__asm __volatile("cpuid" : : : "eax", "ebx", "ecx", "edx");
-
-	printf("eax & 0xf == %x\n", cp[0] & 0xf);
-
-	epc_base = ((uint64_t)(cp[1] & 0xfffff) << 32) + (cp[0] & 0xfffff000);
-	epc_size = ((uint64_t)(cp[3] & 0xfffff) << 32) + (cp[2] & 0xfffff000);
-
-	printf("%s: epc_base %lx size %lx\n", __func__, epc_base, epc_size);
-
-	vm_offset_t epc_base_vaddr;
-	int i;
-
-	epc_base_vaddr = (vm_offset_t)pmap_mapdev(epc_base, epc_size);
-	sc->npages = epc_size / SGX_PAGE_SIZE;
-	sc->epc_pages = malloc(sizeof(struct epc_page) * sc->npages,
-	    M_DEVBUF, M_WAITOK | M_ZERO);
-
-	for (i = 0; i < sc->npages; i++) {
-		sc->epc_pages[i].base = epc_base_vaddr + SGX_PAGE_SIZE * i;
-		sc->epc_pages[i].phys = epc_base + SGX_PAGE_SIZE * i;
-		sc->epc_pages[i].used = 0;
-	}
 
 	TAILQ_INIT(&sc->enclaves);
 
+#if 0
 	unsigned regs[4];
 	do_cpuid(1, regs);
 	if (regs[2] & CPUID2_OSXSAVE) {
@@ -1050,9 +1063,9 @@ sgx_attach(device_t dev)
 	}
 
 	printf("RXCR0: %lx\n", rxcr(0));
-
 	printf("CR0: %lx\n", rcr0());
 	printf("CR4: %lx\n", rcr4());
+#endif
 
 	return (0);
 }
