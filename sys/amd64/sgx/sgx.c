@@ -248,6 +248,36 @@ static struct cdev_pager_ops privcmd_pg_ops = {
 };
 
 static int
+sgx_mem_find(struct sgx_softc *sc, uint64_t addr,
+    vm_map_entry_t *entry0, vm_object_t *mem0)
+{
+	struct proc *proc;
+	vm_map_t map;
+	vm_map_entry_t entry;
+	vm_object_t mem;
+	vm_pindex_t pindex;
+	vm_prot_t prot;
+	boolean_t wired;
+	int error;
+
+	proc = curthread->td_proc;
+
+	map = &proc->p_vmspace->vm_map;
+	error = vm_map_lookup(&map, addr, VM_PROT_NONE, &entry,
+	    &mem, &pindex, &prot, &wired);
+	vm_map_lookup_done(map, entry);
+	if (error != 0) {
+		printf("Can't find enclave\n");
+		return (-1);
+	}
+
+	*mem0 = mem;
+	*entry0 = entry;
+
+	return (0);
+}
+
+static int
 sgx_construct_page(struct sgx_softc *sc,
     struct sgx_enclave_page *enclave_page)
 {
@@ -303,33 +333,16 @@ sgx_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 
 	//printf("enclave->base phys %lx\n", vtophys(enclave->base));
 
-	struct proc *proc;
-	pmap_t pmap;
-	proc = curthread->td_proc;
-	pmap = vm_map_pmap(&proc->p_vmspace->vm_map);
-	printf("enclave->base phys %lx\n", pmap_extract(pmap, enclave->base));
-
-	int error;
-	vm_map_t map;
+	struct privcmd_map *priv_map;
 	vm_map_entry_t entry;
 	vm_object_t mem;
-	vm_pindex_t pindex;
-	vm_prot_t prot;
-	boolean_t wired;
-	struct privcmd_map *priv_map;
 
-	map = &proc->p_vmspace->vm_map;
-	error = vm_map_lookup(&map, m_secs->base, VM_PROT_NONE, &entry,
-	    &mem, &pindex, &prot, &wired);
-	vm_map_lookup_done(map, entry);
-	if (error != 0) {
+	ret = sgx_mem_find(sc, m_secs->base, &entry, &mem);
+	if (ret != 0) {
 		printf("Can't find vm_map\n");
 		return (-1);
 	}
-	printf("%s: vm_map_lookup: entry->start 0x%lx, entry->end 0x%lx, entry->offset 0x%lx pindex 0x%lx\n",
-	    __func__, entry->start, entry->end, entry->offset, (uint64_t)pindex);
 
-	printf("vm_map->root->start %lx\n", map->root->start);
 	priv_map = mem->handle;
 	printf("vm_map found, size 0x%lx\n", priv_map->size);
 	enclave->map = priv_map;
@@ -367,23 +380,12 @@ enclave_get(struct sgx_softc *sc, uint64_t addr,
     struct sgx_enclave **encl)
 {
 	struct privcmd_map *priv_map;
-	struct proc *proc;
-	vm_map_t map;
 	vm_map_entry_t entry;
 	vm_object_t mem;
-	vm_pindex_t pindex;
-	vm_prot_t prot;
-	boolean_t wired;
-	int error;
+	int ret;
 
-	proc = curthread->td_proc;
-
-	map = &proc->p_vmspace->vm_map;
-	error = vm_map_lookup(&map, addr, VM_PROT_NONE, &entry,
-	    &mem, &pindex, &prot, &wired);
-	vm_map_lookup_done(map, entry);
-	if (error != 0) {
-		printf("Can't find enclave\n");
+	ret = sgx_mem_find(sc, addr, &entry, &mem);
+	if (ret != 0) {
 		return (-1);
 	}
 
