@@ -148,14 +148,25 @@ static void
 privcmd_pg_dtor(void *handle)
 {
 	struct privcmd_map *map;
-	struct epc_page *secs_epc_page;
+	//struct epc_page *secs_epc_page;
 	struct sgx_enclave *enclave;
 
+	if (handle == NULL) {
+		printf("%s: map not found\n", __func__);
+		return;
+	}
+
 	map = handle;
+
+	if (map->enclave == NULL) {
+		printf("%s: enclave not found\n", __func__);
+		return;
+	}
+
 	enclave = map->enclave;
 
-	secs_epc_page = enclave->secs_page.epc_page;
-	printf("%s: enclave->secs_page.epc_page %lx\n", __func__, (uint64_t)secs_epc_page->base);
+	//secs_epc_page = enclave->secs_page.epc_page;
+	//printf("%s: enclave->secs_page.epc_page %lx\n", __func__, (uint64_t)secs_epc_page->base);
 }
 
 static int
@@ -658,6 +669,10 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 		return -EINVAL;
 	}
 
+	if (ret == -1) {
+		ret = EINVAL;
+	}
+	printf("%s: %ld ret %d\n", __func__, cmd, ret);
 	return (ret);
 }
 
