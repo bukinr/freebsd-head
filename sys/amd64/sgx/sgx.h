@@ -34,6 +34,36 @@
 #ifndef _X86_SGX_SGX_H_
 #define _X86_SGX_SGX_H_
 
+#define	SGX_MAGIC	0xA4
+
+#define SGX_IOC_ENCLAVE_CREATE \
+	(_IOW(SGX_MAGIC, 0x00, struct sgx_enclave_create) & 0xffff)
+#define SGX_IOC_ENCLAVE_ADD_PAGE \
+	(_IOW(SGX_MAGIC, 0x01, struct sgx_enclave_add_page) & 0xffff)
+#define SGX_IOC_ENCLAVE_INIT \
+	(_IOW(SGX_MAGIC, 0x02, struct sgx_enclave_init) & 0xffff)
+
+/* Error codes */
+#define	SGX_SUCCESS		0
+#define	SGX_UNMASKED_EVENT	128
+
+struct sgx_enclave_create {
+	uint64_t	src;
+};
+
+struct sgx_enclave_add_page {
+	uint64_t	addr;
+	uint64_t	src;
+	uint64_t	secinfo;
+	uint16_t	mrmask;
+};
+
+struct sgx_enclave_init {
+	uint64_t	addr;
+	uint64_t	sigstruct;
+	uint64_t	einittoken;
+};
+
 enum {
 	ECREATE	= 0x0,
 	EADD	= 0x1,
@@ -177,5 +207,58 @@ __eremove(void *epc)
 
 	return (tmp.oeax);
 }
+
+struct secinfo {
+	uint64_t flags;
+	uint64_t reserved[7];
+} __attribute__((aligned(128)));
+
+/*
+ * 2.7 SGX ENCLAVE CONTROL STRUCTURE (SECS)
+ * The SECS data structure requires 4K-Bytes alignment.
+ */
+
+struct secs_attr {
+	uint8_t		reserved1: 1;
+	uint8_t		debug: 1;
+	uint8_t		mode64bit: 1;
+	uint8_t		reserved2: 1;
+	uint8_t		provisionkey: 1;
+	uint8_t		einittokenkey: 1;
+	uint8_t		reserved3: 2;
+	uint8_t		reserved4[7];
+	uint64_t	xfrm;			/* X-Feature Request Mask */
+};
+
+struct secs {
+	uint64_t	size;
+	uint64_t	base;
+	uint32_t	ssa_frame_size;
+	uint32_t	misc_select;
+	uint8_t		reserved1[24];
+	struct secs_attr attributes;
+	uint8_t		mr_enclave[32];
+	uint8_t		reserved2[32];
+	uint8_t		mr_signer[32];
+	uint8_t		reserved3[96];
+	uint16_t	isv_prod_id;
+	uint16_t	isv_svn;
+	uint8_t		reserved4[3836];
+};
+
+struct tcs {
+	uint64_t	state;
+	uint64_t	flags;
+	uint64_t	ossa;
+	uint32_t	cssa;
+	uint32_t	nssa;
+	uint64_t	oentry;
+	uint64_t	aep;
+	uint64_t	ofsbasgx;
+	uint64_t	ogsbasgx;
+	uint32_t	fslimit;
+	uint32_t	gslimit;
+	uint64_t	reserved[503];
+};
 
 #endif /* !_X86_SGX_SGX_H_ */

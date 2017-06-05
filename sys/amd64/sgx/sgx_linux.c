@@ -49,9 +49,11 @@ __FBSDID("$FreeBSD$");
 #endif
 #include <compat/linux/linux_ioctl.h>
 
-/* There are three ioctls only. */
-#define SGX_LINUX_IOCTL_MIN  0xa400
-#define SGX_LINUX_IOCTL_MAX  0xa402
+#include <amd64/sgx/sgx.h>
+#include <sys/ioccom.h>
+
+#define	SGX_LINUX_IOCTL_MIN	SGX_IOC_ENCLAVE_CREATE
+#define	SGX_LINUX_IOCTL_MAX	SGX_IOC_ENCLAVE_INIT
 
 static int
 sgx_linux_ioctl(struct thread *td, struct linux_ioctl_args *args)

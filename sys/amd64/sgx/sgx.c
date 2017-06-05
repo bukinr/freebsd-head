@@ -58,7 +58,6 @@ __FBSDID("$FreeBSD$");
 #include <machine/bus.h>
 
 #include "sgx.h"
-#include "sgx_user.h"
 
 #define	SGX_CPUID			0x12
 #define	SGX_PAGE_SIZE			4096
@@ -330,7 +329,7 @@ sgx_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 {
 	struct sgx_enclave_page *secs_page;
 	struct page_info pginfo;
-	struct sgx_secinfo secinfo;
+	struct secinfo secinfo;
 	struct sgx_enclave *enclave;
 	struct epc_page *epc;
 	struct secs *m_secs;
@@ -352,7 +351,7 @@ sgx_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	enclave->base = m_secs->base;
 	enclave->size = m_secs->size;
 
-	memset(&secinfo, 0, sizeof(struct sgx_secinfo));
+	memset(&secinfo, 0, sizeof(struct secinfo));
 
 	//printf("enclave->base phys %lx\n", vtophys(enclave->base));
 
@@ -475,7 +474,7 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	struct sgx_enclave *enclave;
 	struct epc_page *epc;
 	struct page_info pginfo;
-	struct sgx_secinfo secinfo;
+	struct secinfo secinfo;
 	vm_offset_t tmp_vaddr;
 	uint64_t page_type;
 	struct proc *proc;
@@ -496,8 +495,8 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	//printf("%s: add page addr %lx src %lx secinfo %lx mrmask %x\n", __func__,
 	//    addp->addr, addp->src, addp->secinfo, addp->mrmask);
 
-	memset(&secinfo, 0, sizeof(struct sgx_secinfo));
-	ret = copyin((void *)addp->secinfo, &secinfo, sizeof(struct sgx_secinfo));
+	memset(&secinfo, 0, sizeof(struct secinfo));
+	ret = copyin((void *)addp->secinfo, &secinfo, sizeof(struct secinfo));
 	if (ret != 0) {
 		printf("%s: Failed to copy secinfo\n", __func__);
 		return (-1);
@@ -644,6 +643,7 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 		printf("Failed to init enclave: %d\n", ret);
 	}
 
+#if 0
 	switch (ret) {
 	case SGX_INVALID_MEASUREMENT:
 		printf("Invalid measurement\n");
@@ -658,6 +658,7 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 		printf("%s: err %d\n", __func__, ret);
 		break;
 	};
+#endif
 
 	return (ret);
 }
