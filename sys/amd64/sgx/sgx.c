@@ -149,7 +149,12 @@ privcmd_pg_dtor(void *handle)
 {
 	struct privcmd_map *map;
 	//struct epc_page *secs_epc_page;
+	struct sgx_softc *sc;
 	struct sgx_enclave *enclave;
+	struct sgx_enclave_page *enclave_page_tmp;
+	struct sgx_enclave_page *enclave_page;
+
+	printf("%s\n", __func__);
 
 	if (handle == NULL) {
 		printf("%s: map not found\n", __func__);
@@ -157,6 +162,7 @@ privcmd_pg_dtor(void *handle)
 	}
 
 	map = handle;
+	sc = map->sc;
 
 	if (map->enclave == NULL) {
 		printf("%s: enclave not found\n", __func__);
@@ -165,8 +171,29 @@ privcmd_pg_dtor(void *handle)
 
 	enclave = map->enclave;
 
+	printf("%s: enclave found\n", __func__);
+
 	//secs_epc_page = enclave->secs_page.epc_page;
 	//printf("%s: enclave->secs_page.epc_page %lx\n", __func__, (uint64_t)secs_epc_page->base);
+
+	struct va_page *va_page;
+	struct epc_page *epc;
+	TAILQ_FOREACH_SAFE(enclave_page, &enclave->pages, next, enclave_page_tmp) {
+		TAILQ_REMOVE(&enclave->pages, enclave_page, next);
+
+		va_page = enclave_page->va_page;
+		epc = va_page->epc_page;
+		__eremove((void *)epc->base);
+		epc->used = 0;
+		free(enclave_page->va_page, M_SGX);
+
+		epc = enclave_page->epc_page;
+		__eremove((void *)epc->base);
+		epc->used = 0;
+		free(enclave_page, M_SGX);
+	}
+
+	TAILQ_REMOVE(&sc->enclaves, enclave, next);
 }
 
 static int
@@ -672,7 +699,7 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 	if (ret == -1) {
 		ret = EINVAL;
 	}
-	printf("%s: %ld ret %d\n", __func__, cmd, ret);
+	//printf("%s: %ld ret %d\n", __func__, cmd, ret);
 	return (ret);
 }
 

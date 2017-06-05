@@ -181,33 +181,6 @@ typedef struct _secs_t
     uint8_t                     reserved4[SECS_RESERVED4_LENGTH];/* (260) reserved */
 } secs_t;
 
-#if 0
-#define __encls(rax, rbx, rcx, rdx...)  \
-        ({                              \
-        int ret;                        \
-        __asm __volatile("1: .byte 0x0f, 0x01, 0xcf;\n\t"   \
-                     " xor %%eax,%%eax;\n"              \
-                     "2: \n"                                    \
-                     ".section .fixup,\"ax\"\n"                 \
-                     "3: mov $-1,%%eax\n"                       \
-                     "   jmp 2b\n"                              \
-                     ".previous\n"                              \
-                     : "=a"(ret), "=b"(rbx), "=c"(rcx)          \
-                     : "a"(rax), "b"(rbx), "c"(rcx), rdx        \
-                     : "memory");                               \
-        ret;    \
-        })
-
-static inline u_long
-__ecreate(struct page_info *pginfo, void *secs)
-{
-
-	__encls(ECREATE, pginfo, secs, "d"(0));
-
-	return (0);
-}
-
-#else
 #define __encls(cmd, tmp, rbx, rcx, rdx)		\
 	__asm __volatile(				\
 		".byte 0x0f, 0x01, 0xcf\n\t"		\
@@ -229,8 +202,8 @@ __ecreate(struct page_info *pginfo, void *secs)
 
 	__encls(ECREATE, tmp, pginfo, secs, 0);
 
-	printf("%s: %x %lx %lx %lx\n",
-	    __func__, tmp.oeax, tmp.orbx, tmp.orcx, tmp.ordx);
+	//printf("%s: %x %lx %lx %lx\n",
+	//    __func__, tmp.oeax, tmp.orbx, tmp.orcx, tmp.ordx);
 
 	return (tmp.oeax);
 }
@@ -243,8 +216,8 @@ __eadd(struct page_info *pginfo, void *epc)
 
 	__encls(EADD, tmp, pginfo, epc, 0);
 
-	printf("%s: %x %lx %lx %lx\n",
-	    __func__, tmp.oeax, tmp.orbx, tmp.orcx, tmp.ordx);
+	//printf("%s: %x %lx %lx %lx\n",
+	//    __func__, tmp.oeax, tmp.orbx, tmp.orcx, tmp.ordx);
 
 	return (tmp.oeax);
 }
@@ -256,8 +229,8 @@ __einit(void *sigstruct, void *secs, einittoken_t *einittoken)
 
 	__encls(EINIT, tmp, sigstruct, secs, einittoken);
 
-	printf("%s: %x %lx %lx %lx\n",
-	    __func__, tmp.oeax, tmp.orbx, tmp.orcx, tmp.ordx);
+	//printf("%s: %x %lx %lx %lx\n",
+	//    __func__, tmp.oeax, tmp.orbx, tmp.orcx, tmp.ordx);
 
 	return (tmp.oeax);
 }
@@ -299,6 +272,14 @@ __eldu(unsigned long rbx, unsigned long rcx,
 	return (tmp.oeax);
 }
 
-#endif
+static inline int
+__eremove(void *epc)
+{
+	struct out_regs tmp;
+
+	__encls(EREMOVE, tmp, 0, epc, 0);
+
+	return (tmp.oeax);
+}
 
 #endif /* !_X86_SGX_SGX_H_ */
