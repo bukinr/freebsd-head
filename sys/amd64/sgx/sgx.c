@@ -60,10 +60,6 @@ __FBSDID("$FreeBSD$");
 #include "sgx.h"
 #include "sgx_user.h"
 
-#define	_SGX_IOC_ENCLAVE_CREATE		0xa400
-#define	_SGX_IOC_ENCLAVE_ADD_PAGE	0xa401
-#define	_SGX_IOC_ENCLAVE_INIT		0xa402
-
 #define	SGX_CPUID			0x12
 #define	SGX_PAGE_SIZE			4096
 
@@ -683,21 +679,21 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 	ret = 0;
 
 	switch (cmd & 0xffff) {
-	case _SGX_IOC_ENCLAVE_CREATE:
+	case SGX_IOC_ENCLAVE_CREATE:
 		//printf("%s: enclave_create: addr %lx flags %d\n", __func__, (uint64_t)addr, flags);
 
 		param = (struct sgx_enclave_create *)addr;
 		ret = sgx_create(sc, param);
 
 		break;
-	case _SGX_IOC_ENCLAVE_ADD_PAGE:
+	case SGX_IOC_ENCLAVE_ADD_PAGE:
 		//printf("%s: enclave_add_page\n", __func__);
 
 		addp = (struct sgx_enclave_add_page *)addr;
 		ret = sgx_add_page(sc, addp);
 
 		break;
-	case _SGX_IOC_ENCLAVE_INIT:
+	case SGX_IOC_ENCLAVE_INIT:
 		//printf("%s: enclave_init\n", __func__);
 
 		initp = (struct sgx_enclave_init *)addr;

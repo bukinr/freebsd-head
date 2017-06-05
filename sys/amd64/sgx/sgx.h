@@ -57,31 +57,6 @@ enum {
 	PT_TRIM = 0x04,
 };
 
-#if 0
-struct secinfo_flags {
-	uint8_t r:1;
-	uint8_t w:1;
-	uint8_t x:1; 
-	uint8_t pending:1;
-	uint8_t modified:1;
-	uint8_t reserved1:3;
-	uint8_t page_type;
-	uint8_t reserved2[6]; 
-};
-
-struct secinfo {
-	struct secinfo_flags flags;
-	uint8_t reserved[56];
-};
-
-struct sgx_einittoken {
-	uint32_t	valid;
-	uint8_t		reserved1[206];
-	uint16_t	isvsvnle;
-	uint8_t		reserved2[92];
-} __attribute__((aligned(512)));
-#endif
-
 struct page_info {
 	uint64_t linaddr;
 	uint64_t srcpge;
