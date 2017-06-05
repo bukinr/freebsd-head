@@ -148,7 +148,6 @@ static void
 privcmd_pg_dtor(void *handle)
 {
 	struct privcmd_map *map;
-	//struct epc_page *secs_epc_page;
 	struct sgx_softc *sc;
 	struct sgx_enclave *enclave;
 	struct sgx_enclave_page *enclave_page_tmp;
@@ -193,7 +192,20 @@ privcmd_pg_dtor(void *handle)
 		free(enclave_page, M_SGX);
 	}
 
+	enclave_page = &enclave->secs_page;
+
+	va_page = enclave_page->va_page;
+	epc = va_page->epc_page;
+	__eremove((void *)epc->base);
+	epc->used = 0;
+	free(enclave_page->va_page, M_SGX);
+
+	epc = enclave_page->epc_page;
+	__eremove((void *)epc->base);
+	epc->used = 0;
+
 	TAILQ_REMOVE(&sc->enclaves, enclave, next);
+	free(enclave, M_SGX);
 }
 
 static int
@@ -496,7 +508,7 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	}
 
 	tmp_vaddr = kmem_alloc_contig(kmem_arena, PAGE_SIZE,
-	    0/* flags */, 0, BUS_SPACE_MAXADDR_32BIT,
+	    0/*flags*/, 0, BUS_SPACE_MAXADDR_32BIT,
 	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
 
 	ret = copyin((void *)addp->src, (void *)tmp_vaddr, PAGE_SIZE);
@@ -607,7 +619,7 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	secs_epc_page = enclave->secs_page.epc_page;
 
 	tmp_vaddr = kmem_alloc_contig(kmem_arena, PAGE_SIZE,
-	    0/* flags */, 0, BUS_SPACE_MAXADDR_32BIT,
+	    0/*flags*/, 0, BUS_SPACE_MAXADDR_32BIT,
 	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
 	sigstruct = (void *)tmp_vaddr;
 	einittoken = (einittoken_t *)((uint64_t)sigstruct + PAGE_SIZE / 2);
