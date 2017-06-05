@@ -35,15 +35,15 @@
 #define _AMD64_SGX_SGX_H_
 
 #define	SGX_MAGIC	0xA4
-#define	SIGSTRUCT_SIZE	1808
-#define	EINITTOKEN_SIZE	304
-
 #define SGX_IOC_ENCLAVE_CREATE \
 	(_IOW(SGX_MAGIC, 0x00, struct sgx_enclave_create) & 0xffff)
 #define SGX_IOC_ENCLAVE_ADD_PAGE \
 	(_IOW(SGX_MAGIC, 0x01, struct sgx_enclave_add_page) & 0xffff)
 #define SGX_IOC_ENCLAVE_INIT \
 	(_IOW(SGX_MAGIC, 0x02, struct sgx_enclave_init) & 0xffff)
+
+#define	SIGSTRUCT_SIZE	1808
+#define	EINITTOKEN_SIZE	304
 
 /* Error codes */
 #define	SGX_SUCCESS		0
@@ -122,7 +122,6 @@ struct out_regs {
 static inline u_long
 __ecreate(struct page_info *pginfo, void *secs)
 {
-
 	struct out_regs tmp;
 
 	__encls(ECREATE, tmp, pginfo, secs, 0);
@@ -136,7 +135,6 @@ __ecreate(struct page_info *pginfo, void *secs)
 static inline u_long
 __eadd(struct page_info *pginfo, void *epc)
 {
-
 	struct out_regs tmp;
 
 	__encls(EADD, tmp, pginfo, epc, 0);
@@ -177,7 +175,7 @@ static inline int
 __epa(void *epc)
 {
 	struct out_regs tmp;
-	unsigned long rbx;
+	uint64_t rbx;
 
 	rbx = PT_VA;
 
@@ -187,8 +185,8 @@ __epa(void *epc)
 }
 
 static inline int
-__eldu(unsigned long rbx, unsigned long rcx,
-    unsigned long rdx)
+__eldu(uint64_t rbx, uint64_t rcx,
+    uint64_t rdx)
 {
 	struct out_regs tmp;
 
