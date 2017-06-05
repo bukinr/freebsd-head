@@ -783,9 +783,27 @@ sgx_get_epc_area(struct sgx_softc *sc)
 static void
 sgx_identify(driver_t *driver, device_t parent)
 {
+	unsigned regs[4];
 
 	if ((cpu_stdext_feature & CPUID_STDEXT_SGX) == 0)
 		return;
+
+	do_cpuid(1, regs);
+
+	if ((regs[2] & CPUID2_OSXSAVE) == 0) {
+		printf("OSXSAVE not found\n");
+		return;
+	}
+
+	if ((rcr4() & CR4_XSAVE) == 0) {
+		printf("CR4_XSAVE not found\n");
+		return;
+	}
+
+	if ((rcr4() & CR4_FXSR) == 0) {
+		printf("CR4_FXSR not found\n");
+		return;
+	}
 
 	/* Make sure we're not being doubly invoked. */
 	if (device_find_child(parent, "sgx", -1) != NULL)
@@ -829,32 +847,6 @@ sgx_attach(device_t dev)
 	sc->sgx_cdev->si_drv1 = sc;
 
 	TAILQ_INIT(&sc->enclaves);
-
-#if 0
-	unsigned regs[4];
-	do_cpuid(1, regs);
-	if (regs[2] & CPUID2_OSXSAVE) {
-		printf("OSXSAVE found\n");
-	} else {
-		printf("OSXSAVE not found\n");
-	}
-
-	if (rcr4() & CR4_XSAVE) {
-		printf("CR4_XSAVE found\n");
-	} else {
-		printf("CR4_XSAVE not found\n");
-	}
-
-	if (rcr4() & CR4_FXSR) {
-		printf("CR4_FXSR found\n");
-	} else {
-		printf("CR4_FXSR not found\n");
-	}
-
-	printf("RXCR0: %lx\n", rxcr(0));
-	printf("CR0: %lx\n", rcr0());
-	printf("CR4: %lx\n", rcr4());
-#endif
 
 	return (0);
 }
