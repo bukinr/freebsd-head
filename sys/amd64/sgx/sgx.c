@@ -598,10 +598,10 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 static int
 sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 {
-	einittoken_t *einittoken;
 	struct epc_page *secs_epc_page;
 	struct sgx_enclave *enclave;
 	vm_offset_t tmp_vaddr;
+	void *einittoken;
 	void *sigstruct;
 	int retry;
 	int ret;
@@ -622,7 +622,7 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	    0/*flags*/, 0, BUS_SPACE_MAXADDR_32BIT,
 	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
 	sigstruct = (void *)tmp_vaddr;
-	einittoken = (einittoken_t *)((uint64_t)sigstruct + PAGE_SIZE / 2);
+	einittoken = (void *)((uint64_t)sigstruct + PAGE_SIZE / 2);
 
 	ret = copyin((void *)initp->sigstruct, sigstruct,
 	    SIGSTRUCT_SIZE);
