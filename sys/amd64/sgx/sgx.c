@@ -220,8 +220,15 @@ privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
 	int found;
 
 	map = object->handle;
+	if (map == NULL) {
+		return VM_PAGER_FAIL;
+	}
 	sc = map->sc;
 	enclave = map->enclave;
+
+	if (enclave == NULL) {
+		return VM_PAGER_FAIL;
+	}
 
 	//printf("%s: offset 0x%lx\n", __func__, offset);
 
@@ -244,6 +251,9 @@ privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
 
 	epc = enclave_page->epc_page;
 	paddr = epc->phys;
+
+	//if (paddr == 0)
+	//	return VM_PAGER_FAIL;
 
 	if (((*mres)->flags & PG_FICTITIOUS) != 0) {
 		printf("fake page\n");
@@ -315,6 +325,11 @@ sgx_construct_page(struct sgx_softc *sc,
 	}
 
 	va_page = malloc(sizeof(struct va_page), M_SGX, M_WAITOK | M_ZERO);
+	if (va_page == NULL) {
+		printf("Can't alloc va_page\n");
+		return (ENOMEM);
+	}
+
 	va_page->epc_page = epc;
 
 	__epa((void *)epc->base);
@@ -347,6 +362,11 @@ sgx_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	}
 
 	enclave = malloc(sizeof(struct sgx_enclave), M_SGX, M_WAITOK | M_ZERO);
+	if (enclave == NULL) {
+		printf("Can't alloc memory for enclave\n");
+		return (ENOMEM);
+	}
+
 	TAILQ_INIT(&enclave->pages);
 	enclave->base = m_secs->base;
 	enclave->size = m_secs->size;
@@ -719,9 +739,11 @@ sgx_mmap_single(struct cdev *cdev, vm_ooffset_t *offset, vm_size_t mapsize,
 	struct privcmd_map *map;
 	struct sgx_softc *sc;
 
-	map = malloc(sizeof(*map), M_SGX, M_WAITOK | M_ZERO);
-
-	printf("%s: mapsize %ld\n", __func__, mapsize);
+	map = malloc(sizeof(struct privcmd_map), M_SGX, M_WAITOK | M_ZERO);
+	if (map == NULL) {
+		printf("%s: Can't alloc memory\n", __func__);
+		return (ENOMEM);
+	}
 
 	sc = cdev->si_drv1;
 
@@ -770,6 +792,10 @@ sgx_get_epc_area(struct sgx_softc *sc)
 
 	sc->epc_pages = malloc(sizeof(struct epc_page) * sc->npages,
 	    M_DEVBUF, M_WAITOK | M_ZERO);
+	if (sc->epc_pages == NULL) {
+		printf("%s: can't alloc memory\n", __func__);
+		return (ENOMEM);
+	}
 
 	for (i = 0; i < sc->npages; i++) {
 		sc->epc_pages[i].base = epc_base_vaddr + SGX_PAGE_SIZE * i;
