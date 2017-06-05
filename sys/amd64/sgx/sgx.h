@@ -31,10 +31,12 @@
  * $FreeBSD$
  */
 
-#ifndef _X86_SGX_SGX_H_
-#define _X86_SGX_SGX_H_
+#ifndef _AMD64_SGX_SGX_H_
+#define _AMD64_SGX_SGX_H_
 
 #define	SGX_MAGIC	0xA4
+#define	SIGSTRUCT_SIZE	1808
+#define	EINITTOKEN_SIZE	304
 
 #define SGX_IOC_ENCLAVE_CREATE \
 	(_IOW(SGX_MAGIC, 0x00, struct sgx_enclave_create) & 0xffff)
@@ -103,9 +105,6 @@ struct out_regs {
 	uint64_t orcx;
 	uint64_t ordx;
 };
-
-#define	SIGSTRUCT_SIZE	1808
-#define	EINITTOKEN_SIZE	304
 
 #define __encls(cmd, tmp, rbx, rcx, rdx)		\
 	__asm __volatile(				\
@@ -261,4 +260,4 @@ struct tcs {
 	uint64_t	reserved[503];
 };
 
-#endif /* !_X86_SGX_SGX_H_ */
+#endif /* !_AMD64_SGX_SGX_H_ */
