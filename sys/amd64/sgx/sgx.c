@@ -83,7 +83,7 @@ struct va_page {
 struct sgx_enclave_page {
 	struct epc_page			*epc_page;
 	struct va_page			*va_page;
-	uint64_t			va_slot;
+	int				va_slot;
 	uint64_t			addr;
 	TAILQ_ENTRY(sgx_enclave_page)	next;
 };
@@ -341,6 +341,21 @@ sgx_mem_find(struct sgx_softc *sc, uint64_t addr,
 }
 
 static int
+get_va_slot(struct va_page *va_page)
+{
+	int i;
+
+	for (i = 0; i < VA_PAGE_SLOTS; i++) {
+		if (va_page->slots[i] == 0) {
+			va_page->slots[i] = 1;
+			return (i);
+		}
+	}
+
+	return (-1);
+}
+
+static int
 sgx_construct_page(struct sgx_softc *sc,
     struct sgx_enclave *enclave,
     struct sgx_enclave_page *enclave_page)
@@ -348,27 +363,18 @@ sgx_construct_page(struct sgx_softc *sc,
 	struct va_page *va_page;
 	struct va_page *va_page_tmp;
 	struct epc_page *epc;
-	uint64_t va_slot;
-	int found;
-	int i;
+	int va_slot;
 
-	va_slot = 0;
-	found = 0;
+	va_slot = -1;
+
 	TAILQ_FOREACH_SAFE(va_page, &enclave->va_pages, va_next, va_page_tmp) {
-		for (i = 0; i < VA_PAGE_SLOTS; i++) {
-			if (va_page->slots[i] == 0) {
-				va_page->slots[i] = 1;
-				va_slot = i;
-				found = 1;
-				break;
-			}
-		}
-		if (found == 1) {
+		va_slot = get_va_slot(va_page);
+		if (va_slot >= 0) {
 			break;
 		}
 	}
 
-	if (found == 0) {
+	if (va_slot < 0) {
 		epc = get_epc_page(sc);
 		if (epc == NULL) {
 			printf("No free epc pages available\n");
@@ -380,18 +386,17 @@ sgx_construct_page(struct sgx_softc *sc,
 			printf("Can't alloc va_page\n");
 			return (ENOMEM);
 		}
+		va_slot = get_va_slot(va_page);
 
 		va_page->epc_page = epc;
 
 		__epa((void *)epc->base);
 
 		TAILQ_INSERT_TAIL(&enclave->va_pages, va_page, va_next);
-		va_page->slots[0] = 1;
 	}
 
 	enclave_page->va_page = va_page;
 	enclave_page->va_slot = va_slot;
-
 
 	return (0);
 }
