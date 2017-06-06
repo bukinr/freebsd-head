@@ -114,6 +114,87 @@ struct privcmd_map {
 	struct sgx_enclave	*enclave;
 };
 
+static int
+get_va_slot(struct va_page *va_page)
+{
+	int i;
+
+	for (i = 0; i < VA_PAGE_SLOTS; i++) {
+		if (va_page->slots[i] == 0) {
+			va_page->slots[i] = 1;
+			return (i);
+		}
+	}
+
+	return (-1);
+}
+
+static int
+free_va_slot(struct sgx_enclave *enclave,
+    struct sgx_enclave_page *enclave_page)
+{
+	struct va_page *va_page;
+	struct epc_page *epc;
+	int va_slot;
+	int found;
+	int i;
+
+	found = 0;
+
+	va_page = enclave_page->va_page;
+	va_slot = enclave_page->va_slot;
+
+	if (va_page->slots[va_slot] == 0) {
+		/* Error */
+	}
+
+	va_page->slots[va_slot] = 0;
+	for (i = 0; i < VA_PAGE_SLOTS; i++) {
+		if (va_page->slots[i] == 1) {
+			found = 1;
+			break;
+		}
+	}
+
+	if (found == 0) {
+		TAILQ_REMOVE(&enclave->va_pages, va_page, va_next);
+		epc = va_page->epc_page;
+		__eremove((void *)epc->base);
+		epc->used = 0;
+		free(enclave_page->va_page, M_SGX);
+	}
+
+	return (0);
+}
+
+static int
+enclave_remove(struct sgx_enclave *enclave)
+{
+	struct sgx_enclave_page *enclave_page_tmp;
+	struct sgx_enclave_page *enclave_page;
+	struct epc_page *epc;
+
+	TAILQ_FOREACH_SAFE(enclave_page, &enclave->pages, next, enclave_page_tmp) {
+		TAILQ_REMOVE(&enclave->pages, enclave_page, next);
+		free_va_slot(enclave, enclave_page);
+
+		epc = enclave_page->epc_page;
+		__eremove((void *)epc->base);
+		epc->used = 0;
+		free(enclave_page, M_SGX);
+	}
+
+	enclave_page = &enclave->secs_page;
+	free_va_slot(enclave, enclave_page);
+
+	epc = enclave_page->epc_page;
+	__eremove((void *)epc->base);
+	epc->used = 0;
+	free(enclave, M_SGX);
+
+	return (0);
+}
+
 static struct epc_page *
 get_epc_page(struct sgx_softc *sc)
 {
@@ -150,12 +231,8 @@ privcmd_pg_dtor(void *handle)
 	struct privcmd_map *map;
 	struct sgx_softc *sc;
 	struct sgx_enclave *enclave;
-	struct sgx_enclave_page *enclave_page_tmp;
-	struct sgx_enclave_page *enclave_page;
-	int found;
-	int i;
 
-	printf("%s\n", __func__);
+	//printf("%s\n", __func__);
 
 	if (handle == NULL) {
 		printf("%s: map not found\n", __func__);
@@ -172,64 +249,12 @@ privcmd_pg_dtor(void *handle)
 
 	enclave = map->enclave;
 
-	printf("%s: enclave found\n", __func__);
-
+	//printf("%s: enclave found\n", __func__);
 	//secs_epc_page = enclave->secs_page.epc_page;
 	//printf("%s: enclave->secs_page.epc_page %lx\n", __func__, (uint64_t)secs_epc_page->base);
 
-	struct va_page *va_page;
-	struct epc_page *epc;
-
-	TAILQ_FOREACH_SAFE(enclave_page, &enclave->pages, next, enclave_page_tmp) {
-		TAILQ_REMOVE(&enclave->pages, enclave_page, next);
-
-		found = 0;
-		va_page = enclave_page->va_page;
-		va_page->slots[enclave_page->va_slot] = 0;
-		for (i = 0; i < VA_PAGE_SLOTS; i++) {
-			if (va_page->slots[i] == 1) {
-				found = 1;
-				break;
-			}
-		}
-		if (found == 0) {
-			TAILQ_REMOVE(&enclave->va_pages, va_page, va_next);
-			epc = va_page->epc_page;
-			__eremove((void *)epc->base);
-			epc->used = 0;
-			free(enclave_page->va_page, M_SGX);
-		}
-
-		epc = enclave_page->epc_page;
-		__eremove((void *)epc->base);
-		epc->used = 0;
-		free(enclave_page, M_SGX);
-	}
-
-	enclave_page = &enclave->secs_page;
-
-	found = 0;
-	va_page = enclave_page->va_page;
-	va_page->slots[enclave_page->va_slot] = 0;
-	for (i = 0; i < VA_PAGE_SLOTS; i++) {
-		if (va_page->slots[i] == 1) {
-			found = 1;
-			break;
-		}
-	}
-	if (found == 0) {
-		TAILQ_REMOVE(&enclave->va_pages, va_page, va_next);
-		epc = va_page->epc_page;
-		__eremove((void *)epc->base);
-		epc->used = 0;
-		free(enclave_page->va_page, M_SGX);
-	}
-
-	epc = enclave_page->epc_page;
-	__eremove((void *)epc->base);
-	epc->used = 0;
 	TAILQ_REMOVE(&sc->enclaves, enclave, next);
-	free(enclave, M_SGX);
+	enclave_remove(enclave);
 }
 
 static int
@@ -338,21 +363,6 @@ sgx_mem_find(struct sgx_softc *sc, uint64_t addr,
 	*entry0 = entry;
 
 	return (0);
-}
-
-static int
-get_va_slot(struct va_page *va_page)
-{
-	int i;
-
-	for (i = 0; i < VA_PAGE_SLOTS; i++) {
-		if (va_page->slots[i] == 0) {
-			va_page->slots[i] = 1;
-			return (i);
-		}
-	}
-
-	return (-1);
 }
 
 static int
