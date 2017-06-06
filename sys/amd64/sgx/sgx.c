@@ -397,6 +397,42 @@ sgx_construct_page(struct sgx_softc *sc,
 	return (0);
 }
 
+static struct sgx_enclave *
+enclave_alloc(struct sgx_softc *sc, struct secs *secs)
+{
+	struct sgx_enclave *enclave;
+	struct privcmd_map *priv_map;
+	vm_map_entry_t entry;
+	vm_object_t mem;
+	int ret;
+
+	ret = sgx_mem_find(sc, secs->base, &entry, &mem);
+	if (ret != 0) {
+		printf("Can't find vm_map\n");
+		return (NULL);
+	}
+
+	priv_map = mem->handle;
+	priv_map->base = (entry->start - entry->offset);
+
+	enclave = malloc(sizeof(struct sgx_enclave), M_SGX, M_WAITOK | M_ZERO);
+	if (enclave == NULL) {
+		printf("Can't alloc memory for enclave\n");
+		return (NULL);
+	}
+
+	TAILQ_INIT(&enclave->pages);
+	TAILQ_INIT(&enclave->va_pages);
+
+	enclave->base = secs->base;
+	enclave->size = secs->size;
+
+	enclave->map = priv_map;
+	priv_map->enclave = enclave;
+
+	return (enclave);
+}
+
 static int
 sgx_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 {
@@ -419,46 +455,17 @@ sgx_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 		return (-1);
 	}
 
-	enclave = malloc(sizeof(struct sgx_enclave), M_SGX, M_WAITOK | M_ZERO);
+	enclave = enclave_alloc(sc, m_secs);
 	if (enclave == NULL) {
-		printf("Can't alloc memory for enclave\n");
 		return (ENOMEM);
 	}
 
-	TAILQ_INIT(&enclave->pages);
-	TAILQ_INIT(&enclave->va_pages);
-	enclave->base = m_secs->base;
-	enclave->size = m_secs->size;
-
 	memset(&secinfo, 0, sizeof(struct secinfo));
-
-	//printf("enclave->base phys %lx\n", vtophys(enclave->base));
-
-	struct privcmd_map *priv_map;
-	vm_map_entry_t entry;
-	vm_object_t mem;
-
-	ret = sgx_mem_find(sc, m_secs->base, &entry, &mem);
-	if (ret != 0) {
-		printf("Can't find vm_map\n");
-		return (-1);
-	}
-
-	priv_map = mem->handle;
-	printf("vm_map found, size 0x%lx\n", priv_map->size);
-	enclave->map = priv_map;
-	priv_map->enclave = enclave;
-	priv_map->base = (entry->start - entry->offset);
-
 	memset(&pginfo, 0, sizeof(struct page_info));
 	pginfo.linaddr = 0;
 	pginfo.srcpge = (uint64_t)m_secs;
 	pginfo.secinfo = (uint64_t)&secinfo;
 	pginfo.secs = 0;
-
-#if 0
-	printf("%s: secs->base 0x%lx, secs->size 0x%lx\n", __func__, m_secs->base, m_secs->size);
-#endif
 
 	epc = get_epc_page(sc);
 	if (epc == NULL) {
@@ -474,9 +481,7 @@ sgx_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 
 	secs_page = &enclave->secs_page;
 	secs_page->epc_page = epc;
-
 	__ecreate(&pginfo, (void *)epc->base);
-
 	TAILQ_INSERT_TAIL(&sc->enclaves, enclave, next);
 
 	return (0);
