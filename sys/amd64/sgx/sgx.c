@@ -232,8 +232,6 @@ privcmd_pg_dtor(void *handle)
 	struct sgx_softc *sc;
 	struct sgx_enclave *enclave;
 
-	//printf("%s\n", __func__);
-
 	if (handle == NULL) {
 		printf("%s: map not found\n", __func__);
 		return;
@@ -248,10 +246,6 @@ privcmd_pg_dtor(void *handle)
 	}
 
 	enclave = map->enclave;
-
-	//printf("%s: enclave found\n", __func__);
-	//secs_epc_page = enclave->secs_page.epc_page;
-	//printf("%s: enclave->secs_page.epc_page %lx\n", __func__, (uint64_t)secs_epc_page->base);
 
 	TAILQ_REMOVE(&sc->enclaves, enclave, next);
 	enclave_remove(enclave);
@@ -300,18 +294,13 @@ privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
 	}
 	if (found == 0) {
 		printf("Error: page not found\n");
-		return (-1);
+		return VM_PAGER_FAIL;
 	}
 
 	epc = enclave_page->epc_page;
 	paddr = epc->phys;
 
-	//if (paddr == 0)
-	//	return VM_PAGER_FAIL;
-
 	if (((*mres)->flags & PG_FICTITIOUS) != 0) {
-		printf("fake page\n");
-
 		page = *mres;
 		vm_page_updatefake(page, paddr, memattr);
 	} else {
