@@ -64,28 +64,26 @@ __FBSDID("$FreeBSD$");
 
 MALLOC_DEFINE(M_SGX, "sgx", "SGX driver");
 
+#define	VA_PAGE_SLOTS	512
+
+/* Enclave Page Cache */
 struct epc_page {
-	uint64_t base;
-	uint64_t phys;
-	uint8_t used;
+	uint64_t		base;
+	uint64_t		phys;
+	uint8_t			used;
 };
 
-/* Version-Array slot */
+/* Version-Array page */
 struct va_page {
-	struct epc_page *epc_page;
-};
-
-struct privcmd_map {
-	struct sgx_softc *sc;
-	vm_object_t mem;
-	uint64_t base;
-	vm_size_t size;
-	struct sgx_enclave *enclave;
+	struct epc_page		*epc_page;
+	TAILQ_ENTRY(va_page)	va_next;
+	bool			slots[VA_PAGE_SLOTS];
 };
 
 struct sgx_enclave_page {
-	struct epc_page *epc_page;
-	struct va_page *va_page;
+	struct epc_page			*epc_page;
+	struct va_page			*va_page;
+	uint64_t			va_slot;
 	uint64_t			addr;
 	TAILQ_ENTRY(sgx_enclave_page)	next;
 };
@@ -97,16 +95,23 @@ struct sgx_enclave {
 	struct privcmd_map		*map;
 	TAILQ_ENTRY(sgx_enclave)	next;
 	TAILQ_HEAD(, sgx_enclave_page)	pages;
+	TAILQ_HEAD(, va_page)		va_pages;
 };
 
 struct sgx_softc {
-	struct cdev		*sgx_cdev;
-	device_t		dev;
-
-	struct epc_page		*epc_pages;
-	uint32_t		npages;
-
+	struct cdev			*sgx_cdev;
+	device_t			dev;
+	struct epc_page			*epc_pages;
+	uint32_t			npages;
 	TAILQ_HEAD(, sgx_enclave)	enclaves;
+};
+
+struct privcmd_map {
+	struct sgx_softc	*sc;
+	vm_object_t		mem;
+	uint64_t		base;
+	vm_size_t		size;
+	struct sgx_enclave	*enclave;
 };
 
 static struct epc_page *
@@ -147,6 +152,8 @@ privcmd_pg_dtor(void *handle)
 	struct sgx_enclave *enclave;
 	struct sgx_enclave_page *enclave_page_tmp;
 	struct sgx_enclave_page *enclave_page;
+	int found;
+	int i;
 
 	printf("%s\n", __func__);
 
@@ -172,14 +179,26 @@ privcmd_pg_dtor(void *handle)
 
 	struct va_page *va_page;
 	struct epc_page *epc;
+
 	TAILQ_FOREACH_SAFE(enclave_page, &enclave->pages, next, enclave_page_tmp) {
 		TAILQ_REMOVE(&enclave->pages, enclave_page, next);
 
+		found = 0;
 		va_page = enclave_page->va_page;
-		epc = va_page->epc_page;
-		__eremove((void *)epc->base);
-		epc->used = 0;
-		free(enclave_page->va_page, M_SGX);
+		va_page->slots[enclave_page->va_slot] = 0;
+		for (i = 0; i < VA_PAGE_SLOTS; i++) {
+			if (va_page->slots[i] == 1) {
+				found = 1;
+				break;
+			}
+		}
+		if (found == 0) {
+			TAILQ_REMOVE(&enclave->va_pages, va_page, va_next);
+			epc = va_page->epc_page;
+			__eremove((void *)epc->base);
+			epc->used = 0;
+			free(enclave_page->va_page, M_SGX);
+		}
 
 		epc = enclave_page->epc_page;
 		__eremove((void *)epc->base);
@@ -189,16 +208,26 @@ privcmd_pg_dtor(void *handle)
 
 	enclave_page = &enclave->secs_page;
 
+	found = 0;
 	va_page = enclave_page->va_page;
-	epc = va_page->epc_page;
-	__eremove((void *)epc->base);
-	epc->used = 0;
-	free(enclave_page->va_page, M_SGX);
+	va_page->slots[enclave_page->va_slot] = 0;
+	for (i = 0; i < VA_PAGE_SLOTS; i++) {
+		if (va_page->slots[i] == 1) {
+			found = 1;
+			break;
+		}
+	}
+	if (found == 0) {
+		TAILQ_REMOVE(&enclave->va_pages, va_page, va_next);
+		epc = va_page->epc_page;
+		__eremove((void *)epc->base);
+		epc->used = 0;
+		free(enclave_page->va_page, M_SGX);
+	}
 
 	epc = enclave_page->epc_page;
 	__eremove((void *)epc->base);
 	epc->used = 0;
-
 	TAILQ_REMOVE(&sc->enclaves, enclave, next);
 	free(enclave, M_SGX);
 }
@@ -313,28 +342,56 @@ sgx_mem_find(struct sgx_softc *sc, uint64_t addr,
 
 static int
 sgx_construct_page(struct sgx_softc *sc,
+    struct sgx_enclave *enclave,
     struct sgx_enclave_page *enclave_page)
 {
 	struct va_page *va_page;
+	struct va_page *va_page_tmp;
 	struct epc_page *epc;
+	uint64_t va_slot;
+	int found;
+	int i;
 
-	epc = get_epc_page(sc);
-	if (epc == NULL) {
-		printf("No free epc pages available\n");
-		return (-1);
+	va_slot = 0;
+	found = 0;
+	TAILQ_FOREACH_SAFE(va_page, &enclave->va_pages, va_next, va_page_tmp) {
+		for (i = 0; i < VA_PAGE_SLOTS; i++) {
+			if (va_page->slots[i] == 0) {
+				va_page->slots[i] = 1;
+				va_slot = i;
+				found = 1;
+				break;
+			}
+		}
+		if (found == 1) {
+			break;
+		}
 	}
 
-	va_page = malloc(sizeof(struct va_page), M_SGX, M_WAITOK | M_ZERO);
-	if (va_page == NULL) {
-		printf("Can't alloc va_page\n");
-		return (ENOMEM);
+	if (found == 0) {
+		epc = get_epc_page(sc);
+		if (epc == NULL) {
+			printf("No free epc pages available\n");
+			return (-1);
+		}
+
+		va_page = malloc(sizeof(struct va_page), M_SGX, M_WAITOK | M_ZERO);
+		if (va_page == NULL) {
+			printf("Can't alloc va_page\n");
+			return (ENOMEM);
+		}
+
+		va_page->epc_page = epc;
+
+		__epa((void *)epc->base);
+
+		TAILQ_INSERT_TAIL(&enclave->va_pages, va_page, va_next);
+		va_page->slots[0] = 1;
 	}
-
-	va_page->epc_page = epc;
-
-	__epa((void *)epc->base);
 
 	enclave_page->va_page = va_page;
+	enclave_page->va_slot = va_slot;
+
 
 	return (0);
 }
@@ -368,6 +425,7 @@ sgx_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	}
 
 	TAILQ_INIT(&enclave->pages);
+	TAILQ_INIT(&enclave->va_pages);
 	enclave->base = m_secs->base;
 	enclave->size = m_secs->size;
 
@@ -407,7 +465,7 @@ sgx_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 		return (-1);
 	}
 
-	ret = sgx_construct_page(sc, &enclave->secs_page);
+	ret = sgx_construct_page(sc, enclave, &enclave->secs_page);
 	if (ret != 0) {
 		printf("can't construct page\n");
 		return (-1);
@@ -571,7 +629,7 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 		return (-1);
 	}
 
-	ret = sgx_construct_page(sc, enclave_page);
+	ret = sgx_construct_page(sc, enclave, enclave_page);
 	if (ret != 0) {
 		printf("can't construct page\n");
 		return (-1);
