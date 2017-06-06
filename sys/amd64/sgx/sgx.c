@@ -61,10 +61,9 @@ __FBSDID("$FreeBSD$");
 
 #define	SGX_CPUID			0x12
 #define	SGX_PAGE_SIZE			4096
+#define	SGX_VA_PAGE_SLOTS		512
 
 MALLOC_DEFINE(M_SGX, "sgx", "SGX driver");
-
-#define	VA_PAGE_SLOTS	512
 
 /* Enclave Page Cache */
 struct epc_page {
@@ -77,7 +76,7 @@ struct epc_page {
 struct va_page {
 	struct epc_page		*epc_page;
 	TAILQ_ENTRY(va_page)	va_next;
-	bool			slots[VA_PAGE_SLOTS];
+	bool			slots[SGX_VA_PAGE_SLOTS];
 };
 
 struct sgx_enclave_page {
@@ -119,7 +118,7 @@ get_va_slot(struct va_page *va_page)
 {
 	int i;
 
-	for (i = 0; i < VA_PAGE_SLOTS; i++) {
+	for (i = 0; i < SGX_VA_PAGE_SLOTS; i++) {
 		if (va_page->slots[i] == 0) {
 			va_page->slots[i] = 1;
 			return (i);
@@ -149,7 +148,7 @@ free_va_slot(struct sgx_enclave *enclave,
 	}
 
 	va_page->slots[va_slot] = 0;
-	for (i = 0; i < VA_PAGE_SLOTS; i++) {
+	for (i = 0; i < SGX_VA_PAGE_SLOTS; i++) {
 		if (va_page->slots[i] == 1) {
 			found = 1;
 			break;
@@ -385,12 +384,10 @@ sgx_construct_page(struct sgx_softc *sc,
 			printf("Can't alloc va_page\n");
 			return (ENOMEM);
 		}
+
 		va_slot = get_va_slot(va_page);
-
 		va_page->epc_page = epc;
-
 		__epa((void *)epc->base);
-
 		TAILQ_INSERT_TAIL(&enclave->va_pages, va_page, va_next);
 	}
 
@@ -510,11 +507,8 @@ sgx_measure_page(struct epc_page *secs, struct epc_page *epc,
     uint16_t mrmask)
 {
 	int i, j;
-	int ret;
 
-	ret = 0;
-
-	for (i = 0, j = 1; i < 0x1000 && !ret; i += 0x100, j <<= 1) {
+	for (i = 0, j = 1; i < PAGE_SIZE; i += 0x100, j <<= 1) {
 		if (!(j & mrmask)) {
 			continue;
 		}
