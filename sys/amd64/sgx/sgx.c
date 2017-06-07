@@ -63,6 +63,15 @@ __FBSDID("$FreeBSD$");
 #define	SGX_PAGE_SIZE			4096
 #define	SGX_VA_PAGE_SLOTS		512
 
+#define	DEBUG
+#undef	DEBUG
+
+#ifdef	DEBUG
+#define	debug_printf(dev, fmt, ...)  device_printf(dev, fmt, ##__VA_ARGS__)
+#else
+#define	debug_printf(dev, fmt, ...)
+#endif
+
 MALLOC_DEFINE(M_SGX, "sgx", "SGX driver");
 
 /* Enclave Page Cache */
@@ -216,10 +225,18 @@ privcmd_pg_ctor(void *handle, vm_ooffset_t size, vm_prot_t prot,
     vm_ooffset_t foff, struct ucred *cred, u_short *color)
 {
 	struct privcmd_map *map;
+	struct sgx_softc *sc;
 
-	printf("%s: foff 0x%lx size 0x%lx\n", __func__, foff, size);
+	if (handle == NULL) {
+		printf("%s: map not found\n", __func__);
+		return (0);
+	}
 
 	map = handle;
+	sc = map->sc;
+
+	debug_printf(sc->dev, "%s: foff 0x%lx size 0x%lx\n",
+	    __func__, foff, size);
 
 	return (0);
 }
@@ -278,16 +295,14 @@ privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
 		return VM_PAGER_FAIL;
 	}
 
-	//printf("%s: offset 0x%lx\n", __func__, offset);
+	debug_printf(sc->dev, "%s: offset 0x%lx\n", __func__, offset);
 
 	memattr = object->memattr;
 	pidx = OFF_TO_IDX(offset);
 
 	found = 0;
 	TAILQ_FOREACH_SAFE(enclave_page, &enclave->pages, next, enclave_page_tmp) {
-		//printf("%s: page addr %lx\n", __func__, enclave_page->addr);
 		if ((map->base + offset) == enclave_page->addr) {
-			//printf("page found\n");
 			found = 1;
 			break;
 		}
@@ -708,9 +723,8 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	int retry;
 	int ret;
 
-	//printf("%s: addr %lx\n", __func__, initp->addr);
-	//printf("%s: sigstruct %lx\n", __func__, initp->sigstruct);
-	//printf("%s: einittoken %lx\n", __func__, initp->einittoken);
+	debug_printf(sc->dev, "%s: addr %lx, sigstruct %lx, einittoken %lx\n",
+	    __func__, initp->addr, initp->sigstruct, initp->einittoken);
 
 	ret = enclave_get(sc, initp->addr, &enclave);
 	if (ret != 0) {
@@ -745,11 +759,11 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	retry = 16;
 	do {
 		ret = __einit(sigstruct, (void *)secs_epc_page->base, einittoken);
-		device_printf(sc->dev, "%s: __einit returned %d\n", __func__, ret);
+		debug_printf(sc->dev, "%s: __einit returned %d\n", __func__, ret);
 	} while (ret == SGX_UNMASKED_EVENT && retry--);
 
 	if (ret != 0) {
-		device_printf(sc->dev, "%s: Failed to init enclave: %d\n",
+		debug_printf(sc->dev, "%s: Failed to init enclave: %d\n",
 		    __func__, ret);
 	}
 
@@ -767,10 +781,13 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 	int ret;
 
 	sc = dev->si_drv1;
+	cmd &= 0xffff;
+
+	debug_printf(sc->dev, "%s: cmd %lx\n", __func__, cmd);
 
 	ret = 0;
 
-	switch (cmd & 0xffff) {
+	switch (cmd) {
 	case SGX_IOC_ENCLAVE_CREATE:
 		param = (struct sgx_enclave_create *)addr;
 		ret = sgx_create(sc, param);
@@ -802,6 +819,9 @@ sgx_mmap_single(struct cdev *cdev, vm_ooffset_t *offset, vm_size_t mapsize,
 	struct sgx_softc *sc;
 
 	sc = cdev->si_drv1;
+
+	debug_printf(sc->dev, "%s: mapsize 0x%lx, offset %lx\n",
+	    __func__, mapsize, *offset);
 
 	map = malloc(sizeof(struct privcmd_map), M_SGX, M_WAITOK | M_ZERO);
 	if (map == NULL) {
