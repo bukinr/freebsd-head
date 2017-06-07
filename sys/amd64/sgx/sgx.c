@@ -240,7 +240,8 @@ privcmd_pg_dtor(void *handle)
 	sc = map->sc;
 
 	if (map->enclave == NULL) {
-		printf("%s: enclave not found\n", __func__);
+		device_printf(sc->dev, "%s: enclave not found\n",
+		    __func__);
 		return;
 	}
 
@@ -292,7 +293,7 @@ privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
 		}
 	}
 	if (found == 0) {
-		printf("Error: page not found\n");
+		device_printf(sc->dev, "%s: page not found\n", __func__);
 		return VM_PAGER_FAIL;
 	}
 
@@ -343,7 +344,8 @@ sgx_mem_find(struct sgx_softc *sc, uint64_t addr,
 	    &mem, &pindex, &prot, &wired);
 	vm_map_lookup_done(map, entry);
 	if (error != 0) {
-		printf("Can't find enclave\n");
+		device_printf(sc->dev, "%s: can't find enclave\n",
+		    __func__);
 		return (-1);
 	}
 
@@ -375,14 +377,17 @@ sgx_construct_page(struct sgx_softc *sc,
 	if (va_slot < 0) {
 		epc = get_epc_page(sc);
 		if (epc == NULL) {
-			printf("No free epc pages available\n");
+			device_printf(sc->dev, "%s: No free epc pages available\n",
+			    __func__);
 			return (-1);
 		}
 
 		va_page = malloc(sizeof(struct va_page), M_SGX, M_WAITOK | M_ZERO);
 		if (va_page == NULL) {
-			printf("Can't alloc va_page\n");
-			return (ENOMEM);
+			device_printf(sc->dev, "%s: Can't alloc va_page\n",
+			    __func__);
+			epc->used = 0;
+			return (-1);
 		}
 
 		va_slot = get_va_slot(va_page);
@@ -408,7 +413,7 @@ enclave_alloc(struct sgx_softc *sc, struct secs *secs)
 
 	ret = sgx_mem_find(sc, secs->base, &entry, &mem);
 	if (ret != 0) {
-		printf("Can't find vm_map\n");
+		device_printf(sc->dev, "Can't find vm_map\n");
 		return (NULL);
 	}
 
@@ -417,7 +422,7 @@ enclave_alloc(struct sgx_softc *sc, struct secs *secs)
 
 	enclave = malloc(sizeof(struct sgx_enclave), M_SGX, M_WAITOK | M_ZERO);
 	if (enclave == NULL) {
-		printf("Can't alloc memory for enclave\n");
+		device_printf(sc->dev, "Can't alloc memory for enclave\n");
 		return (NULL);
 	}
 
@@ -444,6 +449,10 @@ sgx_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	struct secs *m_secs;
 	int ret;
 
+	epc = NULL;
+	m_secs = NULL;
+	enclave = NULL;
+
 	/* SGX Enclave Control Structure (SECS) */
 	m_secs = (struct secs *)kmem_alloc_contig(kmem_arena, PAGE_SIZE,
 	    0/*flags*/, 0, BUS_SPACE_MAXADDR_32BIT,
@@ -451,13 +460,14 @@ sgx_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 
 	ret = copyin((void *)param->src, m_secs, sizeof(struct secs));
 	if (ret != 0) {
-		printf("Can't copy SECS\n");
-		return (-1);
+		device_printf(sc->dev, "Can't copy SECS\n");
+		goto error;
 	}
 
 	enclave = enclave_alloc(sc, m_secs);
 	if (enclave == NULL) {
-		return (ENOMEM);
+		device_printf(sc->dev, "Can't copy SECS\n");
+		goto error;
 	}
 
 	memset(&secinfo, 0, sizeof(struct secinfo));
@@ -469,14 +479,15 @@ sgx_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 
 	epc = get_epc_page(sc);
 	if (epc == NULL) {
-		printf("%s: failed to get epc page\n", __func__);
-		return (-1);
+		device_printf(sc->dev, "%s: failed to get epc page\n",
+		    __func__);
+		goto error;
 	}
 
 	ret = sgx_construct_page(sc, enclave, &enclave->secs_page);
 	if (ret != 0) {
-		printf("can't construct page\n");
-		return (-1);
+		device_printf(sc->dev, "can't construct page\n");
+		goto error;
 	}
 
 	secs_page = &enclave->secs_page;
@@ -485,6 +496,19 @@ sgx_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	TAILQ_INSERT_TAIL(&sc->enclaves, enclave, next);
 
 	return (0);
+
+error:
+	if (m_secs != NULL) {
+		kmem_free(kmem_arena, (vm_offset_t)m_secs, PAGE_SIZE);
+	}
+	if (enclave != NULL) {
+		free(enclave, M_SGX);
+	}
+	if (epc != NULL) {
+		epc->used = 0;
+	}
+
+	return (-1);
 }
 
 static int
@@ -507,7 +531,7 @@ enclave_get(struct sgx_softc *sc, uint64_t addr,
 	return (0);
 }
 
-static int
+static void
 sgx_measure_page(struct epc_page *secs, struct epc_page *epc,
     uint16_t mrmask)
 {
@@ -520,8 +544,6 @@ sgx_measure_page(struct epc_page *secs, struct epc_page *epc,
 
 		__eextend((void *)secs->base, (void *)((uint64_t)epc->base + i));
 	}
-
-	return (0);
 }
 
 static int
@@ -547,6 +569,23 @@ validate_tcs(struct tcs *tcs)
 	return (0);
 }
 
+static void
+dump_tcs(struct tcs *t)
+{
+
+	printf("t->state %lx\n", t->state);
+	printf("t->flags %lx\n", t->flags);
+	printf("t->ossa %lx\n", t->ossa);
+	printf("t->cssa %x\n", t->cssa);
+	printf("t->nssa %x\n", t->nssa);
+	printf("t->oentry %lx\n", t->oentry);
+	printf("t->aep %lx\n", t->aep);
+	printf("t->ofsbasgx %lx\n", t->ofsbasgx);
+	printf("t->ogsbasgx %lx\n", t->ogsbasgx);
+	printf("t->fslimit %x\n", t->fslimit);
+	printf("t->gslimit %x\n", t->gslimit);
+}
+
 static int
 sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 {
@@ -556,90 +595,80 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	struct epc_page *epc;
 	struct page_info pginfo;
 	struct secinfo secinfo;
-	vm_offset_t tmp_vaddr;
+	void *tmp_vaddr;
 	uint64_t page_type;
 	struct proc *proc;
+	struct tcs *t;
 	pmap_t pmap;
 	int ret;
 
+	tmp_vaddr = NULL;
+	enclave_page = NULL;
+	epc = NULL;
+
 	ret = enclave_get(sc, addp->addr, &enclave);
 	if (ret != 0) {
-		printf("Failed to get enclave\n");
+		device_printf(sc->dev, "Failed to get enclave\n");
 		return (-1);
 	}
 
 	proc = curthread->td_proc;
 	pmap = vm_map_pmap(&proc->p_vmspace->vm_map);
 
-	//printf("addp->addr phys %lx\n", pmap_extract(pmap, addp->addr));
-	//printf("%s\n", __func__);
-	//printf("%s: add page addr %lx src %lx secinfo %lx mrmask %x\n", __func__,
-	//    addp->addr, addp->src, addp->secinfo, addp->mrmask);
-
 	memset(&secinfo, 0, sizeof(struct secinfo));
 	ret = copyin((void *)addp->secinfo, &secinfo, sizeof(struct secinfo));
 	if (ret != 0) {
-		printf("%s: Failed to copy secinfo\n", __func__);
+		device_printf(sc->dev, "%s: Failed to copy secinfo\n", __func__);
 		return (-1);
 	}
 
-	tmp_vaddr = kmem_alloc_contig(kmem_arena, PAGE_SIZE,
+	tmp_vaddr = (void *)kmem_alloc_contig(kmem_arena, PAGE_SIZE,
 	    0/*flags*/, 0, BUS_SPACE_MAXADDR_32BIT,
 	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
+	if (tmp_vaddr == NULL) {
+		device_printf(sc->dev, "%s: failed to alloc memory\n", __func__);
+		goto error;
+	}
 
-	ret = copyin((void *)addp->src, (void *)tmp_vaddr, PAGE_SIZE);
+	ret = copyin((void *)addp->src, tmp_vaddr, PAGE_SIZE);
 	if (ret != 0) {
-		printf("%s: Failed to copy page\n", __func__);
-		kmem_free(kmem_arena, tmp_vaddr, PAGE_SIZE);
-		return (-1);
+		device_printf(sc->dev, "%s: Failed to copy page\n", __func__);
+		goto error;
 	}
 
 	page_type = (secinfo.flags >> 8) & 0xff;
-	//printf("page_type %ld\n", page_type);
-
-	struct tcs *t;
 	if (page_type == PT_TCS) {
-
 		t = (struct tcs *)tmp_vaddr;
 		if (validate_tcs(t) != 0) {
-			printf("TCS validation failed\n");
+			device_printf(sc->dev, "%s: TCS page validation failed\n",
+			    __func__);
 			return (-1);
 		}
 #if 0
-		printf("t->state %lx\n", t->state);
-		printf("t->flags %lx\n", t->flags);
-		printf("t->ossa %lx\n", t->ossa);
-		printf("t->cssa %x\n", t->cssa);
-		printf("t->nssa %x\n", t->nssa);
-		printf("t->oentry %lx\n", t->oentry);
-		printf("t->aep %lx\n", t->aep);
-		printf("t->ofsbasgx %lx\n", t->ofsbasgx);
-		printf("t->ogsbasgx %lx\n", t->ogsbasgx);
-		printf("t->fslimit %x\n", t->fslimit);
-		printf("t->gslimit %x\n", t->gslimit);
+		dump_tcs(t);
 #endif
 	}
 
 	enclave_page = malloc(sizeof(struct sgx_enclave_page), M_SGX, M_WAITOK | M_ZERO);
 	if (enclave_page == NULL) {
-		printf("Can't allocate enclave page\n");
-		return (-1);
+		device_printf(sc->dev, "%s: Can't allocate enclave page.\n", __func__);
+		goto error;
 	}
 
 	epc = get_epc_page(sc);
 	if (epc == NULL) {
-		printf("%s: failed to get epc page\n", __func__);
-		return (-1);
+		device_printf(sc->dev, "%s: failed to get epc page\n", __func__);
+		goto error;
 	}
 
 	ret = sgx_construct_page(sc, enclave, enclave_page);
 	if (ret != 0) {
-		printf("can't construct page\n");
-		return (-1);
+		device_printf(sc->dev, "Can't construct page\n");
+		goto error;
 	}
+
 	enclave_page->epc_page = epc;
 	enclave_page->addr = addp->addr;
-
 	secs_epc_page = enclave->secs_page.epc_page;
 
 	memset(&pginfo, 0, sizeof(struct page_info));
@@ -647,28 +676,25 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	pginfo.srcpge = (uint64_t)tmp_vaddr;
 	pginfo.secinfo = (uint64_t)&secinfo;
 	pginfo.secs = (uint64_t)secs_epc_page->base;
-
-#if 0
-	printf("pginfo %lx epc %lx\n", (uint64_t)&pginfo, (uint64_t)epc->base);
-	printf("%s: __eadd\n", __func__);
-#endif
-
 	__eadd(&pginfo, (void *)epc->base);
 
-#if 0
-	printf("%s: sgx_measure_page\n", __func__);
-#endif
-	ret = sgx_measure_page(enclave->secs_page.epc_page, epc, addp->mrmask);
-	if (ret != 0) {
-		printf("sgx_measure_page returned %d\n", ret);
-		return (-1);
-	}
-
-	kmem_free(kmem_arena, tmp_vaddr, PAGE_SIZE);
-
+	sgx_measure_page(enclave->secs_page.epc_page, epc, addp->mrmask);
 	TAILQ_INSERT_TAIL(&enclave->pages, enclave_page, next);
 
 	return (0);
+
+error:
+	if (tmp_vaddr != NULL) {
+		kmem_free(kmem_arena, (vm_offset_t)tmp_vaddr, PAGE_SIZE);
+	}
+	if (epc != NULL) {
+		epc->used = 0;
+	}
+	if (enclave_page != NULL) {
+		/* TODO */
+	}
+
+	return (-1);
 }
 
 static int
@@ -682,13 +708,13 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	int retry;
 	int ret;
 
-	printf("%s: addr %lx\n", __func__, initp->addr);
-	printf("%s: sigstruct %lx\n", __func__, initp->sigstruct);
-	printf("%s: einittoken %lx\n", __func__, initp->einittoken);
+	//printf("%s: addr %lx\n", __func__, initp->addr);
+	//printf("%s: sigstruct %lx\n", __func__, initp->sigstruct);
+	//printf("%s: einittoken %lx\n", __func__, initp->einittoken);
 
 	ret = enclave_get(sc, initp->addr, &enclave);
 	if (ret != 0) {
-		printf("Failed to get enclave\n");
+		device_printf(sc->dev, "Failed to get enclave\n");
 		return (-1);
 	}
 
@@ -703,43 +729,29 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	ret = copyin((void *)initp->sigstruct, sigstruct,
 	    SIGSTRUCT_SIZE);
 	if (ret != 0) {
-		printf("%s: Failed to copy SIGSTRUCT page\n", __func__);
+		device_printf(sc->dev, "%s: Failed to copy SIGSTRUCT page\n",
+		    __func__);
 		return (-1);
 	}
 
 	ret = copyin((void *)initp->einittoken, einittoken,
 	    EINITTOKEN_SIZE);
 	if (ret != 0) {
-		printf("%s: Failed to copy EINITTOKEN page\n", __func__);
+		device_printf(sc->dev, "%s: Failed to copy EINITTOKEN page\n",
+		    __func__);
 		return (-1);
 	}
 
 	retry = 16;
 	do {
 		ret = __einit(sigstruct, (void *)secs_epc_page->base, einittoken);
-		printf("__einit returned %d\n", ret);
+		device_printf(sc->dev, "%s: __einit returned %d\n", __func__, ret);
 	} while (ret == SGX_UNMASKED_EVENT && retry--);
 
 	if (ret != 0) {
-		printf("Failed to init enclave: %d\n", ret);
+		device_printf(sc->dev, "%s: Failed to init enclave: %d\n",
+		    __func__, ret);
 	}
-
-#if 0
-	switch (ret) {
-	case SGX_INVALID_MEASUREMENT:
-		printf("Invalid measurement\n");
-		break;
-	case SGX_UNMASKED_EVENT:
-		printf("Unmasked event\n");
-		break;
-	case SGX_INVALID_ATTRIBUTE:
-		printf("Invalid attr\n");
-		break;
-	default:
-		printf("%s: err %d\n", __func__, ret);
-		break;
-	};
-#endif
 
 	return (ret);
 }
@@ -756,31 +768,20 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 
 	sc = dev->si_drv1;
 
-	//printf("%s: %ld\n", __func__, cmd);
-
 	ret = 0;
 
 	switch (cmd & 0xffff) {
 	case SGX_IOC_ENCLAVE_CREATE:
-		//printf("%s: enclave_create: addr %lx flags %d\n", __func__, (uint64_t)addr, flags);
-
 		param = (struct sgx_enclave_create *)addr;
 		ret = sgx_create(sc, param);
-
 		break;
 	case SGX_IOC_ENCLAVE_ADD_PAGE:
-		//printf("%s: enclave_add_page\n", __func__);
-
 		addp = (struct sgx_enclave_add_page *)addr;
 		ret = sgx_add_page(sc, addp);
-
 		break;
 	case SGX_IOC_ENCLAVE_INIT:
-		//printf("%s: enclave_init\n", __func__);
-
 		initp = (struct sgx_enclave_init *)addr;
 		ret = sgx_init(sc, initp);
-
 		break;
 	default:
 		return -EINVAL;
@@ -789,7 +790,7 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 	if (ret == -1) {
 		ret = EINVAL;
 	}
-	//printf("%s: %ld ret %d\n", __func__, cmd, ret);
+
 	return (ret);
 }
 
@@ -800,13 +801,13 @@ sgx_mmap_single(struct cdev *cdev, vm_ooffset_t *offset, vm_size_t mapsize,
 	struct privcmd_map *map;
 	struct sgx_softc *sc;
 
+	sc = cdev->si_drv1;
+
 	map = malloc(sizeof(struct privcmd_map), M_SGX, M_WAITOK | M_ZERO);
 	if (map == NULL) {
-		printf("%s: Can't alloc memory\n", __func__);
+		device_printf(sc->dev, "%s: Can't alloc memory\n", __func__);
 		return (ENOMEM);
 	}
-
-	sc = cdev->si_drv1;
 
 	map->sc = sc;
 	map->size = mapsize;
@@ -845,7 +846,8 @@ sgx_get_epc_area(struct sgx_softc *sc)
 	epc_size = ((uint64_t)(cp[3] & 0xfffff) << 32) + \
 	    (cp[2] & 0xfffff000);
 
-	printf("%s: epc_base %lx size %lx\n", __func__, epc_base, epc_size);
+	device_printf(sc->dev, "%s: epc_base %lx size %lx\n",
+	    __func__, epc_base, epc_size);
 
 	epc_base_vaddr = (vm_offset_t)pmap_mapdev(epc_base, epc_size);
 
@@ -854,7 +856,7 @@ sgx_get_epc_area(struct sgx_softc *sc)
 	sc->epc_pages = malloc(sizeof(struct epc_page) * sc->npages,
 	    M_DEVBUF, M_WAITOK | M_ZERO);
 	if (sc->epc_pages == NULL) {
-		printf("%s: can't alloc memory\n", __func__);
+		device_printf(sc->dev, "%s: can't alloc memory\n", __func__);
 		return (ENOMEM);
 	}
 
@@ -878,17 +880,17 @@ sgx_identify(driver_t *driver, device_t parent)
 	do_cpuid(1, regs);
 
 	if ((regs[2] & CPUID2_OSXSAVE) == 0) {
-		printf("OSXSAVE not found\n");
+		device_printf(parent, "OSXSAVE not found\n");
 		return;
 	}
 
 	if ((rcr4() & CR4_XSAVE) == 0) {
-		printf("CR4_XSAVE not found\n");
+		device_printf(parent, "CR4_XSAVE not found\n");
 		return;
 	}
 
 	if ((rcr4() & CR4_FXSR) == 0) {
-		printf("CR4_FXSR not found\n");
+		device_printf(parent, "CR4_FXSR not found\n");
 		return;
 	}
 
@@ -921,14 +923,16 @@ sgx_attach(device_t dev)
 
 	ret = sgx_get_epc_area(sc);
 	if (ret != 0) {
-		printf("Failed to get EPC area\n");
+		device_printf(sc->dev, "%s: Failed to get EPC area\n",
+		    __func__);
 		return (ENXIO);
 	}
 
 	sc->sgx_cdev = make_dev(&sgx_cdevsw, 0, UID_ROOT, GID_WHEEL,
 	    0600, "isgx");
 	if (sc->sgx_cdev == NULL) {
-		device_printf(dev, "Failed to create character device.\n");
+		device_printf(dev, "%s: Failed to create character device.\n",
+		    __func__);
 		return (ENXIO);
 	}
 	sc->sgx_cdev->si_drv1 = sc;
