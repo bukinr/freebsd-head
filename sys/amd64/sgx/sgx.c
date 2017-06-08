@@ -640,8 +640,8 @@ validate_tcs(struct tcs *tcs)
 	    (tcs->ossa & (PAGE_SIZE - 1)) ||
 	    (tcs->ofsbasgx & (PAGE_SIZE - 1)) ||
 	    (tcs->ogsbasgx & (PAGE_SIZE - 1)) ||
-	    ((tcs->fslimit & 0xFFF) != 0xFFF) ||
-	    ((tcs->gslimit & 0xFFF) != 0xFFF)) {
+	    ((tcs->fslimit & 0xfff) != 0xfff) ||
+	    ((tcs->gslimit & 0xfff) != 0xfff)) {
 		return (-1);
 	}
 
