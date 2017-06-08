@@ -319,7 +319,8 @@ sgx_pg_dtor(void *handle)
 
 	enclave_remove(sc, enclave);
 
-	printf("free epc pages: %d\n", count_free_epc_pages(sc));
+	debug_printf(sc->dev, "free epc pages: %d\n",
+	    count_free_epc_pages(sc));
 }
 
 static int
@@ -970,6 +971,8 @@ sgx_get_epc_area(struct sgx_softc *sc)
 		sc->epc_pages[i].used = 0;
 	}
 
+	debug_printf(sc->dev, "npages %d\n", sc->npages);
+
 	return (0);
 }
 
@@ -1046,8 +1049,6 @@ sgx_attach(device_t dev)
 	sc->sgx_cdev->si_drv1 = sc;
 
 	TAILQ_INIT(&sc->enclaves);
-
-	printf("free epc pages: %d\n", count_free_epc_pages(sc));
 
 	return (0);
 }
