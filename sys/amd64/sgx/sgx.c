@@ -731,7 +731,7 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 			    "%s: TCS page validation failed\n", __func__);
 			return (-1);
 		}
-#if 0
+#ifdef DEBUG
 		dump_tcs(t);
 #endif
 	}
