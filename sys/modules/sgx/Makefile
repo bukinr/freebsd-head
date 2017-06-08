@@ -4,7 +4,7 @@
 
 KMOD=	sgx
 SRCS=	sgx.c
-SRCS+=	sgx.h sgx_user.h
+SRCS+=	sgx.h
 SRCS+=	bus_if.h device_if.h
 
 .include <bsd.kmod.mk>
