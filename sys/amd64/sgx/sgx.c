@@ -103,6 +103,7 @@ struct sgx_enclave {
 	uint64_t			size;
 	struct sgx_enclave_page		secs_page;
 	struct sgx_vm_handle		*vmh;
+	struct mtx			mtx;
 	TAILQ_ENTRY(sgx_enclave)	next;
 	TAILQ_HEAD(, sgx_enclave_page)	pages;
 	TAILQ_HEAD(, va_page)		va_pages;
@@ -111,6 +112,7 @@ struct sgx_enclave {
 struct sgx_softc {
 	struct cdev			*sgx_cdev;
 	device_t			dev;
+	struct mtx			mtx;
 	struct epc_page			*epc_pages;
 	uint32_t			npages;
 	TAILQ_HEAD(, sgx_enclave)	enclaves;
@@ -130,13 +132,18 @@ get_epc_page(struct sgx_softc *sc)
 	struct epc_page *epc;
 	int i;
 
+	mtx_lock(&sc->mtx);
+
 	for (i = 0; i < sc->npages; i++) {
 		epc = &sc->epc_pages[i];
 		if (epc->used == 0) {
 			epc->used = 1;
+			mtx_unlock(&sc->mtx);
 			return (epc);
 		}
 	}
+
+	mtx_unlock(&sc->mtx);
 
 	return (NULL);
 }
@@ -485,6 +492,8 @@ enclave_alloc(struct sgx_softc *sc, struct secs *secs)
 
 	TAILQ_INIT(&enclave->pages);
 	TAILQ_INIT(&enclave->va_pages);
+
+	mtx_init(&enclave->mtx, "SGX enclave", NULL, MTX_DEF);
 
 	enclave->base = secs->base;
 	enclave->size = secs->size;
@@ -996,6 +1005,8 @@ sgx_attach(device_t dev)
 
 	sc = device_get_softc(dev);
 	sc->dev = dev;
+
+	mtx_init(&sc->mtx, "SGX", NULL, MTX_DEF);
 
 	ret = sgx_get_epc_area(sc);
 	if (ret != 0) {
