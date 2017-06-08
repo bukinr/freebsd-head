@@ -52,6 +52,7 @@ __FBSDID("$FreeBSD$");
 #include <vm/vm_map.h>
 #include <vm/vm_object.h>
 #include <vm/vm_pager.h>
+#include <vm/pmap.h>
 
 #include <machine/md_var.h>
 #include <machine/specialreg.h>
@@ -197,6 +198,7 @@ enclave_remove(struct sgx_enclave *enclave)
 
 	epc = enclave_page->epc_page;
 	__eremove((void *)epc->base);
+
 	epc->used = 0;
 	free(enclave, M_SGX);
 
@@ -235,8 +237,8 @@ privcmd_pg_ctor(void *handle, vm_ooffset_t size, vm_prot_t prot,
 	map = handle;
 	sc = map->sc;
 
-	debug_printf(sc->dev, "%s: foff 0x%lx size 0x%lx\n",
-	    __func__, foff, size);
+	debug_printf(sc->dev, "%s: map->base %lx foff 0x%lx size 0x%lx\n",
+	    __func__, map->base, foff, size);
 
 	return (0);
 }
@@ -286,14 +288,15 @@ privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
 
 	map = object->handle;
 	if (map == NULL) {
-		return VM_PAGER_FAIL;
+		return (VM_PAGER_FAIL);
 	}
-	sc = map->sc;
-	enclave = map->enclave;
 
+	enclave = map->enclave;
 	if (enclave == NULL) {
-		return VM_PAGER_FAIL;
+		return (VM_PAGER_FAIL);
 	}
+
+	sc = map->sc;
 
 	debug_printf(sc->dev, "%s: offset 0x%lx\n", __func__, offset);
 
@@ -301,15 +304,17 @@ privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
 	pidx = OFF_TO_IDX(offset);
 
 	found = 0;
-	TAILQ_FOREACH_SAFE(enclave_page, &enclave->pages, next, enclave_page_tmp) {
+	TAILQ_FOREACH_SAFE(enclave_page, &enclave->pages, next,
+	    enclave_page_tmp) {
 		if ((map->base + offset) == enclave_page->addr) {
 			found = 1;
 			break;
 		}
 	}
 	if (found == 0) {
-		device_printf(sc->dev, "%s: page not found\n", __func__);
-		return VM_PAGER_FAIL;
+		device_printf(sc->dev, "%s: page not found\n",
+		    __func__);
+		return (VM_PAGER_FAIL);
 	}
 
 	epc = enclave_page->epc_page;
@@ -328,6 +333,7 @@ privcmd_pg_fault(vm_object_t object, vm_ooffset_t offset,
 		*mres = page;
 		vm_page_insert(page, object, pidx);
 	}
+
 	page->valid = VM_PAGE_BITS_ALL;
 
 	return (VM_PAGER_OK);
@@ -507,6 +513,7 @@ sgx_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 
 	secs_page = &enclave->secs_page;
 	secs_page->epc_page = epc;
+
 	__ecreate(&pginfo, (void *)epc->base);
 	TAILQ_INSERT_TAIL(&sc->enclaves, enclave, next);
 
@@ -692,6 +699,7 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	pginfo.secinfo = (uint64_t)&secinfo;
 	pginfo.secs = (uint64_t)secs_epc_page->base;
 	__eadd(&pginfo, (void *)epc->base);
+	kmem_free(kmem_arena, (vm_offset_t)tmp_vaddr, PAGE_SIZE);
 
 	sgx_measure_page(enclave->secs_page.epc_page, epc, addp->mrmask);
 	TAILQ_INSERT_TAIL(&enclave->pages, enclave_page, next);
@@ -801,7 +809,7 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 		ret = sgx_init(sc, initp);
 		break;
 	default:
-		return -EINVAL;
+		return (EINVAL);
 	}
 
 	if (ret == -1) {
@@ -865,13 +873,12 @@ sgx_get_epc_area(struct sgx_softc *sc)
 	    (cp[0] & 0xfffff000);
 	epc_size = ((uint64_t)(cp[3] & 0xfffff) << 32) + \
 	    (cp[2] & 0xfffff000);
+	sc->npages = epc_size / SGX_PAGE_SIZE;
 
-	device_printf(sc->dev, "%s: epc_base %lx size %lx\n",
-	    __func__, epc_base, epc_size);
+	device_printf(sc->dev, "%s: epc_base %lx size %lx (%d pages)\n",
+	    __func__, epc_base, epc_size, sc->npages);
 
 	epc_base_vaddr = (vm_offset_t)pmap_mapdev(epc_base, epc_size);
-
-	sc->npages = epc_size / SGX_PAGE_SIZE;
 
 	sc->epc_pages = malloc(sizeof(struct epc_page) * sc->npages,
 	    M_DEVBUF, M_WAITOK | M_ZERO);
