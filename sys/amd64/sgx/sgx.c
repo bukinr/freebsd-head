@@ -979,7 +979,7 @@ sgx_get_epc_area(struct sgx_softc *sc)
 static void
 sgx_identify(driver_t *driver, device_t parent)
 {
-	unsigned regs[4];
+	u_int regs[4];
 
 	if ((cpu_stdext_feature & CPUID_STDEXT_SGX) == 0)
 		return;
