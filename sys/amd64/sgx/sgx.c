@@ -124,6 +124,49 @@ struct sgx_vm_handle {
 	struct sgx_enclave	*enclave;
 };
 
+static struct epc_page *
+get_epc_page(struct sgx_softc *sc)
+{
+	struct epc_page *epc;
+	int i;
+
+	for (i = 0; i < sc->npages; i++) {
+		epc = &sc->epc_pages[i];
+		if (epc->used == 0) {
+			epc->used = 1;
+			return (epc);
+		}
+	}
+
+	return (NULL);
+}
+
+static void
+put_epc_page(struct sgx_softc *sc, struct epc_page *epc)
+{
+
+	epc->used = 0;
+}
+
+static int
+count_free_epc_pages(struct sgx_softc *sc)
+{
+	struct epc_page *epc;
+	int cnt;
+	int i;
+
+	cnt = 0;
+
+	for (i = 0; i < sc->npages; i++) {
+		epc = &sc->epc_pages[i];
+		if (epc->used == 0) {
+			cnt++;
+		}
+	}
+
+	return (cnt);
+}
+
 static int
 get_va_slot(struct va_page *va_page)
 {
@@ -140,7 +183,8 @@ get_va_slot(struct va_page *va_page)
 }
 
 static int
-free_va_slot(struct sgx_enclave *enclave,
+free_va_slot(struct sgx_softc *sc,
+    struct sgx_enclave *enclave,
     struct sgx_enclave_page *enclave_page)
 {
 	struct va_page *va_page;
@@ -159,6 +203,8 @@ free_va_slot(struct sgx_enclave *enclave,
 	}
 
 	va_page->slots[va_slot] = 0;
+
+	/* Now check if we need to remove va_page. */
 	for (i = 0; i < SGX_VA_PAGE_SLOTS; i++) {
 		if (va_page->slots[i] == 1) {
 			found = 1;
@@ -170,7 +216,7 @@ free_va_slot(struct sgx_enclave *enclave,
 		TAILQ_REMOVE(&enclave->va_pages, va_page, va_next);
 		epc = va_page->epc_page;
 		__eremove((void *)epc->base);
-		epc->used = 0;
+		put_epc_page(sc, epc);
 		free(enclave_page->va_page, M_SGX);
 	}
 
@@ -178,7 +224,8 @@ free_va_slot(struct sgx_enclave *enclave,
 }
 
 static int
-enclave_remove(struct sgx_enclave *enclave)
+enclave_remove(struct sgx_softc *sc,
+    struct sgx_enclave *enclave)
 {
 	struct sgx_enclave_page *enclave_page_tmp;
 	struct sgx_enclave_page *enclave_page;
@@ -187,41 +234,24 @@ enclave_remove(struct sgx_enclave *enclave)
 	TAILQ_FOREACH_SAFE(enclave_page, &enclave->pages, next,
 	    enclave_page_tmp) {
 		TAILQ_REMOVE(&enclave->pages, enclave_page, next);
-		free_va_slot(enclave, enclave_page);
+		free_va_slot(sc, enclave, enclave_page);
 
 		epc = enclave_page->epc_page;
 		__eremove((void *)epc->base);
-		epc->used = 0;
+		put_epc_page(sc, epc);
 		free(enclave_page, M_SGX);
 	}
 
 	enclave_page = &enclave->secs_page;
-	free_va_slot(enclave, enclave_page);
+	free_va_slot(sc, enclave, enclave_page);
 
 	epc = enclave_page->epc_page;
 	__eremove((void *)epc->base);
 
-	epc->used = 0;
+	put_epc_page(sc, epc);
 	free(enclave, M_SGX);
 
 	return (0);
-}
-
-static struct epc_page *
-get_epc_page(struct sgx_softc *sc)
-{
-	struct epc_page *epc;
-	int i;
-
-	for (i = 0; i < sc->npages; i++) {
-		epc = &sc->epc_pages[i];
-		if (epc->used == 0) {
-			epc->used = 1;
-			return (epc);
-		}
-	}
-
-	return (NULL);
 }
 
 static int
@@ -270,7 +300,9 @@ sgx_pg_dtor(void *handle)
 	enclave = vmh->enclave;
 
 	TAILQ_REMOVE(&sc->enclaves, enclave, next);
-	enclave_remove(enclave);
+	enclave_remove(sc, enclave);
+
+	printf("free epc pages: %d\n", count_free_epc_pages(sc));
 }
 
 static int
@@ -411,7 +443,7 @@ sgx_construct_page(struct sgx_softc *sc,
 		if (va_page == NULL) {
 			device_printf(sc->dev,
 			    "%s: Can't alloc va_page\n", __func__);
-			epc->used = 0;
+			put_epc_page(sc, epc);
 			return (-1);
 		}
 
@@ -531,7 +563,7 @@ error:
 		free(enclave, M_SGX);
 	}
 	if (epc != NULL) {
-		epc->used = 0;
+		put_epc_page(sc, epc);
 	}
 
 	return (-1);
@@ -722,7 +754,7 @@ error:
 		kmem_free(kmem_arena, (vm_offset_t)tmp_vaddr, PAGE_SIZE);
 	}
 	if (epc != NULL) {
-		epc->used = 0;
+		put_epc_page(sc, epc);
 	}
 	if (enclave_page != NULL) {
 		/* TODO */
@@ -983,6 +1015,8 @@ sgx_attach(device_t dev)
 	sc->sgx_cdev->si_drv1 = sc;
 
 	TAILQ_INIT(&sc->enclaves);
+
+	printf("free epc pages: %d\n", count_free_epc_pages(sc));
 
 	return (0);
 }
