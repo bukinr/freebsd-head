@@ -112,6 +112,7 @@ struct sgx_enclave {
 struct sgx_softc {
 	struct cdev			*sgx_cdev;
 	device_t			dev;
+	struct mtx			mtx_epc;
 	struct mtx			mtx;
 	struct epc_page			*epc_pages;
 	uint32_t			npages;
@@ -132,18 +133,18 @@ get_epc_page(struct sgx_softc *sc)
 	struct epc_page *epc;
 	int i;
 
-	mtx_lock(&sc->mtx);
+	mtx_lock(&sc->mtx_epc);
 
 	for (i = 0; i < sc->npages; i++) {
 		epc = &sc->epc_pages[i];
 		if (epc->used == 0) {
 			epc->used = 1;
-			mtx_unlock(&sc->mtx);
+			mtx_unlock(&sc->mtx_epc);
 			return (epc);
 		}
 	}
 
-	mtx_unlock(&sc->mtx);
+	mtx_unlock(&sc->mtx_epc);
 
 	return (NULL);
 }
@@ -220,7 +221,10 @@ free_va_slot(struct sgx_softc *sc,
 	}
 
 	if (found == 0) {
+		mtx_lock(&enclave->mtx);
 		TAILQ_REMOVE(&enclave->va_pages, va_page, va_next);
+		mtx_unlock(&enclave->mtx);
+
 		epc = va_page->epc_page;
 		__eremove((void *)epc->base);
 		put_epc_page(sc, epc);
@@ -240,7 +244,10 @@ enclave_remove(struct sgx_softc *sc,
 
 	TAILQ_FOREACH_SAFE(enclave_page, &enclave->pages, next,
 	    enclave_page_tmp) {
+		mtx_lock(&enclave->mtx);
 		TAILQ_REMOVE(&enclave->pages, enclave_page, next);
+		mtx_unlock(&enclave->mtx);
+
 		free_va_slot(sc, enclave, enclave_page);
 
 		epc = enclave_page->epc_page;
@@ -306,7 +313,10 @@ sgx_pg_dtor(void *handle)
 
 	enclave = vmh->enclave;
 
+	mtx_lock(&sc->mtx);
 	TAILQ_REMOVE(&sc->enclaves, enclave, next);
+	mtx_unlock(&sc->mtx);
+
 	enclave_remove(sc, enclave);
 
 	printf("free epc pages: %d\n", count_free_epc_pages(sc));
@@ -457,7 +467,10 @@ sgx_construct_page(struct sgx_softc *sc,
 		va_slot = get_va_slot(va_page);
 		va_page->epc_page = epc;
 		__epa((void *)epc->base);
+
+		mtx_lock(&enclave->mtx);
 		TAILQ_INSERT_TAIL(&enclave->va_pages, va_page, va_next);
+		mtx_unlock(&enclave->mtx);
 	}
 
 	enclave_page->va_page = va_page;
@@ -560,7 +573,10 @@ sgx_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	secs_page->epc_page = epc;
 
 	__ecreate(&pginfo, (void *)epc->base);
+
+	mtx_lock(&sc->mtx);
 	TAILQ_INSERT_TAIL(&sc->enclaves, enclave, next);
+	mtx_unlock(&sc->mtx);
 
 	return (0);
 
@@ -754,7 +770,10 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	kmem_free(kmem_arena, (vm_offset_t)tmp_vaddr, PAGE_SIZE);
 
 	sgx_measure_page(enclave->secs_page.epc_page, epc, addp->mrmask);
+
+	mtx_lock(&enclave->mtx);
 	TAILQ_INSERT_TAIL(&enclave->pages, enclave_page, next);
+	mtx_unlock(&enclave->mtx);
 
 	return (0);
 
@@ -1007,6 +1026,7 @@ sgx_attach(device_t dev)
 	sc->dev = dev;
 
 	mtx_init(&sc->mtx, "SGX", NULL, MTX_DEF);
+	mtx_init(&sc->mtx_epc, "SGX EPC area", NULL, MTX_DEF);
 
 	ret = sgx_get_epc_area(sc);
 	if (ret != 0) {
