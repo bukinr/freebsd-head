@@ -83,7 +83,7 @@ struct epc_page {
 	uint8_t			used;
 };
 
-/* Version-Array page */
+/* Version Array page */
 struct va_page {
 	struct epc_page		*epc_page;
 	TAILQ_ENTRY(va_page)	va_next;
@@ -655,20 +655,20 @@ validate_tcs(struct tcs *tcs)
 }
 
 static void
-dump_tcs(struct tcs *t)
+dump_tcs(struct sgx_softc *sc, struct tcs *t)
 {
 
-	printf("t->state %lx\n", t->state);
-	printf("t->flags %lx\n", t->flags);
-	printf("t->ossa %lx\n", t->ossa);
-	printf("t->cssa %x\n", t->cssa);
-	printf("t->nssa %x\n", t->nssa);
-	printf("t->oentry %lx\n", t->oentry);
-	printf("t->aep %lx\n", t->aep);
-	printf("t->ofsbasgx %lx\n", t->ofsbasgx);
-	printf("t->ogsbasgx %lx\n", t->ogsbasgx);
-	printf("t->fslimit %x\n", t->fslimit);
-	printf("t->gslimit %x\n", t->gslimit);
+	debug_printf(sc->dev, "t->state %lx\n", t->state);
+	debug_printf(sc->dev, "t->flags %lx\n", t->flags);
+	debug_printf(sc->dev, "t->ossa %lx\n", t->ossa);
+	debug_printf(sc->dev, "t->cssa %x\n", t->cssa);
+	debug_printf(sc->dev, "t->nssa %x\n", t->nssa);
+	debug_printf(sc->dev, "t->oentry %lx\n", t->oentry);
+	debug_printf(sc->dev, "t->aep %lx\n", t->aep);
+	debug_printf(sc->dev, "t->ofsbasgx %lx\n", t->ofsbasgx);
+	debug_printf(sc->dev, "t->ogsbasgx %lx\n", t->ogsbasgx);
+	debug_printf(sc->dev, "t->fslimit %x\n", t->fslimit);
+	debug_printf(sc->dev, "t->gslimit %x\n", t->gslimit);
 }
 
 static int
@@ -732,9 +732,7 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 			    "%s: TCS page validation failed\n", __func__);
 			return (-1);
 		}
-#ifdef DEBUG
-		dump_tcs(t);
-#endif
+		dump_tcs(sc, t);
 	}
 
 	enclave_page = malloc(sizeof(struct sgx_enclave_page),
