@@ -68,7 +68,8 @@ __FBSDID("$FreeBSD$");
 #undef	DEBUG
 
 #ifdef	DEBUG
-#define	debug_printf(dev, fmt, ...)  device_printf(dev, fmt, ##__VA_ARGS__)
+#define	debug_printf(dev, fmt, ...) \
+    device_printf(dev, fmt, ##__VA_ARGS__)
 #else
 #define	debug_printf(dev, fmt, ...)
 #endif
