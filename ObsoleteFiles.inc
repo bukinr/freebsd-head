@@ -38,6 +38,8 @@
 #   xargs -n1 | sort | uniq -d;
 # done
 
+# 20170609: drop obsolete manpage link (if_rtwn.ko -> rtwn.ko)
+OLD_FILES+=usr/share/man/man4/if_rtwn.4.gz
 # 20170531: removal of groff
 OLD_FILES+=usr/bin/addftinfo
 OLD_FILES+=usr/bin/afmtodit
@@ -596,7 +598,7 @@ OLD_FILES+=usr/share/doc/psd/Title.ascii.gz
 OLD_FILES+=usr/share/doc/psd/contents.ascii.gz
 OLD_DIRS+=usr/share/doc/psd/
 OLD_FILES+=usr/share/doc/smm/01.setup/paper.ascii.gz
-OLD_DIRS+=usr/share/doc/smm
+OLD_DIRS+=usr/share/doc/smm/01.setup
 OLD_FILES+=usr/share/doc/smm/02.config/paper.ascii.gz
 OLD_DIRS+=usr/share/doc/smm/02.config
 OLD_FILES+=usr/share/doc/smm/03.fsck/paper.ascii.gz
