@@ -793,9 +793,6 @@ error:
 	if (epc != NULL) {
 		sgx_epc_page_put(sc, epc);
 	}
-	if (enclave_page != NULL) {
-		/* TODO */
-	}
 
 	return (-1);
 }
