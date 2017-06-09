@@ -205,6 +205,9 @@ __eremove(void *epc)
 	return (tmp.oeax);
 }
 
+#define	SECINFO_FLAGS_PT_S	8
+#define	SECINFO_FLAGS_PT_M	(0xff << SECINFO_FLAGS_PT_S)
+
 struct secinfo {
 	uint64_t flags;
 	uint64_t reserved[7];

@@ -734,7 +734,8 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 		goto error;
 	}
 
-	page_type = (secinfo.flags >> 8) & 0xff;
+	page_type = (secinfo.flags & SECINFO_FLAGS_PT_M) >> \
+	    SECINFO_FLAGS_PT_S;
 	if (page_type == PT_TCS) {
 		t = (struct tcs *)tmp_vaddr;
 		if (sgx_tcs_validate(t) != 0) {
