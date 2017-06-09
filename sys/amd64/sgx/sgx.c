@@ -906,8 +906,8 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 		return (EINVAL);
 	}
 
-	if (ret == -1) {
-		ret = EINVAL;
+	if (ret < 0) {
+		return (EINVAL);
 	}
 
 	return (ret);
