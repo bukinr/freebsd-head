@@ -414,6 +414,7 @@ sgx_enclave_free(struct sgx_softc *sc,
 	/* Remove SECS page */
 	enclave_page = &enclave->secs_page;
 	sgx_enclave_page_remove(sc, enclave, enclave_page);
+
 	free(enclave, M_SGX);
 
 	return (0);
@@ -802,11 +803,13 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 {
 	struct epc_page *secs_epc_page;
 	struct sgx_enclave *enclave;
-	vm_offset_t tmp_vaddr;
+	void *tmp_vaddr;
 	void *einittoken;
 	void *sigstruct;
 	int retry;
 	int ret;
+
+	tmp_vaddr = NULL;
 
 	debug_printf(sc->dev, "%s: addr %lx, sigstruct %lx,"
 	    "einittoken %lx\n", __func__, initp->addr,
@@ -815,15 +818,20 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	ret = sgx_enclave_find(sc, initp->addr, &enclave);
 	if (ret != 0) {
 		device_printf(sc->dev, "Failed to get enclave\n");
-		return (-1);
+		goto error;
 	}
 
 	secs_epc_page = enclave->secs_page.epc_page;
 
-	tmp_vaddr = kmem_alloc_contig(kmem_arena, PAGE_SIZE,
+	tmp_vaddr = (void *)kmem_alloc_contig(kmem_arena, PAGE_SIZE,
 	    0/*flags*/, 0, BUS_SPACE_MAXADDR_32BIT,
 	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
-	sigstruct = (void *)tmp_vaddr;
+	if (tmp_vaddr == NULL) {
+		device_printf(sc->dev,
+		    "%s: failed to alloc memory\n", __func__);
+		goto error;
+	}
+	sigstruct = tmp_vaddr;
 	einittoken = (void *)((uint64_t)sigstruct + PAGE_SIZE / 2);
 
 	ret = copyin((void *)initp->sigstruct, sigstruct,
@@ -831,7 +839,7 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	if (ret != 0) {
 		device_printf(sc->dev,
 		    "%s: Failed to copy SIGSTRUCT page\n", __func__);
-		return (-1);
+		goto error;
 	}
 
 	ret = copyin((void *)initp->einittoken, einittoken,
@@ -839,7 +847,7 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	if (ret != 0) {
 		device_printf(sc->dev,
 		    "%s: Failed to copy EINITTOKEN page\n", __func__);
-		return (-1);
+		goto error;
 	}
 
 	retry = 16;
@@ -853,8 +861,14 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	if (ret != 0) {
 		debug_printf(sc->dev,
 		    "%s: Failed to init enclave: %d\n", __func__, ret);
+		goto error;
 	}
 
+error:
+	if (tmp_vaddr != NULL) {
+		kmem_free(kmem_arena, (vm_offset_t)tmp_vaddr, PAGE_SIZE);
+	}
+	
 	return (ret);
 }
 
