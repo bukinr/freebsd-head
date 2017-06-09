@@ -206,9 +206,7 @@ sgx_va_slot_free(struct sgx_softc *sc,
 	va_page = enclave_page->va_page;
 	va_slot = enclave_page->va_slot;
 
-	if (va_page->slots[va_slot] == 0) {
-		/* Error */
-	}
+	KASSERT(va_page->slots[va_slot] == 1, ("freeing unused page"));
 
 	va_page->slots[va_slot] = 0;
 
@@ -517,7 +515,6 @@ sgx_pg_dtor(void *handle)
 		    "%s: enclave not found\n", __func__);
 		return;
 	}
-
 	sgx_enclave_free(sc, vmh->enclave);
 	free(vmh, M_SGX);
 
@@ -590,7 +587,6 @@ sgx_pg_fault(vm_object_t object, vm_ooffset_t offset,
 		*mres = page;
 		vm_page_insert(page, object, pidx);
 	}
-
 	page->valid = VM_PAGE_BITS_ALL;
 
 	return (VM_PAGER_OK);
@@ -621,6 +617,10 @@ sgx_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	m_secs = (struct secs *)kmem_alloc_contig(kmem_arena, PAGE_SIZE,
 	    0/*flags*/, 0, BUS_SPACE_MAXADDR_32BIT,
 	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
+	if (m_secs == NULL) {
+		device_printf(sc->dev, "Can't allocate memory.\n");
+		goto error;
+	}
 
 	ret = copyin((void *)param->src, m_secs, sizeof(struct secs));
 	if (ret != 0) {
@@ -662,6 +662,8 @@ sgx_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	mtx_lock(&sc->mtx);
 	TAILQ_INSERT_TAIL(&sc->enclaves, enclave, next);
 	mtx_unlock(&sc->mtx);
+
+	kmem_free(kmem_arena, (vm_offset_t)m_secs, PAGE_SIZE);
 
 	return (0);
 
