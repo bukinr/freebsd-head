@@ -126,9 +126,6 @@ __ecreate(struct page_info *pginfo, void *secs)
 
 	__encls(ECREATE, tmp, pginfo, secs, 0);
 
-	//printf("%s: %x %lx %lx %lx\n",
-	//    __func__, tmp.oeax, tmp.orbx, tmp.orcx, tmp.ordx);
-
 	return (tmp.oeax);
 }
 
@@ -138,9 +135,6 @@ __eadd(struct page_info *pginfo, void *epc)
 	struct out_regs tmp;
 
 	__encls(EADD, tmp, pginfo, epc, 0);
-
-	//printf("%s: %x %lx %lx %lx\n",
-	//    __func__, tmp.oeax, tmp.orbx, tmp.orcx, tmp.ordx);
 
 	return (tmp.oeax);
 }
@@ -152,9 +146,6 @@ __einit(void *sigstruct, void *secs, void *einittoken)
 
 	__encls(EINIT, tmp, sigstruct, secs, einittoken);
 
-	//printf("%s: %x %lx %lx %lx\n",
-	//    __func__, tmp.oeax, tmp.orbx, tmp.orcx, tmp.ordx);
-
 	return (tmp.oeax);
 }
 
@@ -164,9 +155,6 @@ __eextend(void *secs, void *epc)
 	struct out_regs tmp;
 
 	__encls(EEXTEND, tmp, secs, epc, 0);
-
-	//printf("%s: %x %lx %lx %lx\n",
-	//    __func__, tmp.oeax, tmp.orbx, tmp.orcx, tmp.ordx);
 
 	return (tmp.oeax);
 }
