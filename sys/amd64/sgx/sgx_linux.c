@@ -52,8 +52,8 @@ __FBSDID("$FreeBSD$");
 #include <amd64/sgx/sgx.h>
 #include <sys/ioccom.h>
 
-#define	SGX_LINUX_IOCTL_MIN	SGX_IOC_ENCLAVE_CREATE
-#define	SGX_LINUX_IOCTL_MAX	SGX_IOC_ENCLAVE_INIT
+#define	SGX_LINUX_IOCTL_MIN	(SGX_IOC_ENCLAVE_CREATE & 0xffff)
+#define	SGX_LINUX_IOCTL_MAX	(SGX_IOC_ENCLAVE_INIT & 0xffff)
 
 static int
 sgx_linux_ioctl(struct thread *td, struct linux_ioctl_args *args)
