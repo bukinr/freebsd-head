@@ -35,12 +35,12 @@
 #define _AMD64_SGX_SGX_H_
 
 #define	SGX_MAGIC	0xA4
-#define SGX_IOC_ENCLAVE_CREATE \
-	(_IOW(SGX_MAGIC, 0x00, struct sgx_enclave_create) & 0xffff)
-#define SGX_IOC_ENCLAVE_ADD_PAGE \
-	(_IOW(SGX_MAGIC, 0x01, struct sgx_enclave_add_page) & 0xffff)
-#define SGX_IOC_ENCLAVE_INIT \
-	(_IOW(SGX_MAGIC, 0x02, struct sgx_enclave_init) & 0xffff)
+#define	SGX_IOC_ENCLAVE_CREATE \
+	_IOR(SGX_MAGIC, 0x00, struct sgx_enclave_create)
+#define	SGX_IOC_ENCLAVE_ADD_PAGE \
+	_IOR(SGX_MAGIC, 0x01, struct sgx_enclave_add_page)
+#define	SGX_IOC_ENCLAVE_INIT \
+	_IOR(SGX_MAGIC, 0x02, struct sgx_enclave_init)
 
 #define	SIGSTRUCT_SIZE	1808
 #define	EINITTOKEN_SIZE	304
@@ -51,20 +51,20 @@
 
 struct sgx_enclave_create {
 	uint64_t	src;
-};
+} __packed;
 
 struct sgx_enclave_add_page {
 	uint64_t	addr;
 	uint64_t	src;
 	uint64_t	secinfo;
 	uint16_t	mrmask;
-};
+} __packed;
 
 struct sgx_enclave_init {
 	uint64_t	addr;
 	uint64_t	sigstruct;
 	uint64_t	einittoken;
-};
+} __packed;
 
 enum {
 	ECREATE	= 0x0,
@@ -97,7 +97,7 @@ struct page_info {
 		uint64_t pcmd;
 	};
 	uint64_t secs;
-} __attribute__((aligned(32)));
+} __aligned(32);
 
 struct out_regs {
 	uint32_t oeax;
@@ -108,7 +108,7 @@ struct out_regs {
 
 #define __encls(cmd, tmp, rbx, rcx, rdx)		\
 	__asm __volatile(				\
-		".byte 0x0f, 0x01, 0xcf\n\t"		\
+		".byte 0x0f, 0x01, 0xcf"		\
 		:"=a"(tmp.oeax),			\
 		 "=b"(tmp.orbx),			\
 		 "=c"(tmp.orcx),			\
