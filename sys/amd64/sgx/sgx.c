@@ -300,7 +300,8 @@ sgx_enclave_page_construct(struct sgx_softc *sc,
 			return (-1);
 		}
 
-		va_page = malloc(sizeof(struct va_page), M_SGX, M_WAITOK | M_ZERO);
+		va_page = malloc(sizeof(struct va_page),
+		    M_SGX, M_WAITOK | M_ZERO);
 		if (va_page == NULL) {
 			device_printf(sc->dev,
 			    "%s: Can't alloc va_page\n", __func__);
@@ -383,9 +384,11 @@ sgx_enclave_alloc(struct sgx_softc *sc, struct secs *secs)
 {
 	struct sgx_enclave *enclave;
 
-	enclave = malloc(sizeof(struct sgx_enclave), M_SGX, M_WAITOK | M_ZERO);
+	enclave = malloc(sizeof(struct sgx_enclave),
+	    M_SGX, M_WAITOK | M_ZERO);
 	if (enclave == NULL) {
-		device_printf(sc->dev, "Can't alloc memory for enclave\n");
+		device_printf(sc->dev,
+		    "%s: Can't alloc memory for enclave\n", __func__);
 		return (NULL);
 	}
 
@@ -1093,27 +1096,9 @@ sgx_get_epc_area(struct sgx_softc *sc)
 static void
 sgx_identify(driver_t *driver, device_t parent)
 {
-	u_int regs[4];
 
 	if ((cpu_stdext_feature & CPUID_STDEXT_SGX) == 0)
 		return;
-
-	do_cpuid(1, regs);
-
-	if ((regs[2] & CPUID2_OSXSAVE) == 0) {
-		device_printf(parent, "OSXSAVE not found\n");
-		return;
-	}
-
-	if ((rcr4() & CR4_XSAVE) == 0) {
-		device_printf(parent, "CR4_XSAVE not found\n");
-		return;
-	}
-
-	if ((rcr4() & CR4_FXSR) == 0) {
-		device_printf(parent, "CR4_FXSR not found\n");
-		return;
-	}
 
 	/* Make sure we're not being doubly invoked. */
 	if (device_find_child(parent, "sgx", -1) != NULL)
