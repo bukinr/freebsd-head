@@ -262,8 +262,11 @@ trap(struct trapframe *frame)
 		if (td->td_cowgen != p->p_cowgen)
 			thread_cow_update(td);
 
+		//printf("User trap %d\n", type);
+
 		switch (type) {
 		case T_PRIVINFLT:	/* privileged instruction fault */
+			printf("privileged instruction fault: rip %lx\n", addr);
 			i = SIGILL;
 			ucode = ILL_PRVOPC;
 			break;
@@ -292,6 +295,7 @@ trap(struct trapframe *frame)
 			break;
 
 		case T_PROTFLT:		/* general protection fault */
+			printf("General protection fault (user): rip %lx\n", addr);
 			i = SIGBUS;
 			ucode = BUS_OBJERR;
 			break;
@@ -321,6 +325,7 @@ trap(struct trapframe *frame)
 			if (*p->p_sysent->sv_trap != NULL &&
 			    (*p->p_sysent->sv_trap)(td) == 0)
 				goto userout;
+			//printf("page fault: %lx at rip %lx\n", frame->tf_addr, addr);
 
 			addr = frame->tf_addr;
 			i = trap_pfault(frame, TRUE);
@@ -384,6 +389,7 @@ trap(struct trapframe *frame)
 			break;
 
 		case T_DNA:
+			//printf("fpu not avail trap\n");
 			/* transparent fault (due to context switch "late") */
 			KASSERT(PCB_USER_FPU(td->td_pcb),
 			    ("kernel FPU ctx has leaked"));
