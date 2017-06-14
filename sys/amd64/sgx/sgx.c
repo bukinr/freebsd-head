@@ -435,10 +435,12 @@ sgx_enclave_free(struct sgx_softc *sc,
 }
 
 static void
-sgx_measure_page(struct epc_page *secs, struct epc_page *epc,
-    uint16_t mrmask)
+sgx_measure_page(struct sgx_softc *sc, struct epc_page *secs,
+    struct epc_page *epc, uint16_t mrmask)
 {
 	int i, j;
+
+	mtx_lock(&sc->mtx);
 
 	for (i = 0, j = 1; i < PAGE_SIZE; i += 0x100, j <<= 1) {
 		if (!(j & mrmask)) {
@@ -448,6 +450,8 @@ sgx_measure_page(struct epc_page *secs, struct epc_page *epc,
 		__eextend((void *)secs->base,
 		    (void *)((uint64_t)epc->base + i));
 	}
+
+	mtx_unlock(&sc->mtx);
 }
 
 static int
@@ -464,7 +468,7 @@ sgx_tcs_validate(struct tcs *tcs)
 		return (-1);
 	}
 
-	for (i = 0; i < sizeof(tcs->reserved)/sizeof(uint64_t); i++) {
+	for (i = 0; i < (sizeof(tcs->reserved) / sizeof(uint64_t)); i++) {
 		if (tcs->reserved[i]) {
 			return (-1);
 		}
@@ -849,14 +853,14 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	pginfo.srcpge = (uint64_t)tmp_vaddr;
 	pginfo.secinfo = (uint64_t)&secinfo;
 	pginfo.secs = (uint64_t)secs_epc_page->base;
+
 	mtx_lock(&sc->mtx);
 	__eadd(&pginfo, (void *)epc->base);
 	mtx_unlock(&sc->mtx);
+
 	kmem_free(kmem_arena, (vm_offset_t)tmp_vaddr, PAGE_SIZE);
 
-	mtx_lock(&sc->mtx);
-	sgx_measure_page(enclave->secs_page.epc_page, epc, addp->mrmask);
-	mtx_unlock(&sc->mtx);
+	sgx_measure_page(sc, enclave->secs_page.epc_page, epc, addp->mrmask);
 
 	mtx_lock(&enclave->mtx);
 	TAILQ_INSERT_TAIL(&enclave->pages, enclave_page, next);
