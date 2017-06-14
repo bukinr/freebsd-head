@@ -505,19 +505,6 @@ sgx_remove(struct sgx_softc *sc, struct sgx_enclave *enclave)
 
 	vmh = enclave->vmh;
 
-#if 0
-	vm_page_t m;
-	int i;
-	VM_OBJECT_WLOCK(vmh->mem);
-	for (i = 0; i < (vmh->size/PAGE_SIZE); i++) {
-		m = vm_page_lookup(vmh->mem, i);
-		if (m == NULL)
-			continue;
-		panic("ok");
-	}
-	VM_OBJECT_WUNLOCK(vmh->mem);
-#endif
-
 	sgx_enclave_free(sc, vmh->enclave);
 	free(vmh, M_SGX);
 
