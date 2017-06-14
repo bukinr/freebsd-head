@@ -1013,7 +1013,8 @@ sgx_get_epc_area(struct sgx_softc *sc)
 	    (cp[2] & 0xfffff000);
 	sc->npages = sc->epc_size / SGX_PAGE_SIZE;
 
-	epc_base_vaddr = (vm_offset_t)pmap_mapdev(sc->epc_base, sc->epc_size);
+	epc_base_vaddr = (vm_offset_t)pmap_mapdev_attr(sc->epc_base,
+	    sc->epc_size, VM_MEMATTR_DEFAULT);
 
 	sc->epc_pages = malloc(sizeof(struct epc_page) * sc->npages,
 	    M_DEVBUF, M_WAITOK | M_ZERO);
