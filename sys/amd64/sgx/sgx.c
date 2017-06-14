@@ -71,8 +71,7 @@ __FBSDID("$FreeBSD$");
 #undef	DEBUG
 
 #ifdef	DEBUG
-#define	dprintf(fmt, ...) \
-    printf(fmt, ##__VA_ARGS__)
+#define	dprintf(fmt, ...)	printf(fmt, ##__VA_ARGS__)
 #else
 #define	dprintf(fmt, ...)
 #endif
@@ -117,6 +116,8 @@ struct sgx_softc {
 	device_t			dev;
 	struct mtx			mtx_epc;
 	struct mtx			mtx;
+	uint64_t			epc_base;
+	uint64_t			epc_size;
 	struct epc_page			*epc_pages;
 	uint32_t			npages;
 	TAILQ_HEAD(, sgx_enclave)	enclaves;
@@ -217,7 +218,8 @@ sgx_va_slot_free(struct sgx_softc *sc,
 	va_page = enclave_page->va_page;
 	va_slot = enclave_page->va_slot;
 
-	KASSERT(va_page->slots[va_slot] == 1, ("freeing unused page"));
+	KASSERT(va_page->slots[va_slot] == 1,
+	    ("Freeing unused page."));
 
 	va_page->slots[va_slot] = 0;
 
@@ -603,19 +605,17 @@ sgx_pg_fault(vm_object_t object, vm_ooffset_t offset,
 	KASSERT(page->wire_count == 1, ("wire_count not 1 %p", page));
 	KASSERT(vm_page_busied(page) == 0, ("page %p is busy", page));
 
-	vm_page_t oldm;
 	if (*mres != NULL) {
-		oldm = *mres;
-		vm_page_lock(oldm);
-		vm_page_free(oldm);
-		vm_page_unlock(oldm);
+		vm_page_lock(*mres);
+		vm_page_free(*mres);
+		vm_page_unlock(*mres);
 		*mres = NULL;
 	}
 
 	vm_page_insert(page, object, pidx);
 	page->valid = VM_PAGE_BITS_ALL;
-
 	vm_page_xbusy(page);
+
 	*mres = page;  
 
 	return (VM_PAGER_OK);
@@ -999,31 +999,19 @@ static int
 sgx_get_epc_area(struct sgx_softc *sc)
 {
 	vm_offset_t epc_base_vaddr;
-	uint64_t epc_base;
-	uint64_t epc_size;
 	u_int cp[4];
 	int error;
 	int i;
 
 	cpuid_count(SGX_CPUID, 0x2, cp);
 
-	epc_base = ((uint64_t)(cp[1] & 0xfffff) << 32) + \
+	sc->epc_base = ((uint64_t)(cp[1] & 0xfffff) << 32) + \
 	    (cp[0] & 0xfffff000);
-	epc_size = ((uint64_t)(cp[3] & 0xfffff) << 32) + \
+	sc->epc_size = ((uint64_t)(cp[3] & 0xfffff) << 32) + \
 	    (cp[2] & 0xfffff000);
-	sc->npages = epc_size / SGX_PAGE_SIZE;
+	sc->npages = sc->epc_size / SGX_PAGE_SIZE;
 
-	printf("%s: epc_base %lx size %lx (%d pages)\n",
-	    __func__, epc_base, epc_size, sc->npages);
-
-	error = vm_phys_fictitious_reg_range(epc_base, epc_base + epc_size,
-	    VM_MEMATTR_DEFAULT);
-	if (error) { 
-		printf("%s: Can't register fictitious space.\n", __func__);
-		return (EINVAL);
-	}
-
-	epc_base_vaddr = (vm_offset_t)pmap_mapdev(epc_base, epc_size);
+	epc_base_vaddr = (vm_offset_t)pmap_mapdev(sc->epc_base, sc->epc_size);
 
 	sc->epc_pages = malloc(sizeof(struct epc_page) * sc->npages,
 	    M_DEVBUF, M_WAITOK | M_ZERO);
@@ -1034,17 +1022,33 @@ sgx_get_epc_area(struct sgx_softc *sc)
 
 	for (i = 0; i < sc->npages; i++) {
 		sc->epc_pages[i].base = epc_base_vaddr + SGX_PAGE_SIZE * i;
-		sc->epc_pages[i].phys = epc_base + SGX_PAGE_SIZE * i;
+		sc->epc_pages[i].phys = sc->epc_base + SGX_PAGE_SIZE * i;
 		sc->epc_pages[i].used = 0;
 	}
 
-	dprintf("npages %d\n", sc->npages);
+	error = vm_phys_fictitious_reg_range(sc->epc_base,
+	    sc->epc_base + sc->epc_size, VM_MEMATTR_DEFAULT);
+	if (error) { 
+		printf("%s: Can't register fictitious space.\n", __func__);
+		free(sc->epc_pages, M_SGX);
+		return (EINVAL);
+	}
 
 	return (0);
 }
 
+static void
+sgx_put_epc_area(struct sgx_softc *sc)
+{
+
+	free(sc->epc_pages, M_SGX);
+
+	vm_phys_fictitious_unreg_range(sc->epc_base,
+	    sc->epc_base + sc->epc_size);
+}
+
 static int
-sgx_init(void)
+sgx_load(void)
 {
 	struct sgx_softc *sc;
 	int error;
@@ -1064,23 +1068,40 @@ sgx_init(void)
 		return (ENXIO);
 	}
 
+	TAILQ_INIT(&sc->enclaves);
+
 	sc->sgx_cdev = make_dev(&sgx_cdevsw, 0, UID_ROOT, GID_WHEEL,
 	    0600, "isgx");
 	if (sc->sgx_cdev == NULL) {
 		printf("%s: Failed to create character device.\n", __func__);
+		sgx_put_epc_area(sc);
 		return (ENXIO);
 	}
 	sc->sgx_cdev->si_drv1 = sc;
 
-	TAILQ_INIT(&sc->enclaves);
+	printf("SGX initialized: EPC base 0x%lx size 0x%lx (%d pages)\n",
+	    sc->epc_base, sc->epc_size, sc->npages);
 
 	return (0);
 }
 
 static int
-sgx_uninit(void)
+sgx_unload(void)
 {
+	struct sgx_softc *sc;
 
+	sc = &sgx_sc;
+
+	if (!TAILQ_EMPTY(&sc->enclaves))
+		return (EBUSY);
+
+	destroy_dev(sc->sgx_cdev);
+
+	vm_phys_fictitious_unreg_range(sc->epc_base,
+	    sc->epc_base + sc->epc_size);
+
+	mtx_destroy(&sc->mtx);
+	mtx_destroy(&sc->mtx_epc);
 
 	return (0);
 }
@@ -1092,10 +1113,10 @@ sgx_handler(module_t mod, int what, void *arg)
 
 	switch (what) {
 	case MOD_LOAD:
-		error = sgx_init();
+		error = sgx_load();
 		break;
 	case MOD_UNLOAD:
-		error = sgx_uninit();
+		error = sgx_unload();
 		break;
 	default:
 		error = 0;
