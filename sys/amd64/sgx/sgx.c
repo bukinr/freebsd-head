@@ -77,7 +77,7 @@ __FBSDID("$FreeBSD$");
 #define	debug_printf(dev, fmt, ...)
 #endif
 
-MALLOC_DEFINE(M_SGX, "sgx", "SGX driver");
+static MALLOC_DEFINE(M_SGX, "sgx", "SGX driver");
 
 /* EPC (Enclave Page Cache) page */
 struct epc_page {
@@ -209,11 +209,11 @@ sgx_va_slot_free(struct sgx_softc *sc,
 {
 	struct va_page *va_page;
 	struct epc_page *epc;
+	bool found;
 	int va_slot;
-	int found;
 	int i;
 
-	found = 0;
+	found = false;
 
 	va_page = enclave_page->va_page;
 	va_slot = enclave_page->va_slot;
@@ -227,16 +227,16 @@ sgx_va_slot_free(struct sgx_softc *sc,
 	/* Now check if we need to remove va_page. */
 	for (i = 0; i < SGX_VA_PAGE_SLOTS; i++)
 		if (va_page->slots[i] == 1) {
-			found = 1;
+			found = true;
 			break;
 		}
 
-	if (found == 0)
+	if (!found)
 		TAILQ_REMOVE(&enclave->va_pages, va_page, va_next);
 
 	mtx_unlock(&enclave->mtx);
 
-	if (found == 0) {
+	if (!found) {
 		epc = va_page->epc_page;
 		mtx_lock(&sc->mtx);
 		__eremove((void *)epc->base);
@@ -579,7 +579,7 @@ sgx_pg_fault(vm_object_t object, vm_ooffset_t offset,
 	struct sgx_enclave_page *enclave_page_tmp;
 	struct sgx_enclave_page *enclave_page;
 	struct epc_page *epc;
-	int found;
+	bool found;
 
 	vmh = object->handle;
 	if (vmh == NULL)
@@ -596,17 +596,17 @@ sgx_pg_fault(vm_object_t object, vm_ooffset_t offset,
 	memattr = object->memattr;
 	pidx = OFF_TO_IDX(offset);
 
-	found = 0;
+	found = false;
 	mtx_lock(&enclave->mtx);
 	TAILQ_FOREACH_SAFE(enclave_page, &enclave->pages, next,
 	    enclave_page_tmp) {
 		if ((vmh->base + offset) == enclave_page->addr) {
-			found = 1;
+			found = true;
 			break;
 		}
 	}
 	mtx_unlock(&enclave->mtx);
-	if (found == 0) {
+	if (!found) {
 		device_printf(sc->dev,
 		    "%s: page not found\n", __func__);
 		return (VM_PAGER_FAIL);
