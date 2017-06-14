@@ -694,7 +694,7 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 
 	ret = sgx_enclave_page_construct(sc, enclave, &enclave->secs_page);
 	if (ret != 0) {
-		dprintf("%s: can't construct page\n", __func__);
+		dprintf("%s: Can't construct page\n", __func__);
 		goto error;
 	}
 
@@ -750,7 +750,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 
 	epc = sgx_epc_page_get(sc);
 	if (epc == NULL) {
-		dprintf("%s: failed to get free epc page\n", __func__);
+		dprintf("%s: Failed to get free epc page\n", __func__);
 		goto error;
 	}
 
@@ -768,7 +768,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	    M_WAITOK | M_ZERO, 0, BUS_SPACE_MAXADDR_32BIT,
 	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
 	if (tmp_vaddr == NULL) {
-		dprintf("%s: failed to alloc memory\n", __func__);
+		dprintf("%s: Failed to alloc memory\n", __func__);
 		goto error;
 	}
 
@@ -798,7 +798,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 
 	ret = sgx_enclave_page_construct(sc, enclave, enclave_page);
 	if (ret != 0) {
-		dprintf("%s: can't construct page\n", __func__);
+		dprintf("%s: Can't construct page\n", __func__);
 		goto error;
 	}
 
@@ -1078,6 +1078,14 @@ sgx_init(void)
 }
 
 static int
+sgx_uninit(void)
+{
+
+
+	return (0);
+}
+
+static int
 sgx_handler(module_t mod, int what, void *arg)
 {
 	int error;
@@ -1087,6 +1095,8 @@ sgx_handler(module_t mod, int what, void *arg)
 		error = sgx_init();
 		break;
 	case MOD_UNLOAD:
+		error = sgx_uninit();
+		break;
 	default:
 		error = 0;
 		break;
