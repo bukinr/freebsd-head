@@ -34,60 +34,15 @@
 #ifndef _AMD64_SGX_SGX_H_
 #define _AMD64_SGX_SGX_H_
 
-#define	SGX_MAGIC	0xA4
-#define	SGX_IOC_ENCLAVE_CREATE \
-	_IOR(SGX_MAGIC, 0x00, struct sgx_enclave_create)
-#define	SGX_IOC_ENCLAVE_ADD_PAGE \
-	_IOR(SGX_MAGIC, 0x01, struct sgx_enclave_add_page)
-#define	SGX_IOC_ENCLAVE_INIT \
-	_IOR(SGX_MAGIC, 0x02, struct sgx_enclave_init)
-
 #define	SIGSTRUCT_SIZE	1808
 #define	EINITTOKEN_SIZE	304
 
-/* Error codes and used by */
-#define	SGX_SUCCESS			0
-#define	SGX_INVALID_SIG_STRUCT		1	/* EINIT */
-#define	SGX_INVALID_ATTRIBUTE		2	/* EINIT, EGETKEY */
-#define	SGX_BLSTATE			3	/* EBLOCK */
-#define	SGX_INVALID_MEASUREMENT		4	/* EINIT */
-#define	SGX_NOTBLOCKABLE		5	/* EBLOCK */
-#define	SGX_PG_INVLD			6	/* EBLOCK */
-#define	SGX_LOCKFAIL			7	/* EBLOCK, EMODPR, EMODT */
-#define	SGX_INVALID_SIGNATURE		8	/* EINIT */
-#define	SGX_MAC_COMPARE_FAIL		9	/* ELDB, ELDU */
-#define	SGX_PAGE_NOT_BLOCKED		10	/* EWB */
-#define	SGX_NOT_TRACKED			11	/* EWB, EACCEPT */
-#define	SGX_VA_SLOT_OCCUPIED		12	/* EWB */
-#define	SGX_CHILD_PRESENT		13	/* EWB, EREMOVE */
-#define	SGX_ENCLAVE_ACT			14	/* EREMOVE */
-#define	SGX_ENTRYEPOCH_LOCKED		15	/* EBLOCK */
-#define	SGX_INVALID_EINIT_TOKEN		16	/* EINIT */
-#define	SGX_PREV_TRK_INCMPL		17	/* ETRACK */
-#define	SGX_PG_IS_SECS			18	/* EBLOCK */
-#define	SGX_PAGE_ATTRIBUTES_MISMATCH	19	/* EACCEPT, EACCEPTCOPY */
-#define	SGX_PAGE_NOT_MODIFIABLE		20	/* EMODPR, EMODT */
-#define	SGX_INVALID_CPUSVN		32	/* EINIT, EGETKEY */
-#define	SGX_INVALID_ISVSVN		64	/* EGETKEY */
-#define	SGX_UNMASKED_EVENT		128	/* EINIT */
-#define	SGX_INVALID_KEYNAME		256	/* EGETKEY */
-
-struct sgx_enclave_create {
-	uint64_t	src;
-} __packed;
-
-struct sgx_enclave_add_page {
-	uint64_t	addr;
-	uint64_t	src;
-	uint64_t	secinfo;
-	uint16_t	mrmask;
-} __packed;
-
-struct sgx_enclave_init {
-	uint64_t	addr;
-	uint64_t	sigstruct;
-	uint64_t	einittoken;
-} __packed;
+struct secinfo {
+	uint64_t flags;
+#define	SECINFO_FLAGS_PT_S	8	/* Page type shift */
+#define	SECINFO_FLAGS_PT_M	(0xff << SECINFO_FLAGS_PT_S)
+	uint64_t reserved[7];
+} __aligned(128);
 
 struct page_info {
 	uint64_t linaddr;
@@ -98,19 +53,6 @@ struct page_info {
 	};
 	uint64_t secs;
 } __aligned(32);
-
-#define	SECINFO_FLAGS_PT_S	8
-#define	SECINFO_FLAGS_PT_M	(0xff << SECINFO_FLAGS_PT_S)
-
-struct secinfo {
-	uint64_t flags;
-	uint64_t reserved[7];
-} __attribute__((aligned(128)));
-
-/*
- * 2.7 SGX ENCLAVE CONTROL STRUCTURE (SECS)
- * The SECS data structure requires 4K-Bytes alignment.
- */
 
 struct secs_attr {
 	uint8_t		reserved1: 1;
@@ -124,6 +66,10 @@ struct secs_attr {
 	uint64_t	xfrm;			/* X-Feature Request Mask */
 };
 
+/*
+ * 2.7 SGX Enclave Control Structure (SECS)
+ * The SECS data structure requires 4K-Bytes alignment.
+ */
 struct secs {
 	uint64_t	size;
 	uint64_t	base;
@@ -140,6 +86,11 @@ struct secs {
 	uint8_t		reserved4[3836];
 };
 
+/*
+ * 2.8 Thread Control Structure (TCS)
+ * Each executing thread in the enclave is associated with a
+ * Thread Control Structure. It requires 4K-Bytes alignment.
+ */
 struct tcs {
 	uint64_t	state;
 	uint64_t	flags;

@@ -59,8 +59,10 @@ __FBSDID("$FreeBSD$");
 #include <machine/md_var.h>
 #include <machine/specialreg.h>
 #include <machine/bus.h>
+#include <machine/cpufunc.h>
 
 #include "sgx.h"
+#include "sgx_user.h"
 
 #define	SGX_CPUID			0x12
 #define	SGX_PAGE_SIZE			4096
@@ -352,7 +354,7 @@ sgx_enclave_find(struct sgx_softc *sc, uint64_t addr,
 	int ret;
 
 	ret = sgx_mem_find(sc, addr, &entry, &mem);
-	if (ret != 0)
+	if (ret)
 		return (ret);
 
 	vmh = mem->handle;
@@ -443,7 +445,7 @@ sgx_tcs_validate(struct tcs *tcs)
 {
 	int i;
 
-	if ((tcs->flags != 0) ||
+	if ((tcs->flags) ||
 	    (tcs->ossa & (PAGE_SIZE - 1)) ||
 	    (tcs->ofsbasgx & (PAGE_SIZE - 1)) ||
 	    (tcs->ogsbasgx & (PAGE_SIZE - 1)) ||
@@ -605,7 +607,7 @@ sgx_pg_fault(vm_object_t object, vm_ooffset_t offset,
 	if (page == NULL)
 		return (VM_PAGER_FAIL);
 
-	KASSERT((page->flags & PG_FICTITIOUS) != 0,
+	KASSERT(page->flags & PG_FICTITIOUS,
 	    ("not fictitious %p", page));
 	KASSERT(page->wire_count == 1, ("wire_count not 1 %p", page));
 	KASSERT(vm_page_busied(page) == 0, ("page %p is busy", page));
@@ -700,7 +702,7 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	}
 
 	ret = sgx_enclave_page_construct(sc, enclave, &enclave->secs_page);
-	if (ret != 0) {
+	if (ret) {
 		dprintf("%s: Can't construct page.\n", __func__);
 		goto error;
 	}
@@ -751,7 +753,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	epc = NULL;
 
 	ret = sgx_enclave_find(sc, addp->addr, &enclave);
-	if (ret != 0) {
+	if (ret) {
 		dprintf("%s: Failed to find enclave.\n", __func__);
 		goto error;
 	}
@@ -768,7 +770,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	memset(&secinfo, 0, sizeof(struct secinfo));
 	ret = copyin((void *)addp->secinfo, &secinfo,
 	    sizeof(struct secinfo));
-	if (ret != 0) {
+	if (ret) {
 		dprintf("%s: Failed to copy secinfo\n", __func__);
 		goto error;
 	}
@@ -783,7 +785,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	}
 
 	ret = copyin((void *)addp->src, tmp_vaddr, PAGE_SIZE);
-	if (ret != 0) {
+	if (ret) {
 		dprintf("%s: Failed to copy page\n", __func__);
 		goto error;
 	}
@@ -809,7 +811,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	}
 
 	ret = sgx_enclave_page_construct(sc, enclave, enclave_page);
-	if (ret != 0) {
+	if (ret) {
 		dprintf("%s: Can't construct page\n", __func__);
 		goto error;
 	}
@@ -865,7 +867,7 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	    __func__, initp->addr, initp->sigstruct, initp->einittoken);
 
 	ret = sgx_enclave_find(sc, initp->addr, &enclave);
-	if (ret != 0) {
+	if (ret) {
 		dprintf("%s: Failed to get enclave\n", __func__);
 		goto error;
 	}
@@ -885,14 +887,14 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 
 	ret = copyin((void *)initp->sigstruct, sigstruct,
 	    SIGSTRUCT_SIZE);
-	if (ret != 0) {
+	if (ret) {
 		dprintf("%s: Failed to copy SIGSTRUCT page\n", __func__);
 		goto error;
 	}
 
 	ret = copyin((void *)initp->einittoken, einittoken,
 	    EINITTOKEN_SIZE);
-	if (ret != 0) {
+	if (ret) {
 		dprintf("%s: Failed to copy EINITTOKEN page\n", __func__);
 		goto error;
 	}
@@ -940,7 +942,7 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 		return (EINVAL);
 
 	ret = copyin(addr, data, len);
-	if (ret != 0) {
+	if (ret) {
 		dprintf("%s: Can't copy data\n", __func__);
 		return (EINVAL);
 	}
@@ -1073,7 +1075,7 @@ sgx_load(void)
 	mtx_init(&sc->mtx_epc, "SGX EPC area", NULL, MTX_DEF);
 
 	error = sgx_get_epc_area(sc);
-	if (error != 0) {
+	if (error) {
 		printf("%s: Failed to get Processor Reserved Memory area\n",
 		    __func__);
 		return (ENXIO);

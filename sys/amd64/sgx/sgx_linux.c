@@ -49,7 +49,7 @@ __FBSDID("$FreeBSD$");
 #endif
 #include <compat/linux/linux_ioctl.h>
 
-#include <amd64/sgx/sgx.h>
+#include <amd64/sgx/sgx_user.h>
 #include <sys/ioccom.h>
 
 #define	SGX_LINUX_IOCTL_MIN	(SGX_IOC_ENCLAVE_CREATE & 0xffff)
