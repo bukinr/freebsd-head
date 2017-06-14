@@ -202,18 +202,15 @@ sgx_va_slot_alloc(struct sgx_enclave *enclave,
 	return (-1);
 }
 
-static int
+static void
 sgx_va_slot_free(struct sgx_softc *sc,
     struct sgx_enclave *enclave,
     struct sgx_enclave_page *enclave_page)
 {
 	struct va_page *va_page;
 	struct epc_page *epc;
-	bool found;
 	int va_slot;
 	int i;
-
-	found = false;
 
 	va_page = enclave_page->va_page;
 	va_slot = enclave_page->va_slot;
@@ -222,33 +219,26 @@ sgx_va_slot_free(struct sgx_softc *sc,
 
 	va_page->slots[va_slot] = 0;
 
-	mtx_lock(&enclave->mtx);
-
 	/* Now check if we need to remove va_page. */
+	mtx_lock(&enclave->mtx);
 	for (i = 0; i < SGX_VA_PAGE_SLOTS; i++)
 		if (va_page->slots[i] == 1) {
-			found = true;
-			break;
+			mtx_unlock(&enclave->mtx);
+			return;
 		}
 
-	if (!found)
-		TAILQ_REMOVE(&enclave->va_pages, va_page, va_next);
-
+	TAILQ_REMOVE(&enclave->va_pages, va_page, va_next);
 	mtx_unlock(&enclave->mtx);
 
-	if (!found) {
-		epc = va_page->epc_page;
-		mtx_lock(&sc->mtx);
-		__eremove((void *)epc->base);
-		mtx_unlock(&sc->mtx);
-		sgx_epc_page_put(sc, epc);
-		free(enclave_page->va_page, M_SGX);
-	}
-
-	return (0);
+	epc = va_page->epc_page;
+	mtx_lock(&sc->mtx);
+	__eremove((void *)epc->base);
+	mtx_unlock(&sc->mtx);
+	sgx_epc_page_put(sc, epc);
+	free(enclave_page->va_page, M_SGX);
 }
 
-static int
+static void
 sgx_enclave_page_remove(struct sgx_softc *sc,
     struct sgx_enclave *enclave,
     struct sgx_enclave_page *enclave_page)
@@ -262,8 +252,6 @@ sgx_enclave_page_remove(struct sgx_softc *sc,
 	__eremove((void *)epc->base);
 	mtx_unlock(&sc->mtx);
 	sgx_epc_page_put(sc, epc);
-
-	return (0);
 }
 
 static int
@@ -396,7 +384,7 @@ sgx_enclave_alloc(struct sgx_softc *sc, struct secs *secs)
 	return (enclave);
 }
 
-static int
+static void
 sgx_enclave_free(struct sgx_softc *sc,
     struct sgx_enclave *enclave)
 {
@@ -423,8 +411,6 @@ sgx_enclave_free(struct sgx_softc *sc,
 	    ("Enclave version-array pages tailq is not empty"));
 	KASSERT(TAILQ_EMPTY(&enclave->pages),
 	    ("Enclave pages is not empty"));
-
-	return (0);
 }
 
 static void
@@ -505,7 +491,7 @@ sgx_pg_ctor(void *handle, vm_ooffset_t size, vm_prot_t prot,
 	return (0);
 }
 
-static int
+static void
 sgx_remove(struct sgx_softc *sc, struct sgx_enclave *enclave)
 {
 	struct sgx_vm_handle *vmh;
@@ -534,8 +520,6 @@ sgx_remove(struct sgx_softc *sc, struct sgx_enclave *enclave)
 
 	debug_printf(sc->dev, "count free epc pages: %d\n",
 	    sgx_epc_page_count(sc));
-
-	return (0);
 }
 
 static void
