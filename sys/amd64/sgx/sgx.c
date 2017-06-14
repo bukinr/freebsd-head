@@ -723,7 +723,8 @@ error:
 }
 
 static int
-sgx_ioctl_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
+sgx_ioctl_add_page(struct sgx_softc *sc,
+    struct sgx_enclave_add_page *addp)
 {
 	struct sgx_enclave_page *enclave_page;
 	struct epc_page *secs_epc_page;
@@ -758,7 +759,8 @@ sgx_ioctl_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	pmap = vm_map_pmap(&proc->p_vmspace->vm_map);
 
 	memset(&secinfo, 0, sizeof(struct secinfo));
-	ret = copyin((void *)addp->secinfo, &secinfo, sizeof(struct secinfo));
+	ret = copyin((void *)addp->secinfo, &secinfo,
+	    sizeof(struct secinfo));
 	if (ret != 0) {
 		dprintf("%s: Failed to copy secinfo\n", __func__);
 		goto error;
