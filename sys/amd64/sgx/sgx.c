@@ -237,7 +237,7 @@ sgx_va_slot_free(struct sgx_softc *sc,
 
 	epc = va_page->epc_page;
 	mtx_lock(&sc->mtx);
-	__eremove((void *)epc->base);
+	sgx_eremove((void *)epc->base);
 	mtx_unlock(&sc->mtx);
 	sgx_epc_page_put(sc, epc);
 	free(enclave_page->va_page, M_SGX);
@@ -254,7 +254,7 @@ sgx_enclave_page_remove(struct sgx_softc *sc,
 
 	epc = enclave_page->epc_page;
 	mtx_lock(&sc->mtx);
-	__eremove((void *)epc->base);
+	sgx_eremove((void *)epc->base);
 	mtx_unlock(&sc->mtx);
 	sgx_epc_page_put(sc, epc);
 }
@@ -303,7 +303,7 @@ sgx_enclave_page_construct(struct sgx_softc *sc,
 
 		va_page->epc_page = epc;
 		mtx_lock(&sc->mtx);
-		__epa((void *)epc->base);
+		sgx_epa((void *)epc->base);
 		mtx_unlock(&sc->mtx);
 
 		mtx_lock(&enclave->mtx);
@@ -431,7 +431,7 @@ sgx_measure_page(struct sgx_softc *sc, struct epc_page *secs,
 		if (!(j & mrmask))
 			continue;
 
-		__eextend((void *)secs->base,
+		sgx_eextend((void *)secs->base,
 		    (void *)((uint64_t)epc->base + i));
 	}
 
@@ -709,7 +709,7 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	secs_page->epc_page = epc;
 
 	mtx_lock(&sc->mtx);
-	__ecreate(&pginfo, (void *)epc->base);
+	sgx_ecreate(&pginfo, (void *)epc->base);
 	TAILQ_INSERT_TAIL(&sc->enclaves, enclave, next);
 	mtx_unlock(&sc->mtx);
 
@@ -825,7 +825,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	pginfo.secs = (uint64_t)secs_epc_page->base;
 
 	mtx_lock(&sc->mtx);
-	__eadd(&pginfo, (void *)epc->base);
+	sgx_eadd(&pginfo, (void *)epc->base);
 	mtx_unlock(&sc->mtx);
 
 	kmem_free(kmem_arena, (vm_offset_t)tmp_vaddr, PAGE_SIZE);
@@ -900,10 +900,10 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	retry = 16;
 	do {
 		mtx_lock(&sc->mtx);
-		ret = __einit(sigstruct, (void *)secs_epc_page->base,
+		ret = sgx_einit(sigstruct, (void *)secs_epc_page->base,
 		    einittoken);
 		mtx_unlock(&sc->mtx);
-		dprintf("%s: __einit returned %d\n", __func__, ret);
+		dprintf("%s: sgx_einit returned %d\n", __func__, ret);
 	} while (ret == SGX_UNMASKED_EVENT && retry--);
 
 	if (ret) {

@@ -106,91 +106,82 @@ struct out_regs {
 	uint64_t ordx;
 };
 
-#define __encls(cmd, tmp, rbx, rcx, rdx)		\
+#define	encls_ret(rax, rbx, rcx, rdx, tmp)		\
 	__asm __volatile(				\
 		".byte 0x0f, 0x01, 0xcf"		\
 		:"=a"(tmp.oeax),			\
 		 "=b"(tmp.orbx),			\
 		 "=c"(tmp.orcx),			\
 		 "=d"(tmp.ordx)				\
-		:"a"((uint32_t)cmd),			\
+		:"a"((uint32_t)rax),			\
 		 "b"(rbx),				\
 		 "c"(rcx),				\
 		 "d"(rdx)				\
 		:"memory");
 
-static inline u_long
-__ecreate(struct page_info *pginfo, void *secs)
+#define	encls(rax, rbx, rcx, rdx)			\
+	__asm __volatile(				\
+		".byte 0x0f, 0x01, 0xcf"		\
+		::"a"((uint32_t)rax),			\
+		 "b"(rbx),				\
+		 "c"(rcx),				\
+		 "d"(rdx)				\
+		:"memory");
+
+static inline void
+sgx_ecreate(struct page_info *pginfo, void *secs)
 {
-	struct out_regs tmp;
 
-	__encls(ECREATE, tmp, pginfo, secs, 0);
-
-	return (tmp.oeax);
+	encls(ECREATE, pginfo, secs, 0);
 }
 
-static inline u_long
-__eadd(struct page_info *pginfo, void *epc)
+static inline void
+sgx_eadd(struct page_info *pginfo, void *epc)
 {
-	struct out_regs tmp;
 
-	__encls(EADD, tmp, pginfo, epc, 0);
-
-	return (tmp.oeax);
-}
-
-static inline int
-__einit(void *sigstruct, void *secs, void *einittoken)
-{
-	struct out_regs tmp;
-
-	__encls(EINIT, tmp, sigstruct, secs, einittoken);
-
-	return (tmp.oeax);
+	encls(EADD, pginfo, epc, 0);
 }
 
 static inline int
-__eextend(void *secs, void *epc)
+sgx_einit(void *sigstruct, void *secs, void *einittoken)
 {
 	struct out_regs tmp;
 
-	__encls(EEXTEND, tmp, secs, epc, 0);
+	encls_ret(EINIT, sigstruct, secs, einittoken, tmp);
 
 	return (tmp.oeax);
 }
 
-static inline int
-__epa(void *epc)
+static inline void
+sgx_eextend(void *secs, void *epc)
 {
-	struct out_regs tmp;
-	uint64_t rbx;
 
-	rbx = PT_VA;
+	encls(EEXTEND, secs, epc, 0);
+}
 
-	__encls(EPA, tmp, rbx, epc, 0);
+static inline void
+sgx_epa(void *epc)
+{
 
-	return (tmp.oeax);
+	encls(EPA, PT_VA, epc, 0);
 }
 
 static inline int
-__eldu(uint64_t rbx, uint64_t rcx,
+sgx_eldu(uint64_t rbx, uint64_t rcx,
     uint64_t rdx)
 {
 	struct out_regs tmp;
 
-	__encls(ELDU, tmp, rbx, rcx, rdx);
+	encls_ret(ELDU, rbx, rcx, rdx, tmp);
 
 	return (tmp.oeax);
 }
 
-static inline int
-__eremove(void *epc)
+static inline void
+sgx_eremove(void *epc)
 {
-	struct out_regs tmp;
 
-	__encls(EREMOVE, tmp, 0, epc, 0);
-
-	return (tmp.oeax);
+	encls(EREMOVE, 0, epc, 0);
 }
 
 #define	SECINFO_FLAGS_PT_S	8
