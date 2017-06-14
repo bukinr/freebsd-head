@@ -802,6 +802,110 @@ intr_restore(register_t rflags)
 	write_rflags(rflags);
 }
 
+enum {
+	ECREATE	= 0x0,
+	EADD	= 0x1,
+	EINIT	= 0x2,
+	EREMOVE	= 0x3,
+	EDGBRD	= 0x4,
+	EDGBWR	= 0x5,
+	EEXTEND	= 0x6,
+	ELDU	= 0x8,
+	EBLOCK	= 0x9,
+	EPA	= 0xA,
+	EWB	= 0xB,
+	ETRACK	= 0xC,
+};
+
+enum {
+	PT_SECS = 0x00,
+	PT_TCS  = 0x01,
+	PT_REG  = 0x02,
+	PT_VA   = 0x03,
+	PT_TRIM = 0x04,
+};
+
+struct sgx_out_regs {
+	uint32_t oeax;
+	uint64_t orbx;
+};
+
+#define	encls_ret(rax, rbx, rcx, rdx, tmp)		\
+	__asm __volatile(				\
+		".byte 0x0f, 0x01, 0xcf"		\
+		:"=a"(tmp.oeax),			\
+		 "=b"(tmp.orbx)				\
+		:"a"((uint32_t)rax),			\
+		 "b"(rbx),				\
+		 "c"(rcx),				\
+		 "d"(rdx)				\
+		:"memory");
+
+#define	encls(rax, rbx, rcx, rdx)			\
+	__asm __volatile(				\
+		".byte 0x0f, 0x01, 0xcf"		\
+		::"a"((uint32_t)rax),			\
+		 "b"(rbx),				\
+		 "c"(rcx),				\
+		 "d"(rdx)				\
+		:"memory");
+
+static __inline void
+sgx_ecreate(void *pginfo, void *secs)
+{
+
+	encls(ECREATE, pginfo, secs, 0);
+}
+
+static __inline void
+sgx_eadd(void *pginfo, void *epc)
+{
+
+	encls(EADD, pginfo, epc, 0);
+}
+
+static __inline int
+sgx_einit(void *sigstruct, void *secs, void *einittoken)
+{
+	struct sgx_out_regs tmp;
+
+	encls_ret(EINIT, sigstruct, secs, einittoken, tmp);
+
+	return (tmp.oeax);
+}
+
+static __inline void
+sgx_eextend(void *secs, void *epc)
+{
+
+	encls(EEXTEND, secs, epc, 0);
+}
+
+static __inline void
+sgx_epa(void *epc)
+{
+
+	encls(EPA, PT_VA, epc, 0);
+}
+
+static __inline int
+sgx_eldu(uint64_t rbx, uint64_t rcx,
+    uint64_t rdx)
+{
+	struct sgx_out_regs tmp;
+
+	encls_ret(ELDU, rbx, rcx, rdx, tmp);
+
+	return (tmp.oeax);
+}
+
+static __inline void
+sgx_eremove(void *epc)
+{
+
+	encls(EREMOVE, 0, epc, 0);
+}
+
 #else /* !(__GNUCLIKE_ASM && __CC_SUPPORTS___INLINE) */
 
 int	breakpoint(void);

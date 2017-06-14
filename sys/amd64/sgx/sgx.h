@@ -45,9 +45,32 @@
 #define	SIGSTRUCT_SIZE	1808
 #define	EINITTOKEN_SIZE	304
 
-/* Error codes */
-#define	SGX_SUCCESS		0
-#define	SGX_UNMASKED_EVENT	128
+/* Error codes and used by */
+#define	SGX_SUCCESS			0
+#define	SGX_INVALID_SIG_STRUCT		1	/* EINIT */
+#define	SGX_INVALID_ATTRIBUTE		2	/* EINIT, EGETKEY */
+#define	SGX_BLSTATE			3	/* EBLOCK */
+#define	SGX_INVALID_MEASUREMENT		4	/* EINIT */
+#define	SGX_NOTBLOCKABLE		5	/* EBLOCK */
+#define	SGX_PG_INVLD			6	/* EBLOCK */
+#define	SGX_LOCKFAIL			7	/* EBLOCK, EMODPR, EMODT */
+#define	SGX_INVALID_SIGNATURE		8	/* EINIT */
+#define	SGX_MAC_COMPARE_FAIL		9	/* ELDB, ELDU */
+#define	SGX_PAGE_NOT_BLOCKED		10	/* EWB */
+#define	SGX_NOT_TRACKED			11	/* EWB, EACCEPT */
+#define	SGX_VA_SLOT_OCCUPIED		12	/* EWB */
+#define	SGX_CHILD_PRESENT		13	/* EWB, EREMOVE */
+#define	SGX_ENCLAVE_ACT			14	/* EREMOVE */
+#define	SGX_ENTRYEPOCH_LOCKED		15	/* EBLOCK */
+#define	SGX_INVALID_EINIT_TOKEN		16	/* EINIT */
+#define	SGX_PREV_TRK_INCMPL		17	/* ETRACK */
+#define	SGX_PG_IS_SECS			18	/* EBLOCK */
+#define	SGX_PAGE_ATTRIBUTES_MISMATCH	19	/* EACCEPT, EACCEPTCOPY */
+#define	SGX_PAGE_NOT_MODIFIABLE		20	/* EMODPR, EMODT */
+#define	SGX_INVALID_CPUSVN		32	/* EINIT, EGETKEY */
+#define	SGX_INVALID_ISVSVN		64	/* EGETKEY */
+#define	SGX_UNMASKED_EVENT		128	/* EINIT */
+#define	SGX_INVALID_KEYNAME		256	/* EGETKEY */
 
 struct sgx_enclave_create {
 	uint64_t	src;
@@ -66,29 +89,6 @@ struct sgx_enclave_init {
 	uint64_t	einittoken;
 } __packed;
 
-enum {
-	ECREATE	= 0x0,
-	EADD	= 0x1,
-	EINIT	= 0x2,
-	EREMOVE	= 0x3,
-	EDGBRD	= 0x4,
-	EDGBWR	= 0x5,
-	EEXTEND	= 0x6,
-	ELDU	= 0x8,
-	EBLOCK	= 0x9,
-	EPA	= 0xA,
-	EWB	= 0xB,
-	ETRACK	= 0xC,
-};
-
-enum {
-	PT_SECS = 0x00,
-	PT_TCS  = 0x01,
-	PT_REG  = 0x02,
-	PT_VA   = 0x03,
-	PT_TRIM = 0x04,
-};
-
 struct page_info {
 	uint64_t linaddr;
 	uint64_t srcpge;
@@ -98,91 +98,6 @@ struct page_info {
 	};
 	uint64_t secs;
 } __aligned(32);
-
-struct out_regs {
-	uint32_t oeax;
-	uint64_t orbx;
-	uint64_t orcx;
-	uint64_t ordx;
-};
-
-#define	encls_ret(rax, rbx, rcx, rdx, tmp)		\
-	__asm __volatile(				\
-		".byte 0x0f, 0x01, 0xcf"		\
-		:"=a"(tmp.oeax),			\
-		 "=b"(tmp.orbx),			\
-		 "=c"(tmp.orcx),			\
-		 "=d"(tmp.ordx)				\
-		:"a"((uint32_t)rax),			\
-		 "b"(rbx),				\
-		 "c"(rcx),				\
-		 "d"(rdx)				\
-		:"memory");
-
-#define	encls(rax, rbx, rcx, rdx)			\
-	__asm __volatile(				\
-		".byte 0x0f, 0x01, 0xcf"		\
-		::"a"((uint32_t)rax),			\
-		 "b"(rbx),				\
-		 "c"(rcx),				\
-		 "d"(rdx)				\
-		:"memory");
-
-static inline void
-sgx_ecreate(struct page_info *pginfo, void *secs)
-{
-
-	encls(ECREATE, pginfo, secs, 0);
-}
-
-static inline void
-sgx_eadd(struct page_info *pginfo, void *epc)
-{
-
-	encls(EADD, pginfo, epc, 0);
-}
-
-static inline int
-sgx_einit(void *sigstruct, void *secs, void *einittoken)
-{
-	struct out_regs tmp;
-
-	encls_ret(EINIT, sigstruct, secs, einittoken, tmp);
-
-	return (tmp.oeax);
-}
-
-static inline void
-sgx_eextend(void *secs, void *epc)
-{
-
-	encls(EEXTEND, secs, epc, 0);
-}
-
-static inline void
-sgx_epa(void *epc)
-{
-
-	encls(EPA, PT_VA, epc, 0);
-}
-
-static inline int
-sgx_eldu(uint64_t rbx, uint64_t rcx,
-    uint64_t rdx)
-{
-	struct out_regs tmp;
-
-	encls_ret(ELDU, rbx, rcx, rdx, tmp);
-
-	return (tmp.oeax);
-}
-
-static inline void
-sgx_eremove(void *epc)
-{
-
-	encls(EREMOVE, 0, epc, 0);
-}
 
 #define	SECINFO_FLAGS_PT_S	8
 #define	SECINFO_FLAGS_PT_M	(0xff << SECINFO_FLAGS_PT_S)
