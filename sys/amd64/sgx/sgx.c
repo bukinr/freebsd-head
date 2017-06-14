@@ -446,7 +446,7 @@ sgx_tcs_validate(struct tcs *tcs)
 	    ((tcs->gslimit & 0xfff) != 0xfff))
 		return (-1);
 
-	for (i = 0; i < (sizeof(tcs->reserved) / sizeof(uint64_t)); i++)
+	for (i = 0; i < nitems(tcs->reserved); i++)
 		if (tcs->reserved[i])
 			return (-1);
 
