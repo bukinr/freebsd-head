@@ -141,9 +141,8 @@ sgx_epc_page_count(struct sgx_softc *sc)
 
 	for (i = 0; i < sc->npages; i++) {
 		epc = &sc->epc_pages[i];
-		if (epc->used == 0) {
+		if (epc->used == 0)
 			cnt++;
-		}
 	}
 
 	return (cnt);
@@ -157,10 +156,9 @@ sgx_epc_page_get(struct sgx_softc *sc)
 
 	mtx_lock(&sc->mtx_epc);
 
-	if (sgx_epc_page_count(sc) == 0) {
+	if (sgx_epc_page_count(sc) == 0)
 		device_printf(sc->dev, "count free epc pages: %d\n",
 		    sgx_epc_page_count(sc));
-	}
 
 	for (i = 0; i < sc->npages; i++) {
 		epc = &sc->epc_pages[i];
@@ -180,9 +178,8 @@ static void
 sgx_epc_page_put(struct sgx_softc *sc, struct epc_page *epc)
 {
 
-	if (epc == NULL) {
+	if (epc == NULL)
 		return;
-	}
 
 	KASSERT(epc->used == 1, ("freeing not used page"));
 	epc->used = 0;
@@ -196,12 +193,11 @@ sgx_va_slot_alloc(struct sgx_enclave *enclave,
 
 	mtx_assert(&enclave->mtx, MA_OWNED);
 
-	for (i = 0; i < SGX_VA_PAGE_SLOTS; i++) {
+	for (i = 0; i < SGX_VA_PAGE_SLOTS; i++)
 		if (va_page->slots[i] == 0) {
 			va_page->slots[i] = 1;
 			return (i);
 		}
-	}
 
 	return (-1);
 }
@@ -229,15 +225,15 @@ sgx_va_slot_free(struct sgx_softc *sc,
 	mtx_lock(&enclave->mtx);
 
 	/* Now check if we need to remove va_page. */
-	for (i = 0; i < SGX_VA_PAGE_SLOTS; i++) {
+	for (i = 0; i < SGX_VA_PAGE_SLOTS; i++)
 		if (va_page->slots[i] == 1) {
 			found = 1;
 			break;
 		}
-	}
-	if (found == 0) {
+
+	if (found == 0)
 		TAILQ_REMOVE(&enclave->va_pages, va_page, va_next);
-	}
+
 	mtx_unlock(&enclave->mtx);
 
 	if (found == 0) {
@@ -286,9 +282,8 @@ sgx_enclave_page_construct(struct sgx_softc *sc,
 	TAILQ_FOREACH_SAFE(va_page, &enclave->va_pages, va_next,
 	    va_page_tmp) {
 		va_slot = sgx_va_slot_alloc(enclave, va_page);
-		if (va_slot >= 0) {
+		if (va_slot >= 0)
 			break;
-		}
 	}
 	mtx_unlock(&enclave->mtx);
 
@@ -365,14 +360,12 @@ sgx_enclave_find(struct sgx_softc *sc, uint64_t addr,
 	int ret;
 
 	ret = sgx_mem_find(sc, addr, &entry, &mem);
-	if (ret != 0) {
+	if (ret != 0)
 		return (-1);
-	}
 
 	vmh = mem->handle;
-	if (vmh == NULL) {
+	if (vmh == NULL)
 		return (-1);
-	}
 
 	*encl = vmh->enclave;
 
@@ -443,9 +436,8 @@ sgx_measure_page(struct sgx_softc *sc, struct epc_page *secs,
 	mtx_lock(&sc->mtx);
 
 	for (i = 0, j = 1; i < PAGE_SIZE; i += 0x100, j <<= 1) {
-		if (!(j & mrmask)) {
+		if (!(j & mrmask))
 			continue;
-		}
 
 		__eextend((void *)secs->base,
 		    (void *)((uint64_t)epc->base + i));
@@ -464,15 +456,12 @@ sgx_tcs_validate(struct tcs *tcs)
 	    (tcs->ofsbasgx & (PAGE_SIZE - 1)) ||
 	    (tcs->ogsbasgx & (PAGE_SIZE - 1)) ||
 	    ((tcs->fslimit & 0xfff) != 0xfff) ||
-	    ((tcs->gslimit & 0xfff) != 0xfff)) {
+	    ((tcs->gslimit & 0xfff) != 0xfff))
 		return (-1);
-	}
 
-	for (i = 0; i < (sizeof(tcs->reserved) / sizeof(uint64_t)); i++) {
-		if (tcs->reserved[i]) {
+	for (i = 0; i < (sizeof(tcs->reserved) / sizeof(uint64_t)); i++)
+		if (tcs->reserved[i])
 			return (-1);
-		}
-	}
 
 	return (0);
 }
@@ -593,14 +582,12 @@ sgx_pg_fault(vm_object_t object, vm_ooffset_t offset,
 	int found;
 
 	vmh = object->handle;
-	if (vmh == NULL) {
+	if (vmh == NULL)
 		return (VM_PAGER_FAIL);
-	}
 
 	enclave = vmh->enclave;
-	if (enclave == NULL) {
+	if (enclave == NULL)
 		return (VM_PAGER_FAIL);
-	}
 
 	sc = vmh->sc;
 
@@ -628,9 +615,8 @@ sgx_pg_fault(vm_object_t object, vm_ooffset_t offset,
 	epc = enclave_page->epc_page;
 
 	page = PHYS_TO_VM_PAGE(epc->phys);
-	if (page == NULL) {
+	if (page == NULL)
 		return (VM_PAGER_FAIL);
-	}
 
 	KASSERT((page->flags & PG_FICTITIOUS) != 0,
 	    ("not fictitious %p", page));
@@ -749,9 +735,8 @@ sgx_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	return (0);
 
 error:
-	if (m_secs != NULL) {
+	if (m_secs != NULL)
 		kmem_free(kmem_arena, (vm_offset_t)m_secs, PAGE_SIZE);
-	}
 	sgx_epc_page_put(sc, epc);
 	free(enclave, M_SGX);
 
@@ -869,9 +854,8 @@ sgx_add_page(struct sgx_softc *sc, struct sgx_enclave_add_page *addp)
 	return (0);
 
 error:
-	if (tmp_vaddr != NULL) {
+	if (tmp_vaddr != NULL)
 		kmem_free(kmem_arena, (vm_offset_t)tmp_vaddr, PAGE_SIZE);
-	}
 
 	sgx_epc_page_put(sc, epc);
 	free(enclave_page, M_SGX);
@@ -948,9 +932,8 @@ sgx_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	}
 
 error:
-	if (tmp_vaddr != NULL) {
+	if (tmp_vaddr != NULL)
 		kmem_free(kmem_arena, (vm_offset_t)tmp_vaddr, PAGE_SIZE);
-	}
 
 	return (ret);
 }
@@ -973,9 +956,8 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 
 	debug_printf(sc->dev, "%s: cmd %lx, len %d\n", __func__, cmd, len);
 
-	if (len > IOCTL_MAX_DATA_LEN) {
+	if (len > IOCTL_MAX_DATA_LEN)
 		return (EINVAL);
-	}
 
 	ret = copyin(addr, data, len);
 	if (ret != 0) {
@@ -1000,9 +982,8 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 		return (EINVAL);
 	}
 
-	if (ret < 0) {
+	if (ret < 0)
 		return (EINVAL);
-	}
 
 	return (ret);
 }
