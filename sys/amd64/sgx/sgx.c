@@ -151,8 +151,8 @@ sgx_epc_page_count(struct sgx_softc *sc)
 	return (cnt);
 }
 
-static struct epc_page *
-sgx_epc_page_get(struct sgx_softc *sc)
+static int
+sgx_epc_page_get(struct sgx_softc *sc, struct epc_page **epc0)
 {
 	struct epc_page *epc;
 	int i;
@@ -168,13 +168,14 @@ sgx_epc_page_get(struct sgx_softc *sc)
 		if (epc->used == 0) {
 			epc->used = 1;
 			mtx_unlock(&sc->mtx_epc);
-			return (epc);
+			*epc0 = epc;
+			return (0);
 		}
 	}
 
 	mtx_unlock(&sc->mtx_epc);
 
-	return (NULL);
+	return (ENOMEM);
 }
 
 static void
@@ -267,6 +268,7 @@ sgx_enclave_page_construct(struct sgx_softc *sc,
 	struct va_page *va_page_tmp;
 	struct epc_page *epc;
 	int va_slot;
+	int ret;
 
 	va_slot = -1;
 
@@ -280,19 +282,19 @@ sgx_enclave_page_construct(struct sgx_softc *sc,
 	mtx_unlock(&enclave->mtx);
 
 	if (va_slot < 0) {
-		epc = sgx_epc_page_get(sc);
-		if (epc == NULL) {
-			dprintf("%s: No free EPC pages available\n",
+		ret = sgx_epc_page_get(sc, &epc);
+		if (ret) {
+			dprintf("%s: No free EPC pages available.\n",
 			    __func__);
-			return (-1);
+			return (ret);
 		}
 
 		va_page = malloc(sizeof(struct va_page),
 		    M_SGX, M_WAITOK | M_ZERO);
 		if (va_page == NULL) {
-			dprintf("%s: Can't alloc va_page\n", __func__);
+			dprintf("%s: Can't alloc va_page.\n", __func__);
 			sgx_epc_page_put(sc, epc);
-			return (-1);
+			return (ENOMEM);
 		}
 
 		mtx_lock(&enclave->mtx);
@@ -330,7 +332,7 @@ sgx_mem_find(struct sgx_softc *sc, uint64_t addr,
 	if (!vm_map_lookup_entry(map, addr, &entry)) {
 		vm_map_unlock_read(map);
 		dprintf("%s: Can't find enclave.\n", __func__);
-		return (-1);
+		return (EINVAL);
 	}
 	vm_map_unlock_read(map);
 
@@ -351,19 +353,20 @@ sgx_enclave_find(struct sgx_softc *sc, uint64_t addr,
 
 	ret = sgx_mem_find(sc, addr, &entry, &mem);
 	if (ret != 0)
-		return (-1);
+		return (ret);
 
 	vmh = mem->handle;
 	if (vmh == NULL)
-		return (-1);
+		return (ENXIO);
 
 	*encl = vmh->enclave;
 
 	return (0);
 }
 
-static struct sgx_enclave *
-sgx_enclave_alloc(struct sgx_softc *sc, struct secs *secs)
+static int
+sgx_enclave_alloc(struct sgx_softc *sc, struct secs *secs,
+    struct sgx_enclave **enclave0)
 {
 	struct sgx_enclave *enclave;
 
@@ -371,7 +374,7 @@ sgx_enclave_alloc(struct sgx_softc *sc, struct secs *secs)
 	    M_SGX, M_WAITOK | M_ZERO);
 	if (enclave == NULL) {
 		dprintf("%s: Can't alloc memory for enclave\n", __func__);
-		return (NULL);
+		return (ENOMEM);
 	}
 
 	TAILQ_INIT(&enclave->pages);
@@ -382,7 +385,9 @@ sgx_enclave_alloc(struct sgx_softc *sc, struct secs *secs)
 	enclave->base = secs->base;
 	enclave->size = secs->size;
 
-	return (enclave);
+	*enclave0 = enclave;
+
+	return (0);
 }
 
 static void
@@ -444,11 +449,11 @@ sgx_tcs_validate(struct tcs *tcs)
 	    (tcs->ogsbasgx & (PAGE_SIZE - 1)) ||
 	    ((tcs->fslimit & 0xfff) != 0xfff) ||
 	    ((tcs->gslimit & 0xfff) != 0xfff))
-		return (-1);
+		return (EINVAL);
 
 	for (i = 0; i < nitems(tcs->reserved); i++)
 		if (tcs->reserved[i])
-			return (-1);
+			return (EINVAL);
 
 	return (0);
 }
@@ -651,31 +656,33 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
 	if (m_secs == NULL) {
 		dprintf("%s: Can't allocate memory.\n", __func__);
+		ret = ENOMEM;
 		goto error;
 	}
 
 	ret = copyin((void *)param->src, m_secs, sizeof(struct secs));
-	if (ret != 0) {
+	if (ret) {
 		dprintf("%s: Can't copy SECS.\n", __func__);
 		goto error;
 	}
 
 	ret = sgx_mem_find(sc, m_secs->base, &entry, &mem);
-	if (ret != 0) {
-		dprintf("%s: Can't find vm_map\n", __func__);
+	if (ret) {
+		dprintf("%s: Can't find vm_map.\n", __func__);
 		goto error;
 	}
 
 	vmh = mem->handle;
 	if (!vmh) {
-		dprintf("%s: Can't find vmh\n", __func__);
+		dprintf("%s: Can't find vmh.\n", __func__);
+		ret = ENXIO;
 		goto error;
 	}
 	vmh->base = (entry->start - entry->offset);
 
-	enclave = sgx_enclave_alloc(sc, m_secs);
-	if (enclave == NULL) {
-		dprintf("%s: Can't alloc enclave\n", __func__);
+	ret = sgx_enclave_alloc(sc, m_secs, &enclave);
+	if (ret) {
+		dprintf("%s: Can't alloc enclave.\n", __func__);
 		goto error;
 	}
 
@@ -686,15 +693,15 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	pginfo.secinfo = (uint64_t)&secinfo;
 	pginfo.secs = 0;
 
-	epc = sgx_epc_page_get(sc);
-	if (epc == NULL) {
-		dprintf("%s: failed to get free epc page\n", __func__);
+	ret = sgx_epc_page_get(sc, &epc);
+	if (ret) {
+		dprintf("%s: Failed to get free epc page.\n", __func__);
 		goto error;
 	}
 
 	ret = sgx_enclave_page_construct(sc, enclave, &enclave->secs_page);
 	if (ret != 0) {
-		dprintf("%s: Can't construct page\n", __func__);
+		dprintf("%s: Can't construct page.\n", __func__);
 		goto error;
 	}
 
@@ -719,7 +726,7 @@ error:
 	sgx_epc_page_put(sc, epc);
 	free(enclave, M_SGX);
 
-	return (-1);
+	return (ret);
 }
 
 static int
@@ -745,13 +752,13 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 
 	ret = sgx_enclave_find(sc, addp->addr, &enclave);
 	if (ret != 0) {
-		dprintf("%s: Failed to find enclave\n", __func__);
-		return (-1);
+		dprintf("%s: Failed to find enclave.\n", __func__);
+		goto error;
 	}
 
-	epc = sgx_epc_page_get(sc);
-	if (epc == NULL) {
-		dprintf("%s: Failed to get free epc page\n", __func__);
+	ret = sgx_epc_page_get(sc, &epc);
+	if (ret) {
+		dprintf("%s: Failed to get free epc page.\n", __func__);
 		goto error;
 	}
 
@@ -771,6 +778,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
 	if (tmp_vaddr == NULL) {
 		dprintf("%s: Failed to alloc memory\n", __func__);
+		ret = ENOMEM;
 		goto error;
 	}
 
@@ -784,7 +792,8 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	    SECINFO_FLAGS_PT_S;
 	if (page_type == PT_TCS) {
 		t = (struct tcs *)tmp_vaddr;
-		if (sgx_tcs_validate(t) != 0) {
+		ret = sgx_tcs_validate(t);
+		if (ret) {
 			dprintf("%s: TCS page validation failed\n", __func__);
 			goto error;
 		}
@@ -795,6 +804,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	    M_SGX, M_WAITOK | M_ZERO);
 	if (enclave_page == NULL) {
 		dprintf("%s: Can't allocate enclave page.\n", __func__);
+		ret = ENOMEM;
 		goto error;
 	}
 
@@ -835,7 +845,7 @@ error:
 	sgx_epc_page_put(sc, epc);
 	free(enclave_page, M_SGX);
 
-	return (-1);
+	return (ret);
 }
 
 static int
@@ -857,7 +867,7 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	ret = sgx_enclave_find(sc, initp->addr, &enclave);
 	if (ret != 0) {
 		dprintf("%s: Failed to get enclave\n", __func__);
-		return (-1);
+		goto error;
 	}
 
 	secs_epc_page = enclave->secs_page.epc_page;
@@ -867,6 +877,7 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
 	if (tmp_vaddr == NULL) {
 		dprintf("%s: failed to alloc memory\n", __func__);
+		ret = ENOMEM;
 		goto error;
 	}
 	sigstruct = tmp_vaddr;
@@ -895,7 +906,7 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 		dprintf("%s: __einit returned %d\n", __func__, ret);
 	} while (ret == SGX_UNMASKED_EVENT && retry--);
 
-	if (ret != 0) {
+	if (ret) {
 		dprintf("%s: Failed to init enclave: %d\n", __func__, ret);
 		goto error;
 	}
@@ -950,9 +961,6 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 	default:
 		return (EINVAL);
 	}
-
-	if (ret < 0)
-		return (EINVAL);
 
 	return (ret);
 }
