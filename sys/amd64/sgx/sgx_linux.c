@@ -60,9 +60,9 @@ sgx_linux_ioctl(struct thread *td, struct linux_ioctl_args *args)
 	int error;
 
 	error = fget(td, args->fd, cap_rights_init(&rights, CAP_IOCTL), &fp);
-	if (error != 0) {
+	if (error != 0)
 		return (error);
-	}
+
 	cmd = args->cmd;
 
 	error = (fo_ioctl(fp, cmd, (caddr_t)args->arg, td->td_ucred, td));
