@@ -159,7 +159,7 @@ sgx_va_slot_free(struct sgx_softc *sc,
 	va_slot = enclave_page->va_slot;
 
 	KASSERT(va_page->slots[va_slot] == 1,
-	    ("Freeing unused page."));
+	    ("Freeing unused slot."));
 
 	va_page->slots[va_slot] = 0;
 
@@ -354,9 +354,9 @@ sgx_enclave_free(struct sgx_softc *sc,
 	sgx_enclave_page_remove(sc, enclave, enclave_page);
 
 	KASSERT(TAILQ_EMPTY(&enclave->va_pages),
-	    ("Enclave version-array pages tailq is not empty"));
+	    ("Enclave version-array pages tailq is not empty."));
 	KASSERT(TAILQ_EMPTY(&enclave->pages),
-	    ("Enclave pages is not empty"));
+	    ("Enclave pages is not empty."));
 
 	mtx_destroy(&enclave->mtx);
 	free(enclave, M_SGX);
@@ -521,8 +521,8 @@ sgx_pg_fault(vm_object_t object, vm_ooffset_t offset,
 		return (VM_PAGER_FAIL);
 
 	KASSERT(page->flags & PG_FICTITIOUS,
-	    ("not fictitious %p", page));
-	KASSERT(page->wire_count == 1, ("wire_count not 1 %p", page));
+	    ("Not fictitious page %p", page));
+	KASSERT(page->wire_count == 1, ("wire_count is not 1 %p", page));
 	KASSERT(vm_page_busied(page) == 0, ("page %p is busy", page));
 
 	if (*mres != NULL) {
