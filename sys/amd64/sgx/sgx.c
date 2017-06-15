@@ -361,6 +361,9 @@ sgx_enclave_free(struct sgx_softc *sc,
 	    ("Enclave version-array pages tailq is not empty"));
 	KASSERT(TAILQ_EMPTY(&enclave->pages),
 	    ("Enclave pages is not empty"));
+
+	mtx_destroy(&enclave->mtx);
+	free(enclave, M_SGX);
 }
 
 static void
@@ -441,24 +444,6 @@ sgx_pg_ctor(void *handle, vm_ooffset_t size, vm_prot_t prot,
 }
 
 static void
-sgx_remove(struct sgx_softc *sc, struct sgx_enclave *enclave)
-{
-	struct sgx_vm_handle *vmh;
-
-	vmh = enclave->vmh;
-
-	sgx_enclave_free(sc, vmh->enclave);
-	free(vmh, M_SGX);
-
-	mtx_destroy(&enclave->mtx);
-
-	free(enclave, M_SGX);
-
-	dprintf("%s: Free epc pages: %d\n",
-	    __func__, sgx_epc_page_count(sc));
-}
-
-static void
 sgx_pg_dtor(void *handle)
 {
 	struct sgx_vm_handle *vmh;
@@ -482,7 +467,12 @@ sgx_pg_dtor(void *handle)
 		return;
 	}
 
-	sgx_remove(sc, vmh->enclave);
+	sgx_enclave_free(sc, vmh->enclave);
+
+	free(vmh, M_SGX);
+
+	dprintf("%s: Free epc pages: %d\n",
+	    __func__, sgx_epc_page_count(sc));
 }
 
 static int
@@ -725,7 +715,8 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 		t = (struct tcs *)tmp_vaddr;
 		ret = sgx_tcs_validate(t);
 		if (ret) {
-			dprintf("%s: TCS page validation failed.\n", __func__);
+			dprintf("%s: TCS page validation failed.\n",
+			    __func__);
 			goto error;
 		}
 		sgx_tcs_dump(sc, t);
@@ -983,10 +974,10 @@ static void
 sgx_put_epc_area(struct sgx_softc *sc)
 {
 
-	free(sc->epc_pages, M_SGX);
-
 	vm_phys_fictitious_unreg_range(sc->epc_base,
 	    sc->epc_base + sc->epc_size);
+
+	free(sc->epc_pages, M_SGX);
 }
 
 static int
@@ -1039,8 +1030,7 @@ sgx_unload(void)
 
 	destroy_dev(sc->sgx_cdev);
 
-	vm_phys_fictitious_unreg_range(sc->epc_base,
-	    sc->epc_base + sc->epc_size);
+	sgx_put_epc_area(sc);
 
 	mtx_destroy(&sc->mtx);
 	mtx_destroy(&sc->mtx_epc);
