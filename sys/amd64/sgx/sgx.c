@@ -76,6 +76,7 @@ __FBSDID("$FreeBSD$");
 
 struct sgx_softc sgx_sc;
 
+#ifdef	DEBUG
 static int
 sgx_epc_page_count(struct sgx_softc *sc)
 {
@@ -93,6 +94,7 @@ sgx_epc_page_count(struct sgx_softc *sc)
 
 	return (cnt);
 }
+#endif
 
 static int
 sgx_epc_page_get(struct sgx_softc *sc, struct epc_page **epc0)
@@ -1007,7 +1009,7 @@ sgx_load(void)
 	}
 	sc->sgx_cdev->si_drv1 = sc;
 
-	printf("SGX initialized: EPC base 0x%lx size 0x%lx (%d pages)\n",
+	printf("SGX initialized: EPC base 0x%lx size %ld (%d pages)\n",
 	    sc->epc_base, sc->epc_size, sc->npages);
 
 	return (0);
