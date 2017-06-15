@@ -102,10 +102,6 @@ sgx_epc_page_get(struct sgx_softc *sc, struct epc_page **epc0)
 
 	mtx_lock(&sc->mtx_epc);
 
-	if (sgx_epc_page_count(sc) == 0)
-		dprintf("%s: Free epc pages: %d\n",
-		    __func__, sgx_epc_page_count(sc));
-
 	for (i = 0; i < sc->npages; i++) {
 		epc = &sc->epc_pages[i];
 		if (epc->used == 0) {
@@ -128,7 +124,7 @@ sgx_epc_page_put(struct sgx_softc *sc, struct epc_page *epc)
 	if (epc == NULL)
 		return;
 
-	KASSERT(epc->used == 1, ("freeing not used page"));
+	KASSERT(epc->used == 1, ("Freeing unused page."));
 	epc->used = 0;
 }
 
@@ -409,13 +405,11 @@ static void
 sgx_tcs_dump(struct sgx_softc *sc, struct tcs *t)
 {
 
-	dprintf("t->state %lx\n", t->state);
 	dprintf("t->flags %lx\n", t->flags);
 	dprintf("t->ossa %lx\n", t->ossa);
 	dprintf("t->cssa %x\n", t->cssa);
 	dprintf("t->nssa %x\n", t->nssa);
 	dprintf("t->oentry %lx\n", t->oentry);
-	dprintf("t->aep %lx\n", t->aep);
 	dprintf("t->ofsbasgx %lx\n", t->ofsbasgx);
 	dprintf("t->ogsbasgx %lx\n", t->ogsbasgx);
 	dprintf("t->fslimit %x\n", t->fslimit);
