@@ -801,8 +801,6 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 		goto error;
 	}
 
-	secs_epc_page = enclave->secs_page.epc_page;
-
 	tmp_vaddr = (void *)kmem_alloc_contig(kmem_arena, PAGE_SIZE,
 	    M_WAITOK | M_ZERO, 0, BUS_SPACE_MAXADDR_32BIT,
 	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
@@ -811,6 +809,7 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 		ret = ENOMEM;
 		goto error;
 	}
+
 	sigstruct = tmp_vaddr;
 	einittoken = (void *)((uint64_t)sigstruct + PAGE_SIZE / 2);
 
@@ -828,6 +827,7 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 		goto error;
 	}
 
+	secs_epc_page = enclave->secs_page.epc_page;
 	retry = 16;
 	do {
 		mtx_lock(&sc->mtx);
