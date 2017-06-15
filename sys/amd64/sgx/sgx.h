@@ -27,67 +27,73 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
+ *
+ * $FreeBSD$
  */
 
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
+#ifndef _AMD64_SGX_SGX_H_
+#define _AMD64_SGX_SGX_H_
 
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/capsicum.h>
-#include <sys/conf.h>
-#include <sys/kernel.h>
-#include <sys/module.h>
-#include <sys/file.h>
-#include <sys/proc.h>
+#define	SGX_CPUID			0x12
+#define	SGX_PAGE_SIZE			4096
+#define	SGX_VA_PAGE_SLOTS		512
+#define	SIGSTRUCT_SIZE			1808
+#define	EINITTOKEN_SIZE			304
+#define	IOCTL_MAX_DATA_LEN		26
 
-#include <machine/sgx.h>
-#include <machine/../linux32/linux.h>
-#include <machine/../linux32/linux32_proto.h>
-#include <compat/linux/linux_ioctl.h>
+static MALLOC_DEFINE(M_SGX, "sgx", "SGX driver");
 
-#include <sys/ioccom.h>
-
-#define	SGX_LINUX_IOCTL_MIN	(SGX_IOC_ENCLAVE_CREATE & 0xffff)
-#define	SGX_LINUX_IOCTL_MAX	(SGX_IOC_ENCLAVE_INIT & 0xffff)
-
-static int
-sgx_linux_ioctl(struct thread *td, struct linux_ioctl_args *args)
-{
-	cap_rights_t rights;
-	struct file *fp;
-	u_long cmd;
-	int error;
-
-	error = fget(td, args->fd, cap_rights_init(&rights, CAP_IOCTL), &fp);
-	if (error != 0) {
-		return (error);
-	}
-	cmd = args->cmd;
-
-	error = (fo_ioctl(fp, cmd, (caddr_t)args->arg, td->td_ucred, td));
-	fdrop(fp, td);
-
-	return (error);
-}
-
-static struct linux_ioctl_handler sgx_linux_handler = {
-	sgx_linux_ioctl,
-	SGX_LINUX_IOCTL_MIN,
-	SGX_LINUX_IOCTL_MAX,
+struct sgx_vm_handle {
+	struct sgx_softc	*sc;
+	vm_object_t		mem;
+	uint64_t		base;
+	vm_size_t		size;
+	struct sgx_enclave	*enclave;
 };
 
-SYSINIT(sgx_linux_register, SI_SUB_KLD, SI_ORDER_MIDDLE,
-    linux_ioctl_register_handler, &sgx_linux_handler);
-SYSUNINIT(sgx_linux_unregister, SI_SUB_KLD, SI_ORDER_MIDDLE,
-    linux_ioctl_unregister_handler, &sgx_linux_handler);
+/* EPC (Enclave Page Cache) page */
+struct epc_page {
+	uint64_t		base;
+	uint64_t		phys;
+	uint8_t			used;
+};
 
-static int
-sgx_linux_modevent(module_t mod, int type, void *data)
-{
+/* Version Array page */
+struct va_page {
+	struct epc_page		*epc_page;
+	TAILQ_ENTRY(va_page)	va_next;
+	bool			slots[SGX_VA_PAGE_SLOTS];
+};
 
-	return (0);
-}
+struct sgx_enclave_page {
+	struct epc_page			*epc_page;
+	struct va_page			*va_page;
+	int				va_slot;
+	uint64_t			addr;
+	TAILQ_ENTRY(sgx_enclave_page)	next;
+};
 
-DEV_MODULE(sgx_linux, sgx_linux_modevent, NULL);
-MODULE_DEPEND(sgx_linux, linux64, 1, 1, 1);
+struct sgx_enclave {
+	uint64_t			base;
+	uint64_t			size;
+	struct sgx_enclave_page		secs_page;
+	struct sgx_vm_handle		*vmh;
+	struct mtx			mtx;
+	TAILQ_ENTRY(sgx_enclave)	next;
+	TAILQ_HEAD(, sgx_enclave_page)	pages;
+	TAILQ_HEAD(, va_page)		va_pages;
+};
+
+struct sgx_softc {
+	struct cdev			*sgx_cdev;
+	device_t			dev;
+	struct mtx			mtx_epc;
+	struct mtx			mtx;
+	uint64_t			epc_base;
+	uint64_t			epc_size;
+	struct epc_page			*epc_pages;
+	uint32_t			npages;
+	TAILQ_HEAD(, sgx_enclave)	enclaves;
+};
+
+#endif /* !_AMD64_SGX_SGX_H_ */

@@ -34,20 +34,6 @@
 #ifndef _MACHINE_SGX_H_
 #define _MACHINE_SGX_H_
 
-#define	SIGSTRUCT_SIZE	1808
-#define	EINITTOKEN_SIZE	304
-
-/*
- * 2.11 Security Information (SECINFO)
- * The SECINFO data structure holds meta-data about an enclave page.
- */
-struct secinfo {
-	uint64_t flags;
-#define	SECINFO_FLAGS_PT_S	8	/* Page type shift */
-#define	SECINFO_FLAGS_PT_M	(0xff << SECINFO_FLAGS_PT_S)
-	uint64_t reserved[7];
-} __aligned(128);
-
 /*
  * 2.10 Page Information (PAGEINFO)
  * PAGEINFO is an architectural data structure that is used as a parameter
@@ -57,68 +43,10 @@ struct page_info {
 	uint64_t linaddr;
 	uint64_t srcpge;
 	union {
-		uint64_t secinfo;
+		struct secinfo *secinfo;
 		uint64_t pcmd;
 	};
 	uint64_t secs;
 } __aligned(32);
-
-/*
- * 2.7.1 ATTRIBUTES
- * The ATTRIBUTES data structure is comprised of bit-granular fields that
- * are used in the SECS, CPUID enumeration, the REPORT and the KEYREQUEST
- * structures.
- */
-struct secs_attr {
-	uint8_t		reserved1: 1;
-	uint8_t		debug: 1;
-	uint8_t		mode64bit: 1;
-	uint8_t		reserved2: 1;
-	uint8_t		provisionkey: 1;
-	uint8_t		einittokenkey: 1;
-	uint8_t		reserved3: 2;
-	uint8_t		reserved4[7];
-	uint64_t	xfrm;			/* X-Feature Request Mask */
-};
-
-/*
- * 2.7 SGX Enclave Control Structure (SECS)
- * The SECS data structure requires 4K-Bytes alignment.
- */
-struct secs {
-	uint64_t	size;
-	uint64_t	base;
-	uint32_t	ssa_frame_size;
-	uint32_t	misc_select;
-	uint8_t		reserved1[24];
-	struct secs_attr attributes;
-	uint8_t		mr_enclave[32];
-	uint8_t		reserved2[32];
-	uint8_t		mr_signer[32];
-	uint8_t		reserved3[96];
-	uint16_t	isv_prod_id;
-	uint16_t	isv_svn;
-	uint8_t		reserved4[3836];
-};
-
-/*
- * 2.8 Thread Control Structure (TCS)
- * Each executing thread in the enclave is associated with a
- * Thread Control Structure. It requires 4K-Bytes alignment.
- */
-struct tcs {
-	uint64_t	reserved1;
-	uint64_t	flags;
-	uint64_t	ossa;
-	uint32_t	cssa;
-	uint32_t	nssa;
-	uint64_t	oentry;
-	uint64_t	reserved2;
-	uint64_t	ofsbasgx;
-	uint64_t	ogsbasgx;
-	uint32_t	fslimit;
-	uint32_t	gslimit;
-	uint64_t	reserved3[503];
-};
 
 #endif /* !_MACHINE_SGX_H_ */

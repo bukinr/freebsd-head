@@ -61,12 +61,9 @@ __FBSDID("$FreeBSD$");
 #include <machine/bus.h>
 #include <machine/cpufunc.h>
 #include <machine/sgx.h>
-#include <machine/sgx_user.h>
+#include <machine/sgxvar.h>
 
-#define	SGX_CPUID			0x12
-#define	SGX_PAGE_SIZE			4096
-#define	SGX_VA_PAGE_SLOTS		512
-#define	IOCTL_MAX_DATA_LEN		26
+#include <amd64/sgx/sgx.h>
 
 #define	DEBUG
 #undef	DEBUG
@@ -77,62 +74,7 @@ __FBSDID("$FreeBSD$");
 #define	dprintf(fmt, ...)
 #endif
 
-static MALLOC_DEFINE(M_SGX, "sgx", "SGX driver");
-
-/* EPC (Enclave Page Cache) page */
-struct epc_page {
-	uint64_t		base;
-	uint64_t		phys;
-	uint8_t			used;
-};
-
-/* Version Array page */
-struct va_page {
-	struct epc_page		*epc_page;
-	TAILQ_ENTRY(va_page)	va_next;
-	bool			slots[SGX_VA_PAGE_SLOTS];
-};
-
-struct sgx_enclave_page {
-	struct epc_page			*epc_page;
-	struct va_page			*va_page;
-	int				va_slot;
-	uint64_t			addr;
-	TAILQ_ENTRY(sgx_enclave_page)	next;
-};
-
-struct sgx_enclave {
-	uint64_t			base;
-	uint64_t			size;
-	struct sgx_enclave_page		secs_page;
-	struct sgx_vm_handle		*vmh;
-	struct mtx			mtx;
-	TAILQ_ENTRY(sgx_enclave)	next;
-	TAILQ_HEAD(, sgx_enclave_page)	pages;
-	TAILQ_HEAD(, va_page)		va_pages;
-};
-
-struct sgx_softc {
-	struct cdev			*sgx_cdev;
-	device_t			dev;
-	struct mtx			mtx_epc;
-	struct mtx			mtx;
-	uint64_t			epc_base;
-	uint64_t			epc_size;
-	struct epc_page			*epc_pages;
-	uint32_t			npages;
-	TAILQ_HEAD(, sgx_enclave)	enclaves;
-};
-
 struct sgx_softc sgx_sc;
-
-struct sgx_vm_handle {
-	struct sgx_softc	*sc;
-	vm_object_t		mem;
-	uint64_t		base;
-	vm_size_t		size;
-	struct sgx_enclave	*enclave;
-};
 
 static int
 sgx_epc_page_count(struct sgx_softc *sc)
@@ -631,30 +573,30 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	struct secinfo secinfo;
 	struct sgx_enclave *enclave;
 	struct epc_page *epc;
-	struct secs *m_secs;
+	struct secs *secs;
 	int ret;
 
 	epc = NULL;
-	m_secs = NULL;
+	secs = NULL;
 	enclave = NULL;
 
 	/* SGX Enclave Control Structure (SECS) */
-	m_secs = (struct secs *)kmem_alloc_contig(kmem_arena, PAGE_SIZE,
+	secs = (struct secs *)kmem_alloc_contig(kmem_arena, PAGE_SIZE,
 	    M_WAITOK | M_ZERO, 0, BUS_SPACE_MAXADDR_32BIT,
 	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
-	if (m_secs == NULL) {
+	if (secs == NULL) {
 		dprintf("%s: Can't allocate memory.\n", __func__);
 		ret = ENOMEM;
 		goto error;
 	}
 
-	ret = copyin((void *)param->src, m_secs, sizeof(struct secs));
+	ret = copyin((void *)param->src, secs, sizeof(struct secs));
 	if (ret) {
 		dprintf("%s: Can't copy SECS.\n", __func__);
 		goto error;
 	}
 
-	ret = sgx_mem_find(sc, m_secs->base, &entry, &mem);
+	ret = sgx_mem_find(sc, secs->base, &entry, &mem);
 	if (ret) {
 		dprintf("%s: Can't find vm_map.\n", __func__);
 		goto error;
@@ -668,7 +610,7 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	}
 	vmh->base = (entry->start - entry->offset);
 
-	ret = sgx_enclave_alloc(sc, m_secs, &enclave);
+	ret = sgx_enclave_alloc(sc, secs, &enclave);
 	if (ret) {
 		dprintf("%s: Can't alloc enclave.\n", __func__);
 		goto error;
@@ -677,8 +619,8 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	memset(&secinfo, 0, sizeof(struct secinfo));
 	memset(&pginfo, 0, sizeof(struct page_info));
 	pginfo.linaddr = 0;
-	pginfo.srcpge = (uint64_t)m_secs;
-	pginfo.secinfo = (uint64_t)&secinfo;
+	pginfo.srcpge = (uint64_t)secs;
+	pginfo.secinfo = &secinfo;
 	pginfo.secs = 0;
 
 	ret = sgx_epc_page_get(sc, &epc);
@@ -701,7 +643,7 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	TAILQ_INSERT_TAIL(&sc->enclaves, enclave, next);
 	mtx_unlock(&sc->mtx);
 
-	kmem_free(kmem_arena, (vm_offset_t)m_secs, PAGE_SIZE);
+	kmem_free(kmem_arena, (vm_offset_t)secs, PAGE_SIZE);
 
 	enclave->vmh = vmh;
 	vmh->enclave = enclave;
@@ -709,8 +651,8 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	return (0);
 
 error:
-	if (m_secs != NULL)
-		kmem_free(kmem_arena, (vm_offset_t)m_secs, PAGE_SIZE);
+	if (secs != NULL)
+		kmem_free(kmem_arena, (vm_offset_t)secs, PAGE_SIZE);
 	sgx_epc_page_put(sc, epc);
 	free(enclave, M_SGX);
 
@@ -809,7 +751,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	memset(&pginfo, 0, sizeof(struct page_info));
 	pginfo.linaddr = (uint64_t)addp->addr;
 	pginfo.srcpge = (uint64_t)tmp_vaddr;
-	pginfo.secinfo = (uint64_t)&secinfo;
+	pginfo.secinfo = &secinfo;
 	pginfo.secs = (uint64_t)secs_epc_page->base;
 
 	mtx_lock(&sc->mtx);
