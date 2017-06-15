@@ -333,7 +333,7 @@ sgx_enclave_alloc(struct sgx_softc *sc, struct secs *secs,
 }
 
 static void
-sgx_enclave_free(struct sgx_softc *sc,
+sgx_enclave_remove(struct sgx_softc *sc,
     struct sgx_enclave *enclave)
 {
 	struct sgx_enclave_page *enclave_page_tmp;
@@ -459,7 +459,7 @@ sgx_pg_dtor(void *handle)
 		return;
 	}
 
-	sgx_enclave_free(sc, vmh->enclave);
+	sgx_enclave_remove(sc, vmh->enclave);
 	free(vmh, M_SGX);
 
 	dprintf("%s: Free epc pages: %d\n",
