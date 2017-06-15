@@ -1000,7 +1000,8 @@ sgx_load(void)
 	sc->sgx_cdev = make_dev(&sgx_cdevsw, 0, UID_ROOT, GID_WHEEL,
 	    0600, "isgx");
 	if (sc->sgx_cdev == NULL) {
-		printf("%s: Failed to create character device.\n", __func__);
+		printf("%s: Failed to create character device.\n",
+		    __func__);
 		sgx_put_epc_area(sc);
 		return (ENXIO);
 	}
