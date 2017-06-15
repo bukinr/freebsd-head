@@ -423,15 +423,12 @@ sgx_pg_ctor(void *handle, vm_ooffset_t size, vm_prot_t prot,
     vm_ooffset_t foff, struct ucred *cred, u_short *color)
 {
 	struct sgx_vm_handle *vmh;
-	struct sgx_softc *sc;
 
-	if (handle == NULL) {
+	vmh = handle;
+	if (vmh == NULL) {
 		dprintf("%s: vmh not found.\n", __func__);
 		return (0);
 	}
-
-	vmh = handle;
-	sc = vmh->sc;
 
 	dprintf("%s: vmh->base %lx foff 0x%lx size 0x%lx\n",
 	    __func__, vmh->base, foff, size);
@@ -445,14 +442,13 @@ sgx_pg_dtor(void *handle)
 	struct sgx_vm_handle *vmh;
 	struct sgx_softc *sc;
 
-	if (handle == NULL) {
+	vmh = handle;
+	if (vmh == NULL) {
 		dprintf("%s: vmh not found.\n", __func__);
 		return;
 	}
 
-	vmh = handle;
 	sc = vmh->sc;
-
 	if (sc == NULL) {
 		dprintf("%s: sc is NULL\n", __func__);
 		return;
@@ -464,7 +460,6 @@ sgx_pg_dtor(void *handle)
 	}
 
 	sgx_enclave_free(sc, vmh->enclave);
-
 	free(vmh, M_SGX);
 
 	dprintf("%s: Free epc pages: %d\n",
@@ -477,7 +472,6 @@ sgx_pg_fault(vm_object_t object, vm_ooffset_t offset,
 {
 	struct sgx_enclave *enclave;
 	struct sgx_vm_handle *vmh;
-	struct sgx_softc *sc;
 	vm_page_t page;
 	vm_memattr_t memattr;
 	vm_pindex_t pidx;
@@ -493,8 +487,6 @@ sgx_pg_fault(vm_object_t object, vm_ooffset_t offset,
 	enclave = vmh->enclave;
 	if (enclave == NULL)
 		return (VM_PAGER_FAIL);
-
-	sc = vmh->sc;
 
 	dprintf("%s: offset 0x%lx\n", __func__, offset);
 
