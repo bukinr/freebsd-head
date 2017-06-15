@@ -452,8 +452,8 @@ sgx_tcs_validate(struct tcs *tcs)
 	    ((tcs->gslimit & 0xfff) != 0xfff))
 		return (EINVAL);
 
-	for (i = 0; i < nitems(tcs->reserved); i++)
-		if (tcs->reserved[i])
+	for (i = 0; i < nitems(tcs->reserved3); i++)
+		if (tcs->reserved3[i])
 			return (EINVAL);
 
 	return (0);

@@ -107,18 +107,18 @@ struct secs {
  * Thread Control Structure. It requires 4K-Bytes alignment.
  */
 struct tcs {
-	uint64_t	state;
+	uint64_t	reserved1;
 	uint64_t	flags;
 	uint64_t	ossa;
 	uint32_t	cssa;
 	uint32_t	nssa;
 	uint64_t	oentry;
-	uint64_t	aep;
+	uint64_t	reserved2;
 	uint64_t	ofsbasgx;
 	uint64_t	ogsbasgx;
 	uint32_t	fslimit;
 	uint32_t	gslimit;
-	uint64_t	reserved[503];
+	uint64_t	reserved3[503];
 };
 
 #endif /* !_MACHINE_SGX_H_ */
