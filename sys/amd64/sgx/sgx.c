@@ -103,7 +103,7 @@ sgx_epc_page_get(struct sgx_softc *sc, struct epc_page **epc0)
 	mtx_lock(&sc->mtx_epc);
 
 	if (sgx_epc_page_count(sc) == 0)
-		dprintf("%s: count free epc pages: %d\n",
+		dprintf("%s: Free epc pages: %d\n",
 		    __func__, sgx_epc_page_count(sc));
 
 	for (i = 0; i < sc->npages; i++) {
@@ -316,7 +316,8 @@ sgx_enclave_alloc(struct sgx_softc *sc, struct secs *secs,
 	enclave = malloc(sizeof(struct sgx_enclave),
 	    M_SGX, M_WAITOK | M_ZERO);
 	if (enclave == NULL) {
-		dprintf("%s: Can't alloc memory for enclave\n", __func__);
+		dprintf("%s: Can't alloc memory for enclave.\n",
+		    __func__);
 		return (ENOMEM);
 	}
 
@@ -426,7 +427,7 @@ sgx_pg_ctor(void *handle, vm_ooffset_t size, vm_prot_t prot,
 	struct sgx_softc *sc;
 
 	if (handle == NULL) {
-		dprintf("%s: vmh not found\n", __func__);
+		dprintf("%s: vmh not found.\n", __func__);
 		return (0);
 	}
 
@@ -453,7 +454,7 @@ sgx_remove(struct sgx_softc *sc, struct sgx_enclave *enclave)
 
 	free(enclave, M_SGX);
 
-	dprintf("%s: count free epc pages: %d\n",
+	dprintf("%s: Free epc pages: %d\n",
 	    __func__, sgx_epc_page_count(sc));
 }
 
@@ -464,7 +465,7 @@ sgx_pg_dtor(void *handle)
 	struct sgx_softc *sc;
 
 	if (handle == NULL) {
-		dprintf("%s: vmh not found\n", __func__);
+		dprintf("%s: vmh not found.\n", __func__);
 		return;
 	}
 
@@ -525,7 +526,7 @@ sgx_pg_fault(vm_object_t object, vm_ooffset_t offset,
 	}
 	mtx_unlock(&enclave->mtx);
 	if (!found) {
-		dprintf("%s: page not found\n", __func__);
+		dprintf("%s: Page not found.\n", __func__);
 		return (VM_PAGER_FAIL);
 	}
 
@@ -699,7 +700,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	ret = copyin((void *)addp->secinfo, &secinfo,
 	    sizeof(struct secinfo));
 	if (ret) {
-		dprintf("%s: Failed to copy secinfo\n", __func__);
+		dprintf("%s: Failed to copy secinfo.\n", __func__);
 		goto error;
 	}
 
@@ -707,14 +708,14 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	    M_WAITOK | M_ZERO, 0, BUS_SPACE_MAXADDR_32BIT,
 	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
 	if (tmp_vaddr == NULL) {
-		dprintf("%s: Failed to alloc memory\n", __func__);
+		dprintf("%s: Failed to alloc memory.\n", __func__);
 		ret = ENOMEM;
 		goto error;
 	}
 
 	ret = copyin((void *)addp->src, tmp_vaddr, PAGE_SIZE);
 	if (ret) {
-		dprintf("%s: Failed to copy page\n", __func__);
+		dprintf("%s: Failed to copy page.\n", __func__);
 		goto error;
 	}
 
@@ -724,7 +725,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 		t = (struct tcs *)tmp_vaddr;
 		ret = sgx_tcs_validate(t);
 		if (ret) {
-			dprintf("%s: TCS page validation failed\n", __func__);
+			dprintf("%s: TCS page validation failed.\n", __func__);
 			goto error;
 		}
 		sgx_tcs_dump(sc, t);
@@ -740,7 +741,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 
 	ret = sgx_enclave_page_construct(sc, enclave, enclave_page);
 	if (ret) {
-		dprintf("%s: Can't construct page\n", __func__);
+		dprintf("%s: Can't construct page.\n", __func__);
 		goto error;
 	}
 
@@ -796,7 +797,7 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 
 	ret = sgx_enclave_find(sc, initp->addr, &enclave);
 	if (ret) {
-		dprintf("%s: Failed to get enclave\n", __func__);
+		dprintf("%s: Failed to get enclave.\n", __func__);
 		goto error;
 	}
 
@@ -806,7 +807,7 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	    M_WAITOK | M_ZERO, 0, BUS_SPACE_MAXADDR_32BIT,
 	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
 	if (tmp_vaddr == NULL) {
-		dprintf("%s: failed to alloc memory\n", __func__);
+		dprintf("%s: Failed to alloc memory.\n", __func__);
 		ret = ENOMEM;
 		goto error;
 	}
@@ -816,14 +817,14 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	ret = copyin((void *)initp->sigstruct, sigstruct,
 	    SIGSTRUCT_SIZE);
 	if (ret) {
-		dprintf("%s: Failed to copy SIGSTRUCT page\n", __func__);
+		dprintf("%s: Failed to copy SIGSTRUCT page.\n", __func__);
 		goto error;
 	}
 
 	ret = copyin((void *)initp->einittoken, einittoken,
 	    EINITTOKEN_SIZE);
 	if (ret) {
-		dprintf("%s: Failed to copy EINITTOKEN page\n", __func__);
+		dprintf("%s: Failed to copy EINITTOKEN page.\n", __func__);
 		goto error;
 	}
 
@@ -837,7 +838,6 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	} while (ret == SGX_UNMASKED_EVENT && retry--);
 
 	ret = -ret;
-	printf("einit ret %d\n", ret);
 
 	if (ret) {
 		dprintf("%s: Failed to init enclave: %d\n", __func__, ret);
@@ -874,7 +874,7 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 
 	ret = copyin(addr, data, len);
 	if (ret) {
-		dprintf("%s: Can't copy data\n", __func__);
+		dprintf("%s: Can't copy data.\n", __func__);
 		return (EINVAL);
 	}
 
@@ -913,7 +913,7 @@ sgx_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 	vmh = malloc(sizeof(struct sgx_vm_handle),
 	    M_SGX, M_WAITOK | M_ZERO);
 	if (vmh == NULL) {
-		dprintf("%s: Can't alloc memory\n", __func__);
+		dprintf("%s: Can't alloc memory.\n", __func__);
 		return (ENOMEM);
 	}
 
@@ -1007,7 +1007,7 @@ sgx_load(void)
 
 	error = sgx_get_epc_area(sc);
 	if (error) {
-		printf("%s: Failed to get Processor Reserved Memory area\n",
+		printf("%s: Failed to get Processor Reserved Memory area.\n",
 		    __func__);
 		return (ENXIO);
 	}
