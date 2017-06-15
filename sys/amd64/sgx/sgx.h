@@ -51,14 +51,14 @@ struct sgx_vm_handle {
 	struct sgx_enclave	*enclave;
 };
 
-/* EPC (Enclave Page Cache) page */
+/* EPC (Enclave Page Cache) page. */
 struct epc_page {
 	uint64_t		base;
 	uint64_t		phys;
 	uint8_t			used;
 };
 
-/* Version Array page */
+/* Version Array page. */
 struct va_page {
 	struct epc_page		*epc_page;
 	TAILQ_ENTRY(va_page)	va_next;
