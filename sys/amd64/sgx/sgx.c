@@ -837,8 +837,6 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 		dprintf("%s: sgx_einit returned %d\n", __func__, ret);
 	} while (ret == SGX_UNMASKED_EVENT && retry--);
 
-	ret = -ret;
-
 	if (ret) {
 		dprintf("%s: Failed to init enclave: %d\n", __func__, ret);
 		goto error;
