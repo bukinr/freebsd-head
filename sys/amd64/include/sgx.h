@@ -33,8 +33,8 @@
 
 /* User-visible header. */
 
-#ifndef _MACHINE_SGX_USER_H_
-#define _MACHINE_SGX_USER_H_
+#ifndef _MACHINE_SGX_H_
+#define _MACHINE_SGX_H_
 
 /* Error codes. */
 #define	SGX_SUCCESS			0
@@ -157,4 +157,4 @@ struct tcs {
 	uint64_t	reserved3[503];
 };
 
-#endif /* !_MACHINE_SGX_USER_H_ */
+#endif /* !_MACHINE_SGX_H_ */

@@ -31,8 +31,8 @@
  * $FreeBSD$
  */
 
-#ifndef _MACHINE_SGX_H_
-#define _MACHINE_SGX_H_
+#ifndef _MACHINE_SGXVAR_H_
+#define _MACHINE_SGXVAR_H_
 
 /*
  * 2.10 Page Information (PAGEINFO)
@@ -49,4 +49,4 @@ struct page_info {
 	uint64_t secs;
 } __aligned(32);
 
-#endif /* !_MACHINE_SGX_H_ */
+#endif /* !_MACHINE_SGXVAR_H_ */
