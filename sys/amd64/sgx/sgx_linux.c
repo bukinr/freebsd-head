@@ -40,16 +40,12 @@ __FBSDID("$FreeBSD$");
 #include <sys/module.h>
 #include <sys/file.h>
 #include <sys/proc.h>
-#ifdef __amd64__
+
+#include <machine/sgx_user.h>
 #include <machine/../linux32/linux.h>
 #include <machine/../linux32/linux32_proto.h>
-#else
-#include <machine/../linux/linux.h>
-#include <machine/../linux/linux_proto.h>
-#endif
 #include <compat/linux/linux_ioctl.h>
 
-#include <amd64/sgx/sgx_user.h>
 #include <sys/ioccom.h>
 
 #define	SGX_LINUX_IOCTL_MIN	(SGX_IOC_ENCLAVE_CREATE & 0xffff)

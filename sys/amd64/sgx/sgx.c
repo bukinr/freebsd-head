@@ -60,9 +60,8 @@ __FBSDID("$FreeBSD$");
 #include <machine/specialreg.h>
 #include <machine/bus.h>
 #include <machine/cpufunc.h>
-
-#include "sgx.h"
-#include "sgx_user.h"
+#include <machine/sgx.h>
+#include <machine/sgx_user.h>
 
 #define	SGX_CPUID			0x12
 #define	SGX_PAGE_SIZE			4096
@@ -894,6 +893,9 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 		mtx_unlock(&sc->mtx);
 		dprintf("%s: sgx_einit returned %d\n", __func__, ret);
 	} while (ret == SGX_UNMASKED_EVENT && retry--);
+
+	ret = -ret;
+	printf("einit ret %d\n", ret);
 
 	if (ret) {
 		dprintf("%s: Failed to init enclave: %d\n", __func__, ret);

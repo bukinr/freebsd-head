@@ -31,8 +31,8 @@
  * $FreeBSD$
  */
 
-#ifndef _AMD64_SGX_SGX_H_
-#define _AMD64_SGX_SGX_H_
+#ifndef _MACHINE_SGX_H_
+#define _MACHINE_SGX_H_
 
 #define	SIGSTRUCT_SIZE	1808
 #define	EINITTOKEN_SIZE	304
@@ -106,4 +106,4 @@ struct tcs {
 	uint64_t	reserved[503];
 };
 
-#endif /* !_AMD64_SGX_SGX_H_ */
+#endif /* !_MACHINE_SGX_H_ */

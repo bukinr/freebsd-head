@@ -31,8 +31,8 @@
  * $FreeBSD$
  */
 
-#ifndef _AMD64_SGX_SGX_USER_H_
-#define _AMD64_SGX_SGX_USER_H_
+#ifndef _MACHINE_SGX_USER_H_
+#define _MACHINE_SGX_USER_H_
 
 #define	SGX_MAGIC	0xA4
 #define	SGX_IOC_ENCLAVE_CREATE \
@@ -86,4 +86,4 @@ struct sgx_enclave_init {
 	uint64_t	einittoken;
 } __packed;
 
-#endif /* !_AMD64_SGX_SGX_USER_H_ */
+#endif /* !_MACHINE_SGX_USER_H_ */
