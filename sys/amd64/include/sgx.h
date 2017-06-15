@@ -37,6 +37,10 @@
 #define	SIGSTRUCT_SIZE	1808
 #define	EINITTOKEN_SIZE	304
 
+/*
+ * 2.11 Security Information (SECINFO)
+ * The SECINFO data structure holds meta-data about an enclave page.
+ */
 struct secinfo {
 	uint64_t flags;
 #define	SECINFO_FLAGS_PT_S	8	/* Page type shift */
@@ -44,6 +48,11 @@ struct secinfo {
 	uint64_t reserved[7];
 } __aligned(128);
 
+/*
+ * 2.10 Page Information (PAGEINFO)
+ * PAGEINFO is an architectural data structure that is used as a parameter
+ * to the EPC-management instructions. It requires 32-Byte alignment.
+ */
 struct page_info {
 	uint64_t linaddr;
 	uint64_t srcpge;
@@ -54,6 +63,12 @@ struct page_info {
 	uint64_t secs;
 } __aligned(32);
 
+/*
+ * 2.7.1 ATTRIBUTES
+ * The ATTRIBUTES data structure is comprised of bit-granular fields that
+ * are used in the SECS, CPUID enumeration, the REPORT and the KEYREQUEST
+ * structures.
+ */
 struct secs_attr {
 	uint8_t		reserved1: 1;
 	uint8_t		debug: 1;
