@@ -78,7 +78,7 @@ struct sgx_softc sgx_sc;
 
 #ifdef	DEBUG
 static int
-sgx_epc_page_count(struct sgx_softc *sc)
+sgx_count_epc_pages(struct sgx_softc *sc)
 {
 	struct epc_page *epc;
 	int cnt;
@@ -97,7 +97,7 @@ sgx_epc_page_count(struct sgx_softc *sc)
 #endif
 
 static int
-sgx_epc_page_get(struct sgx_softc *sc, struct epc_page **epc0)
+sgx_get_epc_page(struct sgx_softc *sc, struct epc_page **epc0)
 {
 	struct epc_page *epc;
 	int i;
@@ -120,7 +120,7 @@ sgx_epc_page_get(struct sgx_softc *sc, struct epc_page **epc0)
 }
 
 static void
-sgx_epc_page_put(struct sgx_softc *sc, struct epc_page *epc)
+sgx_put_epc_page(struct sgx_softc *sc, struct epc_page *epc)
 {
 
 	if (epc == NULL)
@@ -180,7 +180,7 @@ sgx_va_slot_free(struct sgx_softc *sc,
 	mtx_lock(&sc->mtx);
 	sgx_eremove((void *)epc->base);
 	mtx_unlock(&sc->mtx);
-	sgx_epc_page_put(sc, epc);
+	sgx_put_epc_page(sc, epc);
 	free(enclave_page->va_page, M_SGX);
 }
 
@@ -197,7 +197,7 @@ sgx_enclave_page_remove(struct sgx_softc *sc,
 	mtx_lock(&sc->mtx);
 	sgx_eremove((void *)epc->base);
 	mtx_unlock(&sc->mtx);
-	sgx_epc_page_put(sc, epc);
+	sgx_put_epc_page(sc, epc);
 }
 
 static int
@@ -223,7 +223,7 @@ sgx_enclave_page_construct(struct sgx_softc *sc,
 	mtx_unlock(&enclave->mtx);
 
 	if (va_slot < 0) {
-		ret = sgx_epc_page_get(sc, &epc);
+		ret = sgx_get_epc_page(sc, &epc);
 		if (ret) {
 			dprintf("%s: No free EPC pages available.\n",
 			    __func__);
@@ -234,7 +234,7 @@ sgx_enclave_page_construct(struct sgx_softc *sc,
 		    M_SGX, M_WAITOK | M_ZERO);
 		if (va_page == NULL) {
 			dprintf("%s: Can't alloc va_page.\n", __func__);
-			sgx_epc_page_put(sc, epc);
+			sgx_put_epc_page(sc, epc);
 			return (ENOMEM);
 		}
 
@@ -463,7 +463,7 @@ sgx_pg_dtor(void *handle)
 	free(vmh, M_SGX);
 
 	dprintf("%s: Free epc pages: %d\n",
-	    __func__, sgx_epc_page_count(sc));
+	    __func__, sgx_count_epc_pages(sc));
 }
 
 static int
@@ -602,7 +602,7 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	pginfo.secinfo = &secinfo;
 	pginfo.secs = 0;
 
-	ret = sgx_epc_page_get(sc, &epc);
+	ret = sgx_get_epc_page(sc, &epc);
 	if (ret) {
 		dprintf("%s: Failed to get free epc page.\n", __func__);
 		goto error;
@@ -632,7 +632,7 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 error:
 	if (secs != NULL)
 		kmem_free(kmem_arena, (vm_offset_t)secs, PAGE_SIZE);
-	sgx_epc_page_put(sc, epc);
+	sgx_put_epc_page(sc, epc);
 	free(enclave, M_SGX);
 
 	return (ret);
@@ -665,7 +665,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 		goto error;
 	}
 
-	ret = sgx_epc_page_get(sc, &epc);
+	ret = sgx_get_epc_page(sc, &epc);
 	if (ret) {
 		dprintf("%s: Failed to get free epc page.\n", __func__);
 		goto error;
@@ -752,7 +752,7 @@ error:
 	if (tmp_vaddr != NULL)
 		kmem_free(kmem_arena, (vm_offset_t)tmp_vaddr, PAGE_SIZE);
 
-	sgx_epc_page_put(sc, epc);
+	sgx_put_epc_page(sc, epc);
 	free(enclave_page, M_SGX);
 
 	return (ret);
