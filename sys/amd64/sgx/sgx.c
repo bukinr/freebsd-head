@@ -763,12 +763,14 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 {
 	struct epc_page *secs_epc_page;
 	struct sgx_enclave *enclave;
+	struct thread *td;
 	void *tmp_vaddr;
 	void *einittoken;
 	void *sigstruct;
 	int retry;
 	int ret;
 
+	td = curthread;
 	tmp_vaddr = NULL;
 
 	dprintf("%s: addr %lx, sigstruct %lx, einittoken %lx\n",
@@ -817,8 +819,9 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	} while (ret == SGX_UNMASKED_EVENT && retry--);
 
 	if (ret) {
-		dprintf("%s: Failed to init enclave: %d\n", __func__, ret);
-		goto error;
+		dprintf("%s: Failed init enclave: %d\n", __func__, ret);
+		td->td_retval[0] = ret;
+		ret = 0;
 	}
 
 error:
