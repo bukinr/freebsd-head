@@ -1,9 +1,6 @@
 /*
- * Copyright (C) 2016 Cavium Inc.
+ * Copyright (c) 2004-2016 Maxim Sobolev <sobomax@FreeBSD.org>
  * All rights reserved.
- *
- * Developed by Semihalf.
- * Based on work by Nathan Whitehorn.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -25,80 +22,59 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
-#include <sys/types.h>
-#include <string.h>
+#include <sys/cdefs.h>
+__FBSDID("$FreeBSD$");
 
-#include "partedit.h"
+#include <sys/disk.h>
+#include <sys/ioctl.h>
+#include <sys/param.h>
+#include <sys/mount.h>
+#include <sys/stat.h>
+#include <err.h>
+#include <fcntl.h>
 
-/* EFI partition size in bytes */
-#define	EFI_BOOTPART_SIZE	(200 * 1024 * 1024)
-#define	EFI_BOOTPART_PATH	"/boot/boot1.efifat"
+#include "mkuz_cfg.h"
+#include "mkuz_insize.h"
 
-const char *
-default_scheme(void)
+off_t
+mkuz_get_insize(struct mkuz_cfg *cfp)
 {
+	int ffd;
+	off_t ms;
+	struct stat sb;
+	struct statfs statfsbuf;
 
-	return ("GPT");
+	if (fstat(cfp->fdr, &sb) != 0) {
+		warn("fstat(%s)", cfp->iname);
+		return (-1);
+	}
+	if ((sb.st_flags & SF_SNAPSHOT) != 0) {
+		if (fstatfs(cfp->fdr, &statfsbuf) != 0) {
+			warn("fstatfs(%s)", cfp->iname);
+			return (-1);
+		}
+		ffd = open(statfsbuf.f_mntfromname, O_RDONLY);
+		if (ffd < 0) {
+			warn("open(%s, O_RDONLY)", statfsbuf.f_mntfromname);
+			return (-1);
+		}
+		if (ioctl(ffd, DIOCGMEDIASIZE, &ms) < 0) {
+			warn("ioctl(DIOCGMEDIASIZE)");
+			return (-1);
+		}
+		sb.st_size = ms;
+	} else if (S_ISCHR(sb.st_mode)) {
+		if (ioctl(cfp->fdr, DIOCGMEDIASIZE, &ms) < 0) {
+			warn("ioctl(DIOCGMEDIASIZE)");
+			return (-1);
+		}
+		sb.st_size = ms;
+	} else if (!S_ISREG(sb.st_mode)) {
+		warnx("%s: not a character device or regular file\n",
+			cfp->iname);
+		return (-1);
+	}
+	return (sb.st_size);
 }
-
-int
-is_scheme_bootable(const char *part_type)
-{
-
-	if (strcmp(part_type, "GPT") == 0)
-		return (1);
-
-	return (0);
-}
-
-int
-is_fs_bootable(const char *part_type, const char *fs)
-{
-
-	if (strcmp(fs, "freebsd-ufs") == 0)
-		return (1);
-
-	return (0);
-}
-
-size_t
-bootpart_size(const char *scheme)
-{
-
-	/* We only support GPT with EFI */
-	if (strcmp(scheme, "GPT") != 0)
-		return (0);
-
-	return (EFI_BOOTPART_SIZE);
-}
-
-const char *
-bootpart_type(const char *scheme)
-{
-
-	/* Only EFI is supported as boot partition */
-	return ("efi");
-}
-
-const char *
-bootcode_path(const char *part_type)
-{
-
-	return (NULL);
-}
-
-const char *
-partcode_path(const char *part_type, const char *fs_type)
-{
-
-	if (strcmp(part_type, "GPT") == 0)
-		return (EFI_BOOTPART_PATH);
-
-	/* No boot partition data for non-GPT */
-	return (NULL);
-}
-

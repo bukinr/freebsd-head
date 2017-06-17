@@ -1,9 +1,6 @@
 /*
- * Copyright (C) 2016 Cavium Inc.
+ * Copyright (c) 2016 Maxim Sobolev <sobomax@FreeBSD.org>
  * All rights reserved.
- *
- * Developed by Semihalf.
- * Based on work by Nathan Whitehorn.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,76 +26,4 @@
  * $FreeBSD$
  */
 
-#include <sys/types.h>
-#include <string.h>
-
-#include "partedit.h"
-
-/* EFI partition size in bytes */
-#define	EFI_BOOTPART_SIZE	(200 * 1024 * 1024)
-#define	EFI_BOOTPART_PATH	"/boot/boot1.efifat"
-
-const char *
-default_scheme(void)
-{
-
-	return ("GPT");
-}
-
-int
-is_scheme_bootable(const char *part_type)
-{
-
-	if (strcmp(part_type, "GPT") == 0)
-		return (1);
-
-	return (0);
-}
-
-int
-is_fs_bootable(const char *part_type, const char *fs)
-{
-
-	if (strcmp(fs, "freebsd-ufs") == 0)
-		return (1);
-
-	return (0);
-}
-
-size_t
-bootpart_size(const char *scheme)
-{
-
-	/* We only support GPT with EFI */
-	if (strcmp(scheme, "GPT") != 0)
-		return (0);
-
-	return (EFI_BOOTPART_SIZE);
-}
-
-const char *
-bootpart_type(const char *scheme)
-{
-
-	/* Only EFI is supported as boot partition */
-	return ("efi");
-}
-
-const char *
-bootcode_path(const char *part_type)
-{
-
-	return (NULL);
-}
-
-const char *
-partcode_path(const char *part_type, const char *fs_type)
-{
-
-	if (strcmp(part_type, "GPT") == 0)
-		return (EFI_BOOTPART_PATH);
-
-	/* No boot partition data for non-GPT */
-	return (NULL);
-}
-
+off_t mkuz_get_insize(struct mkuz_cfg *);
