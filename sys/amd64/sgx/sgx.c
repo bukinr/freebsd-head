@@ -847,15 +847,21 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 
 	len = IOCPARM_LEN(cmd);
 
-	dprintf("%s: cmd %lx, len %d\n", __func__, cmd, len);
+	dprintf("%s: cmd %lx, addr %lx, len %d\n",
+	    __func__, cmd, (uint64_t)addr, len);
 
 	if (len > IOCTL_MAX_DATA_LEN)
 		return (EINVAL);
 
-	ret = copyin(addr, data, len);
-	if (ret) {
-		dprintf("%s: Can't copy data.\n", __func__);
-		return (EINVAL);
+	if ((uint64_t)addr <= VM_MAXUSER_ADDRESS) {
+		ret = copyin(addr, data, len);
+		if (ret) {
+			dprintf("%s: Can't copy data, error %d\n",
+			    __func__, ret);
+			return (EINVAL);
+		}
+	} else {
+		memcpy(data, addr, len);
 	}
 
 	switch (cmd) {

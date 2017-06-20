@@ -65,7 +65,13 @@ sgx_linux_ioctl(struct thread *td, struct linux_ioctl_args *args)
 
 	cmd = args->cmd;
 
-	error = (fo_ioctl(fp, cmd, (caddr_t)args->arg, td->td_ucred, td));
+	args->cmd &= ~(LINUX_IOC_IN | LINUX_IOC_OUT);
+	if (cmd & LINUX_IOC_IN)
+		args->cmd |= IOC_IN;
+	if (cmd & LINUX_IOC_OUT)
+		args->cmd |= IOC_OUT;
+
+	error = (fo_ioctl(fp, args->cmd, (caddr_t)args->arg, td->td_ucred, td));
 	fdrop(fp, td);
 
 	return (error);

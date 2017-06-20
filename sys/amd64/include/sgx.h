@@ -65,11 +65,11 @@
 
 #define	SGX_MAGIC	0xA4
 #define	SGX_IOC_ENCLAVE_CREATE \
-	_IOR(SGX_MAGIC, 0x00, struct sgx_enclave_create)
+	_IOW(SGX_MAGIC, 0x00, struct sgx_enclave_create)
 #define	SGX_IOC_ENCLAVE_ADD_PAGE \
-	_IOR(SGX_MAGIC, 0x01, struct sgx_enclave_add_page)
+	_IOW(SGX_MAGIC, 0x01, struct sgx_enclave_add_page)
 #define	SGX_IOC_ENCLAVE_INIT \
-	_IOR(SGX_MAGIC, 0x02, struct sgx_enclave_init)
+	_IOW(SGX_MAGIC, 0x02, struct sgx_enclave_init)
 
 struct sgx_enclave_create {
 	uint64_t	src;
