@@ -53,13 +53,14 @@ device		mpcore_timer
 device		xdma
 device		pl330
 
-# QSPI Flash
-device		cqspi
+device		altera_pio
 
 # MMC/SD/SDIO Card slot support
-device		mmc			# mmc/sd bus
-device		mmcsd			# mmc/sd flash cards
-device		dwmmc
+# device		mmc			# mmc/sd bus
+# device		mmcsd			# mmc/sd flash cards
+# device		dwmmc
+
+options 		BOOTHOWTO=RB_SINGLE
 
 # Pseudo devices
 
@@ -91,7 +92,10 @@ device		max1619
 device		nhd_0216k3z
 
 # SPI
-device		spibus
+# device		spibus
+# device		mx25l
+device		cqspi
+device		n25q
 
 # Ethernet
 device		ether
