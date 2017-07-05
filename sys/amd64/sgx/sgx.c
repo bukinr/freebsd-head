@@ -839,7 +839,6 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 	struct sgx_enclave_create *param;
 	struct sgx_enclave_init *initp;
 	struct sgx_softc *sc;
-	uint8_t data[IOCTL_MAX_DATA_LEN];
 	int ret;
 	int len;
 
@@ -853,28 +852,17 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 	if (len > IOCTL_MAX_DATA_LEN)
 		return (EINVAL);
 
-	if ((uint64_t)addr <= VM_MAXUSER_ADDRESS) {
-		ret = copyin(addr, data, len);
-		if (ret) {
-			dprintf("%s: Can't copy data, error %d\n",
-			    __func__, ret);
-			return (EINVAL);
-		}
-	} else {
-		memcpy(data, addr, len);
-	}
-
 	switch (cmd) {
 	case SGX_IOC_ENCLAVE_CREATE:
-		param = (struct sgx_enclave_create *)data;
+		param = (struct sgx_enclave_create *)addr;
 		ret = sgx_ioctl_create(sc, param);
 		break;
 	case SGX_IOC_ENCLAVE_ADD_PAGE:
-		addp = (struct sgx_enclave_add_page *)data;
+		addp = (struct sgx_enclave_add_page *)addr;
 		ret = sgx_ioctl_add_page(sc, addp);
 		break;
 	case SGX_IOC_ENCLAVE_INIT:
-		initp = (struct sgx_enclave_init *)data;
+		initp = (struct sgx_enclave_init *)addr;
 		ret = sgx_ioctl_init(sc, initp);
 		break;
 	default:

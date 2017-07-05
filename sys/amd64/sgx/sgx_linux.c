@@ -46,6 +46,8 @@ __FBSDID("$FreeBSD$");
 #include <machine/../linux/linux_proto.h>
 #include <compat/linux/linux_ioctl.h>
 
+#include <amd64/sgx/sgx.h>
+
 #include <sys/ioccom.h>
 
 #define	SGX_LINUX_IOCTL_MIN	(SGX_IOC_ENCLAVE_CREATE & 0xffff)
@@ -54,10 +56,12 @@ __FBSDID("$FreeBSD$");
 static int
 sgx_linux_ioctl(struct thread *td, struct linux_ioctl_args *args)
 {
+	uint8_t data[IOCTL_MAX_DATA_LEN];
 	cap_rights_t rights;
 	struct file *fp;
 	u_long cmd;
 	int error;
+	int len;
 
 	error = fget(td, args->fd, cap_rights_init(&rights, CAP_IOCTL), &fp);
 	if (error != 0)
@@ -71,7 +75,23 @@ sgx_linux_ioctl(struct thread *td, struct linux_ioctl_args *args)
 	if (cmd & LINUX_IOC_OUT)
 		args->cmd |= IOC_OUT;
 
-	error = (fo_ioctl(fp, args->cmd, (caddr_t)args->arg, td->td_ucred, td));
+	len = IOCPARM_LEN(cmd);
+	if (len > IOCTL_MAX_DATA_LEN) {
+		printf("%s: Can't copy data: cmd len is too big %d\n",
+		    __func__, len);
+		return (EINVAL);
+	}
+
+	if (cmd & LINUX_IOC_IN) {
+		error = copyin((void *)args->arg, data, len);
+		if (error) {
+			printf("%s: Can't copy data, error %d\n",
+			    __func__, error);
+			return (EINVAL);
+		}
+	}
+
+	error = (fo_ioctl(fp, args->cmd, (caddr_t)data, td->td_ucred, td));
 	fdrop(fp, td);
 
 	return (error);
