@@ -803,26 +803,26 @@ intr_restore(register_t rflags)
 }
 
 enum {
-	ECREATE	= 0x0,
-	EADD	= 0x1,
-	EINIT	= 0x2,
-	EREMOVE	= 0x3,
-	EDGBRD	= 0x4,
-	EDGBWR	= 0x5,
-	EEXTEND	= 0x6,
-	ELDU	= 0x8,
-	EBLOCK	= 0x9,
-	EPA	= 0xA,
-	EWB	= 0xB,
-	ETRACK	= 0xC,
+	SGX_ECREATE	= 0x0,
+	SGX_EADD	= 0x1,
+	SGX_EINIT	= 0x2,
+	SGX_EREMOVE	= 0x3,
+	SGX_EDGBRD	= 0x4,
+	SGX_EDGBWR	= 0x5,
+	SGX_EEXTEND	= 0x6,
+	SGX_ELDU	= 0x8,
+	SGX_EBLOCK	= 0x9,
+	SGX_EPA		= 0xA,
+	SGX_EWB		= 0xB,
+	SGX_ETRACK	= 0xC,
 };
 
 enum {
-	PT_SECS = 0x00,
-	PT_TCS  = 0x01,
-	PT_REG  = 0x02,
-	PT_VA   = 0x03,
-	PT_TRIM = 0x04,
+	SGX_PT_SECS = 0x00,
+	SGX_PT_TCS  = 0x01,
+	SGX_PT_REG  = 0x02,
+	SGX_PT_VA   = 0x03,
+	SGX_PT_TRIM = 0x04,
 };
 
 struct sgx_out_regs {
@@ -854,14 +854,14 @@ static __inline void
 sgx_ecreate(void *pginfo, void *secs)
 {
 
-	encls(ECREATE, pginfo, secs, 0);
+	encls(SGX_ECREATE, pginfo, secs, 0);
 }
 
 static __inline void
 sgx_eadd(void *pginfo, void *epc)
 {
 
-	encls(EADD, pginfo, epc, 0);
+	encls(SGX_EADD, pginfo, epc, 0);
 }
 
 static __inline int
@@ -869,7 +869,7 @@ sgx_einit(void *sigstruct, void *secs, void *einittoken)
 {
 	struct sgx_out_regs tmp;
 
-	encls_ret(EINIT, sigstruct, secs, einittoken, tmp);
+	encls_ret(SGX_EINIT, sigstruct, secs, einittoken, tmp);
 
 	return (tmp.oeax);
 }
@@ -878,14 +878,14 @@ static __inline void
 sgx_eextend(void *secs, void *epc)
 {
 
-	encls(EEXTEND, secs, epc, 0);
+	encls(SGX_EEXTEND, secs, epc, 0);
 }
 
 static __inline void
 sgx_epa(void *epc)
 {
 
-	encls(EPA, PT_VA, epc, 0);
+	encls(SGX_EPA, SGX_PT_VA, epc, 0);
 }
 
 static __inline int
@@ -894,7 +894,7 @@ sgx_eldu(uint64_t rbx, uint64_t rcx,
 {
 	struct sgx_out_regs tmp;
 
-	encls_ret(ELDU, rbx, rcx, rdx, tmp);
+	encls_ret(SGX_ELDU, rbx, rcx, rdx, tmp);
 
 	return (tmp.oeax);
 }
@@ -903,7 +903,7 @@ static __inline void
 sgx_eremove(void *epc)
 {
 
-	encls(EREMOVE, 0, epc, 0);
+	encls(SGX_EREMOVE, 0, epc, 0);
 }
 
 #else /* !(__GNUCLIKE_ASM && __CC_SUPPORTS___INLINE) */
