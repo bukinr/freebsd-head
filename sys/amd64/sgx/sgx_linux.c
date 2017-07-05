@@ -42,8 +42,8 @@ __FBSDID("$FreeBSD$");
 #include <sys/proc.h>
 
 #include <machine/sgx.h>
-#include <machine/../linux32/linux.h>
-#include <machine/../linux32/linux32_proto.h>
+#include <machine/../linux/linux.h>
+#include <machine/../linux/linux_proto.h>
 #include <compat/linux/linux_ioctl.h>
 
 #include <sys/ioccom.h>
