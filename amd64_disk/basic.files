@@ -88,9 +88,11 @@ lib/libc.so.7
 lib/libcasper.so.0
 lib/libcrypt.so.5
 lib/libcrypto.so.8
+lib/libcxxrt.so.1
 lib/libdevstat.so.7
 lib/libedit.so.7
 lib/libelf.so.2
+lib/libgcc_s.so.1
 lib/libgeom.so.5
 lib/libipsec.so.4
 lib/libjail.so.1
@@ -124,6 +126,7 @@ sbin/init
 sbin/kldload
 sbin/kldstat
 sbin/kldunload
+sbin/ldconfig
 sbin/md5
 sbin/mdconfig
 sbin/mdmfs
@@ -152,7 +155,9 @@ usr/bin/grep
 usr/bin/hd
 usr/bin/head
 usr/bin/hexdump
+usr/bin/jot
 usr/bin/kdump
+usr/bin/killall
 usr/bin/ktrace
 usr/bin/ldd
 usr/bin/less
@@ -185,12 +190,14 @@ usr/lib/libasn1.so.11
 usr/lib/libbsm.so.3
 usr/lib/libbz2.so.4
 usr/lib/libcom_err.so.5
+usr/lib/libc++.so.1
 usr/lib/libdevinfo.so.6
 usr/lib/libelf.so
 usr/lib/libgnuregex.so.5
 usr/lib/libgssapi.so.10
 usr/lib/libgssapi_krb5.so.10
 usr/lib/libheimbase.so.11
+usr/lib/libheimntlm.so.11
 usr/lib/libhx509.so.11
 usr/lib/libkrb5.so.11
 usr/lib/libmemstat.so.3
@@ -199,7 +206,9 @@ usr/lib/libopie.so.8
 usr/lib/libpam.so.6
 usr/lib/libprocstat.so.1
 usr/lib/libroken.so.11
+usr/lib/librt.so.1
 usr/lib/libsysdecode.so.5
+usr/lib/libssl.so.8
 usr/lib/libusb.so.3
 usr/lib/libwind.so.11
 usr/lib/libwrap.so.6
