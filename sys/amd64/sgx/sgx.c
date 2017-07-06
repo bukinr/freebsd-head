@@ -63,7 +63,7 @@ __FBSDID("$FreeBSD$");
 #include <machine/sgx.h>
 #include <machine/sgxvar.h>
 
-#include <amd64/sgx/sgx.h>
+#include <amd64/sgx/sgximpl.h>
 
 #define	DEBUG
 #undef	DEBUG

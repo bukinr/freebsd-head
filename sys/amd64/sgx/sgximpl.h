@@ -31,8 +31,8 @@
  * $FreeBSD$
  */
 
-#ifndef _AMD64_SGX_SGX_H_
-#define _AMD64_SGX_SGX_H_
+#ifndef _AMD64_SGX_SGXIMPL_H_
+#define _AMD64_SGX_SGXIMPL_H_
 
 #define	SGX_CPUID			0x12
 #define	SGX_PAGE_SIZE			4096
@@ -96,4 +96,4 @@ struct sgx_softc {
 	TAILQ_HEAD(, sgx_enclave)	enclaves;
 };
 
-#endif /* !_AMD64_SGX_SGX_H_ */
+#endif /* !_AMD64_SGX_SGXIMPL_H_ */
