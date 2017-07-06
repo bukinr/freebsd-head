@@ -31,8 +31,37 @@
  * $FreeBSD$
  */
 
+/* Machine-defined variables. */
+
 #ifndef _MACHINE_SGXVAR_H_
 #define _MACHINE_SGXVAR_H_
+
+/* Error codes. */
+#define	SGX_SUCCESS			0
+#define	SGX_INVALID_SIG_STRUCT		1	/* EINIT */
+#define	SGX_INVALID_ATTRIBUTE		2	/* EINIT, EGETKEY */
+#define	SGX_BLSTATE			3	/* EBLOCK */
+#define	SGX_INVALID_MEASUREMENT		4	/* EINIT */
+#define	SGX_NOTBLOCKABLE		5	/* EBLOCK */
+#define	SGX_PG_INVLD			6	/* EBLOCK */
+#define	SGX_LOCKFAIL			7	/* EBLOCK, EMODPR, EMODT */
+#define	SGX_INVALID_SIGNATURE		8	/* EINIT */
+#define	SGX_MAC_COMPARE_FAIL		9	/* ELDB, ELDU */
+#define	SGX_PAGE_NOT_BLOCKED		10	/* EWB */
+#define	SGX_NOT_TRACKED			11	/* EWB, EACCEPT */
+#define	SGX_VA_SLOT_OCCUPIED		12	/* EWB */
+#define	SGX_CHILD_PRESENT		13	/* EWB, EREMOVE */
+#define	SGX_ENCLAVE_ACT			14	/* EREMOVE */
+#define	SGX_ENTRYEPOCH_LOCKED		15	/* EBLOCK */
+#define	SGX_INVALID_EINIT_TOKEN		16	/* EINIT */
+#define	SGX_PREV_TRK_INCMPL		17	/* ETRACK */
+#define	SGX_PG_IS_SECS			18	/* EBLOCK */
+#define	SGX_PAGE_ATTRIBUTES_MISMATCH	19	/* EACCEPT, EACCEPTCOPY */
+#define	SGX_PAGE_NOT_MODIFIABLE		20	/* EMODPR, EMODT */
+#define	SGX_INVALID_CPUSVN		32	/* EINIT, EGETKEY */
+#define	SGX_INVALID_ISVSVN		64	/* EGETKEY */
+#define	SGX_UNMASKED_EVENT		128	/* EINIT */
+#define	SGX_INVALID_KEYNAME		256	/* EGETKEY */
 
 /*
  * 2.10 Page Information (PAGEINFO)
@@ -48,5 +77,74 @@ struct page_info {
 	};
 	uint64_t secs;
 } __aligned(32);
+
+/*
+ * 2.11 Security Information (SECINFO)
+ * The SECINFO data structure holds meta-data about an enclave page.
+ */
+struct secinfo {
+	uint64_t flags;
+#define	SECINFO_FLAGS_PT_S	8	/* Page type shift */
+#define	SECINFO_FLAGS_PT_M	(0xff << SECINFO_FLAGS_PT_S)
+	uint64_t reserved[7];
+} __aligned(128);
+
+/*
+ * 2.7.1 ATTRIBUTES
+ * The ATTRIBUTES data structure is comprised of bit-granular fields that
+ * are used in the SECS, CPUID enumeration, the REPORT and the KEYREQUEST
+ * structures.
+ */
+struct secs_attr {
+	uint8_t		reserved1: 1;
+	uint8_t		debug: 1;
+	uint8_t		mode64bit: 1;
+	uint8_t		reserved2: 1;
+	uint8_t		provisionkey: 1;
+	uint8_t		einittokenkey: 1;
+	uint8_t		reserved3: 2;
+	uint8_t		reserved4[7];
+	uint64_t	xfrm;			/* X-Feature Request Mask */
+};
+
+/*
+ * 2.7 SGX Enclave Control Structure (SECS)
+ * The SECS data structure requires 4K-Bytes alignment.
+ */
+struct secs {
+	uint64_t	size;
+	uint64_t	base;
+	uint32_t	ssa_frame_size;
+	uint32_t	misc_select;
+	uint8_t		reserved1[24];
+	struct secs_attr attributes;
+	uint8_t		mr_enclave[32];
+	uint8_t		reserved2[32];
+	uint8_t		mr_signer[32];
+	uint8_t		reserved3[96];
+	uint16_t	isv_prod_id;
+	uint16_t	isv_svn;
+	uint8_t		reserved4[3836];
+};
+
+/*
+ * 2.8 Thread Control Structure (TCS)
+ * Each executing thread in the enclave is associated with a
+ * Thread Control Structure. It requires 4K-Bytes alignment.
+ */
+struct tcs {
+	uint64_t	reserved1;
+	uint64_t	flags;
+	uint64_t	ossa;
+	uint32_t	cssa;
+	uint32_t	nssa;
+	uint64_t	oentry;
+	uint64_t	reserved2;
+	uint64_t	ofsbasgx;
+	uint64_t	ogsbasgx;
+	uint32_t	fslimit;
+	uint32_t	gslimit;
+	uint64_t	reserved3[503];
+};
 
 #endif /* !_MACHINE_SGXVAR_H_ */
