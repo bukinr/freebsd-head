@@ -103,7 +103,8 @@ struct secs_attr {
 	uint8_t		provisionkey: 1;
 	uint8_t		einittokenkey: 1;
 	uint8_t		reserved3: 2;
-	uint8_t		reserved4[7];
+#define	SECS_ATTR_RSV4_SIZE	7
+	uint8_t		reserved4[SECS_ATTR_RSV4_SIZE];
 	uint64_t	xfrm;			/* X-Feature Request Mask */
 };
 
@@ -116,15 +117,19 @@ struct secs {
 	uint64_t	base;
 	uint32_t	ssa_frame_size;
 	uint32_t	misc_select;
-	uint8_t		reserved1[24];
+#define	SECS_RSV1_SIZE	24
+	uint8_t		reserved1[SECS_RSV1_SIZE];
 	struct secs_attr attributes;
 	uint8_t		mr_enclave[32];
-	uint8_t		reserved2[32];
+#define	SECS_RSV2_SIZE	32
+	uint8_t		reserved2[SECS_RSV2_SIZE];
 	uint8_t		mr_signer[32];
-	uint8_t		reserved3[96];
+#define	SECS_RSV3_SIZE	96
+	uint8_t		reserved3[SECS_RSV3_SIZE];
 	uint16_t	isv_prod_id;
 	uint16_t	isv_svn;
-	uint8_t		reserved4[3836];
+#define	SECS_RSV4_SIZE	3836
+	uint8_t		reserved4[SECS_RSV4_SIZE];
 };
 
 /*

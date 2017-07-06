@@ -384,6 +384,51 @@ sgx_measure_page(struct sgx_softc *sc, struct epc_page *secs,
 }
 
 static int
+sgx_secs_validate(struct secs *secs)
+{
+	struct secs_attr *attr;
+	int i;
+
+	if (secs->size == 0)
+		return (EINVAL);
+
+	if ((secs->size & (secs->size - 1)) != 0)
+		return (EINVAL);
+
+	attr = &secs->attributes;
+
+	if (attr->reserved1 != 0 ||
+	    attr->reserved2 != 0 ||
+	    attr->reserved3 != 0)
+		return (EINVAL);
+
+	for (i = 0; i < SECS_ATTR_RSV4_SIZE; i++)
+		if (attr->reserved4[i])
+			return (EINVAL);
+
+	if (!attr->mode64bit)
+		return (EINVAL);
+
+	for (i = 0; i < SECS_RSV1_SIZE; i++)
+		if (secs->reserved1[i])
+			return (EINVAL);
+
+	for (i = 0; i < SECS_RSV2_SIZE; i++)
+		if (secs->reserved2[i])
+			return (EINVAL);
+
+	for (i = 0; i < SECS_RSV3_SIZE; i++)
+		if (secs->reserved3[i])
+			return (EINVAL);
+
+	for (i = 0; i < SECS_RSV4_SIZE; i++)
+		if (secs->reserved4[i])
+			return (EINVAL);
+
+	return (0);
+}
+
+static int
 sgx_tcs_validate(struct tcs *tcs)
 {
 	int i;
@@ -570,6 +615,12 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	ret = copyin((void *)param->src, secs, sizeof(struct secs));
 	if (ret) {
 		dprintf("%s: Can't copy SECS.\n", __func__);
+		goto error;
+	}
+
+	ret = sgx_secs_validate(secs);
+	if (ret) {
+		dprintf("%s: SECS validation failed.\n", __func__);
 		goto error;
 	}
 
