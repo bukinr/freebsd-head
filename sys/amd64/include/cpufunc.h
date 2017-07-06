@@ -825,85 +825,72 @@ enum {
 	SGX_PT_TRIM = 0x04,
 };
 
-struct sgx_out_regs {
-	uint32_t oeax;
-	uint64_t orbx;
-};
+static __inline int
+sgx_encls(uint64_t rax, uint64_t rbx, uint64_t rcx, uint64_t rdx)
+{
+	int oeax;
 
-#define	encls_ret(rax, rbx, rcx, rdx, tmp)		\
-	__asm __volatile(				\
-		".byte 0x0f, 0x01, 0xcf"		\
-		:"=a"(tmp.oeax),			\
-		 "=b"(tmp.orbx)				\
-		:"a"((uint32_t)rax),			\
-		 "b"(rbx),				\
-		 "c"(rcx),				\
-		 "d"(rdx)				\
+	__asm __volatile(
+		".byte 0x0f, 0x01, 0xcf"
+		:"=a"(oeax)
+		:"a"((uint32_t)rax),
+		 "b"(rbx),
+		 "c"(rcx),
+		 "d"(rdx)
 		:"memory");
 
-#define	encls(rax, rbx, rcx, rdx)			\
-	__asm __volatile(				\
-		".byte 0x0f, 0x01, 0xcf"		\
-		::"a"((uint32_t)rax),			\
-		 "b"(rbx),				\
-		 "c"(rcx),				\
-		 "d"(rdx)				\
-		:"memory");
+	return (oeax);
+}
 
 static __inline void
 sgx_ecreate(void *pginfo, void *secs)
 {
 
-	encls(SGX_ECREATE, pginfo, secs, 0);
+	sgx_encls(SGX_ECREATE, (uint64_t)pginfo, (uint64_t)secs, 0);
 }
 
 static __inline void
 sgx_eadd(void *pginfo, void *epc)
 {
 
-	encls(SGX_EADD, pginfo, epc, 0);
+	sgx_encls(SGX_EADD, (uint64_t)pginfo, (uint64_t)epc, 0);
 }
 
 static __inline int
 sgx_einit(void *sigstruct, void *secs, void *einittoken)
 {
-	struct sgx_out_regs tmp;
 
-	encls_ret(SGX_EINIT, sigstruct, secs, einittoken, tmp);
-
-	return (tmp.oeax);
+	return (sgx_encls(SGX_EINIT, (uint64_t)sigstruct,
+	    (uint64_t)secs, (uint64_t)einittoken));
 }
 
 static __inline void
 sgx_eextend(void *secs, void *epc)
 {
 
-	encls(SGX_EEXTEND, secs, epc, 0);
+	sgx_encls(SGX_EEXTEND, (uint64_t)secs, (uint64_t)epc, 0);
 }
 
 static __inline void
 sgx_epa(void *epc)
 {
 
-	encls(SGX_EPA, SGX_PT_VA, epc, 0);
+	sgx_encls(SGX_EPA, SGX_PT_VA, (uint64_t)epc, 0);
 }
 
 static __inline int
 sgx_eldu(uint64_t rbx, uint64_t rcx,
     uint64_t rdx)
 {
-	struct sgx_out_regs tmp;
 
-	encls_ret(SGX_ELDU, rbx, rcx, rdx, tmp);
-
-	return (tmp.oeax);
+	return (sgx_encls(SGX_ELDU, rbx, rcx, rdx));
 }
 
 static __inline void
 sgx_eremove(void *epc)
 {
 
-	encls(SGX_EREMOVE, 0, epc, 0);
+	sgx_encls(SGX_EREMOVE, 0, (uint64_t)epc, 0);
 }
 
 #else /* !(__GNUCLIKE_ASM && __CC_SUPPORTS___INLINE) */
