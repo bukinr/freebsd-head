@@ -494,7 +494,6 @@ sgx_pg_fault(vm_object_t object, vm_ooffset_t offset,
 	pidx = OFF_TO_IDX(offset);
 
 	found = false;
-	mtx_lock(&enclave->mtx);
 	TAILQ_FOREACH_SAFE(enclave_page, &enclave->pages, next,
 	    enclave_page_tmp) {
 		if ((vmh->base + offset) == enclave_page->addr) {
@@ -502,7 +501,6 @@ sgx_pg_fault(vm_object_t object, vm_ooffset_t offset,
 			break;
 		}
 	}
-	mtx_unlock(&enclave->mtx);
 	if (!found) {
 		dprintf("%s: Page not found.\n", __func__);
 		return (VM_PAGER_FAIL);
