@@ -384,7 +384,7 @@ sgx_measure_page(struct sgx_softc *sc, struct epc_page *secs,
 }
 
 static int
-sgx_secs_validate(struct secs *secs)
+sgx_secs_validate(struct sgx_softc *sc, struct secs *secs)
 {
 	struct secs_attr *attr;
 	int i;
@@ -405,6 +405,9 @@ sgx_secs_validate(struct secs *secs)
 	for (i = 0; i < SECS_ATTR_RSV4_SIZE; i++)
 		if (attr->reserved4[i])
 			return (EINVAL);
+
+	if (secs->size > sc->enclave_size_max)
+		return (EINVAL);
 
 	if (!attr->mode64bit)
 		return (EINVAL);
@@ -618,7 +621,7 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 		goto error;
 	}
 
-	ret = sgx_secs_validate(secs);
+	ret = sgx_secs_validate(sc, secs);
 	if (ret) {
 		dprintf("%s: SECS validation failed.\n", __func__);
 		goto error;
@@ -976,6 +979,12 @@ sgx_get_epc_area(struct sgx_softc *sc)
 	sc->epc_size = ((uint64_t)(cp[3] & 0xfffff) << 32) + \
 	    (cp[2] & 0xfffff000);
 	sc->npages = sc->epc_size / SGX_PAGE_SIZE;
+
+	if (cp[3] & 0xffff) {
+		sc->enclave_size_max = (1 << ((cp[3] >> 8) & 0xff));
+	} else {
+		sc->enclave_size_max = ENCLAVE_SIZE_MAX_DEFAULT;
+	}
 
 	epc_base_vaddr = (vm_offset_t)pmap_mapdev_attr(sc->epc_base,
 	    sc->epc_size, VM_MEMATTR_DEFAULT);

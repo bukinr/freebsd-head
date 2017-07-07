@@ -40,6 +40,7 @@
 #define	SIGSTRUCT_SIZE			1808
 #define	EINITTOKEN_SIZE			304
 #define	IOCTL_MAX_DATA_LEN		26
+#define	ENCLAVE_SIZE_MAX_DEFAULT	0x1000000000ULL
 
 static MALLOC_DEFINE(M_SGX, "sgx", "SGX driver");
 
@@ -94,6 +95,7 @@ struct sgx_softc {
 	struct epc_page			*epc_pages;
 	uint32_t			npages;
 	TAILQ_HEAD(, sgx_enclave)	enclaves;
+	uint64_t			enclave_size_max;
 };
 
 #endif /* !_AMD64_SGX_SGXIMPL_H_ */
