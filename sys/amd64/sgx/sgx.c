@@ -406,10 +406,19 @@ sgx_secs_validate(struct sgx_softc *sc, struct secs *secs)
 		if (attr->reserved4[i])
 			return (EINVAL);
 
-	if (secs->size > sc->enclave_size_max)
+	/*
+	 * Intel® Software Guard Extensions Programming Reference
+	 * 6.7.2 Relevant Fields in Various Data Structures
+	 * 6.7.2.1 SECS.ATTRIBUTES.XFRM
+	 * XFRM[1:0] must be set to 0x3.
+	 */
+	if ((attr->xfrm & 0x3) != 0x3)
 		return (EINVAL);
 
 	if (!attr->mode64bit)
+		return (EINVAL);
+
+	if (secs->size > sc->enclave_size_max)
 		return (EINVAL);
 
 	for (i = 0; i < SECS_RSV1_SIZE; i++)
