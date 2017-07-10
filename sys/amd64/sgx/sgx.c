@@ -898,7 +898,7 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 	int ret;
 	int len;
 
-	sc = dev->si_drv1;
+	sc = &sgx_sc;
 
 	len = IOCPARM_LEN(cmd);
 
@@ -935,7 +935,7 @@ sgx_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 	struct sgx_vm_handle *vmh;
 	struct sgx_softc *sc;
 
-	sc = cdev->si_drv1;
+	sc = &sgx_sc;
 
 	dprintf("%s: mapsize 0x%lx, offset %lx\n",
 	    __func__, mapsize, *offset);
@@ -1058,7 +1058,6 @@ sgx_load(void)
 		sgx_put_epc_area(sc);
 		return (ENXIO);
 	}
-	sc->sgx_cdev->si_drv1 = sc;
 
 	printf("SGX initialized: EPC base 0x%lx size %ld (%d pages)\n",
 	    sc->epc_base, sc->epc_size, sc->npages);
