@@ -231,7 +231,7 @@ sgx_enclave_page_construct(struct sgx_softc *sc,
 		}
 
 		va_page = malloc(sizeof(struct va_page),
-		    M_SGX, M_WAITOK | M_ZERO);
+		    M_SGX, M_NOWAIT | M_ZERO);
 		if (va_page == NULL) {
 			dprintf("%s: Can't alloc va_page.\n", __func__);
 			sgx_put_epc_page(sc, epc);
@@ -312,7 +312,7 @@ sgx_enclave_alloc(struct sgx_softc *sc, struct secs *secs,
 	struct sgx_enclave *enclave;
 
 	enclave = malloc(sizeof(struct sgx_enclave),
-	    M_SGX, M_WAITOK | M_ZERO);
+	    M_SGX, M_NOWAIT | M_ZERO);
 	if (enclave == NULL) {
 		dprintf("%s: Can't alloc memory for enclave.\n",
 		    __func__);
@@ -616,7 +616,7 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 
 	/* SGX Enclave Control Structure (SECS) */
 	secs = (struct secs *)kmem_alloc_contig(kmem_arena, PAGE_SIZE,
-	    M_WAITOK | M_ZERO, 0, BUS_SPACE_MAXADDR_32BIT,
+	    M_NOWAIT | M_ZERO, 0, BUS_SPACE_MAXADDR_32BIT,
 	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
 	if (secs == NULL) {
 		dprintf("%s: Can't allocate memory.\n", __func__);
@@ -744,7 +744,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	}
 
 	tmp_vaddr = (void *)kmem_alloc_contig(kmem_arena, PAGE_SIZE,
-	    M_WAITOK | M_ZERO, 0, BUS_SPACE_MAXADDR_32BIT,
+	    M_NOWAIT | M_ZERO, 0, BUS_SPACE_MAXADDR_32BIT,
 	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
 	if (tmp_vaddr == NULL) {
 		dprintf("%s: Failed to alloc memory.\n", __func__);
@@ -772,7 +772,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	}
 
 	enclave_page = malloc(sizeof(struct sgx_enclave_page),
-	    M_SGX, M_WAITOK | M_ZERO);
+	    M_SGX, M_NOWAIT | M_ZERO);
 	if (enclave_page == NULL) {
 		dprintf("%s: Can't allocate enclave page.\n", __func__);
 		ret = ENOMEM;
@@ -844,7 +844,7 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	}
 
 	tmp_vaddr = (void *)kmem_alloc_contig(kmem_arena, PAGE_SIZE,
-	    M_WAITOK | M_ZERO, 0, BUS_SPACE_MAXADDR_32BIT,
+	    M_NOWAIT | M_ZERO, 0, BUS_SPACE_MAXADDR_32BIT,
 	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
 	if (tmp_vaddr == NULL) {
 		dprintf("%s: Failed to alloc memory.\n", __func__);
@@ -946,7 +946,7 @@ sgx_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 	    __func__, mapsize, *offset);
 
 	vmh = malloc(sizeof(struct sgx_vm_handle),
-	    M_SGX, M_WAITOK | M_ZERO);
+	    M_SGX, M_NOWAIT | M_ZERO);
 	if (vmh == NULL) {
 		dprintf("%s: Can't alloc memory.\n", __func__);
 		return (ENOMEM);
@@ -999,7 +999,7 @@ sgx_get_epc_area(struct sgx_softc *sc)
 	    sc->epc_size, VM_MEMATTR_DEFAULT);
 
 	sc->epc_pages = malloc(sizeof(struct epc_page) * sc->npages,
-	    M_DEVBUF, M_WAITOK | M_ZERO);
+	    M_DEVBUF, M_NOWAIT | M_ZERO);
 	if (sc->epc_pages == NULL) {
 		dprintf("%s: Can't alloc memory.\n", __func__);
 		return (ENOMEM);
