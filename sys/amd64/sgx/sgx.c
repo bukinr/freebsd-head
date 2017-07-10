@@ -58,7 +58,6 @@ __FBSDID("$FreeBSD$");
 
 #include <machine/md_var.h>
 #include <machine/specialreg.h>
-#include <machine/bus.h>
 #include <machine/cpufunc.h>
 #include <machine/sgx.h>
 #include <machine/sgxvar.h>
@@ -616,7 +615,7 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 
 	/* SGX Enclave Control Structure (SECS) */
 	secs = (struct secs *)kmem_alloc_contig(kmem_arena, PAGE_SIZE,
-	    M_NOWAIT | M_ZERO, 0, BUS_SPACE_MAXADDR_32BIT,
+	    M_NOWAIT | M_ZERO, 0, ~0,
 	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
 	if (secs == NULL) {
 		dprintf("%s: Can't allocate memory.\n", __func__);
@@ -744,7 +743,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	}
 
 	tmp_vaddr = (void *)kmem_alloc_contig(kmem_arena, PAGE_SIZE,
-	    M_NOWAIT | M_ZERO, 0, BUS_SPACE_MAXADDR_32BIT,
+	    M_NOWAIT | M_ZERO, 0, ~0,
 	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
 	if (tmp_vaddr == NULL) {
 		dprintf("%s: Failed to alloc memory.\n", __func__);
@@ -844,7 +843,7 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	}
 
 	tmp_vaddr = (void *)kmem_alloc_contig(kmem_arena, PAGE_SIZE,
-	    M_NOWAIT | M_ZERO, 0, BUS_SPACE_MAXADDR_32BIT,
+	    M_NOWAIT | M_ZERO, 0, ~0,
 	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
 	if (tmp_vaddr == NULL) {
 		dprintf("%s: Failed to alloc memory.\n", __func__);
