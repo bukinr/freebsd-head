@@ -553,7 +553,7 @@ sgx_pg_fault(vm_object_t object, vm_ooffset_t offset,
 	found = false;
 	TAILQ_FOREACH_SAFE(enclave_page, &enclave->pages, next,
 	    enclave_page_tmp) {
-		if ((vmh->base + offset) == enclave_page->addr) {
+		if (vmh->base + offset == enclave_page->addr) {
 			found = true;
 			break;
 		}
@@ -758,7 +758,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 		goto error;
 	}
 
-	page_type = (secinfo.flags & SECINFO_FLAGS_PT_M) >> \
+	page_type = (secinfo.flags & SECINFO_FLAGS_PT_M) >>
 	    SECINFO_FLAGS_PT_S;
 	if (page_type == SGX_PT_TCS) {
 		t = (struct tcs *)tmp_vaddr;
@@ -983,9 +983,9 @@ sgx_get_epc_area(struct sgx_softc *sc)
 
 	cpuid_count(SGX_CPUID, 0x2, cp);
 
-	sc->epc_base = ((uint64_t)(cp[1] & 0xfffff) << 32) + \
+	sc->epc_base = ((uint64_t)(cp[1] & 0xfffff) << 32) +
 	    (cp[0] & 0xfffff000);
-	sc->epc_size = ((uint64_t)(cp[3] & 0xfffff) << 32) + \
+	sc->epc_size = ((uint64_t)(cp[3] & 0xfffff) << 32) +
 	    (cp[2] & 0xfffff000);
 	sc->npages = sc->epc_size / SGX_PAGE_SIZE;
 
