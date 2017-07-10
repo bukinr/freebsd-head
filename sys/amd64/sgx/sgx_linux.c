@@ -46,7 +46,7 @@ __FBSDID("$FreeBSD$");
 #include <machine/../linux/linux_proto.h>
 #include <compat/linux/linux_ioctl.h>
 
-#include <amd64/sgx/sgximpl.h>
+#include <amd64/sgx/sgxvar.h>
 
 #include <sys/ioccom.h>
 

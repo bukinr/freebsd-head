@@ -33,8 +33,8 @@
 
 /* Machine-defined variables. */
 
-#ifndef _MACHINE_SGXVAR_H_
-#define _MACHINE_SGXVAR_H_
+#ifndef _MACHINE_SGXREG_H_
+#define _MACHINE_SGXREG_H_
 
 /* Error codes. */
 #define	SGX_SUCCESS			0
@@ -152,4 +152,4 @@ struct tcs {
 	uint64_t	reserved3[503];
 };
 
-#endif /* !_MACHINE_SGXVAR_H_ */
+#endif /* !_MACHINE_SGXREG_H_ */

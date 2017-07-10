@@ -60,9 +60,9 @@ __FBSDID("$FreeBSD$");
 #include <machine/specialreg.h>
 #include <machine/cpufunc.h>
 #include <machine/sgx.h>
-#include <machine/sgxvar.h>
+#include <machine/sgxreg.h>
 
-#include <amd64/sgx/sgximpl.h>
+#include <amd64/sgx/sgxvar.h>
 
 #define	DEBUG
 #undef	DEBUG

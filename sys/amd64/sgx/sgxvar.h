@@ -31,8 +31,8 @@
  * $FreeBSD$
  */
 
-#ifndef _AMD64_SGX_SGXIMPL_H_
-#define _AMD64_SGX_SGXIMPL_H_
+#ifndef _AMD64_SGX_SGXVAR_H_
+#define _AMD64_SGX_SGXVAR_H_
 
 #define	SGX_CPUID			0x12
 #define	SGX_PAGE_SIZE			4096
@@ -98,4 +98,4 @@ struct sgx_softc {
 	uint64_t			enclave_size_max;
 };
 
-#endif /* !_AMD64_SGX_SGXIMPL_H_ */
+#endif /* !_AMD64_SGX_SGXVAR_H_ */
