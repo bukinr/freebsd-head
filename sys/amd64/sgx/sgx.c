@@ -261,12 +261,10 @@ static int
 sgx_mem_find(struct sgx_softc *sc, uint64_t addr,
     vm_map_entry_t *entry0, vm_object_t *mem0)
 {
-	struct proc *proc;
 	vm_map_t map;
 	vm_map_entry_t entry;
 
-	proc = curthread->td_proc;
-	map = &proc->p_vmspace->vm_map;
+	map = &curproc->p_vmspace->vm_map;
 
 	vm_map_lock_read(map);
 	if (!vm_map_lookup_entry(map, addr, &entry)) {
@@ -710,7 +708,6 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	struct secinfo secinfo;
 	void *tmp_vaddr;
 	uint64_t page_type;
-	struct proc *proc;
 	struct tcs *t;
 	pmap_t pmap;
 	int ret;
@@ -731,8 +728,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 		goto error;
 	}
 
-	proc = curthread->td_proc;
-	pmap = vm_map_pmap(&proc->p_vmspace->vm_map);
+	pmap = vm_map_pmap(&curproc->p_vmspace->vm_map);
 
 	memset(&secinfo, 0, sizeof(struct secinfo));
 	ret = copyin((void *)addp->secinfo, &secinfo,
