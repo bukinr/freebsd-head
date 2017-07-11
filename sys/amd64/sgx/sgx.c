@@ -273,10 +273,15 @@ sgx_mem_find(struct sgx_softc *sc, uint64_t addr,
 		dprintf("%s: Can't find enclave.\n", __func__);
 		return (EINVAL);
 	}
-	vm_map_unlock_read(map);
+
+	if (entry->object.vm_object == NULL) {
+		vm_map_unlock_read(map);
+		return (EINVAL);
+	}
 
 	*mem0 = entry->object.vm_object;
 	*entry0 = entry;
+	vm_map_unlock_read(map);
 
 	return (0);
 }
