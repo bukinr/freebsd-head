@@ -678,6 +678,11 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	secs_page->epc_page = epc;
 
 	mtx_lock(&sc->mtx);
+	if ((sc->state & SGX_STATE_RUNNING) == 0) {
+		sgx_enclave_page_remove(sc, enclave, &enclave->secs_page);
+		mtx_unlock(&sc->mtx);
+		goto error;
+	}
 	sgx_ecreate(&pginfo, (void *)epc->base);
 	TAILQ_INSERT_TAIL(&sc->enclaves, enclave, next);
 	mtx_unlock(&sc->mtx);
@@ -1060,6 +1065,7 @@ sgx_load(void)
 		sgx_put_epc_area(sc);
 		return (ENXIO);
 	}
+	sc->state |= SGX_STATE_RUNNING;
 
 	printf("SGX initialized: EPC base 0x%lx size %ld (%d pages)\n",
 	    sc->epc_base, sc->epc_size, sc->npages);
@@ -1074,8 +1080,13 @@ sgx_unload(void)
 
 	sc = &sgx_sc;
 
-	if (!TAILQ_EMPTY(&sc->enclaves))
+	mtx_lock(&sc->mtx);
+	if (!TAILQ_EMPTY(&sc->enclaves)) {
+		mtx_unlock(&sc->mtx);
 		return (EBUSY);
+	}
+	sc->state &= ~SGX_STATE_RUNNING;
+	mtx_unlock(&sc->mtx);
 
 	destroy_dev(sc->sgx_cdev);
 

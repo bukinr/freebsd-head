@@ -96,6 +96,8 @@ struct sgx_softc {
 	uint32_t			npages;
 	TAILQ_HEAD(, sgx_enclave)	enclaves;
 	uint64_t			enclave_size_max;
+	uint8_t				state;
+#define	SGX_STATE_RUNNING		(1 << 0)
 };
 
 #endif /* !_AMD64_SGX_SGXVAR_H_ */
