@@ -538,7 +538,6 @@ sgx_pg_fault(vm_object_t object, vm_ooffset_t offset,
 	struct sgx_enclave_page *enclave_page_tmp;
 	struct sgx_enclave_page *enclave_page;
 	struct epc_page *epc;
-	bool found;
 
 	vmh = object->handle;
 	if (vmh == NULL)
@@ -553,24 +552,21 @@ sgx_pg_fault(vm_object_t object, vm_ooffset_t offset,
 	memattr = object->memattr;
 	pidx = OFF_TO_IDX(offset);
 
-	found = false;
+	page = NULL;
+	mtx_lock(&enclave->mtx);
 	TAILQ_FOREACH_SAFE(enclave_page, &enclave->pages, next,
 	    enclave_page_tmp) {
 		if (vmh->base + offset == enclave_page->addr) {
-			found = true;
+			epc = enclave_page->epc_page;
+			page = PHYS_TO_VM_PAGE(epc->phys);
 			break;
 		}
 	}
-	if (!found) {
+	mtx_unlock(&enclave->mtx);
+	if (page == NULL) {
 		dprintf("%s: Page not found.\n", __func__);
 		return (VM_PAGER_FAIL);
 	}
-
-	epc = enclave_page->epc_page;
-
-	page = PHYS_TO_VM_PAGE(epc->phys);
-	if (page == NULL)
-		return (VM_PAGER_FAIL);
 
 	KASSERT(page->flags & PG_FICTITIOUS,
 	    ("Not fictitious page %p", page));
