@@ -58,7 +58,6 @@ __FBSDID("$FreeBSD$");
 
 #include <machine/md_var.h>
 #include <machine/specialreg.h>
-#include <machine/bus.h>
 #include <machine/cpufunc.h>
 #include <machine/sgx.h>
 #include <machine/sgxreg.h>
@@ -614,9 +613,7 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	enclave = NULL;
 
 	/* SGX Enclave Control Structure (SECS) */
-	secs = (struct secs *)kmem_alloc_contig(kmem_arena, PAGE_SIZE,
-	    M_NOWAIT | M_ZERO, 0, BUS_SPACE_MAXADDR,
-	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
+	secs = malloc(PAGE_SIZE, M_SGX, M_NOWAIT | M_ZERO);
 	if (secs == NULL) {
 		dprintf("%s: Can't allocate memory.\n", __func__);
 		ret = ENOMEM;
@@ -687,7 +684,7 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	TAILQ_INSERT_TAIL(&sc->enclaves, enclave, next);
 	mtx_unlock(&sc->mtx);
 
-	kmem_free(kmem_arena, (vm_offset_t)secs, PAGE_SIZE);
+	free(secs, M_SGX);
 
 	enclave->vmh = vmh;
 	vmh->enclave = enclave;
@@ -695,8 +692,7 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	return (0);
 
 error:
-	if (secs != NULL)
-		kmem_free(kmem_arena, (vm_offset_t)secs, PAGE_SIZE);
+	free(secs, M_SGX);
 	sgx_put_epc_page(sc, epc);
 	free(enclave, M_SGX);
 
@@ -745,9 +741,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 		goto error;
 	}
 
-	tmp_vaddr = (void *)kmem_alloc_contig(kmem_arena, PAGE_SIZE,
-	    M_NOWAIT | M_ZERO, 0, BUS_SPACE_MAXADDR,
-	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
+	tmp_vaddr = malloc(PAGE_SIZE, M_SGX, M_NOWAIT | M_ZERO);
 	if (tmp_vaddr == NULL) {
 		dprintf("%s: Failed to alloc memory.\n", __func__);
 		ret = ENOMEM;
@@ -801,7 +795,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	sgx_eadd(&pginfo, (void *)epc->base);
 	mtx_unlock(&sc->mtx);
 
-	kmem_free(kmem_arena, (vm_offset_t)tmp_vaddr, PAGE_SIZE);
+	free(tmp_vaddr, M_SGX);
 
 	sgx_measure_page(sc, enclave->secs_page.epc_page, epc, addp->mrmask);
 
@@ -812,9 +806,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	return (0);
 
 error:
-	if (tmp_vaddr != NULL)
-		kmem_free(kmem_arena, (vm_offset_t)tmp_vaddr, PAGE_SIZE);
-
+	free(tmp_vaddr, M_SGX);
 	sgx_put_epc_page(sc, epc);
 	free(enclave_page, M_SGX);
 
@@ -845,9 +837,7 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 		goto error;
 	}
 
-	tmp_vaddr = (void *)kmem_alloc_contig(kmem_arena, PAGE_SIZE,
-	    M_NOWAIT | M_ZERO, 0, BUS_SPACE_MAXADDR,
-	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
+	tmp_vaddr = malloc(PAGE_SIZE, M_SGX, M_NOWAIT | M_ZERO);
 	if (tmp_vaddr == NULL) {
 		dprintf("%s: Failed to alloc memory.\n", __func__);
 		ret = ENOMEM;
@@ -888,8 +878,7 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	}
 
 error:
-	if (tmp_vaddr != NULL)
-		kmem_free(kmem_arena, (vm_offset_t)tmp_vaddr, PAGE_SIZE);
+	free(tmp_vaddr, M_SGX);
 
 	return (ret);
 }
