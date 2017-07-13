@@ -230,12 +230,7 @@ sgx_enclave_page_construct(struct sgx_softc *sc,
 		}
 
 		va_page = malloc(sizeof(struct va_page),
-		    M_SGX, M_NOWAIT | M_ZERO);
-		if (va_page == NULL) {
-			dprintf("%s: Can't alloc va_page.\n", __func__);
-			sgx_put_epc_page(sc, epc);
-			return (ENOMEM);
-		}
+		    M_SGX, M_WAITOK | M_ZERO);
 
 		mtx_lock(&enclave->mtx);
 		va_slot = sgx_va_slot_alloc(enclave, va_page);
@@ -314,12 +309,7 @@ sgx_enclave_alloc(struct sgx_softc *sc, struct secs *secs,
 	struct sgx_enclave *enclave;
 
 	enclave = malloc(sizeof(struct sgx_enclave),
-	    M_SGX, M_NOWAIT | M_ZERO);
-	if (enclave == NULL) {
-		dprintf("%s: Can't alloc memory for enclave.\n",
-		    __func__);
-		return (ENOMEM);
-	}
+	    M_SGX, M_WAITOK | M_ZERO);
 
 	TAILQ_INIT(&enclave->pages);
 	TAILQ_INIT(&enclave->va_pages);
@@ -613,13 +603,7 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	enclave = NULL;
 
 	/* SGX Enclave Control Structure (SECS) */
-	secs = malloc(PAGE_SIZE, M_SGX, M_NOWAIT | M_ZERO);
-	if (secs == NULL) {
-		dprintf("%s: Can't allocate memory.\n", __func__);
-		ret = ENOMEM;
-		goto error;
-	}
-
+	secs = malloc(PAGE_SIZE, M_SGX, M_WAITOK | M_ZERO);
 	ret = copyin((void *)param->src, secs, sizeof(struct secs));
 	if (ret) {
 		dprintf("%s: Can't copy SECS.\n", __func__);
@@ -741,13 +725,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 		goto error;
 	}
 
-	tmp_vaddr = malloc(PAGE_SIZE, M_SGX, M_NOWAIT | M_ZERO);
-	if (tmp_vaddr == NULL) {
-		dprintf("%s: Failed to alloc memory.\n", __func__);
-		ret = ENOMEM;
-		goto error;
-	}
-
+	tmp_vaddr = malloc(PAGE_SIZE, M_SGX, M_WAITOK | M_ZERO);
 	ret = copyin((void *)addp->src, tmp_vaddr, PAGE_SIZE);
 	if (ret) {
 		dprintf("%s: Failed to copy page.\n", __func__);
@@ -768,13 +746,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	}
 
 	enclave_page = malloc(sizeof(struct sgx_enclave_page),
-	    M_SGX, M_NOWAIT | M_ZERO);
-	if (enclave_page == NULL) {
-		dprintf("%s: Can't allocate enclave page.\n", __func__);
-		ret = ENOMEM;
-		goto error;
-	}
-
+	    M_SGX, M_WAITOK | M_ZERO);
 	ret = sgx_enclave_page_construct(sc, enclave, enclave_page);
 	if (ret) {
 		dprintf("%s: Can't construct page.\n", __func__);
@@ -837,13 +809,7 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 		goto error;
 	}
 
-	tmp_vaddr = malloc(PAGE_SIZE, M_SGX, M_NOWAIT | M_ZERO);
-	if (tmp_vaddr == NULL) {
-		dprintf("%s: Failed to alloc memory.\n", __func__);
-		ret = ENOMEM;
-		goto error;
-	}
-
+	tmp_vaddr = malloc(PAGE_SIZE, M_SGX, M_WAITOK | M_ZERO);
 	sigstruct = tmp_vaddr;
 	einittoken = (void *)((uint64_t)sigstruct + PAGE_SIZE / 2);
 
@@ -937,12 +903,7 @@ sgx_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 	    __func__, mapsize, *offset);
 
 	vmh = malloc(sizeof(struct sgx_vm_handle),
-	    M_SGX, M_NOWAIT | M_ZERO);
-	if (vmh == NULL) {
-		dprintf("%s: Can't alloc memory.\n", __func__);
-		return (ENOMEM);
-	}
-
+	    M_SGX, M_WAITOK | M_ZERO);
 	vmh->sc = sc;
 	vmh->size = mapsize;
 	vmh->mem = cdev_pager_allocate(vmh, OBJT_MGTDEVICE, &sgx_pg_ops,
