@@ -163,10 +163,7 @@ sgx_va_slot_init(struct sgx_softc *sc,
 
 	vmh = enclave->obj->handle;
 
-	if (enclave_page->addr == 0)
-		pidx = OFF_TO_IDX(enclave_page->addr);
-	else
-		pidx = OFF_TO_IDX(enclave_page->addr - vmh->base);
+	pidx = OFF_TO_IDX(enclave_page->addr);
 
 	va_slot = pidx % 512;
 	va_page_idx = pidx / 512;
@@ -594,7 +591,7 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 
 	secs_page = &enclave->secs_page;
 	secs_page->epc_page = epc;
-	secs_page->addr = vmh->base;
+	secs_page->addr = 0;
 
 	mtx_lock(&sc->mtx);
 	if ((sc->state & SGX_STATE_RUNNING) == 0) {
@@ -624,7 +621,7 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	obj = enclave->obj;
 	vmh = obj->handle;
 
-	pidx = OFF_TO_IDX(enclave_page->addr - vmh->base);
+	pidx = OFF_TO_IDX(enclave_page->addr);
 	dprintf("addr %lx pidx %ld vmh->base %lx\n",
 	    enclave_page->addr, pidx, vmh->base);
 	epc = enclave_page->epc_page;
@@ -672,6 +669,12 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 		goto error;
 	}
 
+	struct sgx_vm_handle *vmh;
+	vm_object_t obj;
+
+	obj = enclave->obj;
+	vmh = obj->handle;
+
 	ret = sgx_get_epc_page(sc, &epc);
 	if (ret) {
 		dprintf("%s: Failed to get free epc page.\n", __func__);
@@ -711,7 +714,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	enclave_page = malloc(sizeof(struct sgx_enclave_page),
 	    M_SGX, M_WAITOK | M_ZERO);
 	enclave_page->epc_page = epc;
-	enclave_page->addr = addp->addr;
+	enclave_page->addr = (addp->addr - vmh->base);
 
 	ret = sgx_va_slot_init(sc, enclave, enclave_page);
 	if (ret) {
@@ -740,11 +743,8 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 
 	vm_pindex_t pidx;
 	vm_page_t page;
-	struct sgx_vm_handle *vmh;
 
-	vmh = enclave->obj->handle;
-
-	pidx = OFF_TO_IDX(enclave_page->addr - vmh->base);
+	pidx = OFF_TO_IDX(enclave_page->addr);
 	dprintf("addr %lx pidx %lu vmh->base %lx\n",
 	    enclave_page->addr, pidx, vmh->base);
 	epc = enclave_page->epc_page;
