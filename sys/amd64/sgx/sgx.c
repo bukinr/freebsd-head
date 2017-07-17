@@ -154,7 +154,7 @@ sgx_va_slot_init(struct sgx_softc *sc,
 
 	va_slot = pidx % 512;
 	va_page_idx = pidx / 512;
-	idx = -SGX_VA_PAGES_OFFS-va_page_idx;
+	idx = - SGX_VA_PAGES_OFFS - va_page_idx;
 
 	p = vm_page_lookup(obj, idx);
 	if (p == NULL) {
