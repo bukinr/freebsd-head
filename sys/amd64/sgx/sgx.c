@@ -567,8 +567,6 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	enclave->obj = entry->object.vm_object;
 	enclave->vmh = vmh;
 
-	//vm_object_reference(enclave->obj);
-
 	memset(&secinfo, 0, sizeof(struct secinfo));
 	memset(&pginfo, 0, sizeof(struct page_info));
 	pginfo.linaddr = 0;
