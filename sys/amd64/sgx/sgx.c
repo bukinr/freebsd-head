@@ -295,7 +295,10 @@ sgx_enclave_remove(struct sgx_softc *sc,
 
 	VM_OBJECT_WLOCK(enclave->obj);
 
-	/* Take SECS page and skip it. */
+	/*
+	 * First remove all the pages except SECS,
+	 * then remove SECS page.
+	 */
 	p0 = vm_page_lookup(enclave->obj, 0);
 	p = TAILQ_NEXT(p0, listq);
 
@@ -560,7 +563,8 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 		goto error;
 	}
 
-	dprintf("entry start %lx offset %lx\n", entry->start, entry->offset);
+	dprintf("%s: entry start %lx offset %lx\n",
+	    __func__, entry->start, entry->offset);
 	vmh->base = (entry->start - entry->offset);
 
 	ret = sgx_enclave_alloc(sc, secs, &enclave);
