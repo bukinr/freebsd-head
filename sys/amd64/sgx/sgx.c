@@ -141,7 +141,7 @@ sgx_va_slot_init(struct sgx_softc *sc,
 	vm_page_t page;
 	vm_page_t p;
 	uint64_t va_page_idx;
-	struct sgx_vm_handle *vmh;
+	uint64_t idx;
 	vm_object_t obj;
 	int va_slot;
 	int ret;
@@ -150,14 +150,13 @@ sgx_va_slot_init(struct sgx_softc *sc,
 
 	VM_OBJECT_WLOCK(obj);
 
-	vmh = obj->handle;
-
 	pidx = OFF_TO_IDX(addr);
 
 	va_slot = pidx % 512;
 	va_page_idx = pidx / 512;
+	idx = -SGX_VA_PAGES_OFFS-va_page_idx;
 
-	p = vm_page_lookup(obj, -SGX_VA_PAGES_OFFS-va_page_idx);
+	p = vm_page_lookup(obj, idx);
 	if (p == NULL) {
 		ret = sgx_get_epc_page(sc, &epc);
 		if (ret) {
@@ -175,7 +174,7 @@ sgx_va_slot_init(struct sgx_softc *sc,
 
 		dprintf("%s: inserting epc->phys %lx, va_slot %d, va_page_idx %ld\n",
 		    __func__, epc->phys, va_slot, va_page_idx);
-		vm_page_insert(page, obj, -SGX_VA_PAGES_OFFS-va_page_idx);
+		vm_page_insert(page, obj, idx);
 		page->valid = VM_PAGE_BITS_ALL;
 	}
 
@@ -617,9 +616,11 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 {
 	struct epc_page *secs_epc_page;
 	struct sgx_enclave *enclave;
+	struct sgx_vm_handle *vmh;
 	struct epc_page *epc;
 	struct page_info pginfo;
 	struct secinfo secinfo;
+	vm_object_t obj;
 	void *tmp_vaddr;
 	uint64_t page_type;
 	struct tcs *t;
@@ -635,10 +636,8 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 		goto error;
 	}
 
-	struct sgx_vm_handle *vmh;
-	vm_object_t obj;
-
 	obj = enclave->obj;
+	KASSERT(obj != NULL, ("vm object is NULL\n"));
 	vmh = obj->handle;
 
 	ret = sgx_get_epc_page(sc, &epc);
