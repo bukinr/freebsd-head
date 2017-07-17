@@ -222,10 +222,12 @@ sgx_enclave_find(struct sgx_softc *sc, uint64_t addr,
 	ret = sgx_mem_find(sc, addr, &entry, &mem);
 	if (ret)
 		return (ret);
+	vm_object_reference(entry->object.vm_object);
+
+	KASSERT(mem != NULL, ("mem is NULL\n"));
+	KASSERT(mem->handle != NULL, ("mem->handle is NULL\n"));
 
 	vmh = mem->handle;
-	if (vmh == NULL)
-		return (ENXIO);
 
 	enclave = vmh->enclave;
 	enclave->obj = mem;
@@ -520,11 +522,13 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	struct sgx_enclave *enclave;
 	struct epc_page *epc;
 	struct secs *secs;
+	vm_object_t obj;
 	int ret;
 
 	epc = NULL;
 	secs = NULL;
 	enclave = NULL;
+	obj = NULL;
 
 	/* SGX Enclave Control Structure (SECS) */
 	secs = malloc(PAGE_SIZE, M_SGX, M_WAITOK | M_ZERO);
@@ -545,6 +549,8 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 		dprintf("%s: Can't find vm_map.\n", __func__);
 		goto error;
 	}
+	vm_object_reference(entry->object.vm_object);
+	obj = entry->object.vm_object;
 
 	vmh = mem->handle;
 	if (!vmh) {
@@ -561,7 +567,7 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 		dprintf("%s: Can't alloc enclave.\n", __func__);
 		goto error;
 	}
-	enclave->obj = entry->object.vm_object;
+	enclave->obj = obj;
 	enclave->vmh = vmh;
 
 	memset(&secinfo, 0, sizeof(struct secinfo));
@@ -588,10 +594,10 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	if ((sc->state & SGX_STATE_RUNNING) == 0) {
 		/* Remove VA page that was just created for SECS page. */
 		vm_page_t p;
-		VM_OBJECT_WLOCK(enclave->obj);
+		VM_OBJECT_WLOCK(obj);
 		p = vm_page_lookup(enclave->obj, -SGX_VA_PAGES_OFFS);
 		sgx_page_remove(sc, p);
-		VM_OBJECT_WUNLOCK(enclave->obj);
+		VM_OBJECT_WUNLOCK(obj);
 
 		sgx_epc_page_remove(sc, epc);
 		mtx_unlock(&sc->mtx);
@@ -605,12 +611,16 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	vmh->enclave = enclave;
 	sgx_insert_epc_page(enclave, epc, 0);
 
+	/* Release the reference. */
+	vm_object_deallocate(obj);
+
 	return (0);
 
 error:
 	free(secs, M_SGX);
 	sgx_put_epc_page(sc, epc);
 	free(enclave, M_SGX);
+	vm_object_deallocate(obj);
 
 	return (ret);
 }
@@ -634,7 +644,9 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 
 	tmp_vaddr = NULL;
 	epc = NULL;
+	obj = NULL;
 
+	/* Find and get reference to VM object. */
 	ret = sgx_enclave_find(sc, addp->addr, &enclave);
 	if (ret) {
 		dprintf("%s: Failed to find enclave.\n", __func__);
@@ -704,11 +716,15 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 
 	sgx_insert_epc_page(enclave, epc, addr);
 
+	/* Release the reference. */
+	vm_object_deallocate(obj);
+
 	return (0);
 
 error:
 	free(tmp_vaddr, M_SGX);
 	sgx_put_epc_page(sc, epc);
+	vm_object_deallocate(obj);
 
 	return (ret);
 }
@@ -722,20 +738,25 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	void *tmp_vaddr;
 	void *einittoken;
 	void *sigstruct;
+	vm_object_t obj;
 	int retry;
 	int ret;
 
 	td = curthread;
 	tmp_vaddr = NULL;
+	obj = NULL;
 
 	dprintf("%s: addr %lx, sigstruct %lx, einittoken %lx\n",
 	    __func__, initp->addr, initp->sigstruct, initp->einittoken);
 
+	/* Find and get reference to VM object. */
 	ret = sgx_enclave_find(sc, initp->addr, &enclave);
 	if (ret) {
-		dprintf("%s: Failed to get enclave.\n", __func__);
+		dprintf("%s: Failed to find enclave.\n", __func__);
 		goto error;
 	}
+
+	obj = enclave->obj;
 
 	tmp_vaddr = malloc(PAGE_SIZE, M_SGX, M_WAITOK | M_ZERO);
 	sigstruct = tmp_vaddr;
@@ -773,6 +794,9 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 
 error:
 	free(tmp_vaddr, M_SGX);
+
+	/* Release the reference. */
+	vm_object_deallocate(obj);
 
 	return (ret);
 }
