@@ -148,7 +148,7 @@ sgx_va_slot_init(struct sgx_softc *sc,
 
 	obj = enclave->obj;
 
-	VM_OBJECT_WLOCK(obj);
+	VM_OBJECT_ASSERT_WLOCKED(obj);
 
 	pidx = OFF_TO_IDX(addr);
 
@@ -160,7 +160,6 @@ sgx_va_slot_init(struct sgx_softc *sc,
 	if (p == NULL) {
 		ret = sgx_get_epc_page(sc, &epc);
 		if (ret) {
-			VM_OBJECT_WUNLOCK(obj);
 			dprintf("%s: No free EPC pages available.\n",
 			    __func__);
 			return (ret);
@@ -175,8 +174,6 @@ sgx_va_slot_init(struct sgx_softc *sc,
 		vm_page_insert(page, obj, idx);
 		page->valid = VM_PAGE_BITS_ALL;
 	}
-
-	VM_OBJECT_WUNLOCK(obj);
 
 	return (0);
 }
@@ -504,14 +501,12 @@ sgx_insert_epc_page(struct sgx_enclave *enclave,
 	vm_pindex_t pidx;
 	vm_page_t page;
 
-	VM_OBJECT_WLOCK(enclave->obj);
+	VM_OBJECT_ASSERT_WLOCKED(enclave->obj);
 
 	pidx = OFF_TO_IDX(addr);
 	page = PHYS_TO_VM_PAGE(epc->phys);
 	vm_page_insert(page, enclave->obj, pidx);
 	page->valid = VM_PAGE_BITS_ALL;
-
-	VM_OBJECT_WUNLOCK(enclave->obj);
 }
 
 static int
@@ -589,8 +584,18 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	}
 	enclave->secs_epc_page = epc;
 
+	VM_OBJECT_WLOCK(obj);
+	p = vm_page_lookup(obj, 0);
+	if (p) {
+		VM_OBJECT_WUNLOCK(obj);
+		/* SECS page already added. */
+		ret = ENXIO;
+		goto error;
+	}
+
 	ret = sgx_va_slot_init(sc, enclave, 0);
 	if (ret) {
+		VM_OBJECT_WUNLOCK(obj);
 		dprintf("%s: Can't init va slot.\n", __func__);
 		goto error;
 	}
@@ -599,7 +604,6 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	if ((sc->state & SGX_STATE_RUNNING) == 0) {
 		mtx_unlock(&sc->mtx);
 		/* Remove VA page that was just created for SECS page. */
-		VM_OBJECT_WLOCK(obj);
 		p = vm_page_lookup(enclave->obj, -SGX_VA_PAGES_OFFS);
 		sgx_page_remove(sc, p);
 		VM_OBJECT_WUNLOCK(obj);
@@ -614,6 +618,7 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	free(secs, M_SGX);
 	vmh->enclave = enclave;
 	sgx_insert_epc_page(enclave, epc, 0);
+	VM_OBJECT_WUNLOCK(obj);
 
 	/* Release the reference. */
 	vm_object_deallocate(obj);
@@ -644,6 +649,8 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	uint64_t page_type;
 	struct tcs *t;
 	uint64_t addr;
+	uint64_t pidx;
+	vm_page_t p;
 	int ret;
 
 	tmp_vaddr = NULL;
@@ -696,9 +703,20 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	}
 
 	addr = (addp->addr - vmh->base);
+	pidx = OFF_TO_IDX(addr);
+
+	VM_OBJECT_WLOCK(obj);
+	p = vm_page_lookup(obj, pidx);
+	if (p) {
+		VM_OBJECT_WUNLOCK(obj);
+		/* Page already added. */
+		ret = ENXIO;
+		goto error;
+	}
 
 	ret = sgx_va_slot_init(sc, enclave, addr);
 	if (ret) {
+		VM_OBJECT_WUNLOCK(obj);
 		dprintf("%s: Can't init va slot.\n", __func__);
 		goto error;
 	}
@@ -719,6 +737,8 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	sgx_measure_page(sc, enclave->secs_epc_page, epc, addp->mrmask);
 
 	sgx_insert_epc_page(enclave, epc, addr);
+
+	VM_OBJECT_WUNLOCK(obj);
 
 	/* Release the reference. */
 	vm_object_deallocate(obj);
