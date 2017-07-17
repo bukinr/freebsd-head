@@ -269,15 +269,67 @@ sgx_enclave_alloc(struct sgx_softc *sc, struct secs *secs,
 }
 
 static void
+sgx_page_remove(struct sgx_softc *sc, vm_page_t p)
+{
+	struct epc_page *epc;
+	vm_paddr_t pa;
+	uint64_t offs;
+
+	pa = VM_PAGE_TO_PHYS(p);
+
+	epc = &sc->epc_pages[0];
+	//printf("epc0 phys %lx pa %lx sizeof epc page %lu\n",
+	//    (uint64_t)epc->phys, pa, sizeof(struct epc_page));
+
+	offs = ((uint64_t)pa - (uint64_t)epc->phys) / PAGE_SIZE;
+	epc = &sc->epc_pages[offs];
+	//printf("EREMOVE epc->phys %lx\n", epc->phys);
+
+	KASSERT(epc->used == 1, ("Page is used\n"));
+	mtx_lock(&sc->mtx);
+	sgx_eremove((void *)epc->base);
+	mtx_unlock(&sc->mtx);
+	epc->used = 0;
+}
+
+static void
 sgx_enclave_remove(struct sgx_softc *sc,
     struct sgx_enclave *enclave)
 {
+	vm_object_t object;
+	vm_page_t p, p0;
 
 	mtx_lock(&sc->mtx);
 	TAILQ_REMOVE(&sc->enclaves, enclave, next);
 	mtx_unlock(&sc->mtx);
 
-	free(enclave, M_SGX);
+	object = enclave->obj;
+
+	VM_OBJECT_WLOCK(enclave->obj);
+
+	//dprintf("All pages: %d\n", enclave->obj->resident_page_count);
+	//p = vm_page_find_least(enclave->obj, 0);
+
+	/* Take SECS page and skip it. */
+	p0 = vm_page_lookup(enclave->obj, 0);
+	p = TAILQ_NEXT(p0, listq);
+
+	while (p) {
+		//printf("p %lx, index %ld, p->object %lx\n", (uint64_t)p, p->pindex, (uint64_t)p->object);
+		sgx_page_remove(sc, p);
+		p = TAILQ_NEXT(p, listq);
+	}
+
+	/* Now remove SECS page */
+	sgx_page_remove(sc, p0);
+
+	vm_radix_reclaim_allnodes(&object->rtree);
+	TAILQ_INIT(&object->memq);
+	object->resident_page_count = 0;
+	if (object->type == OBJT_VNODE)
+		vdrop(object->handle);
+
+	VM_OBJECT_WUNLOCK(enclave->obj);
 }
 
 static void
@@ -410,30 +462,6 @@ sgx_pg_ctor(void *handle, vm_ooffset_t size, vm_prot_t prot,
 }
 
 static void
-sgx_page_remove(struct sgx_softc *sc, vm_page_t p)
-{
-	struct epc_page *epc;
-	vm_paddr_t pa;
-	uint64_t offs;
-
-	pa = VM_PAGE_TO_PHYS(p);
-
-	epc = &sc->epc_pages[0];
-	//printf("epc0 phys %lx pa %lx sizeof epc page %lu\n",
-	//    (uint64_t)epc->phys, pa, sizeof(struct epc_page));
-
-	offs = ((uint64_t)pa - (uint64_t)epc->phys) / PAGE_SIZE;
-	epc = &sc->epc_pages[offs];
-	//printf("EREMOVE epc->phys %lx\n", epc->phys);
-
-	KASSERT(epc->used == 1, ("Page is used\n"));
-	mtx_lock(&sc->mtx);
-	sgx_eremove((void *)epc->base);
-	mtx_unlock(&sc->mtx);
-	epc->used = 0;
-}
-
-static void
 sgx_pg_dtor(void *handle)
 {
 	struct sgx_vm_handle *vmh;
@@ -456,41 +484,9 @@ sgx_pg_dtor(void *handle)
 		return;
 	}
 
-	struct sgx_enclave *enclave;
-	vm_page_t p0;
-	vm_page_t p;
-
-	enclave = vmh->enclave;
-
-	VM_OBJECT_WLOCK(enclave->obj);
-	dprintf("All pages: %d\n", enclave->obj->resident_page_count);
-	//p = vm_page_find_least(enclave->obj, 0);
-
-	/* Skip SECS page */
-	p0 = vm_page_lookup(enclave->obj, 0);
-	p = TAILQ_NEXT(p0, listq);
-
-	while (p != NULL) {
-		//printf("p %lx, index %ld, p->object %lx\n", (uint64_t)p, p->pindex, (uint64_t)p->object);
-		sgx_page_remove(sc, p);
-		p = TAILQ_NEXT(p, listq);
-	}
-
-	/* Now remove SECS page */
-	sgx_page_remove(sc, p0);
-
-	vm_object_t object;
-	object = enclave->obj;
-	vm_radix_reclaim_allnodes(&object->rtree);
-	TAILQ_INIT(&object->memq);
-	object->resident_page_count = 0;
-	if (object->type == OBJT_VNODE)
-		vdrop(object->handle);
-
-	dprintf("All pages done: %d\n", enclave->obj->resident_page_count);
-	VM_OBJECT_WUNLOCK(enclave->obj);
-
 	sgx_enclave_remove(sc, vmh->enclave);
+
+	free(vmh->enclave, M_SGX);
 	free(vmh, M_SGX);
 
 	dprintf("%s: Free epc pages: %d\n",
