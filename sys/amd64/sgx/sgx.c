@@ -166,9 +166,6 @@ sgx_va_slot_init(struct sgx_softc *sc,
 	va_slot = pidx % 512;
 	va_page_idx = pidx / 512;
 
-	//dprintf("%s: enclave_page addr %lx pidx %ld, va_slot %d, va_page_idx %ld\n",
-	//    __func__, enclave_page->addr, pidx, va_slot, va_page_idx);
-
 	p = vm_page_lookup(enclave->obj, -SGX_VA_PAGES_OFFS-va_page_idx);
 	if (p == NULL) {
 		ret = sgx_get_epc_page(sc, &epc);
@@ -276,12 +273,9 @@ sgx_page_remove(struct sgx_softc *sc, vm_page_t p)
 	pa = VM_PAGE_TO_PHYS(p);
 
 	epc = &sc->epc_pages[0];
-	//printf("epc0 phys %lx pa %lx sizeof epc page %lu\n",
-	//    (uint64_t)epc->phys, pa, sizeof(struct epc_page));
 
 	offs = ((uint64_t)pa - (uint64_t)epc->phys) / PAGE_SIZE;
 	epc = &sc->epc_pages[offs];
-	//printf("EREMOVE epc->phys %lx\n", epc->phys);
 
 	KASSERT(epc->used == 1, ("Page is used\n"));
 	mtx_lock(&sc->mtx);
@@ -305,15 +299,11 @@ sgx_enclave_remove(struct sgx_softc *sc,
 
 	VM_OBJECT_WLOCK(enclave->obj);
 
-	//dprintf("All pages: %d\n", enclave->obj->resident_page_count);
-	//p = vm_page_find_least(enclave->obj, 0);
-
 	/* Take SECS page and skip it. */
 	p0 = vm_page_lookup(enclave->obj, 0);
 	p = TAILQ_NEXT(p0, listq);
 
 	while (p) {
-		//printf("p %lx, index %ld, p->object %lx\n", (uint64_t)p, p->pindex, (uint64_t)p->object);
 		sgx_page_remove(sc, p);
 		p = TAILQ_NEXT(p, listq);
 	}
@@ -765,7 +755,6 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 		goto error;
 	}
 
-	//secs_epc_page = enclave->secs_page.epc_page;
 	secs_epc_page = enclave->secs_epc_page;
 	retry = 16;
 	do {
