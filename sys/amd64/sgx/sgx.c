@@ -75,8 +75,6 @@ __FBSDID("$FreeBSD$");
 #define	dprintf(fmt, ...)
 #endif
 
-#define	VA_PAGES_OFFSET	512
-
 struct sgx_softc sgx_sc;
 
 #ifdef	DEBUG
@@ -171,7 +169,7 @@ sgx_va_slot_init(struct sgx_softc *sc,
 	//dprintf("%s: enclave_page addr %lx pidx %ld, va_slot %d, va_page_idx %ld\n",
 	//    __func__, enclave_page->addr, pidx, va_slot, va_page_idx);
 
-	p = vm_page_lookup(enclave->obj, -VA_PAGES_OFFSET-va_page_idx);
+	p = vm_page_lookup(enclave->obj, -SGX_VA_PAGES_OFFS-va_page_idx);
 	if (p == NULL) {
 		ret = sgx_get_epc_page(sc, &epc);
 		if (ret) {
@@ -188,7 +186,7 @@ sgx_va_slot_init(struct sgx_softc *sc,
 
 		dprintf("%s: inserting epc->phys %lx, va_slot %d, va_page_idx %ld\n",
 		    __func__, epc->phys, va_slot, va_page_idx);
-		vm_page_insert(page, enclave->obj, -VA_PAGES_OFFSET-va_page_idx);
+		vm_page_insert(page, enclave->obj, -SGX_VA_PAGES_OFFS-va_page_idx);
 		page->valid = VM_PAGE_BITS_ALL;
 	}
 
@@ -754,14 +752,14 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	einittoken = (void *)((uint64_t)sigstruct + PAGE_SIZE / 2);
 
 	ret = copyin((void *)initp->sigstruct, sigstruct,
-	    SIGSTRUCT_SIZE);
+	    SGX_SIGSTRUCT_SIZE);
 	if (ret) {
 		dprintf("%s: Failed to copy SIGSTRUCT page.\n", __func__);
 		goto error;
 	}
 
 	ret = copyin((void *)initp->einittoken, einittoken,
-	    EINITTOKEN_SIZE);
+	    SGX_EINITTOKEN_SIZE);
 	if (ret) {
 		dprintf("%s: Failed to copy EINITTOKEN page.\n", __func__);
 		goto error;
@@ -808,7 +806,7 @@ sgx_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 	dprintf("%s: cmd %lx, addr %lx, len %d\n",
 	    __func__, cmd, (uint64_t)addr, len);
 
-	if (len > IOCTL_MAX_DATA_LEN)
+	if (len > SGX_IOCTL_MAX_DATA_LEN)
 		return (EINVAL);
 
 	switch (cmd) {
@@ -888,7 +886,7 @@ sgx_get_epc_area(struct sgx_softc *sc)
 	if (cp[3] & 0xffff) {
 		sc->enclave_size_max = (1 << ((cp[3] >> 8) & 0xff));
 	} else {
-		sc->enclave_size_max = ENCLAVE_SIZE_MAX_DEFAULT;
+		sc->enclave_size_max = SGX_ENCL_SIZE_MAX_DEF;
 	}
 
 	epc_base_vaddr = (vm_offset_t)pmap_mapdev_attr(sc->epc_base,

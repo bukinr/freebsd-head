@@ -774,7 +774,8 @@ vm_object_terminate(vm_object_t object)
 	 * None of the object's fields, including "resident_page_count", were
 	 * modified by the preceding loop.
 	 */
-	if (object->resident_page_count != 0) {
+	if (object->resident_page_count != 0 &&
+	    (object->flags & OBJ_PG_DTOR) == 0) {
 		vm_radix_reclaim_allnodes(&object->rtree);
 		TAILQ_INIT(&object->memq);
 		object->resident_page_count = 0;

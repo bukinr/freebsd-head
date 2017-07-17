@@ -56,7 +56,7 @@ __FBSDID("$FreeBSD$");
 static int
 sgx_linux_ioctl(struct thread *td, struct linux_ioctl_args *args)
 {
-	uint8_t data[IOCTL_MAX_DATA_LEN];
+	uint8_t data[SGX_IOCTL_MAX_DATA_LEN];
 	cap_rights_t rights;
 	struct file *fp;
 	u_long cmd;
@@ -76,7 +76,7 @@ sgx_linux_ioctl(struct thread *td, struct linux_ioctl_args *args)
 		args->cmd |= IOC_OUT;
 
 	len = IOCPARM_LEN(cmd);
-	if (len > IOCTL_MAX_DATA_LEN) {
+	if (len > SGX_IOCTL_MAX_DATA_LEN) {
 		printf("%s: Can't copy data: cmd len is too big %d\n",
 		    __func__, len);
 		return (EINVAL);
