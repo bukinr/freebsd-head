@@ -142,23 +142,26 @@ sgx_va_slot_init(struct sgx_softc *sc,
 	vm_page_t p;
 	uint64_t va_page_idx;
 	struct sgx_vm_handle *vmh;
+	vm_object_t obj;
 	int va_slot;
 	int ret;
 
-	VM_OBJECT_WLOCK(enclave->obj);
+	obj = enclave->obj;
 
-	vmh = enclave->obj->handle;
+	VM_OBJECT_WLOCK(obj);
+
+	vmh = obj->handle;
 
 	pidx = OFF_TO_IDX(addr);
 
 	va_slot = pidx % 512;
 	va_page_idx = pidx / 512;
 
-	p = vm_page_lookup(enclave->obj, -SGX_VA_PAGES_OFFS-va_page_idx);
+	p = vm_page_lookup(obj, -SGX_VA_PAGES_OFFS-va_page_idx);
 	if (p == NULL) {
 		ret = sgx_get_epc_page(sc, &epc);
 		if (ret) {
-			VM_OBJECT_WUNLOCK(enclave->obj);
+			VM_OBJECT_WUNLOCK(obj);
 			dprintf("%s: No free EPC pages available.\n",
 			    __func__);
 			return (ret);
@@ -172,11 +175,11 @@ sgx_va_slot_init(struct sgx_softc *sc,
 
 		dprintf("%s: inserting epc->phys %lx, va_slot %d, va_page_idx %ld\n",
 		    __func__, epc->phys, va_slot, va_page_idx);
-		vm_page_insert(page, enclave->obj, -SGX_VA_PAGES_OFFS-va_page_idx);
+		vm_page_insert(page, obj, -SGX_VA_PAGES_OFFS-va_page_idx);
 		page->valid = VM_PAGE_BITS_ALL;
 	}
 
-	VM_OBJECT_WUNLOCK(enclave->obj);
+	VM_OBJECT_WUNLOCK(obj);
 
 	return (0);
 }
