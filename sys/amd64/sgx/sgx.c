@@ -615,13 +615,14 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	TAILQ_INSERT_TAIL(&sc->enclaves, enclave, next);
 	mtx_unlock(&sc->mtx);
 
-	free(secs, M_SGX);
 	vmh->enclave = enclave;
 	sgx_insert_epc_page(enclave, epc, 0);
 	VM_OBJECT_WUNLOCK(obj);
 
 	/* Release the reference. */
 	vm_object_deallocate(obj);
+
+	free(secs, M_SGX);
 
 	return (0);
 
@@ -732,8 +733,6 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	sgx_eadd(&pginfo, (void *)epc->base);
 	mtx_unlock(&sc->mtx);
 
-	free(tmp_vaddr, M_SGX);
-
 	sgx_measure_page(sc, enclave->secs_epc_page, epc, addp->mrmask);
 
 	sgx_insert_epc_page(enclave, epc, addr);
@@ -742,6 +741,8 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 
 	/* Release the reference. */
 	vm_object_deallocate(obj);
+
+	free(tmp_vaddr, M_SGX);
 
 	return (0);
 
