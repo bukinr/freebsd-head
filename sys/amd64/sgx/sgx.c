@@ -131,18 +131,6 @@ sgx_put_epc_page(struct sgx_softc *sc, struct epc_page *epc)
 	epc->used = 0;
 }
 
-static void
-sgx_enclave_page_remove(struct sgx_softc *sc,
-    struct sgx_enclave *enclave,
-    struct epc_page *epc)
-{
-
-	mtx_lock(&sc->mtx);
-	sgx_eremove((void *)epc->base);
-	mtx_unlock(&sc->mtx);
-	sgx_put_epc_page(sc, epc);
-}
-
 static int
 sgx_va_slot_init(struct sgx_softc *sc,
     struct sgx_enclave *enclave,
@@ -265,6 +253,17 @@ sgx_enclave_alloc(struct sgx_softc *sc, struct secs *secs,
 }
 
 static void
+sgx_epc_page_remove(struct sgx_softc *sc,
+    struct epc_page *epc)
+{
+
+	mtx_lock(&sc->mtx);
+	sgx_eremove((void *)epc->base);
+	mtx_unlock(&sc->mtx);
+	sgx_put_epc_page(sc, epc);
+}
+
+static void
 sgx_page_remove(struct sgx_softc *sc, vm_page_t p)
 {
 	struct epc_page *epc;
@@ -272,17 +271,11 @@ sgx_page_remove(struct sgx_softc *sc, vm_page_t p)
 	uint64_t offs;
 
 	pa = VM_PAGE_TO_PHYS(p);
-
 	epc = &sc->epc_pages[0];
-
 	offs = ((uint64_t)pa - (uint64_t)epc->phys) / PAGE_SIZE;
 	epc = &sc->epc_pages[offs];
 
-	KASSERT(epc->used == 1, ("Page is used\n"));
-	mtx_lock(&sc->mtx);
-	sgx_eremove((void *)epc->base);
-	mtx_unlock(&sc->mtx);
-	epc->used = 0;
+	sgx_epc_page_remove(sc, epc);
 }
 
 static void
@@ -594,7 +587,7 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 
 	mtx_lock(&sc->mtx);
 	if ((sc->state & SGX_STATE_RUNNING) == 0) {
-		sgx_enclave_page_remove(sc, enclave, epc);
+		sgx_epc_page_remove(sc, epc);
 		mtx_unlock(&sc->mtx);
 		goto error;
 	}
