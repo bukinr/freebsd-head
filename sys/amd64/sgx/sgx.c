@@ -586,6 +586,13 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 
 	mtx_lock(&sc->mtx);
 	if ((sc->state & SGX_STATE_RUNNING) == 0) {
+		/* Remove VA page that was just created for SECS page. */
+		vm_page_t p;
+		VM_OBJECT_WLOCK(enclave->obj);
+		p = vm_page_lookup(enclave->obj, -SGX_VA_PAGES_OFFS);
+		sgx_page_remove(sc, p);
+		VM_OBJECT_WUNLOCK(enclave->obj);
+
 		sgx_epc_page_remove(sc, epc);
 		mtx_unlock(&sc->mtx);
 		goto error;
