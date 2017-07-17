@@ -44,6 +44,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/module.h>
 #include <sys/proc.h>
 #include <sys/vmmeter.h>
+#include <sys/vnode.h>
 
 #include <vm/vm.h>
 #include <vm/vm_param.h>
@@ -54,6 +55,7 @@ __FBSDID("$FreeBSD$");
 #include <vm/vm_object.h>
 #include <vm/vm_pager.h>
 #include <vm/vm_phys.h>
+#include <vm/vm_radix.h>
 #include <vm/pmap.h>
 
 #include <machine/md_var.h>
@@ -129,68 +131,12 @@ sgx_put_epc_page(struct sgx_softc *sc, struct epc_page *epc)
 	epc->used = 0;
 }
 
-static int
-sgx_va_slot_alloc(struct sgx_enclave *enclave,
-    struct va_page *va_page)
-{
-	int i;
-
-	mtx_assert(&enclave->mtx, MA_OWNED);
-
-	for (i = 0; i < SGX_VA_PAGE_SLOTS; i++)
-		if (va_page->slots[i] == 0) {
-			va_page->slots[i] = 1;
-			return (i);
-		}
-
-	return (-1);
-}
-
-static void
-sgx_va_slot_free(struct sgx_softc *sc,
-    struct sgx_enclave *enclave,
-    struct sgx_enclave_page *enclave_page)
-{
-	struct va_page *va_page;
-	struct epc_page *epc;
-	int va_slot;
-	int i;
-
-	va_page = enclave_page->va_page;
-	va_slot = enclave_page->va_slot;
-
-	KASSERT(va_page->slots[va_slot] == 1,
-	    ("Freeing unused slot."));
-
-	va_page->slots[va_slot] = 0;
-
-	/* Now check if we need to remove va_page. */
-	mtx_lock(&enclave->mtx);
-	for (i = 0; i < SGX_VA_PAGE_SLOTS; i++)
-		if (va_page->slots[i] == 1) {
-			mtx_unlock(&enclave->mtx);
-			return;
-		}
-
-	TAILQ_REMOVE(&enclave->va_pages, va_page, va_next);
-	mtx_unlock(&enclave->mtx);
-
-	epc = va_page->epc_page;
-	mtx_lock(&sc->mtx);
-	sgx_eremove((void *)epc->base);
-	mtx_unlock(&sc->mtx);
-	sgx_put_epc_page(sc, epc);
-	free(enclave_page->va_page, M_SGX);
-}
-
 static void
 sgx_enclave_page_remove(struct sgx_softc *sc,
     struct sgx_enclave *enclave,
     struct sgx_enclave_page *enclave_page)
 {
 	struct epc_page *epc;
-
-	sgx_va_slot_free(sc, enclave, enclave_page);
 
 	epc = enclave_page->epc_page;
 	mtx_lock(&sc->mtx);
@@ -200,28 +146,36 @@ sgx_enclave_page_remove(struct sgx_softc *sc,
 }
 
 static int
-sgx_enclave_page_construct(struct sgx_softc *sc,
+sgx_va_slot_init(struct sgx_softc *sc,
     struct sgx_enclave *enclave,
     struct sgx_enclave_page *enclave_page)
 {
-	struct va_page *va_page;
-	struct va_page *va_page_tmp;
 	struct epc_page *epc;
+	vm_pindex_t pidx;
+	vm_page_t page;
+	vm_page_t p;
+	uint64_t va_page_idx;
+	struct sgx_vm_handle *vmh;
 	int va_slot;
 	int ret;
 
-	va_slot = -1;
+	VM_OBJECT_WLOCK(enclave->obj);
 
-	mtx_lock(&enclave->mtx);
-	TAILQ_FOREACH_SAFE(va_page, &enclave->va_pages, va_next,
-	    va_page_tmp) {
-		va_slot = sgx_va_slot_alloc(enclave, va_page);
-		if (va_slot >= 0)
-			break;
-	}
-	mtx_unlock(&enclave->mtx);
+	vmh = enclave->obj->handle;
 
-	if (va_slot < 0) {
+	if (enclave_page->addr == 0)
+		pidx = OFF_TO_IDX(enclave_page->addr);
+	else
+		pidx = OFF_TO_IDX(enclave_page->addr - vmh->base);
+
+	va_slot = pidx % 512;
+	va_page_idx = pidx / 512;
+
+	dprintf("%s: enclave_page addr %lx pidx %ld, va_slot %d, va_page_idx %ld\n",
+	    __func__, enclave_page->addr, pidx, va_slot, va_page_idx);
+
+	p = vm_page_lookup(enclave->obj, -512-va_page_idx);
+	if (p == NULL) {
 		ret = sgx_get_epc_page(sc, &epc);
 		if (ret) {
 			dprintf("%s: No free EPC pages available.\n",
@@ -229,25 +183,19 @@ sgx_enclave_page_construct(struct sgx_softc *sc,
 			return (ret);
 		}
 
-		va_page = malloc(sizeof(struct va_page),
-		    M_SGX, M_WAITOK | M_ZERO);
-
-		mtx_lock(&enclave->mtx);
-		va_slot = sgx_va_slot_alloc(enclave, va_page);
-		mtx_unlock(&enclave->mtx);
-
-		va_page->epc_page = epc;
 		mtx_lock(&sc->mtx);
 		sgx_epa((void *)epc->base);
 		mtx_unlock(&sc->mtx);
 
-		mtx_lock(&enclave->mtx);
-		TAILQ_INSERT_TAIL(&enclave->va_pages, va_page, va_next);
-		mtx_unlock(&enclave->mtx);
+		page = PHYS_TO_VM_PAGE(epc->phys);
+
+		dprintf("%s: inserting epc->phys %lx, va_slot %d, va_page_idx %ld\n",
+		    __func__, epc->phys, va_slot, va_page_idx);
+		vm_page_insert(page, enclave->obj, -512-va_page_idx);
+		page->valid = VM_PAGE_BITS_ALL;
 	}
 
-	enclave_page->va_page = va_page;
-	enclave_page->va_slot = va_slot;
+	VM_OBJECT_WUNLOCK(enclave->obj);
 
 	return (0);
 }
@@ -285,6 +233,7 @@ sgx_enclave_find(struct sgx_softc *sc, uint64_t addr,
     struct sgx_enclave **encl)
 {
 	struct sgx_vm_handle *vmh;
+	struct sgx_enclave *enclave;
 	vm_map_entry_t entry;
 	vm_object_t mem;
 	int ret;
@@ -297,7 +246,10 @@ sgx_enclave_find(struct sgx_softc *sc, uint64_t addr,
 	if (vmh == NULL)
 		return (ENXIO);
 
-	*encl = vmh->enclave;
+	enclave = vmh->enclave;
+	enclave->obj = mem;
+
+	*encl = enclave;
 
 	return (0);
 }
@@ -311,11 +263,6 @@ sgx_enclave_alloc(struct sgx_softc *sc, struct secs *secs,
 	enclave = malloc(sizeof(struct sgx_enclave),
 	    M_SGX, M_WAITOK | M_ZERO);
 
-	TAILQ_INIT(&enclave->pages);
-	TAILQ_INIT(&enclave->va_pages);
-
-	mtx_init(&enclave->mtx, "SGX enclave", NULL, MTX_DEF);
-
 	enclave->base = secs->base;
 	enclave->size = secs->size;
 
@@ -328,31 +275,11 @@ static void
 sgx_enclave_remove(struct sgx_softc *sc,
     struct sgx_enclave *enclave)
 {
-	struct sgx_enclave_page *enclave_page_tmp;
-	struct sgx_enclave_page *enclave_page;
 
 	mtx_lock(&sc->mtx);
 	TAILQ_REMOVE(&sc->enclaves, enclave, next);
 	mtx_unlock(&sc->mtx);
 
-	/* Remove all the enclave pages */
-	TAILQ_FOREACH_SAFE(enclave_page, &enclave->pages, next,
-	    enclave_page_tmp) {
-		TAILQ_REMOVE(&enclave->pages, enclave_page, next);
-		sgx_enclave_page_remove(sc, enclave, enclave_page);
-		free(enclave_page, M_SGX);
-	}
-
-	/* Remove SECS page */
-	enclave_page = &enclave->secs_page;
-	sgx_enclave_page_remove(sc, enclave, enclave_page);
-
-	KASSERT(TAILQ_EMPTY(&enclave->va_pages),
-	    ("Enclave version-array pages tailq is not empty."));
-	KASSERT(TAILQ_EMPTY(&enclave->pages),
-	    ("Enclave pages is not empty."));
-
-	mtx_destroy(&enclave->mtx);
 	free(enclave, M_SGX);
 }
 
@@ -486,6 +413,30 @@ sgx_pg_ctor(void *handle, vm_ooffset_t size, vm_prot_t prot,
 }
 
 static void
+sgx_page_remove(struct sgx_softc *sc, vm_page_t p)
+{
+	struct epc_page *epc;
+	vm_paddr_t pa;
+	uint64_t offs;
+
+	pa = VM_PAGE_TO_PHYS(p);
+
+	epc = &sc->epc_pages[0];
+	//printf("epc0 phys %lx pa %lx sizeof epc page %lu\n",
+	//    (uint64_t)epc->phys, pa, sizeof(struct epc_page));
+
+	offs = ((uint64_t)pa - (uint64_t)epc->phys) / PAGE_SIZE;
+	epc = &sc->epc_pages[offs];
+	//printf("EREMOVE epc->phys %lx\n", epc->phys);
+
+	KASSERT(epc->used == 1, ("Page is used\n"));
+	mtx_lock(&sc->mtx);
+	sgx_eremove((void *)epc->base);
+	mtx_unlock(&sc->mtx);
+	epc->used = 0;
+}
+
+static void
 sgx_pg_dtor(void *handle)
 {
 	struct sgx_vm_handle *vmh;
@@ -508,6 +459,41 @@ sgx_pg_dtor(void *handle)
 		return;
 	}
 
+	struct sgx_enclave *enclave;
+	vm_page_t p0;
+	vm_page_t p;
+
+	enclave = vmh->enclave;
+
+	VM_OBJECT_WLOCK(enclave->obj);
+	dprintf("All pages: %d\n", enclave->obj->resident_page_count);
+	//p = vm_page_find_least(enclave->obj, enclave->secs_vm_page_idx);
+	//printf("enclave->secs_vm_page_idx %ld\n", enclave->secs_vm_page_idx);
+
+	p0 = vm_page_lookup(enclave->obj, enclave->secs_vm_page_idx);
+	/* Skip SECS page */
+	p = TAILQ_NEXT(p0, listq);
+
+	while (p != NULL) {
+		//printf("p %lx, index %ld, p->object %lx\n", (uint64_t)p, p->pindex, (uint64_t)p->object);
+		sgx_page_remove(sc, p);
+		p = TAILQ_NEXT(p, listq);
+	}
+
+	/* Now remove SECS page */
+	sgx_page_remove(sc, p0);
+
+	vm_object_t object;
+	object = enclave->obj;
+	vm_radix_reclaim_allnodes(&object->rtree);
+	TAILQ_INIT(&object->memq);
+	object->resident_page_count = 0;
+	if (object->type == OBJT_VNODE)
+		vdrop(object->handle);
+
+	dprintf("All pages done: %d\n", enclave->obj->resident_page_count);
+	VM_OBJECT_WUNLOCK(enclave->obj);
+
 	sgx_enclave_remove(sc, vmh->enclave);
 	free(vmh, M_SGX);
 
@@ -519,63 +505,10 @@ static int
 sgx_pg_fault(vm_object_t object, vm_ooffset_t offset,
     int prot, vm_page_t *mres)
 {
-	struct sgx_enclave *enclave;
-	struct sgx_vm_handle *vmh;
-	vm_page_t page;
-	vm_memattr_t memattr;
-	vm_pindex_t pidx;
-	struct sgx_enclave_page *enclave_page_tmp;
-	struct sgx_enclave_page *enclave_page;
-	struct epc_page *epc;
 
-	vmh = object->handle;
-	if (vmh == NULL)
-		return (VM_PAGER_FAIL);
+	printf("%s: offset 0x%lx\n", __func__, offset);
 
-	enclave = vmh->enclave;
-	if (enclave == NULL)
-		return (VM_PAGER_FAIL);
-
-	dprintf("%s: offset 0x%lx\n", __func__, offset);
-
-	memattr = object->memattr;
-	pidx = OFF_TO_IDX(offset);
-
-	page = NULL;
-	mtx_lock(&enclave->mtx);
-	TAILQ_FOREACH_SAFE(enclave_page, &enclave->pages, next,
-	    enclave_page_tmp) {
-		if (vmh->base + offset == enclave_page->addr) {
-			epc = enclave_page->epc_page;
-			page = PHYS_TO_VM_PAGE(epc->phys);
-			break;
-		}
-	}
-	mtx_unlock(&enclave->mtx);
-	if (page == NULL) {
-		dprintf("%s: Page not found.\n", __func__);
-		return (VM_PAGER_FAIL);
-	}
-
-	KASSERT(page->flags & PG_FICTITIOUS,
-	    ("Not fictitious page %p", page));
-	KASSERT(page->wire_count == 1, ("wire_count is not 1 %p", page));
-	KASSERT(vm_page_busied(page) == 0, ("page %p is busy", page));
-
-	if (*mres != NULL) {
-		vm_page_lock(*mres);
-		vm_page_free(*mres);
-		vm_page_unlock(*mres);
-		*mres = NULL;
-	}
-
-	vm_page_insert(page, object, pidx);
-	page->valid = VM_PAGE_BITS_ALL;
-	vm_page_xbusy(page);
-
-	*mres = page;  
-
-	return (VM_PAGER_OK);
+	return (VM_PAGER_FAIL);
 }
 
 static struct cdev_pager_ops sgx_pg_ops = {
@@ -628,6 +561,8 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 		ret = ENXIO;
 		goto error;
 	}
+
+	dprintf("entry start %lx offset %lx\n", entry->start, entry->offset);
 	vmh->base = (entry->start - entry->offset);
 
 	ret = sgx_enclave_alloc(sc, secs, &enclave);
@@ -635,6 +570,8 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 		dprintf("%s: Can't alloc enclave.\n", __func__);
 		goto error;
 	}
+	enclave->obj = entry->object.vm_object;
+	//vm_object_reference(enclave->obj);
 
 	memset(&secinfo, 0, sizeof(struct secinfo));
 	memset(&pginfo, 0, sizeof(struct page_info));
@@ -649,7 +586,7 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 		goto error;
 	}
 
-	ret = sgx_enclave_page_construct(sc, enclave, &enclave->secs_page);
+	ret = sgx_va_slot_init(sc, enclave, &enclave->secs_page);
 	if (ret) {
 		dprintf("%s: Can't construct page.\n", __func__);
 		goto error;
@@ -657,6 +594,7 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 
 	secs_page = &enclave->secs_page;
 	secs_page->epc_page = epc;
+	secs_page->addr = vmh->base;
 
 	mtx_lock(&sc->mtx);
 	if ((sc->state & SGX_STATE_RUNNING) == 0) {
@@ -672,6 +610,31 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 
 	enclave->vmh = vmh;
 	vmh->enclave = enclave;
+
+	/* Insert SECS page */
+
+	VM_OBJECT_WLOCK(enclave->obj);
+
+	vm_object_t obj;
+	vm_pindex_t pidx;
+	vm_page_t page;
+	struct sgx_enclave_page *enclave_page;
+
+	enclave_page = &enclave->secs_page;
+	obj = enclave->obj;
+	vmh = obj->handle;
+
+	pidx = OFF_TO_IDX(enclave_page->addr - vmh->base);
+	dprintf("addr %lx pidx %ld vmh->base %lx\n",
+	    enclave_page->addr, pidx, vmh->base);
+	epc = enclave_page->epc_page;
+	page = PHYS_TO_VM_PAGE(epc->phys);
+	vm_page_insert(page, enclave->obj, pidx);
+	page->valid = VM_PAGE_BITS_ALL;
+
+	enclave->secs_vm_page_idx = pidx;
+
+	VM_OBJECT_WUNLOCK(enclave->obj);
 
 	return (0);
 
@@ -747,16 +710,16 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 
 	enclave_page = malloc(sizeof(struct sgx_enclave_page),
 	    M_SGX, M_WAITOK | M_ZERO);
-	ret = sgx_enclave_page_construct(sc, enclave, enclave_page);
+	enclave_page->epc_page = epc;
+	enclave_page->addr = addp->addr;
+
+	ret = sgx_va_slot_init(sc, enclave, enclave_page);
 	if (ret) {
 		dprintf("%s: Can't construct page.\n", __func__);
 		goto error;
 	}
 
-	enclave_page->epc_page = epc;
-	enclave_page->addr = addp->addr;
 	secs_epc_page = enclave->secs_page.epc_page;
-
 	memset(&pginfo, 0, sizeof(struct page_info));
 	pginfo.linaddr = (uint64_t)addp->addr;
 	pginfo.srcpge = (uint64_t)tmp_vaddr;
@@ -771,9 +734,25 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 
 	sgx_measure_page(sc, enclave->secs_page.epc_page, epc, addp->mrmask);
 
-	mtx_lock(&enclave->mtx);
-	TAILQ_INSERT_TAIL(&enclave->pages, enclave_page, next);
-	mtx_unlock(&enclave->mtx);
+	/* Insert page */
+
+	VM_OBJECT_WLOCK(enclave->obj);
+
+	vm_pindex_t pidx;
+	vm_page_t page;
+	struct sgx_vm_handle *vmh;
+
+	vmh = enclave->obj->handle;
+
+	pidx = OFF_TO_IDX(enclave_page->addr - vmh->base);
+	dprintf("addr %lx pidx %lu vmh->base %lx\n",
+	    enclave_page->addr, pidx, vmh->base);
+	epc = enclave_page->epc_page;
+	page = PHYS_TO_VM_PAGE(epc->phys);
+	vm_page_insert(page, enclave->obj, pidx);
+	page->valid = VM_PAGE_BITS_ALL;
+
+	VM_OBJECT_WUNLOCK(enclave->obj);
 
 	return (0);
 
@@ -896,6 +875,7 @@ sgx_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 {
 	struct sgx_vm_handle *vmh;
 	struct sgx_softc *sc;
+	vm_object_t obj;
 
 	sc = &sgx_sc;
 
@@ -913,7 +893,9 @@ sgx_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 		return (ENOMEM);
 	}
 
-	*objp = vmh->mem;
+	obj = vmh->mem;
+	obj->flags |= OBJ_PG_DTOR;
+	*objp = obj;
 
 	return (0);
 }
