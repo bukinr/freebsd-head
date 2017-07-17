@@ -275,7 +275,7 @@ sgx_page_remove(struct sgx_softc *sc, vm_page_t p)
 
 	pa = VM_PAGE_TO_PHYS(p);
 	epc = &sc->epc_pages[0];
-	offs = ((uint64_t)pa - (uint64_t)epc->phys) / PAGE_SIZE;
+	offs = (pa - epc->phys) / PAGE_SIZE;
 	epc = &sc->epc_pages[offs];
 
 	sgx_epc_page_remove(sc, epc);
@@ -308,6 +308,7 @@ sgx_enclave_remove(struct sgx_softc *sc,
 	/* Now remove SECS page */
 	sgx_page_remove(sc, p0);
 
+	/* Clean up vm object */
 	vm_radix_reclaim_allnodes(&object->rtree);
 	TAILQ_INIT(&object->memq);
 	object->resident_page_count = 0;
@@ -330,7 +331,7 @@ sgx_measure_page(struct sgx_softc *sc, struct epc_page *secs,
 			continue;
 
 		sgx_eextend((void *)secs->base,
-		    (void *)((uint64_t)epc->base + i));
+		    (void *)(epc->base + i));
 	}
 
 	mtx_unlock(&sc->mtx);
