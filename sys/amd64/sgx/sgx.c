@@ -170,6 +170,7 @@ sgx_va_slot_init(struct sgx_softc *sc,
 	if (p == NULL) {
 		ret = sgx_get_epc_page(sc, &epc);
 		if (ret) {
+			VM_OBJECT_WUNLOCK(enclave->obj);
 			dprintf("%s: No free EPC pages available.\n",
 			    __func__);
 			return (ret);
@@ -627,6 +628,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	void *tmp_vaddr;
 	uint64_t page_type;
 	struct tcs *t;
+	uint64_t addr;
 	int ret;
 
 	tmp_vaddr = NULL;
@@ -678,7 +680,6 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 		sgx_tcs_dump(sc, t);
 	}
 
-	uint64_t addr;
 	addr = (addp->addr - vmh->base);
 
 	ret = sgx_va_slot_init(sc, enclave, addr);
