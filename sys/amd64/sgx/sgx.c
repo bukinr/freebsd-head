@@ -152,8 +152,8 @@ sgx_va_slot_init(struct sgx_softc *sc,
 
 	pidx = OFF_TO_IDX(addr);
 
-	va_slot = pidx % 512;
-	va_page_idx = pidx / 512;
+	va_slot = pidx % SGX_VA_PAGE_SLOTS;
+	va_page_idx = pidx / SGX_VA_PAGE_SLOTS;
 	idx = - SGX_VA_PAGES_OFFS - va_page_idx;
 
 	p = vm_page_lookup(obj, idx);
@@ -172,8 +172,6 @@ sgx_va_slot_init(struct sgx_softc *sc,
 
 		page = PHYS_TO_VM_PAGE(epc->phys);
 
-		dprintf("%s: inserting epc->phys %lx, va_slot %d, va_page_idx %ld\n",
-		    __func__, epc->phys, va_slot, va_page_idx);
 		vm_page_insert(page, obj, idx);
 		page->valid = VM_PAGE_BITS_ALL;
 	}
