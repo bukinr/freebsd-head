@@ -59,30 +59,14 @@ struct epc_page {
 	uint8_t			used;
 };
 
-/* Version Array page. */
-struct va_page {
-	struct epc_page		*epc_page;
-	TAILQ_ENTRY(va_page)	va_next;
-	bool			slots[SGX_VA_PAGE_SLOTS];
-};
-
-struct sgx_enclave_page {
-	struct epc_page			*epc_page;
-	struct va_page			*va_page;
-	int				va_slot;
-	uint64_t			addr;
-	TAILQ_ENTRY(sgx_enclave_page)	next;
-};
-
 struct sgx_enclave {
 	uint64_t			base;
 	uint64_t			size;
-	struct sgx_enclave_page		secs_page;
 	struct sgx_vm_handle		*vmh;
 	struct mtx			mtx;
 	TAILQ_ENTRY(sgx_enclave)	next;
-	TAILQ_HEAD(, sgx_enclave_page)	pages;
-	TAILQ_HEAD(, va_page)		va_pages;
+	vm_object_t			obj;
+	struct epc_page			*secs_epc_page;
 };
 
 struct sgx_softc {

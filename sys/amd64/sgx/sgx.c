@@ -464,11 +464,10 @@ sgx_pg_dtor(void *handle)
 
 	VM_OBJECT_WLOCK(enclave->obj);
 	dprintf("All pages: %d\n", enclave->obj->resident_page_count);
-	//p = vm_page_find_least(enclave->obj, enclave->secs_vm_page_idx);
-	//printf("enclave->secs_vm_page_idx %ld\n", enclave->secs_vm_page_idx);
+	//p = vm_page_find_least(enclave->obj, 0);
 
-	p0 = vm_page_lookup(enclave->obj, enclave->secs_vm_page_idx);
 	/* Skip SECS page */
+	p0 = vm_page_lookup(enclave->obj, 0);
 	p = TAILQ_NEXT(p0, listq);
 
 	while (p != NULL) {
@@ -620,8 +619,6 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 
 	free(secs, M_SGX);
 	vmh->enclave = enclave;
-	enclave->secs_vm_page_idx = 0;
-
 	sgx_insert_epc_page(enclave, epc, 0);
 
 	return (0);
