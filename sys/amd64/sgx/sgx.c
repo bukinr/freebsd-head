@@ -586,12 +586,13 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 
 	ret = sgx_va_slot_init(sc, enclave, 0);
 	if (ret) {
-		dprintf("%s: Can't construct page.\n", __func__);
+		dprintf("%s: Can't init va slot.\n", __func__);
 		goto error;
 	}
 
 	mtx_lock(&sc->mtx);
 	if ((sc->state & SGX_STATE_RUNNING) == 0) {
+		mtx_unlock(&sc->mtx);
 		/* Remove VA page that was just created for SECS page. */
 		vm_page_t p;
 		VM_OBJECT_WLOCK(obj);
@@ -600,7 +601,6 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 		VM_OBJECT_WUNLOCK(obj);
 
 		sgx_epc_page_remove(sc, epc);
-		mtx_unlock(&sc->mtx);
 		goto error;
 	}
 	sgx_ecreate(&pginfo, (void *)epc->base);
@@ -695,7 +695,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 
 	ret = sgx_va_slot_init(sc, enclave, addr);
 	if (ret) {
-		dprintf("%s: Can't construct page.\n", __func__);
+		dprintf("%s: Can't init va slot.\n", __func__);
 		goto error;
 	}
 
