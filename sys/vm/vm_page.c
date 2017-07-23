@@ -1210,7 +1210,8 @@ vm_page_insert_after(vm_page_t m, vm_object_t object, vm_pindex_t pindex,
 
 	VM_OBJECT_ASSERT_WLOCKED(object);
 	KASSERT(m->object == NULL,
-	    ("vm_page_insert_after: page already inserted"));
+	    ("vm_page_insert_after: page already inserted, idx %jd",
+	    (intmax_t)pindex));
 	if (mpred != NULL) {
 		KASSERT(mpred->object == object,
 		    ("vm_page_insert_after: object doesn't contain mpred"));
