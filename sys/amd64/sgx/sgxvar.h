@@ -72,7 +72,6 @@ struct sgx_enclave {
 
 struct sgx_softc {
 	struct cdev			*sgx_cdev;
-	device_t			dev;
 	struct mtx			mtx_epc;
 	struct mtx			mtx;
 	uint64_t			epc_base;
