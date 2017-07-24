@@ -198,6 +198,8 @@ sgx_mem_find(struct sgx_softc *sc, uint64_t addr,
 		return (EINVAL);
 	}
 
+	vm_object_reference(entry->object.vm_object);
+
 	*mem0 = entry->object.vm_object;
 	*entry0 = entry;
 	vm_map_unlock_read(map);
@@ -218,7 +220,6 @@ sgx_enclave_find(struct sgx_softc *sc, uint64_t addr,
 	ret = sgx_mem_find(sc, addr, &entry, &mem);
 	if (ret)
 		return (ret);
-	vm_object_reference(entry->object.vm_object);
 
 	KASSERT(mem != NULL, ("mem is NULL\n"));
 	KASSERT(mem->handle != NULL, ("mem->handle is NULL\n"));
@@ -549,7 +550,6 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 		dprintf("%s: Can't find vm_map.\n", __func__);
 		goto error;
 	}
-	vm_object_reference(entry->object.vm_object);
 	obj = entry->object.vm_object;
 
 	vmh = mem->handle;
