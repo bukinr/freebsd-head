@@ -874,7 +874,7 @@ sgx_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 {
 	struct sgx_vm_handle *vmh;
 	struct sgx_softc *sc;
-	vm_object_t obj;
+	vm_object_t object;
 
 	sc = &sgx_sc;
 
@@ -892,9 +892,9 @@ sgx_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 		return (ENOMEM);
 	}
 
-	obj = vmh->mem;
-	obj->flags |= OBJ_PG_DTOR;
-	*objp = obj;
+	object = vmh->mem;
+	vm_object_set_flag(object, OBJ_PG_DTOR);
+	*objp = object;
 
 	return (0);
 }
