@@ -932,11 +932,7 @@ sgx_get_epc_area(struct sgx_softc *sc)
 	    sc->epc_size, VM_MEMATTR_DEFAULT);
 
 	sc->epc_pages = malloc(sizeof(struct epc_page) * sc->npages,
-	    M_DEVBUF, M_NOWAIT | M_ZERO);
-	if (sc->epc_pages == NULL) {
-		dprintf("%s: Can't alloc memory.\n", __func__);
-		return (ENOMEM);
-	}
+	    M_DEVBUF, M_WAITOK | M_ZERO);
 
 	for (i = 0; i < sc->npages; i++) {
 		sc->epc_pages[i].base = epc_base_vaddr + SGX_PAGE_SIZE * i;
