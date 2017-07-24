@@ -44,7 +44,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/module.h>
 #include <sys/proc.h>
 #include <sys/vmmeter.h>
-#include <sys/vnode.h>
 
 #include <vm/vm.h>
 #include <vm/vm_param.h>
