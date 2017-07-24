@@ -300,19 +300,21 @@ sgx_enclave_remove(struct sgx_softc *sc,
 	p = TAILQ_NEXT(p0, listq);
 
 	while (p) {
+		vm_page_lock(p);
+		vm_page_remove(p);
+		vm_page_unlock(p);
 		sgx_page_remove(sc, p);
 		p = TAILQ_NEXT(p, listq);
 	}
 
 	/* Now remove SECS page */
+	vm_page_lock(p0);
+	vm_page_remove(p0);
+	vm_page_unlock(p0);
 	sgx_page_remove(sc, p0);
 
-	/* Clean up vm object */
-	vm_radix_reclaim_allnodes(&object->rtree);
-	TAILQ_INIT(&object->memq);
-	object->resident_page_count = 0;
-	if (object->type == OBJT_VNODE)
-		vdrop(object->handle);
+	KASSERT(TAILQ_EMPTY(&object->memq) == 1, ("not empty"));
+	KASSERT(object->resident_page_count == 0, ("count"));
 
 	VM_OBJECT_WUNLOCK(enclave->obj);
 }
