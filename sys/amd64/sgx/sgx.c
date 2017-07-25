@@ -347,6 +347,14 @@ sgx_secs_validate(struct sgx_softc *sc, struct secs *secs)
 	if (secs->size == 0)
 		return (EINVAL);
 
+	/* BASEADDR must be naturally aligned on an SECS.SIZE boundary. */
+	if (secs->base & (secs->size - 1))
+		return (EINVAL);
+
+	/* SECS.SIZE must be at least 2 pages. */
+	if (secs->size < 2 * PAGE_SIZE)
+		return (EINVAL);
+
 	if ((secs->size & (secs->size - 1)) != 0)
 		return (EINVAL);
 
