@@ -87,7 +87,7 @@ struct secinfo {
 #define	SECINFO_FLAGS_PT_S	8	/* Page type shift */
 #define	SECINFO_FLAGS_PT_M	(0xff << SECINFO_FLAGS_PT_S)
 	uint64_t reserved[7];
-} __aligned(128);
+} __aligned(64);
 
 /*
  * 2.7.1 ATTRIBUTES
