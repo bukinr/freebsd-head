@@ -618,7 +618,7 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 	}
 	ret = sgx_ecreate(&pginfo, (void *)epc->base);
 	if (ret == SGX_EFAULT) {
-		debug_printf("%s: gp fault\n", __func__);
+		dprintf("%s: gp fault\n", __func__);
 		mtx_unlock(&sc->mtx);
 		/* Remove VA page that was just created for SECS page. */
 		p = vm_page_lookup(enclave->obj, -SGX_VA_PAGES_OFFS);
@@ -747,7 +747,7 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	mtx_lock(&sc->mtx);
 	ret = sgx_eadd(&pginfo, (void *)epc->base);
 	if (ret == SGX_EFAULT) {
-		debug_printf("%s: gp fault\n", __func__);
+		dprintf("%s: gp fault\n", __func__);
 		mtx_unlock(&sc->mtx);
 		VM_OBJECT_WUNLOCK(obj);
 		goto error;
