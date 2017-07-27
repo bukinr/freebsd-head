@@ -259,7 +259,6 @@ sgx_epc_page_remove(struct sgx_softc *sc,
 	mtx_lock(&sc->mtx);
 	sgx_eremove((void *)epc->base);
 	mtx_unlock(&sc->mtx);
-	sgx_put_epc_page(sc, epc);
 }
 
 static void
@@ -279,6 +278,7 @@ sgx_page_remove(struct sgx_softc *sc, vm_page_t p)
 	epc = &sc->epc_pages[offs];
 
 	sgx_epc_page_remove(sc, epc);
+	sgx_put_epc_page(sc, epc);
 }
 
 static void
@@ -317,11 +317,12 @@ sgx_enclave_remove(struct sgx_softc *sc,
 	VM_OBJECT_WUNLOCK(enclave->obj);
 }
 
-static void
+static int
 sgx_measure_page(struct sgx_softc *sc, struct epc_page *secs,
     struct epc_page *epc, uint16_t mrmask)
 {
 	int i, j;
+	int ret;
 
 	mtx_lock(&sc->mtx);
 
@@ -329,11 +330,17 @@ sgx_measure_page(struct sgx_softc *sc, struct epc_page *secs,
 		if (!(j & mrmask))
 			continue;
 
-		sgx_eextend((void *)secs->base,
+		ret = sgx_eextend((void *)secs->base,
 		    (void *)(epc->base + i));
+		if (ret == SGX_EFAULT) {
+			mtx_unlock(&sc->mtx);
+			return (ret);
+		}
 	}
 
 	mtx_unlock(&sc->mtx);
+
+	return (0);
 }
 
 static int
@@ -747,14 +754,20 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	mtx_lock(&sc->mtx);
 	ret = sgx_eadd(&pginfo, (void *)epc->base);
 	if (ret == SGX_EFAULT) {
-		dprintf("%s: gp fault\n", __func__);
+		dprintf("%s: gp fault on eadd\n", __func__);
 		mtx_unlock(&sc->mtx);
 		VM_OBJECT_WUNLOCK(obj);
 		goto error;
 	}
 	mtx_unlock(&sc->mtx);
 
-	sgx_measure_page(sc, enclave->secs_epc_page, epc, addp->mrmask);
+	ret = sgx_measure_page(sc, enclave->secs_epc_page, epc, addp->mrmask);
+	if (ret == SGX_EFAULT) {
+		dprintf("%s: gp fault on eextend\n", __func__);
+		sgx_epc_page_remove(sc, epc);
+		VM_OBJECT_WUNLOCK(obj);
+		goto error;
+	}
 
 	sgx_insert_epc_page(enclave, epc, addr);
 
