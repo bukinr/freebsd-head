@@ -825,7 +825,7 @@ enum {
 	SGX_PT_TRIM = 0x04,
 };
 
-int sgx_encls(uint64_t rax, uint64_t rbx, uint64_t rcx, uint64_t rdx);
+int sgx_encls(uint32_t eax, uint64_t rbx, uint64_t rcx, uint64_t rdx);
 
 static __inline int
 sgx_ecreate(void *pginfo, void *secs)

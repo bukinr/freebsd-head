@@ -39,8 +39,8 @@
 
 /*
  * int
- * sgx_encls(uint64_t rax, uint64_t rbx, uint64_t rcx, uint64_t rdx);
- *           %rdi,         %rsi,         %rdx,         %rcx
+ * sgx_encls(uint32_t eax, uint64_t rbx, uint64_t rcx, uint64_t rdx);
+ *           %edi,         %rsi,         %rdx,         %rcx
  */
 ENTRY(sgx_encls)
 	PUSH_FRAME_POINTER
