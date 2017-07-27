@@ -42,7 +42,9 @@
 #define	SGX_EINITTOKEN_SIZE		304
 #define	SGX_IOCTL_MAX_DATA_LEN		26
 #define	SGX_ENCL_SIZE_MAX_DEF		0x1000000000ULL
+#define	SGX_EFAULT			99
 
+#ifndef LOCORE
 static MALLOC_DEFINE(M_SGX, "sgx", "SGX driver");
 
 struct sgx_vm_handle {
@@ -83,5 +85,6 @@ struct sgx_softc {
 	uint8_t				state;
 #define	SGX_STATE_RUNNING		(1 << 0)
 };
+#endif /* !LOCORE */
 
 #endif /* !_AMD64_SGX_SGXVAR_H_ */

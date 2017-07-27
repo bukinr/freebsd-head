@@ -269,6 +269,10 @@ sgx_page_remove(struct sgx_softc *sc, vm_page_t p)
 	vm_paddr_t pa;
 	uint64_t offs;
 
+	vm_page_lock(p);
+	vm_page_remove(p);
+	vm_page_unlock(p);
+
 	pa = VM_PAGE_TO_PHYS(p);
 	epc = &sc->epc_pages[0];
 	offs = (pa - epc->phys) / PAGE_SIZE;
@@ -300,17 +304,11 @@ sgx_enclave_remove(struct sgx_softc *sc,
 	p = TAILQ_NEXT(p0, listq);
 
 	while (p) {
-		vm_page_lock(p);
-		vm_page_remove(p);
-		vm_page_unlock(p);
 		sgx_page_remove(sc, p);
 		p = TAILQ_NEXT(p, listq);
 	}
 
 	/* Now remove SECS page */
-	vm_page_lock(p0);
-	vm_page_remove(p0);
-	vm_page_unlock(p0);
 	sgx_page_remove(sc, p0);
 
 	KASSERT(TAILQ_EMPTY(&object->memq) == 1, ("not empty"));
@@ -616,11 +614,19 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 		p = vm_page_lookup(enclave->obj, -SGX_VA_PAGES_OFFS);
 		sgx_page_remove(sc, p);
 		VM_OBJECT_WUNLOCK(obj);
-
-		sgx_epc_page_remove(sc, epc);
 		goto error;
 	}
-	sgx_ecreate(&pginfo, (void *)epc->base);
+	ret = sgx_ecreate(&pginfo, (void *)epc->base);
+	if (ret == SGX_EFAULT) {
+		debug_printf("%s: gp fault\n", __func__);
+		mtx_unlock(&sc->mtx);
+		/* Remove VA page that was just created for SECS page. */
+		p = vm_page_lookup(enclave->obj, -SGX_VA_PAGES_OFFS);
+		sgx_page_remove(sc, p);
+		VM_OBJECT_WUNLOCK(obj);
+		goto error;
+	}
+
 	TAILQ_INSERT_TAIL(&sc->enclaves, enclave, next);
 	mtx_unlock(&sc->mtx);
 
@@ -739,7 +745,13 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	pginfo.secs = (uint64_t)secs_epc_page->base;
 
 	mtx_lock(&sc->mtx);
-	sgx_eadd(&pginfo, (void *)epc->base);
+	ret = sgx_eadd(&pginfo, (void *)epc->base);
+	if (ret == SGX_EFAULT) {
+		debug_printf("%s: gp fault\n", __func__);
+		mtx_unlock(&sc->mtx);
+		VM_OBJECT_WUNLOCK(obj);
+		goto error;
+	}
 	mtx_unlock(&sc->mtx);
 
 	sgx_measure_page(sc, enclave->secs_epc_page, epc, addp->mrmask);
