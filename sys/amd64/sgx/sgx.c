@@ -286,7 +286,7 @@ sgx_enclave_remove(struct sgx_softc *sc,
     struct sgx_enclave *enclave)
 {
 	vm_object_t object;
-	vm_page_t p, p0;
+	vm_page_t p, p0, p_next;
 
 	mtx_lock(&sc->mtx);
 	TAILQ_REMOVE(&sc->enclaves, enclave, next);
@@ -300,16 +300,17 @@ sgx_enclave_remove(struct sgx_softc *sc,
 	 * First remove all the pages except SECS,
 	 * then remove SECS page.
 	 */
-	p0 = vm_page_lookup(enclave->obj, 0);
-	p = TAILQ_NEXT(p0, listq);
-
-	while (p) {
+	p0 = NULL;
+	TAILQ_FOREACH_SAFE(p, &object->memq, listq, p_next) {
+		if (p->pindex == 0) {
+			p0 = p;
+			continue;
+		}
 		sgx_page_remove(sc, p);
-		p = TAILQ_NEXT(p, listq);
 	}
-
 	/* Now remove SECS page */
-	sgx_page_remove(sc, p0);
+	if (p0 != NULL)
+		sgx_page_remove(sc, p0);
 
 	KASSERT(TAILQ_EMPTY(&object->memq) == 1, ("not empty"));
 	KASSERT(object->resident_page_count == 0, ("count"));
