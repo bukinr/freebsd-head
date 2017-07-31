@@ -179,10 +179,11 @@ sgx_va_slot_init(struct sgx_softc *sc,
 
 static int
 sgx_mem_find(struct sgx_softc *sc, uint64_t addr,
-    vm_map_entry_t *entry0, vm_object_t *mem0)
+    vm_map_entry_t *entry0, vm_object_t *object0)
 {
 	vm_map_t map;
 	vm_map_entry_t entry;
+	vm_object_t object;
 
 	map = &curproc->p_vmspace->vm_map;
 
@@ -193,14 +194,16 @@ sgx_mem_find(struct sgx_softc *sc, uint64_t addr,
 		return (EINVAL);
 	}
 
-	if (entry->object.vm_object == NULL) {
+	object = entry->object.vm_object;
+
+	if (object == NULL || object->handle == NULL) {
 		vm_map_unlock_read(map);
 		return (EINVAL);
 	}
 
-	vm_object_reference(entry->object.vm_object);
+	vm_object_reference(object);
 
-	*mem0 = entry->object.vm_object;
+	*object0 = object;
 	*entry0 = entry;
 	vm_map_unlock_read(map);
 
@@ -214,20 +217,24 @@ sgx_enclave_find(struct sgx_softc *sc, uint64_t addr,
 	struct sgx_vm_handle *vmh;
 	struct sgx_enclave *enclave;
 	vm_map_entry_t entry;
-	vm_object_t mem;
+	vm_object_t object;
 	int ret;
 
-	ret = sgx_mem_find(sc, addr, &entry, &mem);
+	ret = sgx_mem_find(sc, addr, &entry, &object);
 	if (ret)
 		return (ret);
 
-	KASSERT(mem != NULL, ("mem is NULL\n"));
-	KASSERT(mem->handle != NULL, ("mem->handle is NULL\n"));
-
-	vmh = mem->handle;
+	vmh = object->handle;
+	if (vmh == NULL) {
+		vm_object_deallocate(object);
+		return (EINVAL);
+	}
 
 	enclave = vmh->enclave;
-	enclave->obj = mem;
+	if (enclave == NULL || enclave->obj == NULL) {
+		vm_object_deallocate(object);
+		return (EINVAL);
+	}
 
 	*encl = enclave;
 
