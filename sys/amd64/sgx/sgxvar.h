@@ -68,7 +68,7 @@ struct sgx_enclave {
 	struct sgx_vm_handle		*vmh;
 	struct mtx			mtx;
 	TAILQ_ENTRY(sgx_enclave)	next;
-	vm_object_t			obj;
+	vm_object_t			object;
 	struct epc_page			*secs_epc_page;
 };
 
