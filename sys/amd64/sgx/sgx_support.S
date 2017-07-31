@@ -47,10 +47,10 @@ ENTRY(sgx_encls)
 	PUSH_FRAME_POINTER
 	pushq	%rbx
 	movq	PCPU(CURPCB),%r8
-	movq	$sgx_onfault,PCB_ONFAULT(%r8)
 	movl	%edi,%eax
 	movq	%rsi,%rbx
 	xchgq	%rdx,%rcx
+	movq	$sgx_onfault,PCB_ONFAULT(%r8)
 	.byte 0x0f, 0x01, 0xcf
 	movq	$0,PCB_ONFAULT(%r8)
 	popq	%rbx
