@@ -201,8 +201,8 @@ sgx_mem_find(struct sgx_softc *sc, uint64_t addr,
 		return (EINVAL);
 	}
 
-	if ((object->type != OBJT_MGTDEVICE) ||
-	    (object->un_pager.devp.ops != &sgx_pg_ops)) {
+	if (object->type != OBJT_MGTDEVICE ||
+	    object->un_pager.devp.ops != &sgx_pg_ops) {
 		vm_map_unlock_read(map);
 		return (EINVAL);
 	}
@@ -968,11 +968,10 @@ sgx_get_epc_area(struct sgx_softc *sc)
 	    (cp[2] & 0xfffff000);
 	sc->npages = sc->epc_size / SGX_PAGE_SIZE;
 
-	if (cp[3] & 0xffff) {
+	if (cp[3] & 0xffff)
 		sc->enclave_size_max = (1 << ((cp[3] >> 8) & 0xff));
-	} else {
+	else
 		sc->enclave_size_max = SGX_ENCL_SIZE_MAX_DEF;
-	}
 
 	epc_base_vaddr = (vm_offset_t)pmap_mapdev_attr(sc->epc_base,
 	    sc->epc_size, VM_MEMATTR_DEFAULT);
