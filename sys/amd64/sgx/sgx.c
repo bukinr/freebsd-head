@@ -74,6 +74,7 @@ __FBSDID("$FreeBSD$");
 #define	dprintf(fmt, ...)
 #endif
 
+static struct cdev_pager_ops sgx_pg_ops;
 struct sgx_softc sgx_sc;
 
 #ifdef	DEBUG
@@ -196,6 +197,12 @@ sgx_mem_find(struct sgx_softc *sc, uint64_t addr,
 
 	object = entry->object.vm_object;
 	if (object == NULL || object->handle == NULL) {
+		vm_map_unlock_read(map);
+		return (EINVAL);
+	}
+
+	if ((object->type != OBJT_MGTDEVICE) ||
+	    (object->un_pager.devp.ops != &sgx_pg_ops)) {
 		vm_map_unlock_read(map);
 		return (EINVAL);
 	}
