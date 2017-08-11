@@ -78,8 +78,8 @@
  *     associated with user process created on step 1, create SECS physical
  *     page and map it to index 0 of enclave VM object.
  *  3) User calls ioctl SGX_IOC_ENCLAVE_ADD_PAGE: we look for enclave created
- *     on step 2, create physical page and map it to specified by user address
- *     of enclave VM object.
+ *     on step 2, create TCS or REG physical page and map it to specified by
+ *     user address of enclave VM object.
  *  4) User finalizes enclave creation with ioctl SGX_IOC_ENCLAVE_INIT call.
  *  5) User can freely enter to and exit from enclave using ENCLU instructions
  *     from userspace: the driver does nothing here.
