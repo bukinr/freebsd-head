@@ -60,15 +60,15 @@
  *                       Finalizes enclave creation.
  *
  * Enclave lifecycle:
- *    ECREATE --.
- *    EADD      |
- *    EEXTEND   | Kernel space
- *    EPA       |
- *    EINIT   --'
- *    EENTER  --.
- *    EEXIT     | User space
- *    ERESUME --'
- *
+ *          .-- ECREATE  -- Add SECS page
+ *          |   EADD     -- Add TCS, REG pages
+ *   Kernel |   EEXTEND  -- Measure the page (take unique hash)
+ *    space |   EPA      -- Allocate version array page
+ *          '-- EINIT    -- Finilize enclave creation
+ *          .-- EENTER   -- Go to entry point of Enclave
+ *   User   |   EEXIT    -- Exit back to main application
+ *    space '-- ERESUME  -- Resume enclave execution (e.g. after interrupt)
+ *  
  * Enclave lifecycle from driver point of view:
  *  1) User proceed mmap() on /dev/sgx: we allocate a VM object
  *  2) User proceed ioctl SGX_IOC_ENCLAVE_CREATE:
@@ -86,6 +86,7 @@
  * Locking:
  *    SGX ENCLS set of instructions have limitations on concurrency:
  *    we use sc->mtx lock around them to prevent concurrent execution.
+ *    Same lock is used for
  *
  * Eviction of EPC pages:
  *    Eviction support is not implemented in this driver, however the driver proceed
@@ -93,8 +94,8 @@
  *    VA pages are currently unused.
  *    The VA page index and slot in VM object for each VM object page is uniquely
  *    determined by the following formula:
- *      va_slot_idx = VM object page index % SGX_VA_PAGE_SLOTS;
- *      va_page_idx = - SGX_VA_PAGES_OFFS - (VM object page index / SGX_VA_PAGE_SLOTS);
+ *    va_slot_idx = VM object page index % SGX_VA_PAGE_SLOTS;
+ *    va_page_idx = - SGX_VA_PAGES_OFFS - (VM object page index / SGX_VA_PAGE_SLOTS);
  */
 
 #include <sys/cdefs.h>
