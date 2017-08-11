@@ -70,7 +70,7 @@
  *          '-- EINIT    -- Finalize enclave creation
  *   User   .-- EENTER   -- Go to entry point of enclave
  *    space |   EEXIT    -- Exit back to main application
- *    ENCLU '-- ERESUME  -- Resume enclave execution (e.g. after interrupt)
+ *    ENCLU '-- ERESUME  -- Resume enclave execution (e.g. after exception)
  *  
  * Enclave lifecycle from driver point of view:
  *  1) User calls mmap() on /dev/sgx: we allocate a VM object
