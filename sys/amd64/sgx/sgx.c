@@ -30,23 +30,26 @@
  */
 
 /*
- * Short design overview
+ * Design overview
  *
  * The driver duties is EPC pages management.
  *
- * This driver provides a character device for mmap(2) and ioctl(2) facilities
- * allowing user to create isolated compartments ("enclaves") in user VA space.
+ * This driver requires SGX support from hardware and it provides a character
+ * device for mmap(2) and ioctl(2) facilities allowing user to manage isolated
+ * compartments ("enclaves") in user VA space.
  *
  * /dev/sgx:
  *      .mmap:
  *            sgx_mmap_single() allocates VM object with following pager
  *            operations:
- *                   a) sgx_pg_ctor(): VM object constructor does nothing
+ *                   a) sgx_pg_ctor():
+ *                          VM object constructor does nothing
  *                   b) sgx_pg_dtor():
- *                       VM object destructor destroys the SGX enclave associated
- *                       with the object: it frees all the EPC pages allocated
- *                       for enclave and removes the enclave.
- *                   c) sgx_pg_fault(): VM object fault handler does nothing
+ *                          VM object destructor destroys the SGX enclave associated
+ *                          with the object: it frees all the EPC pages allocated
+ *                          for enclave and removes the enclave.
+ *                   c) sgx_pg_fault():
+ *                          VM object fault handler does nothing
  *
  *      .ioctl:
  *            sgx_ioctl():
@@ -58,7 +61,6 @@
  *                           Finalizes enclave creation.
  *
  * Enclave lifecycle:
- *
  * 1) User proceed mmap() on /dev/sgx: we allocate a VM object
  * 2) User proceed ioctl SGX_IOC_ENCLAVE_CREATE:
  *    We look for the VM object associated with user process created on step 1,
@@ -69,23 +71,20 @@
  * 4) User finalizes enclave creation using ioctl SGX_IOC_ENCLAVE_INIT:
  *    We allocate EPC page.
  * 5) User can freely enter to and exit from enclave using ENCLU instructions from
- *    userspace: this driver does nothing here.
+ *    userspace: the driver does nothing here.
  * 6) User proceed munmap or process that created enclave dies:
  *    We destroy the enclave associated with the object.
  *
  * Locking:
- *
  * SGX ENCLS set of instructions have limitations on concurrency:
- * we use sc->mtx lock around them to prevent concurrent execution.
+ * we use sc->mtx lock around ENCLS instructions to prevent concurrent execution.
  *
  * Eviction of EPC pages:
- *
  * Eviction support is not implemented in this driver, however the driver provides
  * management for VA (version array) pages (which are currently unused).
  *
  * The VA page index and slot in VM object for each VM object page is uniquely
  * determined by the following formula:
- *
  * va_slot_idx = VM object page index % SGX_VA_PAGE_SLOTS;
  * va_page_idx = - SGX_VA_PAGES_OFFS - (VM object page index / SGX_VA_PAGE_SLOTS);
  */
