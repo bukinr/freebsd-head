@@ -32,11 +32,10 @@
 /*
  * Design overview
  *
- * The driver duties is EPC pages management.
- *
- * This driver requires SGX support from hardware and it provides a character
- * device for mmap(2) and ioctl(2) facilities allowing user to manage isolated
- * compartments ("enclaves") in user VA space.
+ * This driver requires SGX support from hardware. The driver provides a
+ * character device for mmap(2) and ioctl(2) facilities allowing user to
+ * manage isolated compartments ("enclaves") in user VA space.
+ * The driver duties is EPC pages management, data validation.
  *
  * /dev/sgx:
  *    .mmap:
@@ -74,28 +73,28 @@
  *  1) User proceed mmap() on /dev/sgx: we allocate a VM object
  *  2) User proceed ioctl SGX_IOC_ENCLAVE_CREATE:
  *     We look for the VM object associated with user process created on step 1,
- *     add SECS physical page and map it to index 0 of enclave VM object.
+ *     create SECS physical page and map it to index 0 of enclave VM object.
  *  3) User proceed ioctl SGX_IOC_ENCLAVE_ADD_PAGE:
  *     We look for enclave created on step 2, add physical page and map it to
  *     specified by user address of enclave VM object.
  *  4) User finalizes enclave creation using ioctl SGX_IOC_ENCLAVE_INIT.
- *  5) User can freely enter to and exit from enclave using ENCLU instructions from
- *     userspace: the driver does nothing here.
+ *  5) User can freely enter to and exit from enclave using ENCLU instructions
+ *     from userspace: the driver does nothing here.
  *  6) User proceed munmap or process with enclave dies:
  *     We destroy the enclave associated with the object.
  *
  * Locking:
- *  SGX ENCLS set of instructions have limitations on concurrency:
- *  we use sc->mtx lock around them to prevent concurrent execution.
+ *    SGX ENCLS set of instructions have limitations on concurrency:
+ *    we use sc->mtx lock around them to prevent concurrent execution.
  *
  * Eviction of EPC pages:
- *  Eviction support is not implemented in this driver, however the driver provides
- *  management for VA (version array) pages (which are currently unused).
- *
- * The VA page index and slot in VM object for each VM object page is uniquely
- * determined by the following formula:
- *  va_slot_idx = VM object page index % SGX_VA_PAGE_SLOTS;
- *  va_page_idx = - SGX_VA_PAGES_OFFS - (VM object page index / SGX_VA_PAGE_SLOTS);
+ *    Eviction support is not implemented in this driver, however the driver proceed
+ *    management for VA (version array) pages which will be required for eviction.
+ *    VA pages are currently unused.
+ *    The VA page index and slot in VM object for each VM object page is uniquely
+ *    determined by the following formula:
+ *      va_slot_idx = VM object page index % SGX_VA_PAGE_SLOTS;
+ *      va_page_idx = - SGX_VA_PAGES_OFFS - (VM object page index / SGX_VA_PAGE_SLOTS);
  */
 
 #include <sys/cdefs.h>
