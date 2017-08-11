@@ -39,54 +39,63 @@
  * compartments ("enclaves") in user VA space.
  *
  * /dev/sgx:
- *      .mmap:
- *            sgx_mmap_single() allocates VM object with following pager
- *            operations:
- *                   a) sgx_pg_ctor():
- *                          VM object constructor does nothing
- *                   b) sgx_pg_dtor():
- *                          VM object destructor destroys the SGX enclave associated
- *                          with the object: it frees all the EPC pages allocated
- *                          for enclave and removes the enclave.
- *                   c) sgx_pg_fault():
- *                          VM object fault handler does nothing
+ *    .mmap:
+ *        sgx_mmap_single() allocates VM object with following pager
+ *        operations:
+ *               a) sgx_pg_ctor():
+ *                      VM object constructor does nothing
+ *               b) sgx_pg_dtor():
+ *                      VM object destructor destroys the SGX enclave associated
+ *                      with the object: it frees all the EPC pages allocated
+ *                      for enclave and removes the enclave.
+ *               c) sgx_pg_fault():
+ *                      VM object fault handler does nothing
  *
- *      .ioctl:
- *            sgx_ioctl():
- *                   a) SGX_IOC_ENCLAVE_CREATE
- *                           Adds Enclave SECS page: initial step of enclave creation.
- *                   b) SGX_IOC_ENCLAVE_ADD_PAGE
- *                           Adds TCS, REG and other pages to the enclave.
- * 		     c) SGX_IOC_ENCLAVE_INIT
- *                           Finalizes enclave creation.
+ *    .ioctl:
+ *        sgx_ioctl():
+ *               a) SGX_IOC_ENCLAVE_CREATE
+ *                       Adds Enclave SECS page: initial step of enclave creation.
+ *               b) SGX_IOC_ENCLAVE_ADD_PAGE
+ *                       Adds TCS, REG pages to the enclave.
+ *               c) SGX_IOC_ENCLAVE_INIT
+ *                       Finalizes enclave creation.
  *
  * Enclave lifecycle:
- * 1) User proceed mmap() on /dev/sgx: we allocate a VM object
- * 2) User proceed ioctl SGX_IOC_ENCLAVE_CREATE:
- *    We look for the VM object associated with user process created on step 1,
- *    then we allocate EPC page and map it to index 0 of enclave VM object.
- * 3) User proceed ioctl SGX_IOC_ENCLAVE_ADD_PAGE:
- *    We look for enclave created on step 2, allocate EPC page and map it to specified
- *    by user address of enclave VM object.
- * 4) User finalizes enclave creation using ioctl SGX_IOC_ENCLAVE_INIT:
- *    We allocate EPC page.
- * 5) User can freely enter to and exit from enclave using ENCLU instructions from
- *    userspace: the driver does nothing here.
- * 6) User proceed munmap or process that created enclave dies:
- *    We destroy the enclave associated with the object.
+ *    ECREATE --.
+ *    EADD      |
+ *    EEXTEND   | Kernel space
+ *    EPA       |
+ *    EINIT   --'
+ *    EENTER  --.
+ *    EEXIT     | User space
+ *    ERESUME --'
+ *
+ * Enclave lifecycle from driver point of view:
+ *  1) User proceed mmap() on /dev/sgx: we allocate a VM object
+ *  2) User proceed ioctl SGX_IOC_ENCLAVE_CREATE:
+ *     We look for the VM object associated with user process created on step 1,
+ *     add SECS physical page and map it to index 0 of enclave VM object.
+ *  3) User proceed ioctl SGX_IOC_ENCLAVE_ADD_PAGE:
+ *     We look for enclave created on step 2, add physical page and map it to
+ *     specified by user address of enclave VM object.
+ *  4) User finalizes enclave creation using ioctl SGX_IOC_ENCLAVE_INIT.
+ *  5) User can freely enter to and exit from enclave using ENCLU instructions from
+ *     userspace: the driver does nothing here.
+ *  6) User proceed munmap or process with enclave dies:
+ *     We destroy the enclave associated with the object.
  *
  * Locking:
- * SGX ENCLS set of instructions have limitations on concurrency:
- * we use sc->mtx lock around ENCLS instructions to prevent concurrent execution.
+ *  SGX ENCLS set of instructions have limitations on concurrency:
+ *  we use sc->mtx lock around them to prevent concurrent execution.
  *
  * Eviction of EPC pages:
- * Eviction support is not implemented in this driver, however the driver provides
- * management for VA (version array) pages (which are currently unused).
+ *  Eviction support is not implemented in this driver, however the driver provides
+ *  management for VA (version array) pages (which are currently unused).
  *
  * The VA page index and slot in VM object for each VM object page is uniquely
  * determined by the following formula:
- * va_slot_idx = VM object page index % SGX_VA_PAGE_SLOTS;
- * va_page_idx = - SGX_VA_PAGES_OFFS - (VM object page index / SGX_VA_PAGE_SLOTS);
+ *  va_slot_idx = VM object page index % SGX_VA_PAGE_SLOTS;
+ *  va_page_idx = - SGX_VA_PAGES_OFFS - (VM object page index / SGX_VA_PAGE_SLOTS);
  */
 
 #include <sys/cdefs.h>
