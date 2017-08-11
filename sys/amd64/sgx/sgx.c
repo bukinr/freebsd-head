@@ -44,23 +44,23 @@
  *    .mmap:
  *        sgx_mmap_single() allocates VM object with following pager
  *        operations:
- *               a) sgx_pg_ctor():
- *                      VM object constructor does nothing
- *               b) sgx_pg_dtor():
- *                      VM object destructor destroys the SGX enclave associated
- *                      with the object: it frees all the EPC pages allocated
- *                      for enclave and removes the enclave.
- *               c) sgx_pg_fault():
- *                      VM object fault handler does nothing
+ *              a) sgx_pg_ctor():
+ *                  VM object constructor does nothing
+ *              b) sgx_pg_dtor():
+ *                  VM object destructor destroys the SGX enclave associated
+ *                  with the object: it frees all the EPC pages allocated for
+ *                  enclave and removes the enclave.
+ *              c) sgx_pg_fault():
+ *                  VM object fault handler does nothing
  *
  *    .ioctl:
  *        sgx_ioctl():
  *               a) SGX_IOC_ENCLAVE_CREATE
- *                       Adds Enclave SECS page: initial step of enclave creation.
+ *                   Adds Enclave SECS page: initial step of enclave creation.
  *               b) SGX_IOC_ENCLAVE_ADD_PAGE
- *                       Adds TCS, REG pages to the enclave.
+ *                   Adds TCS, REG pages to the enclave.
  *               c) SGX_IOC_ENCLAVE_INIT
- *                       Finalizes enclave creation.
+ *                   Finalizes enclave creation.
  *
  * Enclave lifecycle:
  *          .-- ECREATE  -- Add SECS page
@@ -74,12 +74,12 @@
  *  
  * Enclave lifecycle from driver point of view:
  *  1) User calls mmap() on /dev/sgx: we allocate a VM object
- *  2) User calls ioctl SGX_IOC_ENCLAVE_CREATE:
- *     we look for the VM object associated with user process created on step 1,
- *     create SECS physical page and map it to index 0 of enclave VM object.
- *  3) User calls ioctl SGX_IOC_ENCLAVE_ADD_PAGE:
- *     we look for enclave created on step 2, add physical page and map it to
- *     specified by user address of enclave VM object.
+ *  2) User calls ioctl SGX_IOC_ENCLAVE_CREATE: we look for the VM object
+ *     associated with user process created on step 1, create SECS physical
+ *     page and map it to index 0 of enclave VM object.
+ *  3) User calls ioctl SGX_IOC_ENCLAVE_ADD_PAGE: we look for enclave created
+ *     on step 2, add physical page and map it to specified by user address
+ *     of enclave VM object.
  *  4) User finalizes enclave creation with ioctl SGX_IOC_ENCLAVE_INIT call.
  *  5) User can freely enter to and exit from enclave using ENCLU instructions
  *     from userspace: the driver does nothing here.
@@ -87,20 +87,20 @@
  *     we destroy the enclave associated with the object.
  *
  * Locking:
- *    sc->mtx_encls:
- *      SGX ENCLS set of instructions have limitations on concurrency:
+ *    SGX ENCLS set of instructions have limitations on concurrency:
  *      we use sc->mtx_encls lock around them to prevent concurrent execution.
- *    sc->mtx lock is used to access list of created enclaves and SGX driver state.
+ *    sc->mtx lock is used to manage list of created enclaves and SGX driver
+ *      state.
  *    sc->mtx_epc lock is used for EPC pages allocation only.
  *
  * Eviction of EPC pages:
- *    Eviction support is not implemented in this driver, however the driver proceed
- *    management for VA (version array) pages which will be required for eviction.
- *    VA pages are currently unused.
- *    The VA page index and slot in VM object for each VM object page is uniquely
- *    determined by the following formula:
- *    va_slot_idx = VM object page index % SGX_VA_PAGE_SLOTS;
- *    va_page_idx = - SGX_VA_PAGES_OFFS - (VM object page index / SGX_VA_PAGE_SLOTS);
+ *    Eviction support is not implemented in this driver, however the driver
+ *    provides management for VA (version array) pages which will be required
+ *    for eviction later. VA pages are currently unused.
+ *    The VA page index and slot in VM object for each VM object page is
+ *    uniquely determined by the following formula:
+ *    va_slot_idx = page_idx % SGX_VA_PAGE_SLOTS;
+ *    va_page_idx = - SGX_VA_PAGES_OFFS - (page_idx / SGX_VA_PAGE_SLOTS);
  */
 
 #include <sys/cdefs.h>
