@@ -102,6 +102,9 @@
  *    uniquely determined by the following formula:
  *    va_slot_idx = page_idx % SGX_VA_PAGE_SLOTS;
  *    va_page_idx = - SGX_VA_PAGES_OFFS - (page_idx / SGX_VA_PAGE_SLOTS);
+ *
+ * Intel® Software Guard Extensions Programming Reference
+ * https://software.intel.com/sites/default/files/managed/48/88/329298-002.pdf
  */
 
 #include <sys/cdefs.h>
