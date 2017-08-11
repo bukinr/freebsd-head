@@ -83,20 +83,21 @@
  *  4) User finalizes enclave creation with ioctl SGX_IOC_ENCLAVE_INIT call.
  *  5) User can freely enter to and exit from enclave using ENCLU instructions
  *     from userspace: the driver does nothing here.
- *  6) User proceed munmap(2) system call or the process with enclave dies:
+ *  6) User proceed munmap(2) system call (or the process with enclave dies):
  *     we destroy the enclave associated with the object.
  *
  * Locking:
  *    SGX ENCLS set of instructions have limitations on concurrency:
- *    we use sc->mtx_encls lock around them to prevent concurrent execution.
- *    sc->mtx lock is used to manage list of created enclaves and SGX driver
- *    state.
+ *    some instructions can't be executed same time on different CPUs.
+ *    We use sc->mtx_encls lock around them to prevent concurrent execution.
+ *    sc->mtx lock is used to manage list of created enclaves and the state of
+ *    SGX driver.
  *    sc->mtx_epc lock is used for EPC pages allocation only.
  *
  * Eviction of EPC pages:
  *    Eviction support is not implemented in this driver, however the driver
  *    manages VA (version array) pages: it allocates a VA slot for each EPC
- *    page. This will be required for eviction support.
+ *    page. This will be required for eviction support in future.
  *    VA pages and slots are currently unused.
  *    The VA page index and slot in VM object for each VM object page is
  *    uniquely determined by the following formula:
