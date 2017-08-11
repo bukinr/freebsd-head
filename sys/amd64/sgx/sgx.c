@@ -35,7 +35,7 @@
  * The driver provides character device for mmap(2) and ioctl(2) system calls
  * allowing user to manage isolated compartments ("enclaves") in user VA space.
  *
- * The driver duties is EPC pages management, enclave management, data
+ * The driver duties is EPC pages management, enclave management, user data
  * validation.
  *
  * This driver requires Intel SGX support from hardware.
@@ -96,7 +96,7 @@
  * Eviction of EPC pages:
  *    Eviction support is not implemented in this driver, however the driver
  *    manages VA (version array) pages: it allocates a VA slot for each EPC
- *    page.
+ *    page. This will be required for eviction support.
  *    VA pages and slots are currently unused.
  *    The VA page index and slot in VM object for each VM object page is
  *    uniquely determined by the following formula:
