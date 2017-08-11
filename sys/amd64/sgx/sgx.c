@@ -32,8 +32,8 @@
 /*
  * Design overview
  *
- * The driver provides character device for mmap(2) and ioctl(2) allowing user
- * to manage isolated compartments ("enclaves") in user VA space.
+ * The driver provides character device for mmap(2) and ioctl(2) system calls
+ * allowing user to manage isolated compartments ("enclaves") in user VA space.
  *
  * The driver duties is EPC pages management, enclave management, data
  * validation.
@@ -67,31 +67,31 @@
  *   Kernel |   EADD     -- Add TCS, REG pages
  *    space |   EEXTEND  -- Measure the page (take unique hash)
  *    ENCLS |   EPA      -- Allocate version array page
- *          '-- EINIT    -- Finilize enclave creation
+ *          '-- EINIT    -- Finalize enclave creation
  *   User   .-- EENTER   -- Go to entry point of enclave
  *    space |   EEXIT    -- Exit back to main application
  *    ENCLU '-- ERESUME  -- Resume enclave execution (e.g. after interrupt)
  *  
  * Enclave lifecycle from driver point of view:
- *  1) User proceed mmap() on /dev/sgx: we allocate a VM object
- *  2) User proceed ioctl SGX_IOC_ENCLAVE_CREATE:
- *     We look for the VM object associated with user process created on step 1,
+ *  1) User calls mmap() on /dev/sgx: we allocate a VM object
+ *  2) User calls ioctl SGX_IOC_ENCLAVE_CREATE:
+ *     we look for the VM object associated with user process created on step 1,
  *     create SECS physical page and map it to index 0 of enclave VM object.
- *  3) User proceed ioctl SGX_IOC_ENCLAVE_ADD_PAGE:
- *     We look for enclave created on step 2, add physical page and map it to
+ *  3) User calls ioctl SGX_IOC_ENCLAVE_ADD_PAGE:
+ *     we look for enclave created on step 2, add physical page and map it to
  *     specified by user address of enclave VM object.
- *  4) User finalizes enclave creation using ioctl SGX_IOC_ENCLAVE_INIT.
+ *  4) User finalizes enclave creation with ioctl SGX_IOC_ENCLAVE_INIT call.
  *  5) User can freely enter to and exit from enclave using ENCLU instructions
  *     from userspace: the driver does nothing here.
- *  6) User proceed munmap or process with enclave dies:
- *     We destroy the enclave associated with the object.
+ *  6) User proceed munmap call or the process with enclave dies:
+ *     we destroy the enclave associated with the object.
  *
  * Locking:
  *    sc->mtx_encls:
  *      SGX ENCLS set of instructions have limitations on concurrency:
  *      we use sc->mtx_encls lock around them to prevent concurrent execution.
  *    sc->mtx lock is used to access list of created enclaves and SGX driver state.
- *    sc->mtx_epc lock is used for EPC pages allocation.
+ *    sc->mtx_epc lock is used for EPC pages allocation only.
  *
  * Eviction of EPC pages:
  *    Eviction support is not implemented in this driver, however the driver proceed
