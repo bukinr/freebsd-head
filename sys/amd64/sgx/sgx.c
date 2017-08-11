@@ -30,7 +30,7 @@
  */
 
 /*
- * Design overview
+ * Design overview.
  *
  * The driver provides character device for mmap(2) and ioctl(2) system calls
  * allowing user to manage isolated compartments ("enclaves") in user VA space.
@@ -78,25 +78,26 @@
  *     associated with user process created on step 1, create SECS physical
  *     page and map it to index 0 of enclave VM object.
  *  3) User calls ioctl SGX_IOC_ENCLAVE_ADD_PAGE: we look for enclave created
- *     on step 2, add physical page and map it to specified by user address
+ *     on step 2, create physical page and map it to specified by user address
  *     of enclave VM object.
  *  4) User finalizes enclave creation with ioctl SGX_IOC_ENCLAVE_INIT call.
  *  5) User can freely enter to and exit from enclave using ENCLU instructions
  *     from userspace: the driver does nothing here.
- *  6) User proceed munmap call or the process with enclave dies:
+ *  6) User proceed munmap(2) system call or the process with enclave dies:
  *     we destroy the enclave associated with the object.
  *
  * Locking:
  *    SGX ENCLS set of instructions have limitations on concurrency:
- *      we use sc->mtx_encls lock around them to prevent concurrent execution.
+ *    we use sc->mtx_encls lock around them to prevent concurrent execution.
  *    sc->mtx lock is used to manage list of created enclaves and SGX driver
- *      state.
+ *    state.
  *    sc->mtx_epc lock is used for EPC pages allocation only.
  *
  * Eviction of EPC pages:
  *    Eviction support is not implemented in this driver, however the driver
- *    provides management for VA (version array) pages which will be required
- *    for eviction later. VA pages are currently unused.
+ *    manages VA (version array) pages: it allocates a VA slot for each EPC
+ *    page.
+ *    VA pages and slots are currently unused.
  *    The VA page index and slot in VM object for each VM object page is
  *    uniquely determined by the following formula:
  *    va_slot_idx = page_idx % SGX_VA_PAGE_SLOTS;
