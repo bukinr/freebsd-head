@@ -32,10 +32,13 @@
 /*
  * Design overview
  *
- * This driver requires SGX support from hardware. The driver provides a
- * character device for mmap(2) and ioctl(2) facilities allowing user to
- * manage isolated compartments ("enclaves") in user VA space.
- * The driver duties is EPC pages management, data validation.
+ * The driver provides character device for mmap(2) and ioctl(2) allowing user
+ * to manage isolated compartments ("enclaves") in user VA space.
+ *
+ * The driver duties is EPC pages management, enclave management, data
+ * validation.
+ *
+ * This driver requires Intel SGX support from hardware.
  *
  * /dev/sgx:
  *    .mmap:
@@ -61,13 +64,13 @@
  *
  * Enclave lifecycle:
  *          .-- ECREATE  -- Add SECS page
- *          |   EADD     -- Add TCS, REG pages
- *   Kernel |   EEXTEND  -- Measure the page (take unique hash)
- *    space |   EPA      -- Allocate version array page
+ *   Kernel |   EADD     -- Add TCS, REG pages
+ *    space |   EEXTEND  -- Measure the page (take unique hash)
+ *    ENCLS |   EPA      -- Allocate version array page
  *          '-- EINIT    -- Finilize enclave creation
- *          .-- EENTER   -- Go to entry point of Enclave
- *   User   |   EEXIT    -- Exit back to main application
- *    space '-- ERESUME  -- Resume enclave execution (e.g. after interrupt)
+ *   User   .-- EENTER   -- Go to entry point of enclave
+ *    space |   EEXIT    -- Exit back to main application
+ *    ENCLU '-- ERESUME  -- Resume enclave execution (e.g. after interrupt)
  *  
  * Enclave lifecycle from driver point of view:
  *  1) User proceed mmap() on /dev/sgx: we allocate a VM object
@@ -84,9 +87,11 @@
  *     We destroy the enclave associated with the object.
  *
  * Locking:
- *    SGX ENCLS set of instructions have limitations on concurrency:
- *    we use sc->mtx lock around them to prevent concurrent execution.
- *    Same lock is used for
+ *    sc->mtx_encls:
+ *      SGX ENCLS set of instructions have limitations on concurrency:
+ *      we use sc->mtx_encls lock around them to prevent concurrent execution.
+ *    sc->mtx lock is used to access list of created enclaves and SGX driver state.
+ *    sc->mtx_epc lock is used for EPC pages allocation.
  *
  * Eviction of EPC pages:
  *    Eviction support is not implemented in this driver, however the driver proceed
@@ -234,9 +239,9 @@ sgx_va_slot_init(struct sgx_softc *sc,
 			return (ret);
 		}
 
-		mtx_lock(&sc->mtx);
+		mtx_lock(&sc->mtx_encls);
 		sgx_epa((void *)epc->base);
-		mtx_unlock(&sc->mtx);
+		mtx_unlock(&sc->mtx_encls);
 
 		page = PHYS_TO_VM_PAGE(epc->phys);
 
@@ -338,9 +343,9 @@ sgx_epc_page_remove(struct sgx_softc *sc,
     struct epc_page *epc)
 {
 
-	mtx_lock(&sc->mtx);
+	mtx_lock(&sc->mtx_encls);
 	sgx_eremove((void *)epc->base);
-	mtx_unlock(&sc->mtx);
+	mtx_unlock(&sc->mtx_encls);
 }
 
 static void
@@ -407,7 +412,7 @@ sgx_measure_page(struct sgx_softc *sc, struct epc_page *secs,
 	int i, j;
 	int ret;
 
-	mtx_lock(&sc->mtx);
+	mtx_lock(&sc->mtx_encls);
 
 	for (i = 0, j = 1; i < PAGE_SIZE; i += 0x100, j <<= 1) {
 		if (!(j & mrmask))
@@ -416,12 +421,12 @@ sgx_measure_page(struct sgx_softc *sc, struct epc_page *secs,
 		ret = sgx_eextend((void *)secs->base,
 		    (void *)(epc->base + i));
 		if (ret == SGX_EFAULT) {
-			mtx_unlock(&sc->mtx);
+			mtx_unlock(&sc->mtx_encls);
 			return (ret);
 		}
 	}
 
-	mtx_unlock(&sc->mtx);
+	mtx_unlock(&sc->mtx_encls);
 
 	return (0);
 }
@@ -704,7 +709,9 @@ sgx_ioctl_create(struct sgx_softc *sc, struct sgx_enclave_create *param)
 		VM_OBJECT_WUNLOCK(object);
 		goto error;
 	}
+	mtx_lock(&sc->mtx_encls);
 	ret = sgx_ecreate(&pginfo, (void *)epc->base);
+	mtx_unlock(&sc->mtx_encls);
 	if (ret == SGX_EFAULT) {
 		dprintf("%s: gp fault\n", __func__);
 		mtx_unlock(&sc->mtx);
@@ -832,15 +839,15 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 	pginfo.secinfo = &secinfo;
 	pginfo.secs = (uint64_t)secs_epc_page->base;
 
-	mtx_lock(&sc->mtx);
+	mtx_lock(&sc->mtx_encls);
 	ret = sgx_eadd(&pginfo, (void *)epc->base);
 	if (ret == SGX_EFAULT) {
 		dprintf("%s: gp fault on eadd\n", __func__);
-		mtx_unlock(&sc->mtx);
+		mtx_unlock(&sc->mtx_encls);
 		VM_OBJECT_WUNLOCK(object);
 		goto error;
 	}
-	mtx_unlock(&sc->mtx);
+	mtx_unlock(&sc->mtx_encls);
 
 	ret = sgx_measure_page(sc, enclave->secs_epc_page, epc, addp->mrmask);
 	if (ret == SGX_EFAULT) {
@@ -919,10 +926,10 @@ sgx_ioctl_init(struct sgx_softc *sc, struct sgx_enclave_init *initp)
 	secs_epc_page = enclave->secs_epc_page;
 	retry = 16;
 	do {
-		mtx_lock(&sc->mtx);
+		mtx_lock(&sc->mtx_encls);
 		ret = sgx_einit(sigstruct, (void *)secs_epc_page->base,
 		    einittoken);
-		mtx_unlock(&sc->mtx);
+		mtx_unlock(&sc->mtx_encls);
 		dprintf("%s: sgx_einit returned %d\n", __func__, ret);
 	} while (ret == SGX_UNMASKED_EVENT && retry--);
 
@@ -1086,8 +1093,9 @@ sgx_load(void)
 	if ((cpu_stdext_feature & CPUID_STDEXT_SGX) == 0)
 		return (ENXIO);
 
-	mtx_init(&sc->mtx, "SGX", NULL, MTX_DEF);
+	mtx_init(&sc->mtx_encls, "SGX ENCLS", NULL, MTX_DEF);
 	mtx_init(&sc->mtx_epc, "SGX EPC area", NULL, MTX_DEF);
+	mtx_init(&sc->mtx, "SGX driver", NULL, MTX_DEF);
 
 	error = sgx_get_epc_area(sc);
 	if (error) {
@@ -1128,8 +1136,9 @@ sgx_unload(void)
 
 	sgx_put_epc_area(sc);
 
-	mtx_destroy(&sc->mtx);
+	mtx_destroy(&sc->mtx_encls);
 	mtx_destroy(&sc->mtx_epc);
+	mtx_destroy(&sc->mtx);
 
 	return (0);
 }

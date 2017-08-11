@@ -66,7 +66,6 @@ struct sgx_enclave {
 	uint64_t			base;
 	uint64_t			size;
 	struct sgx_vm_handle		*vmh;
-	struct mtx			mtx;
 	TAILQ_ENTRY(sgx_enclave)	next;
 	vm_object_t			object;
 	struct epc_page			*secs_epc_page;
@@ -75,6 +74,7 @@ struct sgx_enclave {
 struct sgx_softc {
 	struct cdev			*sgx_cdev;
 	struct mtx			mtx_epc;
+	struct mtx			mtx_encls;
 	struct mtx			mtx;
 	uint64_t			epc_base;
 	uint64_t			epc_size;
