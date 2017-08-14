@@ -76,7 +76,8 @@
  *  1) User calls mmap() on /dev/sgx: we allocate a VM object
  *  2) User calls ioctl SGX_IOC_ENCLAVE_CREATE: we look for the VM object
  *     associated with user process created on step 1, create SECS physical
- *     page and map it to index 0 of enclave VM object.
+ *     page and store it in enclave's VM object queue by special index
+ *     SGX_SECS_VM_OBJECT_INDEX.
  *  3) User calls ioctl SGX_IOC_ENCLAVE_ADD_PAGE: we look for enclave created
  *     on step 2, create TCS or REG physical page and map it to specified by
  *     user address of enclave VM object.
