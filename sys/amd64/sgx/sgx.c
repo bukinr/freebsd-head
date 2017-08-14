@@ -607,6 +607,12 @@ sgx_pg_fault(vm_object_t object, vm_ooffset_t offset,
     int prot, vm_page_t *mres)
 {
 
+	/*
+	 * The purpose of this trivial handler is to handle the race.
+	 * User might access the mmaped region before or during the
+	 * enclave create ioctl is run. 
+	 */
+
 	dprintf("%s: offset 0x%lx\n", __func__, offset);
 
 	return (VM_PAGER_FAIL);
