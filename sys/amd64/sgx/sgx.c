@@ -843,6 +843,10 @@ sgx_ioctl_add_page(struct sgx_softc *sc,
 
 	page_type = (secinfo.flags & SECINFO_FLAGS_PT_M) >>
 	    SECINFO_FLAGS_PT_S;
+	if (page_type != SGX_PT_TCS && page_type != SGX_PT_REG) {
+		dprintf("%s: page can't be added.\n", __func__);
+		goto error;
+	}
 	if (page_type == SGX_PT_TCS) {
 		t = (struct tcs *)tmp_vaddr;
 		ret = sgx_tcs_validate(t);
