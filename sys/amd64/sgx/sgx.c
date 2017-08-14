@@ -1114,7 +1114,7 @@ sgx_get_epc_area(struct sgx_softc *sc)
 
 	error = vm_phys_fictitious_reg_range(sc->epc_base,
 	    sc->epc_base + sc->epc_size, VM_MEMATTR_DEFAULT);
-	if (error) { 
+	if (error) {
 		printf("%s: Can't register fictitious space.\n", __func__);
 		free(sc->epc_pages, M_SGX);
 		return (EINVAL);
