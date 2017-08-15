@@ -1172,6 +1172,7 @@ sgx_unload(void)
 
 	destroy_dev(sc->sgx_cdev);
 
+	vmem_destroy(sc->vmem_epc);
 	sgx_put_epc_area(sc);
 
 	mtx_destroy(&sc->mtx_encls);
