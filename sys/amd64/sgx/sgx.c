@@ -106,7 +106,6 @@
  *    We use sc->mtx_encls lock around them to prevent concurrent execution.
  *    sc->mtx lock is used to manage list of created enclaves and the state of
  *    SGX driver.
- *    sc->mtx_epc lock is used for EPC pages allocation only.
  *
  * Eviction of EPC pages:
  *    Eviction support is not implemented in this driver, however the driver
@@ -132,6 +131,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/conf.h>
 #include <sys/module.h>
 #include <sys/proc.h>
+#include <sys/vmem.h>
 #include <sys/vmmeter.h>
 
 #include <vm/vm.h>
@@ -166,45 +166,18 @@ __FBSDID("$FreeBSD$");
 static struct cdev_pager_ops sgx_pg_ops;
 struct sgx_softc sgx_sc;
 
-#ifdef	DEBUG
-static int
-sgx_count_epc_pages(struct sgx_softc *sc)
-{
-	struct epc_page *epc;
-	int cnt;
-	int i;
-
-	cnt = 0;
-
-	for (i = 0; i < sc->npages; i++) {
-		epc = &sc->epc_pages[i];
-		if (epc->used == 0)
-			cnt++;
-	}
-
-	return (cnt);
-}
-#endif
-
 static int
 sgx_get_epc_page(struct sgx_softc *sc, struct epc_page **epc0)
 {
-	struct epc_page *epc;
+	vmem_addr_t addr;
 	int i;
 
-	mtx_lock(&sc->mtx_epc);
-
-	for (i = 0; i < sc->npages; i++) {
-		epc = &sc->epc_pages[i];
-		if (epc->used == 0) {
-			epc->used = 1;
-			mtx_unlock(&sc->mtx_epc);
-			*epc0 = epc;
-			return (0);
-		}
+	if (vmem_alloc(sc->vmem_epc, PAGE_SIZE, M_FIRSTFIT | M_NOWAIT,
+	    &addr) == 0) {
+		i = (addr - sc->epc_base) / PAGE_SIZE;
+		*epc0 = &sc->epc_pages[i];
+		return (0);
 	}
-
-	mtx_unlock(&sc->mtx_epc);
 
 	return (ENOMEM);
 }
@@ -212,12 +185,13 @@ sgx_get_epc_page(struct sgx_softc *sc, struct epc_page **epc0)
 static void
 sgx_put_epc_page(struct sgx_softc *sc, struct epc_page *epc)
 {
+	vmem_addr_t addr;
 
 	if (epc == NULL)
 		return;
 
-	KASSERT(epc->used == 1, ("Freeing unused page."));
-	epc->used = 0;
+	addr = (epc->index * PAGE_SIZE) + sc->epc_base;
+	vmem_free(sc->vmem_epc, addr, PAGE_SIZE);
 }
 
 static int
@@ -606,9 +580,6 @@ sgx_pg_dtor(void *handle)
 
 	free(vmh->enclave, M_SGX);
 	free(vmh, M_SGX);
-
-	dprintf("%s: Free epc pages: %d\n",
-	    __func__, sgx_count_epc_pages(sc));
 }
 
 static int
@@ -1118,7 +1089,15 @@ sgx_get_epc_area(struct sgx_softc *sc)
 	for (i = 0; i < sc->npages; i++) {
 		sc->epc_pages[i].base = epc_base_vaddr + SGX_PAGE_SIZE * i;
 		sc->epc_pages[i].phys = sc->epc_base + SGX_PAGE_SIZE * i;
-		sc->epc_pages[i].used = 0;
+		sc->epc_pages[i].index = i;
+	}
+
+	sc->vmem_epc = vmem_create("sgx", sc->epc_base, sc->epc_size,
+	    PAGE_SIZE, PAGE_SIZE, M_FIRSTFIT | M_WAITOK);
+	if (sc->vmem_epc == NULL) {
+		printf("%s: Can't create vmem.\n", __func__);
+		free(sc->epc_pages, M_SGX);
+		return (EINVAL);
 	}
 
 	error = vm_phys_fictitious_reg_range(sc->epc_base,
@@ -1154,7 +1133,6 @@ sgx_load(void)
 		return (ENXIO);
 
 	mtx_init(&sc->mtx_encls, "SGX ENCLS", NULL, MTX_DEF);
-	mtx_init(&sc->mtx_epc, "SGX EPC area", NULL, MTX_DEF);
 	mtx_init(&sc->mtx, "SGX driver", NULL, MTX_DEF);
 
 	error = sgx_get_epc_area(sc);
@@ -1197,7 +1175,6 @@ sgx_unload(void)
 	sgx_put_epc_area(sc);
 
 	mtx_destroy(&sc->mtx_encls);
-	mtx_destroy(&sc->mtx_epc);
 	mtx_destroy(&sc->mtx);
 
 	return (0);

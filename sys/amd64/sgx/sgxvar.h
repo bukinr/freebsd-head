@@ -60,7 +60,7 @@ struct sgx_vm_handle {
 struct epc_page {
 	uint64_t		base;
 	uint64_t		phys;
-	uint8_t			used;
+	int			index;
 };
 
 struct sgx_enclave {
@@ -74,12 +74,12 @@ struct sgx_enclave {
 
 struct sgx_softc {
 	struct cdev			*sgx_cdev;
-	struct mtx			mtx_epc;
 	struct mtx			mtx_encls;
 	struct mtx			mtx;
 	uint64_t			epc_base;
 	uint64_t			epc_size;
 	struct epc_page			*epc_pages;
+	struct vmem			*vmem_epc;
 	uint32_t			npages;
 	TAILQ_HEAD(, sgx_enclave)	enclaves;
 	uint64_t			enclave_size_max;
