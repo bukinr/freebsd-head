@@ -87,6 +87,19 @@
  *  6) User proceed munmap(2) system call (or the process with enclave dies):
  *     we destroy the enclave associated with the object.
  *
+ * EPC page types and their indexes in VM object queue:
+ *   - PT_SECS index is special and equals SGX_SECS_VM_OBJECT_INDEX (-1);
+ *   - PT_TCS and PT_REG indexes are specified by user in addr field of ioctl
+ *     request data and determined as follows:
+ *       pidx = OFF_TO_IDX(addp->addr - vmh->base);
+ *   - PT_VA index is special, created for PT_REG, PT_TCS and PT_SECS pages
+ *     and determined by formula:
+ *       va_page_idx = - SGX_VA_PAGES_OFFS - (page_idx / SGX_VA_PAGE_SLOTS);
+ *     PT_VA page can hold versions of up to 512 pages, and slot for each
+ *     page in PT_VA page is determined as follows:
+ *       va_slot_idx = page_idx % SGX_VA_PAGE_SLOTS;
+ *   - PT_TRIM is unused.
+ *
  * Locking:
  *    SGX ENCLS set of instructions have limitations on concurrency:
  *    some instructions can't be executed same time on different CPUs.
@@ -100,10 +113,6 @@
  *    manages VA (version array) pages: it allocates a VA slot for each EPC
  *    page. This will be required for eviction support in future.
  *    VA pages and slots are currently unused.
- *    The VA page index and slot in VM object for each VM object page is
- *    uniquely determined by the following formula:
- *    va_slot_idx = page_idx % SGX_VA_PAGE_SLOTS;
- *    va_page_idx = - SGX_VA_PAGES_OFFS - (page_idx / SGX_VA_PAGE_SLOTS);
  *
  * Intel® 64 and IA-32 Architectures Software Developer's Manual
  * https://software.intel.com/en-us/articles/intel-sdm
