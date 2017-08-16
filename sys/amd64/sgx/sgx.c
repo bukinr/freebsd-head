@@ -167,7 +167,7 @@ static struct cdev_pager_ops sgx_pg_ops;
 struct sgx_softc sgx_sc;
 
 static int
-sgx_get_epc_page(struct sgx_softc *sc, struct epc_page **epc0)
+sgx_get_epc_page(struct sgx_softc *sc, struct epc_page **epc)
 {
 	vmem_addr_t addr;
 	int i;
@@ -175,7 +175,7 @@ sgx_get_epc_page(struct sgx_softc *sc, struct epc_page **epc0)
 	if (vmem_alloc(sc->vmem_epc, PAGE_SIZE, M_FIRSTFIT | M_NOWAIT,
 	    &addr) == 0) {
 		i = (addr - sc->epc_base) / PAGE_SIZE;
-		*epc0 = &sc->epc_pages[i];
+		*epc = &sc->epc_pages[i];
 		return (0);
 	}
 
@@ -1095,7 +1095,7 @@ sgx_get_epc_area(struct sgx_softc *sc)
 	sc->vmem_epc = vmem_create("SGX EPC", sc->epc_base, sc->epc_size,
 	    PAGE_SIZE, PAGE_SIZE, M_FIRSTFIT | M_WAITOK);
 	if (sc->vmem_epc == NULL) {
-		printf("%s: Can't create vmem.\n", __func__);
+		printf("%s: Can't create vmem arena.\n", __func__);
 		free(sc->epc_pages, M_SGX);
 		return (EINVAL);
 	}
