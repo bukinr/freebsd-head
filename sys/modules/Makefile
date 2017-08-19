@@ -313,6 +313,7 @@ SUBDIR=	\
 	proto \
 	pseudofs \
 	${_pst} \
+	${_pt} \
 	pty  \
 	puc \
 	${_qlxge} \
@@ -706,6 +707,7 @@ _linux64=	linux64
 _linux_common=	linux_common
 _ntb=		ntb
 _pms=		pms
+_pt=		pt
 _qlxge=		qlxge
 _qlxgb=		qlxgb
 _qlxgbe=	qlxgbe
