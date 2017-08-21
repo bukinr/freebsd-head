@@ -1,0 +1,13 @@
+# $FreeBSD$
+
+.PATH: ${SRCTOP}/sys/amd64/pt
+
+KMOD=	pt
+SRCS=	pt.c ptvar.h assym.s
+#pt_support.S
+
+pt_support.o:  assym.s
+	${CC} -c -x assembler-with-cpp -DLOCORE ${CFLAGS} \
+	    ${.IMPSRC} -o ${.TARGET}
+
+.include <bsd.kmod.mk>
