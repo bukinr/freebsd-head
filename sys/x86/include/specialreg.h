@@ -387,6 +387,21 @@
 #define	TRANSMETA_VENDOR_ID	"GenuineTMx86"
 #define	UMC_VENDOR_ID		"UMC UMC UMC "
 
+/* Intel64 MSRs */
+#define	MSR_IA32_RTIT_OUTPUT_BASE	0x560	/* Trace Output Base Register (R/W) */
+#define	MSR_IA32_RTIT_OUTPUT_MASK_PTRS	0x561	/* Trace Output Mask Pointers Register (R/W) */
+#define	MSR_IA32_RTIT_CTL		0x570	/* Trace Control Register (R/W) */
+#define	MSR_IA32_RTIT_STATUS		0x571	/* Tracing Status Register (R/W) */
+#define	MSR_IA32_RTIT_CR3_MATCH		0x572	/* Trace Filter CR3 Match Register (R/W) */
+#define	MSR_IA32_RTIT_ADDR0_A		0x580	/* Region 0 Start Address (R/W) */
+#define	MSR_IA32_RTIT_ADDR0_B		0x581	/* Region 0 End Address (R/W) */
+#define	MSR_IA32_RTIT_ADDR1_A		0x582	/* Region 1 Start Address (R/W) */
+#define	MSR_IA32_RTIT_ADDR1_B		0x583	/* Region 1 End Address (R/W) */
+#define	MSR_IA32_RTIT_ADDR2_A		0x584	/* Region 2 Start Address (R/W) */
+#define	MSR_IA32_RTIT_ADDR2_B		0x585	/* Region 2 End Address (R/W) */
+#define	MSR_IA32_RTIT_ADDR3_A		0x586	/* Region 3 Start Address (R/W) */
+#define	MSR_IA32_RTIT_ADDR3_B		0x587	/* Region 3 End Address (R/W) */
+
 /*
  * Model-specific registers for the i386 family
  */
