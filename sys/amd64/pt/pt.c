@@ -136,8 +136,25 @@ static int
 pt_get_epc_area(struct pt_softc *sc)
 {
 	u_int cp[4];
+	u_int *eax;
+	u_int *ebx;
+	u_int *ecx;
 
-	cpuid_count(PT_CPUID, 0x2, cp);
+	printf("Enumerating part 1\n");
+	cpuid_count(PT_CPUID, 0, cp);
+
+	eax = &cp[0];
+	ebx = &cp[1];
+	ecx = &cp[2];
+
+	printf("Maximum valid sub-leaf Index: %x\n", cp[0]);
+	printf("b %x\n", cp[1]);
+	printf("c %x\n", cp[2]);
+
+	printf("Enumerating part 2\n");
+	cpuid_count(PT_CPUID, 1, cp);
+	printf("a %x\n", cp[0]);
+	printf("b %x\n", cp[1]);
 
 	return (0);
 }
