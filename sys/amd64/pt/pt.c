@@ -133,28 +133,27 @@ static struct cdevsw pt_cdevsw = {
 };
 
 static int
-pt_get_epc_area(struct pt_softc *sc)
+pt_enumerate(struct pt_softc *sc)
 {
 	u_int cp[4];
 	u_int *eax;
 	u_int *ebx;
 	u_int *ecx;
 
-	printf("Enumerating part 1\n");
-	cpuid_count(PT_CPUID, 0, cp);
-
 	eax = &cp[0];
 	ebx = &cp[1];
 	ecx = &cp[2];
 
+	printf("Enumerating part 1\n");
+	cpuid_count(PT_CPUID, 0, cp);
 	printf("Maximum valid sub-leaf Index: %x\n", cp[0]);
-	printf("b %x\n", cp[1]);
-	printf("c %x\n", cp[2]);
+	printf("ebx %x\n", cp[1]);
+	printf("ecx %x\n", cp[2]);
 
 	printf("Enumerating part 2\n");
 	cpuid_count(PT_CPUID, 1, cp);
-	printf("a %x\n", cp[0]);
-	printf("b %x\n", cp[1]);
+	printf("eax %x\n", cp[0]);
+	printf("ebx %x\n", cp[1]);
 
 	return (0);
 }
@@ -174,9 +173,9 @@ pt_load(void)
 	printf("%s\n", __func__);
 	mtx_init(&sc->mtx, "PT driver", NULL, MTX_DEF);
 
-	error = pt_get_epc_area(sc);
+	error = pt_enumerate(sc);
 	if (error) {
-		printf("%s: Failed to get Processor Reserved Memory area.\n",
+		printf("%s: Failed to enumerate PT features.\n",
 		    __func__);
 		return (ENXIO);
 	}
