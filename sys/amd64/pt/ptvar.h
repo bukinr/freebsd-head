@@ -34,7 +34,7 @@
 #ifndef _AMD64_PT_PTVAR_H_
 #define _AMD64_PT_PTVAR_H_
 
-#define	PT_CPUID			0x12
+#define	PT_CPUID			0x14
 
 #ifndef LOCORE
 static MALLOC_DEFINE(M_PT, "pt", "PT driver");
