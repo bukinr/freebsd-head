@@ -391,7 +391,42 @@
 #define	MSR_IA32_RTIT_OUTPUT_BASE	0x560	/* Trace Output Base Register (R/W) */
 #define	MSR_IA32_RTIT_OUTPUT_MASK_PTRS	0x561	/* Trace Output Mask Pointers Register (R/W) */
 #define	MSR_IA32_RTIT_CTL		0x570	/* Trace Control Register (R/W) */
+#define	 RTIT_CTL_TRACEEN	(1 << 0)
+#define	 RTIT_CTL_CYCEN		(1 << 1)
+#define	 RTIT_CTL_OS		(1 << 2)
+#define	 RTIT_CTL_USER		(1 << 3)
+#define	 RTIT_CTL_PWREVTEN	(1 << 4)
+#define	 RTIT_CTL_FUPONPTW	(1 << 5)
+#define	 RTIT_CTL_FABRICEN	(1 << 6)
+#define	 RTIT_CTL_CR3FILTER	(1 << 7)
+#define	 RTIT_CTL_TOPA		(1 << 8)
+#define	 RTIT_CTL_MTCEN		(1 << 9)
+#define	 RTIT_CTL_TSCEN		(1 << 10)
+#define	 RTIT_CTL_DISRETC	(1 << 11)
+#define	 RTIT_CTL_PTWEN		(1 << 12)
+#define	 RTIT_CTL_BRANCHEN	(1 << 13)
+#define	 RTIT_CTL_MTC_FREQ_S	14
+#define	 RTIT_CTL_MTC_FREQ_M	(0xf << RTIT_CTL_MTC_FREQ_S)
+#define	 RTIT_CTL_CYC_THRESH_S	19
+#define	 RTIT_CTL_CYC_THRESH_M	(0xf << RTIT_CTL_CYC_THRESH_S)
+#define	 RTIT_CTL_PSB_FREQ_S	24
+#define	 RTIT_CTL_PSB_FREQ_M	(0xf << RTIT_CTL_PSB_FREQ_S)
+#define	 RTIT_CTL_ADDR0_CFG_S	32
+#define	 RTIT_CTL_ADDR0_CFG_M	(0xf << RTIT_CTL_ADDR0_CFG_S)
+#define	 RTIT_CTL_ADDR1_CFG_S	36
+#define	 RTIT_CTL_ADDR1_CFG_M	(0xf << RTIT_CTL_ADDR1_CFG_S)
+#define	 RTIT_CTL_ADDR2_CFG_S	40
+#define	 RTIT_CTL_ADDR2_CFG_M	(0xf << RTIT_CTL_ADDR2_CFG_S)
+#define	 RTIT_CTL_ADDR3_CFG_S	44
+#define	 RTIT_CTL_ADDR3_CFG_M	(0xf << RTIT_CTL_ADDR3_CFG_S)
 #define	MSR_IA32_RTIT_STATUS		0x571	/* Tracing Status Register (R/W) */
+#define	 RTIT_STATUS_FILTEREN	(1 << 0)
+#define	 RTIT_STATUS_CONTEXTEN	(1 << 1)
+#define	 RTIT_STATUS_TRIGGEREN	(1 << 2)
+#define	 RTIT_STATUS_ERROR	(1 << 4)
+#define	 RTIT_STATUS_STOPPED	(1 << 5)
+#define	 RTIT_STATUS_PACKETBYTECNT_S	32
+#define	 RTIT_STATUS_PACKETBYTECNT_M	(0x1ffff << RTIT_STATUS_PACKETBYTECNT_S)
 #define	MSR_IA32_RTIT_CR3_MATCH		0x572	/* Trace Filter CR3 Match Register (R/W) */
 #define	MSR_IA32_RTIT_ADDR0_A		0x580	/* Region 0 Start Address (R/W) */
 #define	MSR_IA32_RTIT_ADDR0_B		0x581	/* Region 0 End Address (R/W) */
