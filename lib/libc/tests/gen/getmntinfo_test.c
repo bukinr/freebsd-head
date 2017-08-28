@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2000 Doug Rabson
+ * Copyright (c) 2017 Conrad Meyer <cem@FreeBSD.org>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -24,29 +24,63 @@
  * SUCH DAMAGE.
  */
 
+/*
+ * Limited test program for getmntinfo(3), a non-standard BSDism.
+ */
+
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
-#include <efi.h>
-#include <eficonsctl.h>
-#include <efilib.h>
-#include <stand.h>
+#include <sys/param.h>
+#include <sys/mount.h>
+#include <sys/ucred.h>
 
-EFI_HANDLE		IH;
-EFI_SYSTEM_TABLE	*ST;
-EFI_BOOT_SERVICES	*BS;
-EFI_RUNTIME_SERVICES	*RS;
+#include <errno.h>
 
-void *
-efi_get_table(EFI_GUID *tbl)
+#include <atf-c.h>
+
+static void
+check_mntinfo(struct statfs *mntinfo, int n)
 {
-	EFI_GUID *id;
 	int i;
 
-	for (i = 0; i < ST->NumberOfTableEntries; i++) {
-		id = &ST->ConfigurationTable[i].VendorGuid;
-		if (!memcmp(id, tbl, sizeof(EFI_GUID)))
-			return (ST->ConfigurationTable[i].VendorTable);
+	for (i = 0; i < n; i++) {
+		ATF_REQUIRE_MSG(mntinfo[i].f_version == STATFS_VERSION, "%ju",
+		    (uintmax_t)mntinfo[i].f_version);
+		ATF_REQUIRE(mntinfo[i].f_namemax <= sizeof(mntinfo[0].f_mntonname));
 	}
-	return (NULL);
+}
+
+ATF_TC_WITHOUT_HEAD(getmntinfo_test);
+ATF_TC_BODY(getmntinfo_test, tc)
+{
+	int nmnts;
+	struct statfs *mntinfo;
+
+	/* Test bogus mode */
+	nmnts = getmntinfo(&mntinfo, 199);
+	ATF_REQUIRE_MSG(nmnts == 0 && errno == EINVAL,
+	    "getmntinfo() succeeded; errno=%d", errno);
+
+	/* Valid modes */
+	nmnts = getmntinfo(&mntinfo, MNT_NOWAIT);
+	ATF_REQUIRE_MSG(nmnts != 0, "getmntinfo(MNT_NOWAIT) failed; errno=%d",
+	    errno);
+
+	check_mntinfo(mntinfo, nmnts);
+	memset(mntinfo, 0xdf, sizeof(*mntinfo) * nmnts);
+
+	nmnts = getmntinfo(&mntinfo, MNT_WAIT);
+	ATF_REQUIRE_MSG(nmnts != 0, "getmntinfo(MNT_WAIT) failed; errno=%d",
+	    errno);
+
+	check_mntinfo(mntinfo, nmnts);
+}
+
+ATF_TP_ADD_TCS(tp)
+{
+
+	ATF_TP_ADD_TC(tp, getmntinfo_test);
+
+	return (atf_no_error());
 }
