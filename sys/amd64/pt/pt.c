@@ -45,6 +45,9 @@ __FBSDID("$FreeBSD$");
 #include <sys/proc.h>
 #include <sys/vmem.h>
 #include <sys/vmmeter.h>
+#if 0
+#include <sys/bus.h>
+#endif
 
 #include <vm/vm.h>
 #include <vm/vm_param.h>
@@ -61,6 +64,9 @@ __FBSDID("$FreeBSD$");
 #include <machine/md_var.h>
 #include <machine/specialreg.h>
 #include <machine/cpufunc.h>
+#if 0
+#include <machine/resource.h>
+#endif
 #include <machine/pt.h>
 #include <machine/ptreg.h>
 
@@ -74,6 +80,8 @@ __FBSDID("$FreeBSD$");
 #else
 #define	dprintf(fmt, ...)
 #endif
+
+#define	LOW_MEM_LIMIT	0x100000000ul
 
 static struct cdev_pager_ops pt_pg_ops;
 struct pt_softc pt_sc;
@@ -89,7 +97,23 @@ pt_pg_ctor(void *handle, vm_ooffset_t size, vm_prot_t prot,
 static void
 pt_pg_dtor(void *handle)
 {
+	struct pt_vm_handle *vmh;
+	struct pt_softc *sc;
 
+	vmh = handle;
+	if (vmh == NULL) {
+		dprintf("%s: vmh not found.\n", __func__);
+		return;
+	}
+
+	sc = vmh->sc;
+	if (sc == NULL) {
+		dprintf("%s: sc is NULL\n", __func__);
+		return;
+	}
+
+	contigfree(vmh->base, vmh->size, M_PT);
+	free(vmh, M_PT);
 }
 
 static int
@@ -117,10 +141,71 @@ pt_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 	return (0);
 }
 
+#if 0
+static struct resource *
+pt_alloc(device_t dev, int *res_id, size_t size)
+{
+	struct resource *res;
+
+	res = bus_alloc_resource(dev, SYS_RES_MEMORY, res_id, LOW_MEM_LIMIT,
+	    ~0, size, RF_ACTIVE);
+	if (res == NULL) {
+		return (NULL);
+	}
+
+	return (res);
+}
+#endif
+
 static int
 pt_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
     vm_size_t mapsize, struct vm_object **objp, int nprot)
 {
+	struct pt_vm_handle *vmh;
+	struct pt_softc *sc;
+
+	sc = &pt_sc;
+
+	dprintf("%s: mapsize 0x%lx, offset %lx\n",
+	    __func__, mapsize, *offset);
+
+	vmh = malloc(sizeof(struct pt_vm_handle),
+	    M_PT, M_WAITOK | M_ZERO);
+	vmh->sc = sc;
+	vmh->size = mapsize;
+
+#if 0
+	vmh->phys_res_id = 0;
+	vmh->phys_res = pt_alloc(sc->dev, &map->phys_res_id, mapsize);
+	if (vmh->phys_res == NULL) {
+		printf("Can't alloc phys mem\n");
+		free(vmh, M_PT);
+		return (EINVAL);
+	}
+
+	vmh->phys_base_addr = rman_get_start(vmh->phys_res);
+	printf("%s: phys addr 0x%lx\n", __func__, (uint64_t)vmh->phys_base_addr);
+#endif
+	vmh->base = contigmalloc(mapsize, M_PT, M_NOWAIT,
+	    0		/* low */,
+	    ~0		/* high */,
+	    PAGE_SIZE	/* alignment */,
+	    0		/* boundary */);
+	if (vmh->base == NULL) {
+		printf("Can't alloc phys mem\n");
+		free(vmh, M_PT);
+		return (EINVAL);
+	}
+
+	vmh->mem = cdev_pager_allocate(vmh, OBJT_MGTDEVICE, &pt_pg_ops,
+	    mapsize, nprot, *offset, NULL);
+	if (vmh->mem == NULL) {
+		contigfree(vmh->base, vmh->size, M_PT);
+		free(vmh, M_PT);
+		return (ENOMEM);
+	}
+
+	*objp = vmh->mem;
 
 	return (0);
 }
@@ -188,6 +273,33 @@ pt_load(void)
 
 	printf("%s\n", __func__);
 	printf("PT initialized\n");
+
+	wrmsr(MSR_IA32_RTIT_STATUS, 0);
+
+#if 0
+	uint64_t base;
+	uint64_t base1;
+
+	//base = (intptr_t)kmem_alloc_contig(kmem_arena,
+	//	2048 * 1024 * 1024, M_ZERO, 0, ~0, PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
+
+	uint64_t sz;
+
+	sz = (5UL * 1024 * 1024 * 1024);
+	base = (uint64_t)contigmalloc(sz, M_PT, M_WAITOK,
+	    0 /* low */, ~0 /* high */,
+	    0 /* alignment */, 0 /* boundary */);
+	base1 = (uint64_t)contigmalloc(sz, M_PT, M_WAITOK,
+	    0 /* low */, ~0 /* high */,
+	    0 /* alignment */, 0 /* boundary */);
+
+	printf("base %lx\n", base);
+	printf("base1 %lx\n", base1);
+	if (base)
+		contigfree((void *)base, sz, M_PT);
+	if (base1)
+		contigfree((void *)base1, sz, M_PT);
+#endif
 
 	return (0);
 }
