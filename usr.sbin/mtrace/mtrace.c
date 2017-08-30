@@ -56,24 +56,68 @@ __FBSDID("$FreeBSD$");
 #define	round_up(x,y) (((x) + (y) - 1) & ~((y)-1))
 #define	round_down(x,y) ((x) & ~((y)-1))
 
+#define	PT_MAGIC	0xA5
+
+struct pt_test {
+	uint64_t	test;
+};
+
+#define	PT_IOC_TEST \
+	_IOW(PT_MAGIC, 0x00, struct pt_test)
+
 int
 main(int argc __unused, char *argv[] __unused)
 {
 	void *base;
+	int error;
 	int fd;
 
-	fd = open("/dev/ipt", O_RDONLY);
+	fd = open("/dev/ipt", O_RDWR);
 	if (fd < 0) {
 		printf("Can't open /dev/ipt\n");
 		return (1);
 	}
 
-	base = mmap(NULL, 2 * 1024 * 1024, 0, MAP_SHARED, fd, 0);
+	base = mmap(NULL, 2 * 1024 * 1024, PROT_READ, MAP_SHARED, fd, 0);
+	//base = mmap(NULL, 2 * 1024 * 1024, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_SHARED, fd, 0);
 	if (base == MAP_FAILED) {
 		printf("mmap failed: err %d\n", errno);
 		return (-1);
 	}
 	printf("base is %lx\n", (uint64_t)base);
+	uint64_t *addr;
+	addr = (uint64_t *)base;
+
+	//printf("*base %lx\n", addr[0]);
+	//addr[0] = 1;
+	//printf("*base %lx\n", addr[0]);
+
+	struct pt_test data;
+	pid_t pid;
+	char *my_argv[4];
+
+	//my_argv[0] = strdup("/bin/sleep");
+	//my_argv[1] = strdup("0");
+	my_argv[0] = strdup("/home/br/test");
+	my_argv[1] = NULL; //strdup("-a");
+	my_argv[2] = NULL;
+	my_argv[3] = NULL;
+
+	pid = fork();
+
+	if (pid == 0) {
+		/* Child */
+		error = ioctl(fd, PT_IOC_TEST, &data);
+		//while (1);
+		execve("/home/br/test", my_argv, NULL);
+	} else {
+		/* Parent */
+		//error = ioctl(fd, PT_IOC_TEST, &data);
+		sleep(2);
+		printf("while loop\n");
+		while (1)
+			printf("%lx %lx %lx %lx %lx\n", addr[0], addr[1], addr[2], addr[3], addr[4]);
+	}
 
 	return (0);
 }

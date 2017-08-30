@@ -69,6 +69,7 @@ __FBSDID("$FreeBSD$");
 #endif
 #include <machine/pt.h>
 #include <machine/ptreg.h>
+#include <machine/pcb.h>
 
 #include <amd64/pt/ptvar.h>
 
@@ -112,6 +113,12 @@ pt_pg_dtor(void *handle)
 		return;
 	}
 
+	uint64_t *addr;
+	addr = (uint64_t *)vmh->base;
+	printf("%lx %lx\n", addr[0], addr[1]);
+
+	printf("output base ptr %lx\n", rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS));
+
 	contigfree(vmh->base, vmh->size, M_PT);
 	free(vmh, M_PT);
 }
@@ -120,10 +127,52 @@ static int
 pt_pg_fault(vm_object_t object, vm_ooffset_t offset,
     int prot, vm_page_t *mres)
 {
+	vm_pindex_t pidx;
+	struct pt_vm_handle *vmh;
+	vm_page_t page;
+	vm_offset_t paddr;
+	struct pt_softc *sc;
 
-	dprintf("%s: offset 0x%lx\n", __func__, offset);
+	sc = &pt_sc;
 
-	return (VM_PAGER_FAIL);
+	printf("%s: offset 0x%lx\n", __func__, offset);
+
+	vmh = object->handle;
+	if (vmh == NULL)
+		return (VM_PAGER_FAIL);
+
+	pidx = OFF_TO_IDX(offset);
+
+	paddr = vtophys(vmh->base) + offset;
+	//paddr = sc->base + offset;
+
+	if (((*mres)->flags & PG_FICTITIOUS) != 0) {
+		printf("PG_FICTITIOUS\n");
+		/*
+		 * If the passed in result page is a fake page, update it with
+		 * the new physical address.
+		 */
+		page = *mres;
+		vm_page_updatefake(page, paddr, object->memattr);
+	} else {
+		/*
+		 * Replace the passed in reqpage page with our own fake page and
+		 * free up the all of the original pages.
+		 */
+
+		VM_OBJECT_WUNLOCK(object);
+		page = vm_page_getfake(paddr, object->memattr);
+		VM_OBJECT_WLOCK(object);
+		vm_page_lock(*mres);
+		vm_page_free(*mres);
+		vm_page_unlock(*mres);
+		*mres = page;
+		vm_page_insert(page, object, pidx);
+	}
+
+	page->valid = VM_PAGE_BITS_ALL;
+
+	return (VM_PAGER_OK);
 }
 
 static struct cdev_pager_ops pt_pg_ops __unused = {
@@ -137,6 +186,36 @@ static int
 pt_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
     struct thread *td)
 {
+	pmap_t pmap;
+	uint64_t cr3;
+	struct pt_softc *sc;
+	uint64_t reg;
+
+	sc = &pt_sc;
+
+	pmap = vmspace_pmap(td->td_proc->p_vmspace);
+	cr3 = pmap->pm_cr3;
+
+	wrmsr(MSR_IA32_RTIT_CTL, 0);
+
+	printf("cr3 %lx\n", cr3);
+	wrmsr(MSR_IA32_RTIT_CR3_MATCH, cr3);
+	wrmsr(MSR_IA32_RTIT_OUTPUT_BASE, sc->base);
+
+	reg = (sc->size - 1);
+	printf("Writing reg %lx\n", reg);
+	wrmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS, reg);
+
+	/* Enable tracing */
+
+	printf("Enabling trace\n");
+	reg = RTIT_CTL_TRACEEN;
+	reg |= RTIT_CTL_USER;
+	reg |= RTIT_CTL_CR3FILTER;
+	reg |= RTIT_CTL_BRANCHEN;
+	//reg |= RTIT_CTL_TSCEN;
+	//reg |= RTIT_CTL_MTCEN;
+	wrmsr(MSR_IA32_RTIT_CTL, reg);
 
 	return (0);
 }
@@ -166,7 +245,7 @@ pt_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 
 	sc = &pt_sc;
 
-	dprintf("%s: mapsize 0x%lx, offset %lx\n",
+	printf("%s: mapsize 0x%lx, offset %lx\n",
 	    __func__, mapsize, *offset);
 
 	vmh = malloc(sizeof(struct pt_vm_handle),
@@ -186,10 +265,11 @@ pt_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 	vmh->phys_base_addr = rman_get_start(vmh->phys_res);
 	printf("%s: phys addr 0x%lx\n", __func__, (uint64_t)vmh->phys_base_addr);
 #endif
-	vmh->base = contigmalloc(mapsize, M_PT, M_NOWAIT,
-	    0		/* low */,
-	    ~0		/* high */,
-	    PAGE_SIZE	/* alignment */,
+
+	vmh->base = contigmalloc(mapsize, M_PT, M_NOWAIT | M_ZERO,
+	    0,		/* low */
+	    ~0,		/* high */
+	    PAGE_SIZE,	/* alignment */
 	    0		/* boundary */);
 	if (vmh->base == NULL) {
 		printf("Can't alloc phys mem\n");
@@ -197,13 +277,34 @@ pt_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 		return (EINVAL);
 	}
 
-	vmh->mem = cdev_pager_allocate(vmh, OBJT_MGTDEVICE, &pt_pg_ops,
+	sc->base = (uint64_t)vtophys(vmh->base); /* TEST */
+	sc->size = vmh->size; /* TEST */
+
+	vmh->mem = cdev_pager_allocate(vmh, OBJT_DEVICE, &pt_pg_ops,
 	    mapsize, nprot, *offset, NULL);
 	if (vmh->mem == NULL) {
+		printf("cdev_pager_allocate failed\n");
 		contigfree(vmh->base, vmh->size, M_PT);
 		free(vmh, M_PT);
 		return (ENOMEM);
 	}
+
+#if 0
+	vm_object_t object;
+	object = vmh->mem;
+
+	int req;
+	req = VM_ALLOC_NORMAL; //| VM_ALLOC_NOOBJ;
+
+	VM_OBJECT_WLOCK(vmh->mem);
+	sc->page = vm_page_alloc_contig(vmh->mem, 0, req, mapsize/PAGE_SIZE,
+	    0, VM_MAX_ADDRESS,
+	    PAGE_SIZE, 0,
+	    VM_MEMATTR_UNCACHEABLE);
+	VM_OBJECT_WUNLOCK(vmh->mem);
+
+	printf("%s: page is %lx\n", __func__, (uint64_t)sc->page);
+#endif
 
 	*objp = vmh->mem;
 
@@ -274,6 +375,7 @@ pt_load(void)
 	printf("%s\n", __func__);
 	printf("PT initialized\n");
 
+	wrmsr(MSR_IA32_RTIT_CTL, 0);
 	wrmsr(MSR_IA32_RTIT_STATUS, 0);
 
 #if 0
