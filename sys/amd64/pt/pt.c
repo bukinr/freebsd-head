@@ -45,9 +45,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/proc.h>
 #include <sys/vmem.h>
 #include <sys/vmmeter.h>
-#if 0
-#include <sys/bus.h>
-#endif
 
 #include <vm/vm.h>
 #include <vm/vm_param.h>
@@ -64,9 +61,6 @@ __FBSDID("$FreeBSD$");
 #include <machine/md_var.h>
 #include <machine/specialreg.h>
 #include <machine/cpufunc.h>
-#if 0
-#include <machine/resource.h>
-#endif
 #include <machine/pt.h>
 #include <machine/ptreg.h>
 #include <machine/pcb.h>
@@ -81,8 +75,6 @@ __FBSDID("$FreeBSD$");
 #else
 #define	dprintf(fmt, ...)
 #endif
-
-#define	LOW_MEM_LIMIT	0x100000000ul
 
 static struct cdev_pager_ops pt_pg_ops;
 struct pt_softc pt_sc;
@@ -220,22 +212,6 @@ pt_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 	return (0);
 }
 
-#if 0
-static struct resource *
-pt_alloc(device_t dev, int *res_id, size_t size)
-{
-	struct resource *res;
-
-	res = bus_alloc_resource(dev, SYS_RES_MEMORY, res_id, LOW_MEM_LIMIT,
-	    ~0, size, RF_ACTIVE);
-	if (res == NULL) {
-		return (NULL);
-	}
-
-	return (res);
-}
-#endif
-
 static int
 pt_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
     vm_size_t mapsize, struct vm_object **objp, int nprot)
@@ -252,20 +228,6 @@ pt_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 	    M_PT, M_WAITOK | M_ZERO);
 	vmh->sc = sc;
 	vmh->size = mapsize;
-
-#if 0
-	vmh->phys_res_id = 0;
-	vmh->phys_res = pt_alloc(sc->dev, &map->phys_res_id, mapsize);
-	if (vmh->phys_res == NULL) {
-		printf("Can't alloc phys mem\n");
-		free(vmh, M_PT);
-		return (EINVAL);
-	}
-
-	vmh->phys_base_addr = rman_get_start(vmh->phys_res);
-	printf("%s: phys addr 0x%lx\n", __func__, (uint64_t)vmh->phys_base_addr);
-#endif
-
 	vmh->base = contigmalloc(mapsize, M_PT, M_NOWAIT | M_ZERO,
 	    0,		/* low */
 	    ~0,		/* high */

@@ -43,13 +43,7 @@ struct pt_vm_handle {
 	struct pt_softc		*sc;
 	vm_object_t		mem;
 	vm_size_t		size;
-
 	void *			base;
-#if 0
-	int			phys_res_id;
-	struct resource *	phys_res;
-	vm_offset_t		phys_base_addr;
-#endif
 };
 
 struct pt_softc {

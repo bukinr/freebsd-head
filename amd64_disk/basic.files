@@ -23,6 +23,7 @@ bin/tcsh
 boot/kernel/kernel
 boot/kernel/linux_common.ko
 boot/kernel/linux64.ko
+boot/kernel/pt.ko
 boot/kernel/sgx.ko
 boot/kernel/sgx_linux.ko
 boot/loader
