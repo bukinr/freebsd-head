@@ -7,7 +7,7 @@ SHLIBDIR?=	/lib
 
 LIBIPTSRC=	${SRCTOP}/contrib/libipt
 
-.PATH:	${LIBIPTSRC}/src ${LIBIPTSRC}/src/posix ${LIBIPTSRC}/include
+.PATH:	${LIBIPTSRC}/src ${LIBIPTSRC}/src/posix ${LIBIPTSRC}/include ${LIBIPTSRC}/internal/include
 
 LIB=	ipt
 SHLIB_MAJOR=0
@@ -18,7 +18,7 @@ SRCS+=	init.c pt_cpuid.c pt_section_posix.c
 CFLAGS+=-I${LIBIPTSRC}/internal/include -I${LIBIPTSRC}/internal/include/posix -I${LIBIPTSRC}/include -I${.CURDIR}
 CFLAGS+=-DPT_VERSION_BUILD=0 -DPT_VERSION_EXT=\"\" -DPT_VERSION_MAJOR=1 -DPT_VERSION_MINOR=6
 
-INCS=	intel-pt.h
+INCS=	intel-pt.h pt_cpu.h pt_last_ip.h pt_time.h pt_compiler.h
 INCSDIR=${INCLUDEDIR}/libipt
 
 LIBADD=	
