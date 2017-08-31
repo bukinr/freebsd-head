@@ -110,6 +110,7 @@ _LIBRARIES=	\
 		hx509 \
 		ifconfig \
 		ipsec \
+		ipt \
 		jail \
 		kadm5clnt \
 		kadm5srv \

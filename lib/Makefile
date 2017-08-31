@@ -51,6 +51,7 @@ SUBDIR=	${SUBDIR_BOOTSTRAP} \
 	libgeom \
 	libifconfig \
 	libipsec \
+	libipt \
 	libjail \
 	libkiconv \
 	libkvm \

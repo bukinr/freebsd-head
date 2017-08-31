@@ -52,6 +52,7 @@ __FBSDID("$FreeBSD$");
 #include <wctype.h>
 
 #include <gelf.h>
+#include <libipt/intel-pt.h>
 
 #define	round_up(x,y) (((x) + (y) - 1) & ~((y)-1))
 #define	round_down(x,y) ((x) & ~((y)-1))
@@ -118,6 +119,13 @@ main(int argc __unused, char *argv[] __unused)
 		while (1)
 			printf("%lx %lx %lx %lx %lx\n", addr[0], addr[1], addr[2], addr[3], addr[4]);
 	}
+
+	struct pt_packet_decoder *decoder;
+	struct pt_config config;
+
+	memset(&config, 0, sizeof(config));
+	pt_config_init(&config);
+	decoder = pt_pkt_alloc_decoder(&config);
 
 	return (0);
 }

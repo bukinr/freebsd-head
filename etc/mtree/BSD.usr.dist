@@ -46,6 +46,8 @@
         ..
         i18n
         ..
+        libipt
+        ..
         libxo
             encoder
             ..

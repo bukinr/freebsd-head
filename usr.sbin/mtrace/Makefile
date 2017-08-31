@@ -2,6 +2,6 @@
 # $FreeBSD$
 
 PROG=	mtrace
-LIBADD=	elf
+LIBADD=	elf ipt
 
 .include <bsd.prog.mk>
