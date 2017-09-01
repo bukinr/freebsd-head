@@ -4,4 +4,6 @@
 PROG=	mtrace
 LIBADD=	elf ipt
 
+NO_SHARED=	yes
+
 .include <bsd.prog.mk>
