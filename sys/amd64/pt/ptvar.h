@@ -50,6 +50,7 @@ struct pt_softc {
 	uint64_t			base;
 	uint64_t			size;
 	vm_page_t			page;
+	uint64_t			*topa;
 
 	struct cdev			*pt_cdev;
 	struct mtx			mtx_encls;

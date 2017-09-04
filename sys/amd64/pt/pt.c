@@ -45,6 +45,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/proc.h>
 #include <sys/vmem.h>
 #include <sys/vmmeter.h>
+#include <sys/bus.h>
 
 #include <vm/vm.h>
 #include <vm/vm_param.h>
@@ -58,9 +59,12 @@ __FBSDID("$FreeBSD$");
 #include <vm/vm_radix.h>
 #include <vm/pmap.h>
 
+#include <machine/intr_machdep.h>
+#include <x86/apicvar.h>
+#include <machine/cpu.h>
+#include <machine/cpufunc.h>
 #include <machine/md_var.h>
 #include <machine/specialreg.h>
-#include <machine/cpufunc.h>
 #include <machine/pt.h>
 #include <machine/ptreg.h>
 #include <machine/pcb.h>
@@ -109,6 +113,7 @@ pt_pg_dtor(void *handle)
 	addr = (uint64_t *)vmh->base;
 	printf("%lx %lx\n", addr[0], addr[1]);
 
+	printf("output base %lx\n", rdmsr(MSR_IA32_RTIT_OUTPUT_BASE));
 	printf("output base ptr %lx\n", rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS));
 
 	contigfree(vmh->base, vmh->size, M_PT);
@@ -136,7 +141,7 @@ pt_pg_fault(vm_object_t object, vm_ooffset_t offset,
 	pidx = OFF_TO_IDX(offset);
 
 	paddr = vtophys(vmh->base) + offset;
-	//paddr = sc->base + offset;
+	paddr = vtophys(sc->topa) + offset;
 
 	if (((*mres)->flags & PG_FICTITIOUS) != 0) {
 		printf("PG_FICTITIOUS\n");
@@ -173,6 +178,14 @@ static struct cdev_pager_ops pt_pg_ops __unused = {
 	.cdev_pg_fault = pt_pg_fault,
 };
 
+#if 0
+static void
+pt_intr(void)
+{
+
+	printf("pt intr\n");
+}
+#endif
 
 static int
 pt_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
@@ -188,14 +201,20 @@ pt_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 	pmap = vmspace_pmap(td->td_proc->p_vmspace);
 	cr3 = pmap->pm_cr3;
 
+	lapic_enable_pmc();
+
 	wrmsr(MSR_IA32_RTIT_CTL, 0);
 
 	printf("cr3 %lx\n", cr3);
 	wrmsr(MSR_IA32_RTIT_CR3_MATCH, cr3);
-	wrmsr(MSR_IA32_RTIT_OUTPUT_BASE, sc->base);
+	//wrmsr(MSR_IA32_RTIT_OUTPUT_BASE, sc->base);
+	wrmsr(MSR_IA32_RTIT_OUTPUT_BASE, (uint64_t)vtophys(sc->topa));
 
 	reg = (sc->size - 1);
 	printf("Writing reg %lx\n", reg);
+
+	//topa
+	reg = 0x7f;
 	wrmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS, reg);
 
 	/* Enable tracing */
@@ -205,7 +224,8 @@ pt_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 	reg |= RTIT_CTL_USER;
 	reg |= RTIT_CTL_CR3FILTER;
 	reg |= RTIT_CTL_BRANCHEN;
-	//reg |= RTIT_CTL_TSCEN;
+	reg |= RTIT_CTL_TSCEN;
+	reg |= RTIT_CTL_TOPA;
 	//reg |= RTIT_CTL_MTCEN;
 	wrmsr(MSR_IA32_RTIT_CTL, reg);
 
@@ -339,6 +359,30 @@ pt_load(void)
 
 	wrmsr(MSR_IA32_RTIT_CTL, 0);
 	wrmsr(MSR_IA32_RTIT_STATUS, 0);
+
+	uint64_t *topa;
+	void *buf;
+	int i;
+
+	//uint64_t *topa_entry;
+
+	topa = malloc(PAGE_SIZE, M_PT, M_ZERO);
+
+	for (i = 0; i < 1; i++) {
+		buf = contigmalloc(2 * 1024 * 1024, M_PT, M_NOWAIT | M_ZERO,
+		    0,		/* low */
+		    ~0,		/* high */
+		    PAGE_SIZE,	/* alignment */
+		    0		/* boundary */);
+		if (buf == NULL) {
+			printf("Can't allocate topa\n");
+			return (1);
+		}
+		topa[i] = (uint64_t)vtophys(buf) | TOPA_SIZE_2M | TOPA_INT;
+	}
+	topa[1] = vtophys(topa) | TOPA_END;
+
+	sc->topa = topa;
 
 #if 0
 	uint64_t base;

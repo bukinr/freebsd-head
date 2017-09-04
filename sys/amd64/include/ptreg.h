@@ -58,4 +58,26 @@
 #define	S1_EBX_PFE_BITMAP_S	16	/* Bitmap of supported Configurable PSB Frequency encoding */
 #define	S1_EBX_PFE_BITMAP_M	(0xffff << S1_EBX_PFE_BITMAP_S)
 
+#define	TOPA_SIZE_S	6
+#define	TOPA_SIZE_M	(0xf << TOPA_SIZE_S)
+#define	TOPA_SIZE_4K	(0 << TOPA_SIZE_S)
+#define	TOPA_SIZE_8K	(1 << TOPA_SIZE_S)
+#define	TOPA_SIZE_16K	(2 << TOPA_SIZE_S)
+#define	TOPA_SIZE_32K	(3 << TOPA_SIZE_S)
+#define	TOPA_SIZE_64K	(4 << TOPA_SIZE_S)
+#define	TOPA_SIZE_128K	(5 << TOPA_SIZE_S)
+#define	TOPA_SIZE_256K	(6 << TOPA_SIZE_S)
+#define	TOPA_SIZE_512K	(7 << TOPA_SIZE_S)
+#define	TOPA_SIZE_1M	(8 << TOPA_SIZE_S)
+#define	TOPA_SIZE_2M	(9 << TOPA_SIZE_S)
+#define	TOPA_SIZE_4M	(10 << TOPA_SIZE_S)
+#define	TOPA_SIZE_8M	(11 << TOPA_SIZE_S)
+#define	TOPA_SIZE_16M	(12 << TOPA_SIZE_S)
+#define	TOPA_SIZE_32M	(13 << TOPA_SIZE_S)
+#define	TOPA_SIZE_64M	(14 << TOPA_SIZE_S)
+#define	TOPA_SIZE_128M	(15 << TOPA_SIZE_S)
+#define	TOPA_STOP	(1 << 4)
+#define	TOPA_INT	(1 << 2)
+#define	TOPA_END	(1 << 0)
+
 #endif /* !_MACHINE_PTREG_H_ */
