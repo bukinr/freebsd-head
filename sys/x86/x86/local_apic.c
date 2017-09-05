@@ -735,6 +735,8 @@ native_lapic_setup(int boot)
 	int elvt_count;
 	int i;
 
+	printf("%s\n", __func__);
+
 	saveintr = intr_disable();
 
 	la = &lapics[lapic_id()];
@@ -818,41 +820,46 @@ native_lapic_setup(int boot)
 static void
 native_lapic_reenable_pmc(void)
 {
-#ifdef HWPMC_HOOKS
 	uint32_t value;
+
+	printf("%s\n", __func__);
 
 	value = lapic_read32(LAPIC_LVT_PCINT);
 	value &= ~APIC_LVT_M;
 	lapic_write32(LAPIC_LVT_PCINT, value);
-#endif
 }
 
-#ifdef HWPMC_HOOKS
 static void
 lapic_update_pmc(void *dummy)
 {
 	struct lapic *la;
 
+	printf("%s\n", __func__);
+
 	la = &lapics[lapic_id()];
 	lapic_write32(LAPIC_LVT_PCINT, lvt_mode(la, APIC_LVT_PMC,
 	    lapic_read32(LAPIC_LVT_PCINT)));
 }
-#endif
 
 static int
 native_lapic_enable_pmc(void)
 {
-#ifdef HWPMC_HOOKS
 	u_int32_t maxlvt;
+
+	printf("%s\n", __func__);
 
 	/* Fail if the local APIC is not present. */
 	if (!x2apic_mode && lapic_map == NULL)
 		return (0);
 
+	printf("%s\n", __func__);
+
 	/* Fail if the PMC LVT is not present. */
 	maxlvt = (lapic_read32(LAPIC_VERSION) & APIC_VER_MAXLVT) >> MAXLVTSHIFT;
 	if (maxlvt < APIC_LVT_PMC)
 		return (0);
+
+	printf("%s\n", __func__);
 
 	lvts[APIC_LVT_PMC].lvt_masked = 0;
 
@@ -873,15 +880,11 @@ native_lapic_enable_pmc(void)
 		lapic_update_pmc(NULL);
 #endif
 	return (1);
-#else
-	return (0);
-#endif
 }
 
 static void
 native_lapic_disable_pmc(void)
 {
-#ifdef HWPMC_HOOKS
 	u_int32_t maxlvt;
 
 	/* Fail if the local APIC is not present. */
@@ -900,7 +903,6 @@ native_lapic_disable_pmc(void)
 	KASSERT(mp_ncpus == 1 || smp_started, ("hwpmc unloaded too early"));
 #endif
 	smp_rendezvous(NULL, lapic_update_pmc, NULL, NULL);
-#endif
 }
 
 static void

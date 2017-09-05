@@ -31,13 +31,16 @@
 __FBSDID("$FreeBSD$");
 
 #include <sys/param.h>
+#include <sys/event.h>
 #include <sys/stat.h>
 #include <sys/errno.h>
 #include <sys/ioctl.h>
 #include <sys/sysctl.h>
 #include <sys/mman.h>
 #include <sys/uio.h>
+#include <sys/signal.h>
 
+#include <signal.h>
 #include <ctype.h>
 #include <err.h>
 #include <errno.h>
@@ -78,6 +81,15 @@ struct pt_test {
 		memset(field, 0, sizeof(field));		\
 		snprintf(field, sizeof(field), __VA_ARGS__);	\
 	} while (0)
+
+static int mtrace_kq;
+
+static void
+sigusr1(int sig __unused)
+{
+
+	printf("signal\n");
+}
 
 static uint64_t
 sext(uint64_t val, uint8_t sign)
@@ -170,38 +182,14 @@ print_ip_payload(struct ptdump_buffer *buffer, uint64_t offset __unused,
 }
 
 static int
-init_ipt(void *base)
+dump_packets(struct pt_packet_decoder *decoder,
+    const struct pt_config *config __unused)
 {
-	struct pt_packet_decoder *decoder;
-	struct pt_config config;
-	int error;
-
-	memset(&config, 0, sizeof(config));
-	pt_config_init(&config);
-
-	error = pt_cpu_read(&config.cpu);
-	printf("err %d\n", error);
-	error = pt_cpu_errata(&config.errata, &config.cpu);
-	printf("err %d\n", error);
-
-	//config->begin = buffer;
-	//config->end = buffer + size;
-	config.begin = (uint8_t *)base;
-	config.end = (uint8_t *)((uint64_t)base + (2*1024*1024));
-
-	decoder = pt_pkt_alloc_decoder(&config);
-	if (decoder == NULL)
-		printf("Can't allocate decoder\n");
-	else
-		printf("Decoder allocated\n");
-
-	//error = pt_pkt_sync_set(decoder, 0ull);
-	error = pt_pkt_sync_forward(decoder);
-
 	uint64_t offset;
 	struct pt_packet packet;
 	struct ptdump_buffer buffer;
 	const char *sep;
+	int error;
 
 	sep = "";
 
@@ -255,6 +243,10 @@ init_ipt(void *base)
 			print_field(buffer.payload.standard, "%" PRIx64,
 			    packet.payload.tsc.tsc);
 			break;
+		case ppt_mtc:
+			continue;
+			print_field(buffer.opcode, "mtc");
+			break;
 		case ppt_cbr:
 			print_field(buffer.opcode, "cbr");
 			break;
@@ -270,12 +262,62 @@ init_ipt(void *base)
 			break;
 		default:
 			printf("unknown packet %d\n", packet.type);
+			continue;
 			break;
 		}
 
 		printf("%s%s: ", sep, buffer.opcode);
 		//printf(" %s\n", buffer.payload.extended);
 		printf(" %s\n", buffer.payload.standard);
+	}
+
+	return (0);
+}
+
+static int
+init_ipt(uint64_t base)
+{
+	struct pt_packet_decoder *decoder;
+	struct pt_config config;
+	int error;
+
+	memset(&config, 0, sizeof(config));
+	pt_config_init(&config);
+
+	error = pt_cpu_read(&config.cpu);
+	printf("err %d\n", error);
+	error = pt_cpu_errata(&config.errata, &config.cpu);
+	printf("err %d\n", error);
+
+	//config->begin = buffer;
+	//config->end = buffer + size;
+	config.begin = (uint8_t *)base;
+	config.end = (uint8_t *)(base + (2*1024*1024));
+
+	decoder = pt_pkt_alloc_decoder(&config);
+	if (decoder == NULL)
+		printf("Can't allocate decoder\n");
+	else
+		printf("Decoder allocated\n");
+
+	//error = pt_pkt_sync_set(decoder, 0ull);
+	error = pt_pkt_sync_forward(decoder);
+
+	//struct ptdump_tracking tracking;
+	//ptdump_tracking_init(&tracking);
+
+	while (1) {
+		error = dump_packets(decoder, &config);
+		if (error == 0)
+			break;
+
+		error = pt_pkt_sync_forward(decoder);
+		if (error < 0) {
+			if (error == -pte_eos)
+				return (0);
+		}
+
+		//ptdump_tracking_reset(tracking);
 	}
 
 	return (0);
@@ -294,8 +336,8 @@ main(int argc __unused, char *argv[] __unused)
 		return (1);
 	}
 
-	base = mmap(NULL, 2 * 1024 * 1024, PROT_READ, MAP_SHARED, fd, 0);
-	//base = mmap(NULL, 2 * 1024 * 1024, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_SHARED, fd, 0);
+	base = mmap(NULL, 32 * 1024 * 1024, PROT_READ, MAP_SHARED, fd, 0);
+	//base = mmap(NULL, 1 * 1024 * 1024, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_SHARED, fd, 0);
 	if (base == MAP_FAILED) {
 		printf("mmap failed: err %d\n", errno);
 		return (-1);
@@ -319,6 +361,11 @@ main(int argc __unused, char *argv[] __unused)
 	my_argv[2] = NULL;
 	my_argv[3] = NULL;
 
+	int ret;
+
+	if ((mtrace_kq = kqueue()) < 0)
+		printf("can't allocate kqueue\n");
+
 	pid = fork();
 
 	if (pid == 0) {
@@ -329,9 +376,32 @@ main(int argc __unused, char *argv[] __unused)
 	} else {
 		/* Parent */
 		//error = ioctl(fd, PT_IOC_TEST, &data);
-		sleep(2);
 
-		init_ipt(base);
+		struct kevent kev;
+		struct kevent tkev;
+
+		(void)signal(SIGUSR1, sigusr1);
+		EV_SET(&kev, SIGUSR1, EVFILT_SIGNAL, EV_ADD, 0, 0, NULL);
+		if (kevent(mtrace_kq, &kev, 1, NULL, 0, NULL) < 0)
+			printf("can't register kevent\n");
+		printf("kevent registered\n");
+
+		uint64_t offset;
+
+		offset = 0;
+
+		for (;;) {
+			ret = kevent(mtrace_kq, NULL, 0, &tkev, 1, NULL);
+			if (ret == -1) {
+				err(EXIT_FAILURE, "kevent wait");
+			} else if (ret > 0) {
+				init_ipt((uint64_t)base + offset);
+				offset += 2 * 1024 * 1024;
+				printf("ipt done, offset %lx\n", offset);
+				if (offset == (32 * 1024 * 1024))
+					break;
+			}
+		}
 
 		printf("while loop\n");
 		while (1);

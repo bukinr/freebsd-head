@@ -46,6 +46,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/vmem.h>
 #include <sys/vmmeter.h>
 #include <sys/bus.h>
+#include <sys/kthread.h>
 
 #include <vm/vm.h>
 #include <vm/vm_param.h>
@@ -82,11 +83,21 @@ __FBSDID("$FreeBSD$");
 
 static struct cdev_pager_ops pt_pg_ops;
 struct pt_softc pt_sc;
+static void pt_task(void *arg);
 
 static int
 pt_pg_ctor(void *handle, vm_ooffset_t size, vm_prot_t prot,
     vm_ooffset_t foff, struct ucred *cred, u_short *color)
 {
+	struct pt_softc *sc;
+	int error;
+
+	sc = &pt_sc;
+
+	error = kproc_create(&pt_task, sc, &sc->pt_proc, 0, 0, "pt signal");
+	if (error) {
+		printf("can't create kproc");
+	}
 
 	return (0);
 }
@@ -96,6 +107,9 @@ pt_pg_dtor(void *handle)
 {
 	struct pt_vm_handle *vmh;
 	struct pt_softc *sc;
+
+	wrmsr(MSR_IA32_RTIT_CTL, 0);
+	wrmsr(MSR_IA32_RTIT_STATUS, 0);
 
 	vmh = handle;
 	if (vmh == NULL) {
@@ -110,14 +124,23 @@ pt_pg_dtor(void *handle)
 	}
 
 	uint64_t *addr;
+#if 0
 	addr = (uint64_t *)vmh->base;
+#endif
+	addr = (uint64_t *)sc->topa_addr[0];
+
 	printf("%lx %lx\n", addr[0], addr[1]);
 
 	printf("output base %lx\n", rdmsr(MSR_IA32_RTIT_OUTPUT_BASE));
 	printf("output base ptr %lx\n", rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS));
 
+#if 0
 	contigfree(vmh->base, vmh->size, M_PT);
+#endif
 	free(vmh, M_PT);
+
+	sc->proc_terminate = 1;
+	wakeup(sc);
 }
 
 static int
@@ -132,7 +155,7 @@ pt_pg_fault(vm_object_t object, vm_ooffset_t offset,
 
 	sc = &pt_sc;
 
-	printf("%s: offset 0x%lx\n", __func__, offset);
+	//printf("%s: offset 0x%lx\n", __func__, offset);
 
 	vmh = object->handle;
 	if (vmh == NULL)
@@ -140,8 +163,14 @@ pt_pg_fault(vm_object_t object, vm_ooffset_t offset,
 
 	pidx = OFF_TO_IDX(offset);
 
-	paddr = vtophys(vmh->base) + offset;
-	paddr = vtophys(sc->topa) + offset;
+	//paddr = vtophys(vmh->base) + offset;
+	int i;
+	int left;
+
+	i = offset / (2 * 1024 * 1024);
+	left = offset % (2 * 1024 * 1024);
+
+	paddr = vtophys(sc->topa_addr[i]) + left;
 
 	if (((*mres)->flags & PG_FICTITIOUS) != 0) {
 		printf("PG_FICTITIOUS\n");
@@ -178,14 +207,92 @@ static struct cdev_pager_ops pt_pg_ops __unused = {
 	.cdev_pg_fault = pt_pg_fault,
 };
 
-#if 0
 static void
-pt_intr(void)
+pt_task(void *arg)
 {
+	struct pt_softc *sc;
+
+	sc = arg;
+
+	for (;;) {   
+		//mtx_lock(&sc->proc_mtx);
+		//msleep(sc, &sc->proc_mtx, PRIBIO, "jobqueue", hz / 2);
+		tsleep(sc, PRIBIO, "jobqueue", hz / 2);
+		//mtx_unlock(&sc->proc_mtx);
+
+		if (sc->proc_terminate == 1)
+			break;
+
+		if (sc->wakeup == 0)
+			continue;
+
+		//printf("kproc run\n");
+
+		struct proc *p;
+		if (sc->td) {
+			p = sc->td->td_proc;
+			PROC_LOCK(p);
+			tdsignal(sc->td, SIGUSR1);
+			PROC_UNLOCK(p);
+		}
+
+		sc->wakeup = 0;
+	}
+
+	printf("kproc exiting\n");
+
+	kproc_exit(0);
+}
+
+#define	IA32_GLOBAL_STATUS_RESET	0x390
+
+static int
+pt_intr_handler(int cpu, struct trapframe *tf)
+{
+	struct pt_softc *sc;
+	uint64_t reg;
+
+	sc = &pt_sc;
+
+	printf("e");
+
+	reg = (1UL << 55);
+	wrmsr(IA32_GLOBAL_STATUS_RESET, reg);
+
+	if (sc->td != NULL) {
+
+		sc->wakeup = 1;
+#if 0
+		/* not allowed in NMI */
+		wakeup_one(sc);
+#endif
+
+#if 0
+		struct proc *p;
+		p = sc->td->td_proc;
+		PROC_LOCK(p);
+		tdsignal(sc->td, SIGUSR1);
+		PROC_UNLOCK(p);
+#endif
+
+#if 0
+		ksiginfo_t ksi;
+		ksiginfo_init_trap(&ksi);
+		ksi.ksi_signo = SIGUSR1;
+		ksi.ksi_code = SI_USER;
+		ksi.ksi_addr = (void *)sc->td->td_frame->tf_rip;
+		trapsignal(sc->td, &ksi);
+#endif
+	}
+
+	lapic_reenable_pmc();
 
 	printf("pt intr\n");
+
+	printf("x");
+
+	return (1);
 }
-#endif
 
 static int
 pt_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
@@ -210,8 +317,10 @@ pt_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 	//wrmsr(MSR_IA32_RTIT_OUTPUT_BASE, sc->base);
 	wrmsr(MSR_IA32_RTIT_OUTPUT_BASE, (uint64_t)vtophys(sc->topa));
 
+#if 0
 	reg = (sc->size - 1);
 	printf("Writing reg %lx\n", reg);
+#endif
 
 	//topa
 	reg = 0x7f;
@@ -226,7 +335,7 @@ pt_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 	reg |= RTIT_CTL_BRANCHEN;
 	reg |= RTIT_CTL_TSCEN;
 	reg |= RTIT_CTL_TOPA;
-	//reg |= RTIT_CTL_MTCEN;
+	reg |= RTIT_CTL_MTCEN;
 	wrmsr(MSR_IA32_RTIT_CTL, reg);
 
 	return (0);
@@ -244,9 +353,13 @@ pt_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 	printf("%s: mapsize 0x%lx, offset %lx\n",
 	    __func__, mapsize, *offset);
 
+	sc->td = curthread;
+
 	vmh = malloc(sizeof(struct pt_vm_handle),
 	    M_PT, M_WAITOK | M_ZERO);
 	vmh->sc = sc;
+
+#if 0
 	vmh->size = mapsize;
 	vmh->base = contigmalloc(mapsize, M_PT, M_NOWAIT | M_ZERO,
 	    0,		/* low */
@@ -261,12 +374,15 @@ pt_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 
 	sc->base = (uint64_t)vtophys(vmh->base); /* TEST */
 	sc->size = vmh->size; /* TEST */
+#endif
 
 	vmh->mem = cdev_pager_allocate(vmh, OBJT_DEVICE, &pt_pg_ops,
 	    mapsize, nprot, *offset, NULL);
 	if (vmh->mem == NULL) {
 		printf("cdev_pager_allocate failed\n");
+#if 0
 		contigfree(vmh->base, vmh->size, M_PT);
+#endif
 		free(vmh, M_PT);
 		return (ENOMEM);
 	}
@@ -341,12 +457,18 @@ pt_load(void)
 	printf("%s\n", __func__);
 	mtx_init(&sc->mtx, "PT driver", NULL, MTX_DEF);
 
+	sc->proc_terminate = 0;
+	sc->wakeup = 0;
+	sc->td = NULL;
+
 	error = pt_enumerate(sc);
 	if (error) {
 		printf("%s: Failed to enumerate PT features.\n",
 		    __func__);
 		return (ENXIO);
 	}
+
+	mtx_init(&sc->proc_mtx, "Intel PT", NULL, MTX_DEF);
 
 	printf("%s\n", __func__);
 	sc->pt_cdev = make_dev(&pt_cdevsw, 0, UID_ROOT, GID_WHEEL,
@@ -357,30 +479,37 @@ pt_load(void)
 	printf("%s\n", __func__);
 	printf("PT initialized\n");
 
+	pt_intr = pt_intr_handler;
+
 	wrmsr(MSR_IA32_RTIT_CTL, 0);
 	wrmsr(MSR_IA32_RTIT_STATUS, 0);
 
 	uint64_t *topa;
 	void *buf;
 	int i;
+	int n;
 
 	//uint64_t *topa_entry;
 
 	topa = malloc(PAGE_SIZE, M_PT, M_ZERO);
+	sc->topa_addr = malloc(PAGE_SIZE, M_PT, M_ZERO);
 
-	for (i = 0; i < 1; i++) {
-		buf = contigmalloc(2 * 1024 * 1024, M_PT, M_NOWAIT | M_ZERO,
+	n = 16;
+
+	for (i = 0; i < n; i++) {
+		buf = contigmalloc(2 * 1024 * 1024, M_PT, M_WAITOK | M_ZERO,
 		    0,		/* low */
 		    ~0,		/* high */
 		    PAGE_SIZE,	/* alignment */
-		    0		/* boundary */);
+		    0);		/* boundary */
 		if (buf == NULL) {
 			printf("Can't allocate topa\n");
 			return (1);
 		}
+		sc->topa_addr[i] = (uint64_t)buf;
 		topa[i] = (uint64_t)vtophys(buf) | TOPA_SIZE_2M | TOPA_INT;
 	}
-	topa[1] = vtophys(topa) | TOPA_END;
+	topa[n] = vtophys(topa) | TOPA_END;
 
 	sc->topa = topa;
 
@@ -424,16 +553,47 @@ pt_unload(void)
 	if ((sc->state & PT_STATE_RUNNING) == 0)
 		return (0);
 
+	wrmsr(MSR_IA32_RTIT_CTL, 0);
+	wrmsr(MSR_IA32_RTIT_STATUS, 0);
+
+	pt_intr = NULL;
+
 	printf("%s\n", __func__);
 
 	mtx_lock(&sc->mtx);
 	sc->state &= ~PT_STATE_RUNNING;
 	mtx_unlock(&sc->mtx);
 
+
 	printf("%s\n", __func__);
+	int n;
+	int i;
+
+	n = 16;
+
+	for (i = 0; i < n; i++) {
+		contigfree((void *)sc->topa_addr[i], 2 * 1024 * 1024, M_PT);
+	}
+	free(sc->topa_addr, M_PT);
+	free(sc->topa, M_PT);
 
 	destroy_dev(sc->pt_cdev);
 	mtx_destroy(&sc->mtx);
+
+#if 0
+	printf("terminating proc\n");
+
+	sc->proc_terminate = 1;
+	wakeup(sc);
+	while (sc->proc_terminate == 1)
+		;
+
+	printf("proc terminated\n");
+
+	//kproc_shutdown(&sc->pt_proc, 0);
+#endif
+
+	mtx_destroy(&sc->proc_mtx);
 
 	printf("%s\n", __func__);
 

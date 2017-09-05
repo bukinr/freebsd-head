@@ -34,6 +34,8 @@
 #ifndef _AMD64_PT_PTVAR_H_
 #define _AMD64_PT_PTVAR_H_
 
+extern int (*pt_intr)(int _cpu, struct trapframe *_frame);
+
 #define	PT_CPUID			0x14
 
 #ifndef LOCORE
@@ -51,6 +53,12 @@ struct pt_softc {
 	uint64_t			size;
 	vm_page_t			page;
 	uint64_t			*topa;
+	uint64_t			*topa_addr;
+	struct thread			*td;
+	struct mtx			proc_mtx;
+	struct proc			*pt_proc;
+	int				wakeup;
+	bool				proc_terminate;
 
 	struct cdev			*pt_cdev;
 	struct mtx			mtx_encls;
