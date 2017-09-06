@@ -406,6 +406,7 @@
 #define	 RTIT_CTL_PTWEN		(1 << 12)
 #define	 RTIT_CTL_BRANCHEN	(1 << 13)
 #define	 RTIT_CTL_MTC_FREQ_S	14
+#define	 RTIT_CTL_MTC_FREQ(n)	((n) << RTIT_CTL_MTC_FREQ_S)
 #define	 RTIT_CTL_MTC_FREQ_M	(0xf << RTIT_CTL_MTC_FREQ_S)
 #define	 RTIT_CTL_CYC_THRESH_S	19
 #define	 RTIT_CTL_CYC_THRESH_M	(0xf << RTIT_CTL_CYC_THRESH_S)

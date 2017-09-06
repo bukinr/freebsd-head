@@ -59,12 +59,12 @@ __FBSDID("$FreeBSD$");
 #include "sgx_user.h"
 
 static int
-build_secs(struct secs *m_secs, uint64_t enclave_base_addr, uint64_t enclave_size)
+build_secs(void *p, struct secs *m_secs, uint64_t enclave_base_addr __unused, uint64_t enclave_size)
 {
 	struct secs_attr *attributes;
 
 	memset(m_secs, 0, sizeof(struct secs));
-	m_secs->base = enclave_base_addr;
+	m_secs->base = (uint64_t)p; //enclave_base_addr;
 	m_secs->size = enclave_size;
 	m_secs->misc_select = 0;
 	m_secs->ssa_frame_size = 8;
@@ -91,17 +91,10 @@ build_secs(struct secs *m_secs, uint64_t enclave_base_addr, uint64_t enclave_siz
 }
 
 static int
-enclave_create(struct secs *m_secs)
+enclave_create(int fd, struct secs *m_secs)
 {
 	uint64_t data;
 	int err;
-	int fd;
-
-	fd = open("/dev/isgx", O_RDONLY);
-	if (fd < 0) {
-		printf("Can't open /dev/isgx\n");
-		return (1);
-	}
 
 	data = (uint64_t)m_secs;
 	err = ioctl(fd, SGX_IOC_ENCLAVE_CREATE, &data);
@@ -122,6 +115,24 @@ main(int argc, char *argv[])
 	int fd;
 	size_t n;
 	int i;
+	int fd_app;
+	void *secs_base;
+	void *p;
+
+	fd = open("/dev/isgx", O_RDONLY);
+	if (fd < 0) {
+		printf("Can't open /dev/isgx\n");
+		return (1);
+	}
+
+	secs_base = mmap(NULL, 2 * 1024 * 1024, 0, MAP_SHARED, fd, 0);
+	if (secs_base == MAP_FAILED) {
+		printf("mmap failed: err %d\n", errno);
+		return (-1);
+	}
+	printf("secs_base is %lx\n", (uint64_t)secs_base);
+
+	//return (0);
 
 	if (argc < 2) {
 		printf("supply a binary pls\n");
@@ -130,8 +141,8 @@ main(int argc, char *argv[])
 	filename = argv[1];
 	printf("filename %s\n", filename);
 
-	fd = open(filename, O_RDONLY, 0);
-	if (fd < 0) {
+	fd_app = open(filename, O_RDONLY, 0);
+	if (fd_app < 0) {
 		printf("Can't open %s\n", filename);
 		return (1);
 	}
@@ -140,7 +151,7 @@ main(int argc, char *argv[])
 		printf("Elf library init failed\n");
 		return (1);
 	}
-	e = elf_begin(fd, ELF_C_READ, NULL);
+	e = elf_begin(fd_app, ELF_C_READ, NULL);
 	if (e == NULL) {
 		printf("elf_begin failed\n");
 		return (1);
@@ -167,7 +178,6 @@ main(int argc, char *argv[])
 	void *base_addr;
 	void *entry;
 	uint64_t entry_offset;
-	void *p;
 	unsigned long start, fdataend, fend, mend;
 	int pflags;
 	int cnt;
@@ -248,10 +258,31 @@ main(int argc, char *argv[])
 	tls_npages = ((tcs->fslimit + 1) + (tcs->gslimit + 1)) / 4096;
 	tcs->oentry = ((tls_npages) * PAGE_SIZE) + entry_offset;
 
-	build_secs(&m_secs, enclave_base_addr, enclave_size);
+	build_secs(secs_base, &m_secs, enclave_base_addr, enclave_size);
 
-	enclave_create(&m_secs);
+	enclave_create(fd, &m_secs);
 	//enclave_add_page(secs, tcs);
+
+	pid_t pid;
+	pid = fork();
+
+	char *my_argv[4];
+	my_argv[0] = strdup("/bin/sleep");
+	my_argv[1] = strdup("10");
+	my_argv[2] = NULL;
+	my_argv[3] = NULL;
+
+	if (pid == 0) {
+		/* child */
+		//sleep(20);
+		//printf("child exit\n");
+		printf("child go to sleep 10\n");
+		execve("/bin/sleep", my_argv, NULL);
+	} else {
+		/* parent */
+		printf("parent go to sleep 10\n");
+		execve("/bin/sleep", my_argv, NULL);
+	}
 
 	return (0);
 }

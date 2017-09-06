@@ -400,7 +400,7 @@ pt_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 		reg = RTIT_CTL_TRACEEN;
 		//reg |= RTIT_CTL_OS;
 		reg |= RTIT_CTL_USER;
-		//reg |= RTIT_CTL_CR3FILTER;
+		reg |= RTIT_CTL_CR3FILTER;
 		reg |= RTIT_CTL_BRANCHEN;
 		//reg |= RTIT_CTL_TSCEN;
 		reg |= RTIT_CTL_TOPA;

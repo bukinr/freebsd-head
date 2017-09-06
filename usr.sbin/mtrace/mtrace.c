@@ -359,7 +359,8 @@ decode_data(int fd, void *base, uint32_t bufsize)
 			}
 		} else if (data.cycle > cycle) {
 			if ((data.cycle - cycle) > 1)
-				err(EXIT_FAILURE, "trace is too fast: %ld", (data.cycle - cycle));
+				err(EXIT_FAILURE, "trace is too fast, machine cycle %ld, mtrace cycle %ld",
+				    data.cycle, cycle);
 			init_ipt((uint64_t)base, curptr, bufsize);
 			curptr = 0;
 			cycle += 1;
