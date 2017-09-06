@@ -100,18 +100,75 @@ struct pt_softc pt_sc;
 static void pt_task(void *arg);
 
 static int
+buffers_allocate(struct pt_softc *sc)
+{
+	uint64_t *topa;
+	void *buf;
+	int i;
+	int n;
+
+	//uint64_t *topa_entry;
+
+	topa = malloc(PAGE_SIZE, M_PT, M_ZERO);
+	sc->topa_addr = malloc(PAGE_SIZE, M_PT, M_ZERO);
+
+	n = 16;
+
+	for (i = 0; i < n; i++) {
+		buf = contigmalloc(2 * 1024 * 1024, M_PT, M_WAITOK | M_ZERO,
+		    0,		/* low */
+		    ~0,		/* high */
+		    PAGE_SIZE,	/* alignment */
+		    0);		/* boundary */
+		if (buf == NULL) {
+			printf("Can't allocate topa\n");
+			return (1);
+		}
+		sc->topa_addr[i] = (uint64_t)buf;
+		topa[i] = (uint64_t)vtophys(buf) | TOPA_SIZE_2M; //| TOPA_INT;
+	}
+	topa[n-1] |= TOPA_INT;
+	topa[n] = vtophys(topa) | TOPA_END;
+	sc->topa = topa;
+
+	return (0);
+}
+
+static int
+buffers_deallocate(struct pt_softc *sc)
+{
+	int n;
+	int i;
+
+	n = 16;
+
+	printf("%s\n", __func__);
+
+	for (i = 0; i < n; i++) {
+		contigfree((void *)sc->topa_addr[i], 2 * 1024 * 1024, M_PT);
+	}
+
+	free(sc->topa_addr, M_PT);
+	free(sc->topa, M_PT);
+
+	return (0);
+}
+
+static int
 pt_pg_ctor(void *handle, vm_ooffset_t size, vm_prot_t prot,
     vm_ooffset_t foff, struct ucred *cred, u_short *color)
 {
 	struct pt_softc *sc;
-	int error;
 
 	sc = &pt_sc;
 
+#if 0
+	int error;
 	error = kproc_create(&pt_task, sc, &sc->pt_proc, 0, 0, "pt signal");
 	if (error) {
 		printf("can't create kproc");
 	}
+#endif
 
 	return (0);
 }
@@ -151,10 +208,15 @@ pt_pg_dtor(void *handle)
 #if 0
 	contigfree(vmh->base, vmh->size, M_PT);
 #endif
+
 	free(vmh, M_PT);
 
+#if 0
 	sc->proc_terminate = 1;
 	wakeup(sc);
+#endif
+
+	buffers_deallocate(sc);
 }
 
 static int
@@ -350,13 +412,14 @@ pt_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 
 		printf("Enabling trace\n");
 		reg = RTIT_CTL_TRACEEN;
+		//reg |= RTIT_CTL_OS;
 		reg |= RTIT_CTL_USER;
-		reg |= RTIT_CTL_CR3FILTER;
+		//reg |= RTIT_CTL_CR3FILTER;
 		reg |= RTIT_CTL_BRANCHEN;
-		reg |= RTIT_CTL_TSCEN;
+		//reg |= RTIT_CTL_TSCEN;
 		reg |= RTIT_CTL_TOPA;
-		reg |= RTIT_CTL_MTCEN;
-		reg |= RTIT_CTL_MTC_FREQ(6);
+		//reg |= RTIT_CTL_MTCEN;
+		//reg |= RTIT_CTL_MTC_FREQ(6);
 		wrmsr(MSR_IA32_RTIT_CTL, reg);
 		break;
 	case PT_IOC_PTR:
@@ -386,6 +449,7 @@ pt_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 {
 	struct pt_vm_handle *vmh;
 	struct pt_softc *sc;
+	int error;
 
 	sc = &pt_sc;
 
@@ -394,9 +458,17 @@ pt_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 
 	sc->td = curthread;
 
+	wrmsr(MSR_IA32_RTIT_CTL, 0);
+	wrmsr(MSR_IA32_RTIT_STATUS, 0);
+	wrmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS, 0);
+
 	vmh = malloc(sizeof(struct pt_vm_handle),
 	    M_PT, M_WAITOK | M_ZERO);
 	vmh->sc = sc;
+
+	error = buffers_allocate(sc);
+	if (error != 0)
+		return (ENOMEM);
 
 #if 0
 	vmh->size = mapsize;
@@ -523,35 +595,7 @@ pt_load(void)
 	wrmsr(MSR_IA32_RTIT_CTL, 0);
 	wrmsr(MSR_IA32_RTIT_STATUS, 0);
 
-	uint64_t *topa;
-	void *buf;
-	int i;
-	int n;
-
-	//uint64_t *topa_entry;
-
-	topa = malloc(PAGE_SIZE, M_PT, M_ZERO);
-	sc->topa_addr = malloc(PAGE_SIZE, M_PT, M_ZERO);
-
-	n = 16;
-
-	for (i = 0; i < n; i++) {
-		buf = contigmalloc(2 * 1024 * 1024, M_PT, M_WAITOK | M_ZERO,
-		    0,		/* low */
-		    ~0,		/* high */
-		    PAGE_SIZE,	/* alignment */
-		    0);		/* boundary */
-		if (buf == NULL) {
-			printf("Can't allocate topa\n");
-			return (1);
-		}
-		sc->topa_addr[i] = (uint64_t)buf;
-		topa[i] = (uint64_t)vtophys(buf) | TOPA_SIZE_2M; //| TOPA_INT;
-	}
-	topa[n-1] |= TOPA_INT;
-	topa[n] = vtophys(topa) | TOPA_END;
-
-	sc->topa = topa;
+	//buffers_allocate(sc);
 
 #if 0
 	uint64_t base;
@@ -604,18 +648,7 @@ pt_unload(void)
 	sc->state &= ~PT_STATE_RUNNING;
 	mtx_unlock(&sc->mtx);
 
-
-	printf("%s\n", __func__);
-	int n;
-	int i;
-
-	n = 16;
-
-	for (i = 0; i < n; i++) {
-		contigfree((void *)sc->topa_addr[i], 2 * 1024 * 1024, M_PT);
-	}
-	free(sc->topa_addr, M_PT);
-	free(sc->topa, M_PT);
+	//buffers_deallocate(sc);
 
 	destroy_dev(sc->pt_cdev);
 	mtx_destroy(&sc->mtx);

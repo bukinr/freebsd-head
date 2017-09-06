@@ -89,12 +89,14 @@ struct pt_test {
 
 static int mtrace_kq;
 
+#if 0
 static void
 sigusr1(int sig __unused)
 {
 
 	printf("signal\n");
 }
+#endif
 
 static uint64_t
 sext(uint64_t val, uint8_t sign)
@@ -213,11 +215,15 @@ dump_packets(struct pt_packet_decoder *decoder,
 		memset(&buffer, 0, sizeof(buffer));
 		//print_field(buffer.offset, "%016" PRIx64, offset);
 
+		//printf(".");
+
 		switch (packet.type) {
 		case ppt_psb:
+			continue;
 			print_field(buffer.opcode, "psb");
 			break;
 		case ppt_psbend:
+			continue;
 			print_field(buffer.opcode, "psbend");
 			break;
 		case ppt_pad:
@@ -241,18 +247,25 @@ dump_packets(struct pt_packet_decoder *decoder,
 			print_ip_payload(&buffer, offset, &packet.payload.ip);
 			break;
 		case ppt_mode:
+			continue;
 			print_field(buffer.opcode, "mode");
 			break;
 		case ppt_tsc:
+			continue;
 			print_field(buffer.opcode, "tsc");
 			print_field(buffer.payload.standard, "%" PRIx64,
 			    packet.payload.tsc.tsc);
+			break;
+		case ppt_tma:
+			continue;
+			print_field(buffer.opcode, "tma");
 			break;
 		case ppt_mtc:
 			continue;
 			print_field(buffer.opcode, "mtc");
 			break;
 		case ppt_cbr:
+			continue;
 			print_field(buffer.opcode, "cbr");
 			break;
 		case ppt_tnt_8:
@@ -311,8 +324,10 @@ init_ipt(uint64_t base, uint64_t start, uint64_t end)
 
 	while (1) {
 		error = dump_packets(decoder, &config);
-		if (error == 0)
+		if (error == 0) {
+			//printf(",");
 			break;
+		}
 
 		error = pt_pkt_sync_forward(decoder);
 		if (error < 0) {
@@ -326,12 +341,55 @@ init_ipt(uint64_t base, uint64_t start, uint64_t end)
 	return (0);
 }
 
+static int
+decode_data(int fd, void *base, uint32_t bufsize)
+{
+	struct pt_test data;
+	uint64_t curptr;
+	uint64_t cycle;
+	int error;
+
+	cycle = 0;
+	curptr = 0;
+
+	while (1) {
+		error = ioctl(fd, PT_IOC_PTR, &data);
+#if 0
+		printf("data.cycle %ld, cycle %ld, data.ptr %lx, curptr %lx\n",
+		    data.cycle, cycle, data.ptr, curptr);
+#endif
+		if (data.ptr == curptr)
+			continue;
+
+		if (data.cycle == cycle) {
+			if (data.ptr > curptr) {
+				init_ipt((uint64_t)base, curptr, data.ptr);
+				curptr = data.ptr;
+			} else if (data.ptr < curptr) {
+				printf("panic: data.ptr %lx curptr %lx\n", data.ptr, curptr);
+				return (-1);
+			}
+		} else if (data.cycle > cycle) {
+			if ((data.cycle - cycle) > 1)
+				err(EXIT_FAILURE, "trace is too fast: %ld", (data.cycle - cycle));
+			init_ipt((uint64_t)base, curptr, bufsize);
+			curptr = 0;
+			cycle += 1;
+			init_ipt((uint64_t)base, curptr, data.ptr);
+			curptr = data.ptr;
+		}
+	}
+
+	return (0);
+}
+
 int
 main(int argc __unused, char *argv[] __unused)
 {
 	void *base;
 	int error;
 	int fd;
+	int bufsize;
 
 	fd = open("/dev/ipt", O_RDWR);
 	if (fd < 0) {
@@ -339,8 +397,9 @@ main(int argc __unused, char *argv[] __unused)
 		return (1);
 	}
 
-	base = mmap(NULL, 32 * 1024 * 1024, PROT_READ, MAP_SHARED, fd, 0);
-	//base = mmap(NULL, 1 * 1024 * 1024, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_SHARED, fd, 0);
+	bufsize = 32 * 1024 * 1024;
+
+	base = mmap(NULL, bufsize, PROT_READ, MAP_SHARED, fd, 0);
 	if (base == MAP_FAILED) {
 		printf("mmap failed: err %d\n", errno);
 		return (-1);
@@ -372,20 +431,15 @@ main(int argc __unused, char *argv[] __unused)
 		printf("can't allocate kqueue\n");
 
 	pid = fork();
-
 	if (pid == 0) {
 		/* Child */
 		error = ioctl(fd, PT_IOC_TEST, &data);
-		//while (1);
 		execve("/home/br/test", my_argv, NULL);
 	} else {
 		/* Parent */
-		//error = ioctl(fd, PT_IOC_TEST, &data);
-
-		struct kevent kev;
 #if 0
+		struct kevent kev;
 		struct kevent tkev;
-#endif
 
 		(void)signal(SIGUSR1, sigusr1);
 		EV_SET(&kev, SIGUSR1, EVFILT_SIGNAL, EV_ADD, 0, 0, NULL);
@@ -394,10 +448,8 @@ main(int argc __unused, char *argv[] __unused)
 		printf("kevent registered\n");
 
 		uint64_t offset;
-
 		offset = 0;
 
-#if 0
 		ret = kevent(mtrace_kq, NULL, 0, &tkev, 1, NULL);
 		if (ret == -1) {
 			err(EXIT_FAILURE, "kevent wait");
@@ -405,38 +457,7 @@ main(int argc __unused, char *argv[] __unused)
 		}
 #endif
 
-		uint64_t curptr;
-		uint64_t cycle;
-
-		cycle = 0;
-		curptr = 0;
-		while (1) {
-			error = ioctl(fd, PT_IOC_PTR, &data);
-			if (data.ptr == curptr)
-				continue;
-			printf("data.cycle %ld, cycle %ld, data.ptr %lx, curptr %lx\n",
-			    data.cycle, cycle, data.ptr, curptr);
-
-			if (data.cycle == cycle) {
-				if (data.ptr > curptr) {
-					init_ipt((uint64_t)base, curptr, data.ptr);
-					curptr = data.ptr;
-				}
-			}
-
-			if (data.cycle > cycle) {
-				if ((data.cycle - cycle) > 1)
-					err(EXIT_FAILURE, "trace is too fast: %ld", (data.cycle - cycle));
-				init_ipt((uint64_t)base, curptr, 32 * 1024 * 1024);
-				curptr = 0;
-				cycle += 1;
-				init_ipt((uint64_t)base, curptr, data.ptr);
-			}
-		}
-
-		printf("while loop\n");
-		while (1);
-		//printf("%lx %lx %lx %lx %lx\n", addr[0], addr[1], addr[2], addr[3], addr[4]);
+		decode_data(fd, base, bufsize);
 	}
 
 	return (0);
