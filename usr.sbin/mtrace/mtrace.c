@@ -63,22 +63,10 @@ __FBSDID("$FreeBSD$");
 #include <libipt/pt_compiler.h>
 #include <libipt/intel-pt.h>
 
+#include <machine/pt.h>
+
 #define	round_up(x,y) (((x) + (y) - 1) & ~((y)-1))
 #define	round_down(x,y) ((x) & ~((y)-1))
-
-#define	PT_MAGIC	0xA5
-
-struct pt_test {
-	uint64_t	test;
-	uint64_t	ptr;
-	uint64_t	cycle;
-};
-
-#define	PT_IOC_TEST \
-	_IOW(PT_MAGIC, 0x00, struct pt_test)
-
-#define	PT_IOC_PTR \
-	_IOR(PT_MAGIC, 0x01, struct pt_test)
 
 #define print_field(field, ...)					\
 	do {							\

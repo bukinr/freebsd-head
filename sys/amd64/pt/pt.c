@@ -81,19 +81,7 @@ __FBSDID("$FreeBSD$");
 #define	dprintf(fmt, ...)
 #endif
 
-#define	PT_MAGIC	0xA5
-
-struct pt_test {
-	uint64_t	test;
-	uint64_t	ptr;
-	uint64_t	cycle;
-};
-
-#define	PT_IOC_TEST \
-	_IOW(PT_MAGIC, 0x00, struct pt_test)
-
-#define	PT_IOC_PTR \
-	_IOR(PT_MAGIC, 0x01, struct pt_test)
+#define	IA32_GLOBAL_STATUS_RESET	0x390
 
 static struct cdev_pager_ops pt_pg_ops;
 struct pt_softc pt_sc;
@@ -320,8 +308,6 @@ pt_task(void *arg)
 	kproc_exit(0);
 }
 
-#define	IA32_GLOBAL_STATUS_RESET	0x390
-
 static int
 pt_intr_handler(int cpu, struct trapframe *tf)
 {
@@ -333,7 +319,7 @@ pt_intr_handler(int cpu, struct trapframe *tf)
 	reg = (1UL << 55);
 	wrmsr(IA32_GLOBAL_STATUS_RESET, reg);
 
-	sc->cycle += 1;
+	atomic_add_int(&sc->cycle, 1);
 
 #if 0
 	if (sc->td != NULL) {
@@ -596,31 +582,6 @@ pt_load(void)
 	wrmsr(MSR_IA32_RTIT_STATUS, 0);
 
 	//buffers_allocate(sc);
-
-#if 0
-	uint64_t base;
-	uint64_t base1;
-
-	//base = (intptr_t)kmem_alloc_contig(kmem_arena,
-	//	2048 * 1024 * 1024, M_ZERO, 0, ~0, PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
-
-	uint64_t sz;
-
-	sz = (5UL * 1024 * 1024 * 1024);
-	base = (uint64_t)contigmalloc(sz, M_PT, M_WAITOK,
-	    0 /* low */, ~0 /* high */,
-	    0 /* alignment */, 0 /* boundary */);
-	base1 = (uint64_t)contigmalloc(sz, M_PT, M_WAITOK,
-	    0 /* low */, ~0 /* high */,
-	    0 /* alignment */, 0 /* boundary */);
-
-	printf("base %lx\n", base);
-	printf("base1 %lx\n", base1);
-	if (base)
-		contigfree((void *)base, sz, M_PT);
-	if (base1)
-		contigfree((void *)base1, sz, M_PT);
-#endif
 
 	return (0);
 }

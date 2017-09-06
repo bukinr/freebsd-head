@@ -36,4 +36,18 @@
 #ifndef _MACHINE_PT_H_
 #define _MACHINE_PT_H_
 
+#define	PT_MAGIC	0xA5
+
+struct pt_test {
+	uint64_t	test;
+	uint64_t	ptr;
+	uint64_t	cycle;
+};
+
+#define	PT_IOC_TEST \
+	_IOW(PT_MAGIC, 0x00, struct pt_test)
+
+#define	PT_IOC_PTR \
+	_IOR(PT_MAGIC, 0x01, struct pt_test)
+
 #endif /* !_MACHINE_PT_H_ */
