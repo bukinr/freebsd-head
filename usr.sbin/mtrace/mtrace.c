@@ -70,10 +70,15 @@ __FBSDID("$FreeBSD$");
 
 struct pt_test {
 	uint64_t	test;
+	uint64_t	ptr;
+	uint64_t	cycle;
 };
 
 #define	PT_IOC_TEST \
 	_IOW(PT_MAGIC, 0x00, struct pt_test)
+
+#define	PT_IOC_PTR \
+	_IOR(PT_MAGIC, 0x01, struct pt_test)
 
 #define print_field(field, ...)					\
 	do {							\
@@ -275,7 +280,7 @@ dump_packets(struct pt_packet_decoder *decoder,
 }
 
 static int
-init_ipt(uint64_t base)
+init_ipt(uint64_t base, uint64_t start, uint64_t end)
 {
 	struct pt_packet_decoder *decoder;
 	struct pt_config config;
@@ -285,20 +290,18 @@ init_ipt(uint64_t base)
 	pt_config_init(&config);
 
 	error = pt_cpu_read(&config.cpu);
-	printf("err %d\n", error);
+	//printf("err %d\n", error);
 	error = pt_cpu_errata(&config.errata, &config.cpu);
-	printf("err %d\n", error);
+	//printf("err %d\n", error);
 
-	//config->begin = buffer;
-	//config->end = buffer + size;
-	config.begin = (uint8_t *)base;
-	config.end = (uint8_t *)(base + (2*1024*1024));
+	config.begin = (uint8_t *)(base + start);
+	config.end = (uint8_t *)(base + end);
 
 	decoder = pt_pkt_alloc_decoder(&config);
-	if (decoder == NULL)
+	if (decoder == NULL) {
 		printf("Can't allocate decoder\n");
-	else
-		printf("Decoder allocated\n");
+		return (-1);
+	}
 
 	//error = pt_pkt_sync_set(decoder, 0ull);
 	error = pt_pkt_sync_forward(decoder);
@@ -361,7 +364,9 @@ main(int argc __unused, char *argv[] __unused)
 	my_argv[2] = NULL;
 	my_argv[3] = NULL;
 
+#if 0
 	int ret;
+#endif
 
 	if ((mtrace_kq = kqueue()) < 0)
 		printf("can't allocate kqueue\n");
@@ -378,7 +383,9 @@ main(int argc __unused, char *argv[] __unused)
 		//error = ioctl(fd, PT_IOC_TEST, &data);
 
 		struct kevent kev;
+#if 0
 		struct kevent tkev;
+#endif
 
 		(void)signal(SIGUSR1, sigusr1);
 		EV_SET(&kev, SIGUSR1, EVFILT_SIGNAL, EV_ADD, 0, 0, NULL);
@@ -390,16 +397,40 @@ main(int argc __unused, char *argv[] __unused)
 
 		offset = 0;
 
-		for (;;) {
-			ret = kevent(mtrace_kq, NULL, 0, &tkev, 1, NULL);
-			if (ret == -1) {
-				err(EXIT_FAILURE, "kevent wait");
-			} else if (ret > 0) {
-				init_ipt((uint64_t)base + offset);
-				offset += 2 * 1024 * 1024;
-				printf("ipt done, offset %lx\n", offset);
-				if (offset == (32 * 1024 * 1024))
-					break;
+#if 0
+		ret = kevent(mtrace_kq, NULL, 0, &tkev, 1, NULL);
+		if (ret == -1) {
+			err(EXIT_FAILURE, "kevent wait");
+		} else if (ret > 0) {
+		}
+#endif
+
+		uint64_t curptr;
+		uint64_t cycle;
+
+		cycle = 0;
+		curptr = 0;
+		while (1) {
+			error = ioctl(fd, PT_IOC_PTR, &data);
+			if (data.ptr == curptr)
+				continue;
+			printf("data.cycle %ld, cycle %ld, data.ptr %lx, curptr %lx\n",
+			    data.cycle, cycle, data.ptr, curptr);
+
+			if (data.cycle == cycle) {
+				if (data.ptr > curptr) {
+					init_ipt((uint64_t)base, curptr, data.ptr);
+					curptr = data.ptr;
+				}
+			}
+
+			if (data.cycle > cycle) {
+				if ((data.cycle - cycle) > 1)
+					err(EXIT_FAILURE, "trace is too fast: %ld", (data.cycle - cycle));
+				init_ipt((uint64_t)base, curptr, 32 * 1024 * 1024);
+				curptr = 0;
+				cycle += 1;
+				init_ipt((uint64_t)base, curptr, data.ptr);
 			}
 		}
 

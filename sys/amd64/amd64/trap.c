@@ -84,6 +84,8 @@ PMC_SOFT_DEFINE( , , page_fault, write);
 #include <vm/vm_page.h>
 #include <vm/vm_extern.h>
 
+//#include <amd64/pt/ptvar.h>
+
 #include <machine/cpu.h>
 #include <machine/intr_machdep.h>
 #include <x86/mca.h>
@@ -98,6 +100,8 @@ PMC_SOFT_DEFINE( , , page_fault, write);
 #ifdef KDTRACE_HOOKS
 #include <sys/dtrace_bsd.h>
 #endif
+
+int __read_mostly (*pt_intr)(int cpu, struct trapframe *tf) = NULL;
 
 void __noinline trap(struct trapframe *frame);
 void trap_check(struct trapframe *frame);
@@ -203,6 +207,9 @@ trap(struct trapframe *frame)
 	}
 
 	if (type == T_NMI) {
+		if (pt_intr != NULL &&
+		    (*pt_intr)(PCPU_GET(cpuid), frame) != 0)
+			return;
 #ifdef HWPMC_HOOKS
 		/*
 		 * CPU PMCs interrupt using an NMI.  If the PMC module is

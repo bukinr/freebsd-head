@@ -81,6 +81,20 @@ __FBSDID("$FreeBSD$");
 #define	dprintf(fmt, ...)
 #endif
 
+#define	PT_MAGIC	0xA5
+
+struct pt_test {
+	uint64_t	test;
+	uint64_t	ptr;
+	uint64_t	cycle;
+};
+
+#define	PT_IOC_TEST \
+	_IOW(PT_MAGIC, 0x00, struct pt_test)
+
+#define	PT_IOC_PTR \
+	_IOR(PT_MAGIC, 0x01, struct pt_test)
+
 static struct cdev_pager_ops pt_pg_ops;
 struct pt_softc pt_sc;
 static void pt_task(void *arg);
@@ -254,11 +268,12 @@ pt_intr_handler(int cpu, struct trapframe *tf)
 
 	sc = &pt_sc;
 
-	printf("e");
-
 	reg = (1UL << 55);
 	wrmsr(IA32_GLOBAL_STATUS_RESET, reg);
 
+	sc->cycle += 1;
+
+#if 0
 	if (sc->td != NULL) {
 
 		sc->wakeup = 1;
@@ -284,12 +299,9 @@ pt_intr_handler(int cpu, struct trapframe *tf)
 		trapsignal(sc->td, &ksi);
 #endif
 	}
+#endif
 
 	lapic_reenable_pmc();
-
-	printf("pt intr\n");
-
-	printf("x");
 
 	return (1);
 }
@@ -302,41 +314,68 @@ pt_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 	uint64_t cr3;
 	struct pt_softc *sc;
 	uint64_t reg;
+	uint32_t idx;
+	uint32_t offset;
+
+	struct pt_test *param;
 
 	sc = &pt_sc;
 
-	pmap = vmspace_pmap(td->td_proc->p_vmspace);
-	cr3 = pmap->pm_cr3;
+	switch (cmd) {
+	case PT_IOC_TEST:
+		pmap = vmspace_pmap(td->td_proc->p_vmspace);
+		cr3 = pmap->pm_cr3;
 
-	lapic_enable_pmc();
+		lapic_enable_pmc();
 
-	wrmsr(MSR_IA32_RTIT_CTL, 0);
+		wrmsr(MSR_IA32_RTIT_CTL, 0);
 
-	printf("cr3 %lx\n", cr3);
-	wrmsr(MSR_IA32_RTIT_CR3_MATCH, cr3);
-	//wrmsr(MSR_IA32_RTIT_OUTPUT_BASE, sc->base);
-	wrmsr(MSR_IA32_RTIT_OUTPUT_BASE, (uint64_t)vtophys(sc->topa));
+		printf("cr3 %lx\n", cr3);
+		wrmsr(MSR_IA32_RTIT_CR3_MATCH, cr3);
+		//wrmsr(MSR_IA32_RTIT_OUTPUT_BASE, sc->base);
+		wrmsr(MSR_IA32_RTIT_OUTPUT_BASE, (uint64_t)vtophys(sc->topa));
 
 #if 0
-	reg = (sc->size - 1);
-	printf("Writing reg %lx\n", reg);
+		reg = (sc->size - 1);
+		printf("Writing reg %lx\n", reg);
 #endif
 
-	//topa
-	reg = 0x7f;
-	wrmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS, reg);
+		//topa
+		reg = 0x7f;
+		wrmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS, reg);
 
-	/* Enable tracing */
+		/* Enable tracing */
 
-	printf("Enabling trace\n");
-	reg = RTIT_CTL_TRACEEN;
-	reg |= RTIT_CTL_USER;
-	reg |= RTIT_CTL_CR3FILTER;
-	reg |= RTIT_CTL_BRANCHEN;
-	reg |= RTIT_CTL_TSCEN;
-	reg |= RTIT_CTL_TOPA;
-	reg |= RTIT_CTL_MTCEN;
-	wrmsr(MSR_IA32_RTIT_CTL, reg);
+		sc->cycle = 0;
+
+		printf("Enabling trace\n");
+		reg = RTIT_CTL_TRACEEN;
+		reg |= RTIT_CTL_USER;
+		reg |= RTIT_CTL_CR3FILTER;
+		reg |= RTIT_CTL_BRANCHEN;
+		reg |= RTIT_CTL_TSCEN;
+		reg |= RTIT_CTL_TOPA;
+		reg |= RTIT_CTL_MTCEN;
+		reg |= RTIT_CTL_MTC_FREQ(6);
+		wrmsr(MSR_IA32_RTIT_CTL, reg);
+		break;
+	case PT_IOC_PTR:
+		param = (struct pt_test *)addr;
+		param->cycle = sc->cycle;
+
+		reg = rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS);
+		idx = (reg & 0xffffffff) >> 7;
+		offset = reg >> 32;
+		param->ptr = idx * (2 * 1024 * 1024) + offset;
+
+		//printf("param addr %lx\n", (uint64_t)param);
+		//printf("param->test %lx\n", (uint64_t)param->test);
+		//ret = copyin((void *)param->src, secs, sizeof(struct secs));
+		//ret = copyout((void *)param->src, secs, sizeof(struct secs));
+		break;
+	default:
+		break;
+	}
 
 	return (0);
 }
@@ -507,8 +546,9 @@ pt_load(void)
 			return (1);
 		}
 		sc->topa_addr[i] = (uint64_t)buf;
-		topa[i] = (uint64_t)vtophys(buf) | TOPA_SIZE_2M | TOPA_INT;
+		topa[i] = (uint64_t)vtophys(buf) | TOPA_SIZE_2M; //| TOPA_INT;
 	}
+	topa[n-1] |= TOPA_INT;
 	topa[n] = vtophys(topa) | TOPA_END;
 
 	sc->topa = topa;

@@ -59,6 +59,7 @@ struct pt_softc {
 	struct proc			*pt_proc;
 	int				wakeup;
 	bool				proc_terminate;
+	int				cycle;
 
 	struct cdev			*pt_cdev;
 	struct mtx			mtx_encls;
