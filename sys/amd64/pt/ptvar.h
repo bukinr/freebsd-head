@@ -41,6 +41,12 @@ extern int (*pt_intr)(int _cpu, struct trapframe *_frame);
 #ifndef LOCORE
 static MALLOC_DEFINE(M_PT, "pt", "PT driver");
 
+struct topa_entry {
+	uint64_t base;
+	uint64_t size;
+	uint64_t offset;
+};
+
 struct pt_vm_handle {
 	struct pt_softc		*sc;
 	vm_object_t		mem;
@@ -52,8 +58,9 @@ struct pt_softc {
 	uint64_t			base;
 	uint64_t			size;
 	vm_page_t			page;
-	uint64_t			*topa;
-	uint64_t			*topa_addr;
+	uint64_t			*topa_hw;
+	struct topa_entry		*topa_sw;
+	int				topa_n;
 	struct thread			*td;
 	struct mtx			proc_mtx;
 	struct proc			*pt_proc;

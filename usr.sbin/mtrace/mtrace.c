@@ -200,10 +200,9 @@ dump_packets(struct pt_packet_decoder *decoder,
 			break;
 		//printf("err %d, packet.type %d\n", error, packet.type);
 
-
 		memset(&buffer, 0, sizeof(buffer));
-		//print_field(buffer.offset, "%016" PRIx64, offset);
 
+		//print_field(buffer.offset, "%016" PRIx64, offset);
 		//printf(".");
 
 		switch (packet.type) {
@@ -415,7 +414,7 @@ main(int argc, char *argv[])
 		return (1);
 	}
 
-	bufsize = 32 * 1024 * 1024;
+	bufsize = 128 * 1024 * 1024;
 
 	base = mmap(NULL, bufsize, PROT_READ, MAP_SHARED, fd, 0);
 	if (base == MAP_FAILED) {

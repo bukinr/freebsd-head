@@ -88,36 +88,67 @@ struct pt_softc pt_sc;
 static void pt_task(void *arg);
 
 static int
-buffers_allocate(struct pt_softc *sc)
+buffers_allocate(struct pt_softc *sc, uint64_t mapsize)
 {
-	uint64_t *topa;
+	struct topa_entry *entry;
+	uint64_t offset;
+	uint64_t segsize;
+	uint64_t topa_size;
 	void *buf;
 	int i;
 	int n;
 
-	//uint64_t *topa_entry;
+	if (mapsize > (1 * 1024 * 1024 * 1024)) {
+		topa_size = TOPA_SIZE_32M;
+	} else if (mapsize > (128 * 1024 * 1024)) {
+		topa_size = TOPA_SIZE_16M;
+	} else {
+		topa_size = TOPA_SIZE_2M;
+	}
 
-	topa = malloc(PAGE_SIZE, M_PT, M_ZERO);
-	sc->topa_addr = malloc(PAGE_SIZE, M_PT, M_ZERO);
+	segsize = 2 << (11 + (topa_size >> TOPA_SIZE_S));
 
-	n = 16;
+	printf("mapsize %lx, segsize %lx\n", mapsize, segsize);
 
+	if (mapsize % segsize)
+		return (-1);
+
+	n = mapsize / segsize;
+
+	entry = malloc(n * sizeof(struct topa_entry), M_PT, M_ZERO);
+
+	offset = 0;
 	for (i = 0; i < n; i++) {
-		buf = contigmalloc(2 * 1024 * 1024, M_PT, M_WAITOK | M_ZERO,
+		buf = contigmalloc(segsize, M_PT, M_WAITOK | M_ZERO,
 		    0,		/* low */
 		    ~0,		/* high */
 		    PAGE_SIZE,	/* alignment */
 		    0);		/* boundary */
 		if (buf == NULL) {
 			printf("Can't allocate topa\n");
+			/* TODO: deallocate */
 			return (1);
 		}
-		sc->topa_addr[i] = (uint64_t)buf;
-		topa[i] = (uint64_t)vtophys(buf) | TOPA_SIZE_2M; //| TOPA_INT;
+
+		entry[i].base = (uint64_t)buf;
+		entry[i].size = segsize;
+		entry[i].offset = offset;
+		offset += segsize;
 	}
-	topa[n-1] |= TOPA_INT;
-	topa[n] = vtophys(topa) | TOPA_END;
-	sc->topa = topa;
+
+	/* Now build hardware topa table. */
+
+	sc->topa_hw = malloc(PAGE_SIZE, M_PT, M_ZERO);
+	for (i = 0; i < n; i++) {
+		sc->topa_hw[i] = (uint64_t)vtophys(entry[i].base) | topa_size;
+		if (i == (n - 1))
+			sc->topa_hw[i] |= TOPA_INT;
+	}
+
+	/* The last entry is pointer to table. */
+	sc->topa_hw[n] = vtophys(sc->topa_hw) | TOPA_END;
+	sc->topa_sw = entry;
+	sc->topa_n = n;
 
 	return (0);
 }
@@ -125,19 +156,16 @@ buffers_allocate(struct pt_softc *sc)
 static int
 buffers_deallocate(struct pt_softc *sc)
 {
-	int n;
 	int i;
-
-	n = 16;
 
 	printf("%s\n", __func__);
 
-	for (i = 0; i < n; i++) {
-		contigfree((void *)sc->topa_addr[i], 2 * 1024 * 1024, M_PT);
+	for (i = 0; i < sc->topa_n; i++) {
+		contigfree((void *)sc->topa_sw[i].base, sc->topa_sw[i].size, M_PT);
 	}
 
-	free(sc->topa_addr, M_PT);
-	free(sc->topa, M_PT);
+	free(sc->topa_sw, M_PT);
+	free(sc->topa_hw, M_PT);
 
 	return (0);
 }
@@ -182,13 +210,12 @@ pt_pg_dtor(void *handle)
 		return;
 	}
 
-	uint64_t *addr;
 #if 0
+	uint64_t *addr;
 	addr = (uint64_t *)vmh->base;
-#endif
 	addr = (uint64_t *)sc->topa_addr[0];
-
 	printf("%lx %lx\n", addr[0], addr[1]);
+#endif
 
 	printf("output base %lx\n", rdmsr(MSR_IA32_RTIT_OUTPUT_BASE));
 	printf("output base ptr %lx\n", rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS));
@@ -229,12 +256,25 @@ pt_pg_fault(vm_object_t object, vm_ooffset_t offset,
 
 	//paddr = vtophys(vmh->base) + offset;
 	int i;
-	int left;
+	//int left;
 
+	uint64_t sz;
+
+	sz = 0;
+
+	for (i = 0; i < sc->topa_n; i++) {
+		if (offset < sc->topa_sw[i].size) {
+			paddr = vtophys(sc->topa_sw[i].base) + offset;
+			break;
+		}
+		offset -= sc->topa_sw[i].size;
+	}
+
+#if 0
 	i = offset / (2 * 1024 * 1024);
 	left = offset % (2 * 1024 * 1024);
-
 	paddr = vtophys(sc->topa_addr[i]) + left;
+#endif
 
 	if (((*mres)->flags & PG_FICTITIOUS) != 0) {
 		printf("PG_FICTITIOUS\n");
@@ -381,7 +421,7 @@ pt_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 		printf("cr3 %lx\n", cr3);
 		wrmsr(MSR_IA32_RTIT_CR3_MATCH, cr3);
 		//wrmsr(MSR_IA32_RTIT_OUTPUT_BASE, sc->base);
-		wrmsr(MSR_IA32_RTIT_OUTPUT_BASE, (uint64_t)vtophys(sc->topa));
+		wrmsr(MSR_IA32_RTIT_OUTPUT_BASE, (uint64_t)vtophys(sc->topa_hw));
 
 #if 0
 		reg = (sc->size - 1);
@@ -415,7 +455,8 @@ pt_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 		reg = rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS);
 		idx = (reg & 0xffffffff) >> 7;
 		offset = reg >> 32;
-		param->ptr = idx * (2 * 1024 * 1024) + offset;
+		//param->ptr = idx * (2 * 1024 * 1024) + offset;
+		param->ptr = sc->topa_sw[idx].offset + offset;
 
 		//printf("param addr %lx\n", (uint64_t)param);
 		//printf("param->test %lx\n", (uint64_t)param->test);
@@ -444,6 +485,7 @@ pt_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 
 	sc->td = curthread;
 
+	/* Ensure tracing stopped. */
 	wrmsr(MSR_IA32_RTIT_CTL, 0);
 	wrmsr(MSR_IA32_RTIT_STATUS, 0);
 	wrmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS, 0);
@@ -452,7 +494,7 @@ pt_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 	    M_PT, M_WAITOK | M_ZERO);
 	vmh->sc = sc;
 
-	error = buffers_allocate(sc);
+	error = buffers_allocate(sc, mapsize);
 	if (error != 0)
 		return (ENOMEM);
 
