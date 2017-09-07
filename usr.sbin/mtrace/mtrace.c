@@ -46,6 +46,7 @@ __FBSDID("$FreeBSD$");
 #include <errno.h>
 #include <fcntl.h>
 #include <locale.h>
+#include <sysexits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -373,12 +374,40 @@ decode_data(int fd, void *base, uint32_t bufsize)
 }
 
 int
-main(int argc __unused, char *argv[] __unused)
+main(int argc, char *argv[])
 {
 	void *base;
 	int error;
 	int fd;
 	int bufsize;
+	int option;
+	int app_mode;
+	const char *app_filename;
+	struct stat sb;
+
+	app_mode = 0;
+
+	while ((option = getopt(argc, argv,
+	    "a:")) != -1)
+		switch (option) {
+		case 'a':
+			app_mode = 1;
+			if (stat(optarg, &sb) < 0)
+				err(EX_OSERR, "ERROR: Cannot stat \"%s\"",
+				    optarg);
+			app_filename = optarg;
+			break;
+		default:
+			break;
+		};
+
+	if (app_mode == 0) {
+		/* The only mode supported yet */
+
+		errx(EX_USAGE, "ERROR: illegal usage.");
+
+		return (1);
+	}
 
 	fd = open("/dev/ipt", O_RDWR);
 	if (fd < 0) {
@@ -405,10 +434,8 @@ main(int argc __unused, char *argv[] __unused)
 	pid_t pid;
 	char *my_argv[4];
 
-	//my_argv[0] = strdup("/bin/sleep");
-	//my_argv[1] = strdup("0");
-	my_argv[0] = strdup("/home/br/test");
-	my_argv[1] = NULL; //strdup("-a");
+	my_argv[0] = strdup(app_filename);
+	my_argv[1] = NULL;
 	my_argv[2] = NULL;
 	my_argv[3] = NULL;
 
@@ -423,7 +450,7 @@ main(int argc __unused, char *argv[] __unused)
 	if (pid == 0) {
 		/* Child */
 		error = ioctl(fd, PT_IOC_TEST, &data);
-		execve("/home/br/test", my_argv, NULL);
+		execve(app_filename, my_argv, NULL);
 	} else {
 		/* Parent */
 #if 0
