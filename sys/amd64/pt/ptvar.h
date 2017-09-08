@@ -68,6 +68,12 @@ struct pt_softc {
 	bool				proc_terminate;
 	int				cycle;
 
+	uint32_t			s0_eax;
+	uint32_t			s0_ebx;
+	uint32_t			s0_ecx;
+	uint32_t			s1_eax;
+	uint32_t			s1_ebx;
+
 	struct cdev			*pt_cdev;
 	struct mtx			mtx_encls;
 	struct mtx			mtx;

@@ -406,11 +406,14 @@ pt_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 	uint32_t offset;
 
 	struct pt_test *param;
+	struct pt_drv_config *config;
 
 	sc = &pt_sc;
 
 	switch (cmd) {
-	case PT_IOC_TEST:
+	case PT_IOC_CONFIG:
+		config = (struct pt_drv_config *)addr;
+
 		pmap = vmspace_pmap(td->td_proc->p_vmspace);
 		cr3 = pmap->pm_cr3;
 
@@ -438,9 +441,18 @@ pt_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 
 		printf("Enabling trace\n");
 		reg = RTIT_CTL_TRACEEN;
+
+		if (sc->s0_ebx & S0_EBX_PRW) {
+			reg |= RTIT_CTL_FUPONPTW;
+			reg |= RTIT_CTL_PTWEN;
+		}
+
+		if (config->retc == 0)
+			reg |= RTIT_CTL_DISRETC;
 		//reg |= RTIT_CTL_OS;
 		reg |= RTIT_CTL_USER;
 		reg |= RTIT_CTL_CR3FILTER;
+		/* Enable FUP, TIP, TIP.PGE, TIP.PGD, TNT, MODE.Exec and MODE.TSX packets */
 		reg |= RTIT_CTL_BRANCHEN;
 		//reg |= RTIT_CTL_TSCEN;
 		reg |= RTIT_CTL_TOPA;
@@ -573,10 +585,17 @@ pt_enumerate(struct pt_softc *sc)
 	printf("ebx %x\n", cp[1]);
 	printf("ecx %x\n", cp[2]);
 
+	sc->s0_eax = cp[0];
+	sc->s0_ebx = cp[1];
+	sc->s0_ecx = cp[2];
+
 	printf("Enumerating part 2\n");
 	cpuid_count(PT_CPUID, 1, cp);
 	printf("eax %x\n", cp[0]);
 	printf("ebx %x\n", cp[1]);
+
+	sc->s1_eax = cp[0];
+	sc->s1_ebx = cp[1];
 
 	return (0);
 }

@@ -98,6 +98,9 @@ sext(uint64_t val, uint8_t sign)
 	return val & signbit ? val | mask : val & ~mask;
 }
 
+struct mtrace_data {
+	uint64_t ip;
+};
 
 struct ptdump_buffer {
 	char offset[17];
@@ -134,8 +137,8 @@ print_tnt_payload(struct ptdump_buffer *buffer, uint64_t offset __unused,
 }
 
 static int
-print_ip_payload(struct ptdump_buffer *buffer, uint64_t offset __unused,
-    const struct pt_packet_ip *packet)
+print_ip_payload(struct mtrace_data *mdata, struct ptdump_buffer *buffer,
+    uint64_t offset __unused, const struct pt_packet_ip *packet)
 {
 
 	switch (packet->ipc) {
@@ -145,27 +148,54 @@ print_ip_payload(struct ptdump_buffer *buffer, uint64_t offset __unused,
 		return 0;
 
 	case pt_ipc_update_16:
+
+		mdata->ip &= ~0xffff;
+		mdata->ip |= (packet->ip & 0xffff);
+		print_field(buffer->payload.standard, "%x: %016"
+			    PRIx64, pt_ipc_update_16, mdata->ip);
+		return (0);
+
 		//printf("%s: %lx\n", __func__, packet->ip);
 		print_field(buffer->payload.standard, "%x: ????????????%04"
 			    PRIx64, pt_ipc_update_16, packet->ip);
 		return 0;
 
 	case pt_ipc_update_32:
+		mdata->ip &= ~0xffffffff;
+		mdata->ip |= (packet->ip & 0xffffffff);
+		print_field(buffer->payload.standard, "%x: %016"
+			    PRIx64, pt_ipc_update_32, mdata->ip);
+		return (0);
+
 		print_field(buffer->payload.standard, "%x: ????????%08"
 			    PRIx64, pt_ipc_update_32, packet->ip);
 		return 0;
 
 	case pt_ipc_update_48:
+		mdata->ip &= ~0xffffffffffff;
+		mdata->ip |= (packet->ip & 0xffffffffffff);
+		print_field(buffer->payload.standard, "%x: %016"
+			    PRIx64, pt_ipc_update_48, mdata->ip);
+		return (0);
 		print_field(buffer->payload.standard, "%x: ????%012"
 			    PRIx64, pt_ipc_update_48, packet->ip);
 		return 0;
 
 	case pt_ipc_sext_48:
+		mdata->ip &= ~0xffffffffffff;
+		mdata->ip |= (packet->ip & 0xffffffffffff);
+		print_field(buffer->payload.standard, "%x: %016"
+			    PRIx64, pt_ipc_sext_48, mdata->ip);
+		return (0);
 		print_field(buffer->payload.standard, "%x: %016" PRIx64,
 			    pt_ipc_sext_48, sext(packet->ip, 48));
 		return 0;
 
 	case pt_ipc_full:
+		mdata->ip = packet->ip;
+		print_field(buffer->payload.standard, "%x: %016"
+			    PRIx64, pt_ipc_update_16, mdata->ip);
+		return (0);
 		print_field(buffer->payload.standard, "%x: %016" PRIx64,
 			    pt_ipc_full, packet->ip);
 		return 0;
@@ -178,7 +208,7 @@ print_ip_payload(struct ptdump_buffer *buffer, uint64_t offset __unused,
 }
 
 static int
-dump_packets(struct pt_packet_decoder *decoder,
+dump_packets(struct mtrace_data *mdata, struct pt_packet_decoder *decoder,
     const struct pt_config *config __unused)
 {
 	uint64_t offset;
@@ -219,20 +249,20 @@ dump_packets(struct pt_packet_decoder *decoder,
 			print_field(buffer.opcode, "pad");
 			break;
 		case ppt_fup:
-			continue;
 			print_field(buffer.opcode, "fup");
+			print_ip_payload(mdata, &buffer, offset, &packet.payload.ip);
 			break;
 		case ppt_tip:
 			print_field(buffer.opcode, "tip");
-			print_ip_payload(&buffer, offset, &packet.payload.ip);
+			print_ip_payload(mdata, &buffer, offset, &packet.payload.ip);
 			break;
 		case ppt_tip_pge:
 			print_field(buffer.opcode, "tip_pge");
-			print_ip_payload(&buffer, offset, &packet.payload.ip);
+			print_ip_payload(mdata, &buffer, offset, &packet.payload.ip);
 			break;
 		case ppt_tip_pgd:
 			print_field(buffer.opcode, "tip_pgd");
-			print_ip_payload(&buffer, offset, &packet.payload.ip);
+			print_ip_payload(mdata, &buffer, offset, &packet.payload.ip);
 			break;
 		case ppt_mode:
 			continue;
@@ -281,7 +311,8 @@ dump_packets(struct pt_packet_decoder *decoder,
 }
 
 static int
-init_ipt(uint64_t base, uint64_t start, uint64_t end)
+init_ipt(struct mtrace_data *mdata, uint64_t base,
+    uint64_t start, uint64_t end)
 {
 	struct pt_packet_decoder *decoder;
 	struct pt_config config;
@@ -311,7 +342,7 @@ init_ipt(uint64_t base, uint64_t start, uint64_t end)
 	//ptdump_tracking_init(&tracking);
 
 	while (1) {
-		error = dump_packets(decoder, &config);
+		error = dump_packets(mdata, decoder, &config);
 		if (error == 0) {
 			//printf(",");
 			break;
@@ -336,6 +367,7 @@ decode_data(int fd, void *base, uint32_t bufsize)
 	uint64_t curptr;
 	uint64_t cycle;
 	int error;
+	struct mtrace_data mdata;
 
 	cycle = 0;
 	curptr = 0;
@@ -351,7 +383,7 @@ decode_data(int fd, void *base, uint32_t bufsize)
 
 		if (data.cycle == cycle) {
 			if (data.ptr > curptr) {
-				init_ipt((uint64_t)base, curptr, data.ptr);
+				init_ipt(&mdata, (uint64_t)base, curptr, data.ptr);
 				curptr = data.ptr;
 			} else if (data.ptr < curptr) {
 				printf("panic: data.ptr %lx curptr %lx\n", data.ptr, curptr);
@@ -361,15 +393,25 @@ decode_data(int fd, void *base, uint32_t bufsize)
 			if ((data.cycle - cycle) > 1)
 				err(EXIT_FAILURE, "trace is too fast, machine cycle %ld, mtrace cycle %ld",
 				    data.cycle, cycle);
-			init_ipt((uint64_t)base, curptr, bufsize);
+			init_ipt(&mdata, (uint64_t)base, curptr, bufsize);
 			curptr = 0;
 			cycle += 1;
-			init_ipt((uint64_t)base, curptr, data.ptr);
+			init_ipt(&mdata, (uint64_t)base, curptr, data.ptr);
 			curptr = data.ptr;
 		}
 	}
 
 	return (0);
+}
+
+static void
+help(const char *name)
+{
+
+	printf("usage: %s [<options>] <binary>[:<from>[-<to>]\n\n", name);
+	printf("options:\n");
+	printf("  --help|-h                 this text.\n");
+	printf("  --retc                    enable ret compression.\n");
 }
 
 int
@@ -379,13 +421,16 @@ main(int argc, char *argv[])
 	int error;
 	int fd;
 	int bufsize;
-	int option;
 	int app_mode;
 	const char *app_filename;
 	struct stat sb;
+	struct pt_drv_config config;
+	int i;
 
 	app_mode = 0;
 
+#if 0
+	int option;
 	while ((option = getopt(argc, argv,
 	    "a:")) != -1)
 		switch (option) {
@@ -399,9 +444,38 @@ main(int argc, char *argv[])
 		default:
 			break;
 		};
+#endif
+
+	for (i = 1; i < argc; i++) {
+
+		if (strncmp(argv[i], "-", 1) != 0) {
+			app_mode = 1;
+			app_filename = argv[i];
+			if (stat(app_filename, &sb) < 0)
+				err(EX_OSERR, "ERROR: Cannot stat \"%s\"",
+				    app_filename);
+			//if (i < (argc - 1))
+			//	return usage(argv[0]);
+			//break;
+		}
+#if 0
+		if (strcmp(argv[i], "--app") == 0) {
+			app_mode = 1;
+			app_filename = argv[i];
+			if (stat(app_filename, &sb) < 0)
+				err(EX_OSERR, "ERROR: Cannot stat \"%s\"",
+				    app_filename);
+		}
+#endif
+
+		if (strcmp(argv[i], "--retc") == 0) {
+			config.retc = 1;
+		}
+	}
 
 	if (app_mode == 0) {
 		/* The only mode supported yet */
+		help(argv[0]);
 
 		errx(EX_USAGE, "ERROR: illegal usage.");
 
@@ -429,7 +503,6 @@ main(int argc, char *argv[])
 	//addr[0] = 1;
 	//printf("*base %lx\n", addr[0]);
 
-	struct pt_test data;
 	pid_t pid;
 	char *my_argv[4];
 
@@ -448,7 +521,7 @@ main(int argc, char *argv[])
 	pid = fork();
 	if (pid == 0) {
 		/* Child */
-		error = ioctl(fd, PT_IOC_TEST, &data);
+		error = ioctl(fd, PT_IOC_CONFIG, &config);
 		execve(app_filename, my_argv, NULL);
 	} else {
 		/* Parent */

@@ -44,8 +44,12 @@ struct pt_test {
 	uint64_t	cycle;
 };
 
-#define	PT_IOC_TEST \
-	_IOW(PT_MAGIC, 0x00, struct pt_test)
+struct pt_drv_config {
+	uint8_t	retc;	/* Ret compression */
+};
+
+#define	PT_IOC_CONFIG \
+	_IOW(PT_MAGIC, 0x00, struct pt_drv_config)
 
 #define	PT_IOC_PTR \
 	_IOR(PT_MAGIC, 0x01, struct pt_test)
