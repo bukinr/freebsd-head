@@ -64,6 +64,7 @@ __FBSDID("$FreeBSD$");
 #include <sysexits.h>
 #include <unistd.h>
 
+#include <libpmcstat.h>
 #include "pmcstat.h"
 
 /*
@@ -611,6 +612,8 @@ main(int argc, char **argv)
 	bzero(&ds_end, sizeof(ds_end));
 	ev = NULL;
 	CPU_ZERO(&cpumask);
+
+	libpmcstat_test();
 
 	/* Default to using the running system kernel. */
 	len = 0;

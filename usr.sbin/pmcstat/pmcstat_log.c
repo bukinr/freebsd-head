@@ -458,25 +458,6 @@ pmcstat_image_get_aout_params(struct pmcstat_image *image)
 }
 
 /*
- * Helper function.
- */
-
-static int
-pmcstat_symbol_compare(const void *a, const void *b)
-{
-	const struct pmcstat_symbol *sym1, *sym2;
-
-	sym1 = (const struct pmcstat_symbol *) a;
-	sym2 = (const struct pmcstat_symbol *) b;
-
-	if (sym1->ps_end <= sym2->ps_start)
-		return (-1);
-	if (sym1->ps_start >= sym2->ps_end)
-		return (1);
-	return (0);
-}
-
-/*
  * Map an address to a symbol in an image.
  */
 

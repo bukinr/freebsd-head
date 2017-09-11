@@ -34,7 +34,7 @@
 #ifndef	_PMCSTAT_LOG_H_
 #define	_PMCSTAT_LOG_H_
 
-typedef const void *pmcstat_interned_string;
+#include <libpmcstat.h>
 
 /*
  * A 'pmcstat_process' structure models processes.  Each process is
@@ -123,16 +123,6 @@ struct pmcstat_pcmap {
 	uintfptr_t	ppm_lowpc;
 	uintfptr_t	ppm_highpc;
 	struct pmcstat_image *ppm_image;
-};
-
-/*
- * Each function symbol tracked by pmcstat(8).
- */
-
-struct pmcstat_symbol {
-	pmcstat_interned_string ps_name;
-	uint64_t	ps_start;
-	uint64_t	ps_end;
 };
 
 /*

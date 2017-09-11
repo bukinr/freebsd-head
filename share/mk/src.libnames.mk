@@ -142,6 +142,7 @@ _LIBRARIES=	\
 		pcsclite \
 		pjdlog \
 		pmc \
+		pmcstat \
 		proc \
 		procstat \
 		pthread \
