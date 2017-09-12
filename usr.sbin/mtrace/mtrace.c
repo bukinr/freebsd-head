@@ -39,6 +39,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/mman.h>
 #include <sys/uio.h>
 #include <sys/signal.h>
+#include <sys/types.h>
 
 #include <signal.h>
 #include <ctype.h>
@@ -63,6 +64,9 @@ __FBSDID("$FreeBSD$");
 #include <libipt/pt_time.h>
 #include <libipt/pt_compiler.h>
 #include <libipt/intel-pt.h>
+
+#include <pmc.h>
+#include <libpmcstat.h>
 
 #include <machine/pt.h>
 
@@ -100,6 +104,7 @@ sext(uint64_t val, uint8_t sign)
 
 struct mtrace_data {
 	uint64_t ip;
+	struct pmcstat_process *pp;
 };
 
 struct ptdump_buffer {
@@ -110,6 +115,30 @@ struct ptdump_buffer {
 		char extended[48];
 	} payload;
 };
+
+static void
+symbol_lookup(struct pmcstat_process *pp, uint64_t instr)
+{
+	struct pmcstat_pcmap *map;
+	struct pmcstat_image *image;
+	uint64_t newpc;
+	struct pmcstat_symbol *sym;
+
+	map = pmcstat_process_find_map(pp, instr);
+	if (map != NULL) {
+		image = map->ppm_image;
+		newpc = instr - (map->ppm_lowpc +
+			(image->pi_vaddr - image->pi_start));
+		sym = pmcstat_symbol_search(image, newpc);
+		if (sym)
+			printf("FUNC: %s\n", pmcstat_string_unintern(sym->ps_name));
+	} else {
+		//printf("map not found\n");
+		//return (12);
+	}
+
+	printf("ok\n");
+}
 
 static int
 print_tnt_payload(struct ptdump_buffer *buffer, uint64_t offset __unused,
@@ -151,6 +180,7 @@ print_ip_payload(struct mtrace_data *mdata, struct ptdump_buffer *buffer,
 
 		mdata->ip &= ~0xffff;
 		mdata->ip |= (packet->ip & 0xffff);
+		symbol_lookup(mdata->pp, mdata->ip);
 		print_field(buffer->payload.standard, "%x: %016"
 			    PRIx64, pt_ipc_update_16, mdata->ip);
 		return (0);
@@ -163,6 +193,7 @@ print_ip_payload(struct mtrace_data *mdata, struct ptdump_buffer *buffer,
 	case pt_ipc_update_32:
 		mdata->ip &= ~0xffffffff;
 		mdata->ip |= (packet->ip & 0xffffffff);
+		symbol_lookup(mdata->pp, mdata->ip);
 		print_field(buffer->payload.standard, "%x: %016"
 			    PRIx64, pt_ipc_update_32, mdata->ip);
 		return (0);
@@ -174,6 +205,7 @@ print_ip_payload(struct mtrace_data *mdata, struct ptdump_buffer *buffer,
 	case pt_ipc_update_48:
 		mdata->ip &= ~0xffffffffffff;
 		mdata->ip |= (packet->ip & 0xffffffffffff);
+		symbol_lookup(mdata->pp, mdata->ip);
 		print_field(buffer->payload.standard, "%x: %016"
 			    PRIx64, pt_ipc_update_48, mdata->ip);
 		return (0);
@@ -184,6 +216,7 @@ print_ip_payload(struct mtrace_data *mdata, struct ptdump_buffer *buffer,
 	case pt_ipc_sext_48:
 		mdata->ip &= ~0xffffffffffff;
 		mdata->ip |= (packet->ip & 0xffffffffffff);
+		symbol_lookup(mdata->pp, mdata->ip);
 		print_field(buffer->payload.standard, "%x: %016"
 			    PRIx64, pt_ipc_sext_48, mdata->ip);
 		return (0);
@@ -193,6 +226,7 @@ print_ip_payload(struct mtrace_data *mdata, struct ptdump_buffer *buffer,
 
 	case pt_ipc_full:
 		mdata->ip = packet->ip;
+		symbol_lookup(mdata->pp, mdata->ip);
 		print_field(buffer->payload.standard, "%x: %016"
 			    PRIx64, pt_ipc_update_16, mdata->ip);
 		return (0);
@@ -361,7 +395,7 @@ init_ipt(struct mtrace_data *mdata, uint64_t base,
 }
 
 static int
-decode_data(int fd, void *base, uint32_t bufsize)
+decode_data(struct pmcstat_process *pp, int fd, void *base, uint32_t bufsize)
 {
 	struct pt_test data;
 	uint64_t curptr;
@@ -371,6 +405,8 @@ decode_data(int fd, void *base, uint32_t bufsize)
 
 	cycle = 0;
 	curptr = 0;
+
+	mdata.pp = pp;
 
 	while (1) {
 		error = ioctl(fd, PT_IOC_PTR, &data);
@@ -515,6 +551,36 @@ main(int argc, char *argv[])
 	int ret;
 #endif
 
+	struct pmcstat_image *image;
+	struct pmcstat_process *pp;
+	pmcstat_interned_string image_path;
+
+	if ((pp = malloc(sizeof(*pp))) == NULL)
+		err(EX_OSERR, "ERROR: Cannot allocate pid descriptor");
+
+	//pp->pp_pid = pid;
+	pp->pp_isactive = 1;
+
+	TAILQ_INIT(&pp->pp_map);
+
+	//LIST_INSERT_HEAD(&pmcstat_process_hash[hash], pp, pp_next);
+
+	image_path = pmcstat_string_intern(app_filename);
+	pmcstat_process_exec(pp, image_path, 0x4004a0);
+
+	image = pmcstat_image_from_path(image_path, 0);
+	//pmcstat_image_get_elf_params(image);
+
+	struct pmcstat_symbol *sym;
+	//sym = pmcstat_symbol_search(image, 0x400740);
+	//sym = pmcstat_symbol_search(image, 0x740);
+	sym = pmcstat_symbol_search(image, 0xbc1);
+	printf("sym %lx\n", (uint64_t)sym);
+	if (sym != NULL)
+		printf("sym name %s\n", pmcstat_string_unintern(sym->ps_name));
+
+	//map = pmcstat_process_find_map(pp, 0x000000080060cfa0);
+
 	if ((mtrace_kq = kqueue()) < 0)
 		printf("can't allocate kqueue\n");
 
@@ -545,7 +611,7 @@ main(int argc, char *argv[])
 		}
 #endif
 
-		decode_data(fd, base, bufsize);
+		decode_data(pp, fd, base, bufsize);
 	}
 
 	return (0);

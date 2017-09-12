@@ -77,8 +77,6 @@
 #define	PMCSTAT_OPEN_FOR_WRITE		1
 #define	PMCSTAT_DEFAULT_NW_HOST		"localhost"
 #define	PMCSTAT_DEFAULT_NW_PORT		"9000"
-#define	PMCSTAT_NHASH			256
-#define	PMCSTAT_HASH_MASK		0xFF
 
 #define	PMCSTAT_LDD_COMMAND		"/usr/bin/ldd"
 
@@ -97,9 +95,6 @@
 
 #define PMCSTAT_TOP_DELTA 	0
 #define PMCSTAT_TOP_ACCUM	1
-
-#define	min(A,B)		((A) < (B) ? (A) : (B))
-#define	max(A,B)		((A) > (B) ? (A) : (B))
 
 enum pmcstat_state {
 	PMCSTAT_FINISHED = 0,

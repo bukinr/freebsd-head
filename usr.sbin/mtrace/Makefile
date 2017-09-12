@@ -2,8 +2,8 @@
 # $FreeBSD$
 
 PROG=	mtrace
-LIBADD=	elf ipt
+LIBADD=	elf ipt pmcstat
 
-NO_SHARED=	yes
+# NO_SHARED=	yes
 
 .include <bsd.prog.mk>
