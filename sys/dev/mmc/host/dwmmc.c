@@ -385,6 +385,24 @@ dwmmc_intr(void *arg)
 		}
 	}
 
+#if 0
+	if (reg & SDMMC_INTMASK_RXDR) {
+		if (reg & SDMMC_INTMASK_DTO) {
+			printf(".");
+		} else {
+			printf(",");
+		}
+	}
+
+	if (reg & SDMMC_INTMASK_TXDR) {
+		if (reg & SDMMC_INTMASK_DTO) {
+			printf(">");
+		} else {
+			printf("<");
+		}
+	}
+#endif
+
 	if (sc->use_pio) {
 		if (reg & (SDMMC_INTMASK_RXDR|SDMMC_INTMASK_DTO)) {
 			pio_read(sc, cmd);
@@ -549,6 +567,8 @@ dwmmc_attach(device_t dev)
 					 MPSCTRL_NON_SECURE_WRITE_BIT |
 					 MPSCTRL_VALID));
 	}
+
+	sc->use_pio = 0;
 
 	/* XXX: we support operation for slot index 0 only */
 	slot = 0;
@@ -822,7 +842,10 @@ static void
 pio_read(struct dwmmc_softc *sc, struct mmc_command *cmd)
 {
 	struct mmc_data *data;
-	uint32_t *p, status;
+	uint32_t status;
+	uint32_t cnt;
+	uint32_t *p;
+	int i;
 
 	if (cmd == NULL || cmd->data == NULL)
 		return;
@@ -834,13 +857,30 @@ pio_read(struct dwmmc_softc *sc, struct mmc_command *cmd)
 	KASSERT((data->xfer_len & 3) == 0, ("xfer_len not aligned"));
 	p = (uint32_t *)data->data + (data->xfer_len >> 2);
 
+	status = READ4(sc, SDMMC_STATUS);
+	cnt = (status & SDMMC_STATUS_FIFO_COUNT_M) >> SDMMC_STATUS_FIFO_COUNT_S;
+
+	for (i = 0; i < cnt; i++) {
+		*p++ = READ4(sc, SDMMC_DATA);
+	}
+
+	data->xfer_len += 4 * cnt;
+
+#if 0
 	while (data->xfer_len < data->len) {
 		status = READ4(sc, SDMMC_STATUS);
-		if (status & SDMMC_STATUS_FIFO_EMPTY)
+		cnt = (status & SDMMC_STATUS_FIFO_COUNT_M) >> SDMMC_STATUS_FIFO_COUNT_S;
+		printf("cnt %d\n", cnt);
+
+		if (status & SDMMC_STATUS_FIFO_EMPTY) {
+			printf("xfer_len %d len %d, cnt %d\n",
+			    data->xfer_len, data->len, cnt);
 			break;
+		}
 		*p++ = READ4(sc, SDMMC_DATA);
 		data->xfer_len += 4;
 	}
+#endif
 
 	WRITE4(sc, SDMMC_RINTSTS, SDMMC_INTMASK_RXDR);
 }
@@ -850,6 +890,8 @@ pio_write(struct dwmmc_softc *sc, struct mmc_command *cmd)
 {
 	struct mmc_data *data;
 	uint32_t *p, status;
+	//uint32_t cnt;
+	//int i;
 
 	if (cmd == NULL || cmd->data == NULL)
 		return;
@@ -861,12 +903,33 @@ pio_write(struct dwmmc_softc *sc, struct mmc_command *cmd)
 	KASSERT((data->xfer_len & 3) == 0, ("xfer_len not aligned"));
 	p = (uint32_t *)data->data + (data->xfer_len >> 2);
 
+#if 0
+	status = READ4(sc, SDMMC_STATUS);
+	cnt = (status & SDMMC_STATUS_FIFO_COUNT_M) >> SDMMC_STATUS_FIFO_COUNT_S;
+
+	for (i = 0; i < cnt; i++) {
+		WRITE4(sc, SDMMC_DATA, *p++);
+	}
+
+	data->xfer_len += 4 * cnt;
+#endif
+
+	int i;
+	i = 1024;
+
 	while (data->xfer_len < data->len) {
-		status = READ4(sc, SDMMC_STATUS);
-		if (status & SDMMC_STATUS_FIFO_FULL)
+		if (i == 0) {
 			break;
+		}
+		status = READ4(sc, SDMMC_STATUS);
+		if (status & SDMMC_STATUS_FIFO_FULL) {
+			printf("xfer_len %d len %d\n",
+			    data->xfer_len, data->len);
+			break;
+		}
 		WRITE4(sc, SDMMC_DATA, *p++);
 		data->xfer_len += 4;
+		i -= 1;
 	}
 
 	WRITE4(sc, SDMMC_RINTSTS, SDMMC_INTMASK_TXDR);
