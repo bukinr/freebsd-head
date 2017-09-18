@@ -80,6 +80,8 @@ pmc_intel_initialize(void)
 	enum pmc_cputype cputype;
 	int error, model, nclasses, ncpus, stepping, verov;
 
+	printf("%s\n", __func__);
+
 	KASSERT(cpu_vendor_id == CPU_VENDOR_INTEL,
 	    ("[intel,%d] Initializing non-intel processor", __LINE__));
 
@@ -92,6 +94,8 @@ pmc_intel_initialize(void)
 	model = ((cpu_id & 0xF0000) >> 12) | ((cpu_id & 0xF0) >> 4);
 	stepping = cpu_id & 0xF;
 
+	printf("cpuid %x\n", cpu_id & 0xF00);
+	printf("model %x\n", model);
 	switch (cpu_id & 0xF00) {
 #if	defined(__i386__)
 	case 0x500:		/* Pentium family processors */
@@ -214,6 +218,10 @@ pmc_intel_initialize(void)
 			nclasses = 3;
 			break;
 		}
+		case 0x8E:
+			cputype = PMC_CPU_INTEL_KABYLAKE;
+			nclasses = 3 + 1;
+			break;
 		break;
 #if	defined(__i386__) || defined(__amd64__)
 	case 0xF00:		/* P4 */
@@ -263,6 +271,7 @@ pmc_intel_initialize(void)
 	case PMC_CPU_INTEL_IVYBRIDGE_XEON:
 	case PMC_CPU_INTEL_HASWELL:
 	case PMC_CPU_INTEL_HASWELL_XEON:
+	case PMC_CPU_INTEL_KABYLAKE:
 		error = pmc_core_initialize(pmc_mdep, ncpus, verov);
 		break;
 
@@ -303,6 +312,12 @@ pmc_intel_initialize(void)
 
 	if (error) {
 		pmc_tsc_finalize(pmc_mdep);
+		goto error;
+	}
+
+	error = pmc_pt_initialize(pmc_mdep, ncpus);
+	if (error) {
+		pmc_pt_finalize(pmc_mdep);
 		goto error;
 	}
 
@@ -360,6 +375,7 @@ pmc_intel_finalize(struct pmc_mdep *md)
 	case PMC_CPU_INTEL_WESTMERE_EX:
 	case PMC_CPU_INTEL_SANDYBRIDGE_XEON:
 	case PMC_CPU_INTEL_IVYBRIDGE_XEON:
+	case PMC_CPU_INTEL_KABYLAKE:
 		pmc_core_finalize(md);
 		break;
 
