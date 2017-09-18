@@ -71,6 +71,8 @@ __FBSDID("$FreeBSD$");
 #include <vm/pmap.h>
 #include <vm/vm_map.h>
 #include <vm/vm_object.h>
+#include <vm/vm_page.h>
+#include <vm/vm_pager.h>
 
 #include "hwpmc_soft.h"
 
@@ -306,7 +308,14 @@ SYSCTL_INT(_security_bsd, OID_AUTO, unprivileged_syspmcs, CTLFLAG_RWTUN,
 
 #define	PMC_HASH_PTR(P,M)	((((unsigned long) (P) >> 2) * _PMC_HM) & (M))
 
-struct cdev *pmc_cdev;
+struct pmc_vm_handle {
+	vm_object_t		mem;
+	vm_size_t		size;
+	void *			base;
+};
+
+struct pmc_vm_handle *vmh;
+struct cdev *pmc_cdev[MAXCPU];
 
 /*
  * Syscall structures
@@ -4886,9 +4895,108 @@ pmc_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 }
 
 static int
+pmc_pg_ctor(void *handle, vm_ooffset_t size, vm_prot_t prot,
+    vm_ooffset_t foff, struct ucred *cred, u_short *color)
+{
+
+	printf("%s\n", __func__);
+
+	return (0);
+}
+
+static void
+pmc_pg_dtor(void *handle)
+{
+	struct pmc_vm_handle *vmh;
+
+	printf("%s\n", __func__);
+
+	vmh = handle;
+
+	free(vmh, M_PMC);
+}
+
+static int
+pmc_pg_fault(vm_object_t object, vm_ooffset_t offset,
+    int prot, vm_page_t *mres)
+{
+	struct pt_vm_handle *vmh;
+	vm_offset_t paddr;
+	vm_pindex_t pidx;
+	vm_page_t page;
+
+	printf("%s: offset 0x%lx\n", __func__, offset);
+
+	vmh = object->handle;
+	if (vmh == NULL)
+		return (VM_PAGER_FAIL);
+
+	pidx = OFF_TO_IDX(offset);
+
+#if 0
+	int i;
+	for (i = 0; i < sc->topa_n; i++) {
+		if (offset < sc->topa_sw[i].size) {
+			paddr = vtophys(sc->topa_sw[i].base) + offset;
+			break;
+		}
+		offset -= sc->topa_sw[i].size;
+	}
+
+	(*pcd->pcd_get_page)(cpu, offset, &paddr);
+#else
+	paddr = 0;
+#endif
+
+	if (((*mres)->flags & PG_FICTITIOUS) != 0) {
+		printf("PG_FICTITIOUS\n");
+		/*
+		 * If the passed in result page is a fake page, update it with
+		 * the new physical address.
+		 */
+		page = *mres;
+		vm_page_updatefake(page, paddr, object->memattr);
+	} else {
+		/*
+		 * Replace the passed in reqpage page with our own fake page and
+		 * free up the all of the original pages.
+		 */
+
+		VM_OBJECT_WUNLOCK(object);
+		page = vm_page_getfake(paddr, object->memattr);
+		VM_OBJECT_WLOCK(object);
+		vm_page_lock(*mres);
+		vm_page_free(*mres);
+		vm_page_unlock(*mres);
+		*mres = page;
+		vm_page_insert(page, object, pidx);
+	}
+
+	page->valid = VM_PAGE_BITS_ALL;
+
+	return (VM_PAGER_OK);
+}
+
+static struct cdev_pager_ops pmc_pg_ops = {
+	.cdev_pg_ctor = pmc_pg_ctor,
+	.cdev_pg_dtor = pmc_pg_dtor,
+	.cdev_pg_fault = pmc_pg_fault,
+};
+
+static int
 pmc_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
     vm_size_t mapsize, struct vm_object **objp, int nprot)
 {
+
+	vmh = malloc(sizeof(struct pmc_vm_handle),
+	    M_PMC, M_WAITOK | M_ZERO);
+
+	vmh->mem = cdev_pager_allocate(vmh, OBJT_DEVICE, &pmc_pg_ops,
+	    mapsize, nprot, *offset, NULL);
+	if (vmh->mem == NULL) {
+		printf("cdev_pager_allocate failed\n");
+		return (ENXIO);
+	}
 
 	return (0);
 }
@@ -5122,8 +5230,10 @@ pmc_initialize(void)
 		printf("\n");
 	}
 
-	pmc_cdev = make_dev(&pmc_cdevsw, 0, UID_ROOT, GID_WHEEL,
-	    0600, "pmc");
+	for (cpu = 0; cpu < maxcpu; cpu++) {
+		pmc_cdev[cpu] = make_dev(&pmc_cdevsw, 0, UID_ROOT, GID_WHEEL,
+		    0600, "pmc%d", cpu);
+	}
 
 	return (error);
 }
@@ -5278,7 +5388,9 @@ pmc_cleanup(void)
 
 	pmclog_shutdown();
 
-	destroy_dev(pmc_cdev);
+	for (cpu = 0; cpu < maxcpu; cpu++) {
+		destroy_dev(pmc_cdev[cpu]);
+	}
 
 	sx_xunlock(&pmc_sx); 	/* we are done */
 }
