@@ -253,6 +253,7 @@ pmc_md_initialize()
 	else
 		return (NULL);
 
+	printf("call lapic_enable_pmc\n");
 	/* disallow sampling if we do not have an LAPIC */
 	if (md != NULL && !lapic_enable_pmc())
 		for (i = 0; i < md->pmd_nclass; i++) {

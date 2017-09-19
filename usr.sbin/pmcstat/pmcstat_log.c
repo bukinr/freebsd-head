@@ -858,6 +858,9 @@ pmcstat_analyze_log(void)
 			    pmcstat_image_link(ppnew, ppm->ppm_image,
 				ppm->ppm_lowpc);
 			break;
+		case PMCLOG_TYPE_TRACE:
+			printf("trace event\n");
+			break;
 
 		default:	/* other types of entries are not relevant */
 			break;
@@ -989,7 +992,13 @@ pmcstat_print_log(void)
 			PMCSTAT_PRINT_ENTRY("exit","%d",
 			    ev.pl_u.pl_se.pl_pid);
 			break;
+		case PMCLOG_TYPE_TRACE:
+			PMCSTAT_PRINT_ENTRY("trace","%ld, %ld",
+			    ev.pl_u.pl_tr.pl_cycle,
+			    ev.pl_u.pl_tr.pl_offset);
+			break;
 		default:
+			printf("event %d\n", ev.pl_type);
 			fprintf(args.pa_printfile, "unknown event (type %d).\n",
 			    ev.pl_type);
 		}
@@ -997,12 +1006,12 @@ pmcstat_print_log(void)
 
 	if (ev.pl_state == PMCLOG_EOF)
 		return (PMCSTAT_FINISHED);
-	else if (ev.pl_state ==  PMCLOG_REQUIRE_DATA)
+	else if (ev.pl_state == PMCLOG_REQUIRE_DATA)
 		return (PMCSTAT_RUNNING);
 
 	errx(EX_DATAERR,
-	    "ERROR: event parsing failed (record %jd, offset 0x%jx).",
-	    (uintmax_t) ev.pl_count + 1, ev.pl_offset);
+	    "ERROR: event parsing failed (record %jd, offset 0x%jx, type %d, PMCLOG_TYPE_TRACE %d).",
+	    (uintmax_t) ev.pl_count + 1, ev.pl_offset, ev.pl_type, PMCLOG_TYPE_TRACE);
 	/*NOTREACHED*/
 }
 

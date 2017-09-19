@@ -636,7 +636,7 @@ main(int argc, char **argv)
 	CPU_COPY(&rootmask, &cpumask);
 
 	while ((option = getopt(argc, argv,
-	    "CD:EF:G:M:NO:P:R:S:TWa:c:def:gk:l:m:n:o:p:qr:s:t:vw:z:")) != -1)
+	    "CD:EF:G:H:M:NO:P:R:S:TWa:c:def:gh:k:l:m:n:o:p:qr:s:t:vw:z:")) != -1)
 		switch (option) {
 		case 'a':	/* Annotate + callgraph */
 			args.pa_flags |= FLAG_DO_ANNOTATE;
@@ -744,6 +744,56 @@ main(int argc, char **argv)
 			args.pa_required |= FLAG_HAS_SAMPLING_PMCS;
 			break;
 
+		case 'h':
+		case 'H':
+			if ((ev = malloc(sizeof(*ev))) == NULL)
+				errx(EX_SOFTWARE, "ERROR: Out of memory.");
+
+			switch (option) {
+			case 'H': ev->ev_mode = PMC_MODE_ST; break;
+			case 'h': ev->ev_mode = PMC_MODE_TT; break;
+			}
+
+			if (option == 'h') {
+				args.pa_flags |= FLAG_HAS_PROCESS_PMCS;
+				args.pa_required |= (FLAG_HAS_COMMANDLINE |
+				    FLAG_HAS_TARGET);
+			}
+
+			ev->ev_spec = strdup(optarg);
+			if (ev->ev_spec == NULL)
+				errx(EX_SOFTWARE, "ERROR: Out of memory.");
+
+			args.pa_required |= (FLAG_HAS_PIPE |
+			    FLAG_HAS_OUTPUT_LOGFILE);
+
+			ev->ev_saved = 0LL;
+			ev->ev_pmcid = PMC_ID_INVALID;
+
+			/* extract event name */
+			c = strcspn(optarg, ", \t");
+			ev->ev_name = malloc(c + 1);
+			if (ev->ev_name == NULL)
+				errx(EX_SOFTWARE, "ERROR: Out of memory.");
+			(void) strncpy(ev->ev_name, optarg, c);
+			*(ev->ev_name + c) = '\0';
+
+			if (option == 'H')
+				ev->ev_cpu = CPU_FFS(&cpumask) - 1;
+			else
+				ev->ev_cpu = PMC_CPU_ANY;
+
+			ev->ev_flags = 0;
+
+			STAILQ_INSERT_TAIL(&args.pa_events, ev, ev_next);
+
+			if (option == 'H') {
+				CPU_CLR(ev->ev_cpu, &cpumask);
+				pmcstat_clone_event_descriptor(ev, &cpumask);
+				CPU_SET(ev->ev_cpu, &cpumask);
+			}
+
+			break;
 		case 'p':	/* process virtual counting PMC */
 		case 's':	/* system-wide counting PMC */
 		case 'P':	/* process virtual sampling PMC */
@@ -776,7 +826,7 @@ main(int argc, char **argv)
 			if (option == 's' || option == 'S')
 				args.pa_flags |= FLAG_HAS_SYSTEM_PMCS;
 
-			ev->ev_spec  = strdup(optarg);
+			ev->ev_spec = strdup(optarg);
 			if (ev->ev_spec == NULL)
 				errx(EX_SOFTWARE, "ERROR: Out of memory.");
 
@@ -942,6 +992,7 @@ main(int argc, char **argv)
 	    FLAG_DO_ANNOTATE | FLAG_DO_TOP))
 		args.pa_flags |= FLAG_DO_ANALYSIS;
 
+	printf("%s: 1\n", __func__);
 	/*
 	 * Check invocation syntax.
 	 */
@@ -950,6 +1001,8 @@ main(int argc, char **argv)
 	if (args.pa_outputpath && args.pa_inputpath)
 		errx(EX_USAGE,
 		    "ERROR: options -O and -R are mutually exclusive.");
+
+	printf("%s: 2\n", __func__);
 
 	/* disallow -T and -l together */
 	if ((args.pa_flags & FLAG_HAS_DURATION) &&
@@ -1035,11 +1088,13 @@ main(int argc, char **argv)
 		    );
 
 	/* check if -g/-G/-m/-T are being used correctly */
+#if 0
 	if ((args.pa_flags & FLAG_DO_ANALYSIS) &&
 	    !(args.pa_flags & (FLAG_HAS_SAMPLING_PMCS|FLAG_READ_LOGFILE)))
 		errx(EX_USAGE,
 "ERROR: options -g/-G/-m/-T require sampling PMCs or -R to be specified."
 		    );
+#endif
 
 	/* check if -e was specified without -g */
 	if ((args.pa_flags & FLAG_DO_WIDE_GPROF_HC) &&
@@ -1137,6 +1192,7 @@ main(int argc, char **argv)
 
 	/* if we've been asked to process a log file, skip init */
 	if ((args.pa_flags & FLAG_READ_LOGFILE) == 0) {
+		printf("%s: pmc_init\n", __func__);
 		if (pmc_init() < 0)
 			err(EX_UNAVAILABLE,
 			    "ERROR: Initialization of the pmc(3) library failed"
@@ -1310,16 +1366,20 @@ main(int argc, char **argv)
 	 * Setup a timer if we have counting mode PMCs needing to be printed or
 	 * top mode plugin is active.
 	 */
+#if 0
 	if (((args.pa_flags & FLAG_HAS_COUNTING_PMCS) &&
 	     (args.pa_required & FLAG_HAS_OUTPUT_LOGFILE) == 0) ||
 	    (args.pa_flags & FLAG_DO_TOP)) {
+#endif
 		EV_SET(&kev, 0, EVFILT_TIMER, EV_ADD, 0,
 		    args.pa_interval * 1000, NULL);
 
 		if (kevent(pmcstat_kq, &kev, 1, NULL, 0, NULL) < 0)
 			err(EX_OSERR,
 			    "ERROR: Cannot register kevent for timer");
+#if 0
 	}
+#endif
 
 	/*
 	 * Setup a duration timer if we have sampling mode PMCs and
@@ -1423,6 +1483,11 @@ main(int argc, char **argv)
 				continue;
 		}
 
+#if 0
+		printf("%s: pmcstat event: filter %d, ident %ld\n",
+		    __func__, kev.filter, kev.ident);
+#endif
+
 		if (kev.flags & EV_ERROR)
 			errc(EX_OSERR, kev.data, "ERROR: kevent failed");
 
@@ -1441,6 +1506,10 @@ main(int argc, char **argv)
 				do_read = 0;
 				runstate = pmcstat_process_log();
 			}
+			break;
+
+		case EVFILT_WRITE:
+			pmcstat_process_log();
 			break;
 
 		case EVFILT_SIGNAL:
@@ -1484,10 +1553,16 @@ main(int argc, char **argv)
 				runstate = PMCSTAT_FINISHED;
 				break;
 			}
+#if 0
 			/* print out counting PMCs */
 			if ((args.pa_flags & FLAG_DO_TOP) &&
 			     pmc_flush_logfile() == 0)
 				do_read = 1;
+#else
+			pmc_flush_logfile();
+			do_read = 1;
+#endif
+
 			do_print = 1;
 			break;
 

@@ -997,6 +997,19 @@ pmclog_process_sysexit(struct pmc_owner *po, pid_t pid)
 }
 
 /*
+ * Log a trace event.
+ */
+
+void
+pmclog_process_trace(struct pmc_owner *po, uint64_t cycle, uint64_t offset)
+{
+	PMCLOG_RESERVE(po, TRACE, sizeof(struct pmclog_trace));
+	PMCLOG_EMIT64(cycle);
+	PMCLOG_EMIT64(offset);
+	PMCLOG_DESPATCH(po);
+}
+
+/*
  * Write a user log entry.
  */
 

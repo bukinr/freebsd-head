@@ -2843,6 +2843,12 @@ core2_intr(int cpu, struct trapframe *tf)
 	struct core_cpu *cc;
 	pmc_value_t v;
 
+	error = pmc_pt_intr(cpu, tf);
+	if (error) {
+		/* Found */
+		return (1);
+	}
+
 	PMCDBG3(MDP,INT, 1, "cpu=%d tf=0x%p um=%d", cpu, (void *) tf,
 	    TRAPF_USERMODE(tf));
 

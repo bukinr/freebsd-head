@@ -73,6 +73,8 @@ static int p6_allocate_pmc(enum pmc_event _pe, char *_ctrspec,
 #if defined(__amd64__) || defined(__i386__)
 static int tsc_allocate_pmc(enum pmc_event _pe, char *_ctrspec,
     struct pmc_op_pmcallocate *_pmc_config);
+static int pt_allocate_pmc(enum pmc_event _pe, char *_ctrspec,
+    struct pmc_op_pmcallocate *_pmc_config);
 #endif
 #if defined(__arm__)
 #if defined(__XSCALE__)
@@ -237,6 +239,11 @@ static const struct pmc_event_descr skylake_xeon_event_table[] =
 	__PMC_EV_ALIAS_SKYLAKE_XEON()
 };
 
+static const struct pmc_event_descr kabylake_event_table[] =
+{
+	__PMC_EV_ALIAS_KABYLAKE()
+};
+
 static const struct pmc_event_descr ivybridge_event_table[] =
 {
 	__PMC_EV_ALIAS_IVYBRIDGE()
@@ -334,6 +341,7 @@ PMC_MDEP_TABLE(broadwell, IAP, PMC_CLASS_SOFT, PMC_CLASS_IAF, PMC_CLASS_TSC, PMC
 PMC_MDEP_TABLE(broadwell_xeon, IAP, PMC_CLASS_SOFT, PMC_CLASS_IAF, PMC_CLASS_TSC, PMC_CLASS_UCF, PMC_CLASS_UCP);
 PMC_MDEP_TABLE(skylake, IAP, PMC_CLASS_SOFT, PMC_CLASS_IAF, PMC_CLASS_TSC, PMC_CLASS_UCF, PMC_CLASS_UCP);
 PMC_MDEP_TABLE(skylake_xeon, IAP, PMC_CLASS_SOFT, PMC_CLASS_IAF, PMC_CLASS_TSC);
+PMC_MDEP_TABLE(kabylake, IAP, PMC_CLASS_SOFT, PMC_CLASS_IAF, PMC_CLASS_TSC, PMC_CLASS_UCF, PMC_CLASS_UCP, PMC_CLASS_PT);
 PMC_MDEP_TABLE(ivybridge, IAP, PMC_CLASS_SOFT, PMC_CLASS_IAF, PMC_CLASS_TSC);
 PMC_MDEP_TABLE(ivybridge_xeon, IAP, PMC_CLASS_SOFT, PMC_CLASS_IAF, PMC_CLASS_TSC);
 PMC_MDEP_TABLE(sandybridge, IAP, PMC_CLASS_SOFT, PMC_CLASS_IAF, PMC_CLASS_TSC, PMC_CLASS_UCF, PMC_CLASS_UCP);
@@ -363,6 +371,11 @@ static const struct pmc_event_descr tsc_event_table[] =
 	__PMC_EV_TSC()
 };
 
+static const struct pmc_event_descr pt_event_table[] =
+{
+	__PMC_EV_PT()
+};
+
 #undef	PMC_CLASS_TABLE_DESC
 #define	PMC_CLASS_TABLE_DESC(NAME, CLASS, EVENTS, ALLOCATOR)	\
 static const struct pmc_class_descr NAME##_class_table_descr =	\
@@ -390,6 +403,7 @@ PMC_CLASS_TABLE_DESC(broadwell, IAP, broadwell, iap);
 PMC_CLASS_TABLE_DESC(broadwell_xeon, IAP, broadwell_xeon, iap);
 PMC_CLASS_TABLE_DESC(skylake, IAP, skylake, iap);
 PMC_CLASS_TABLE_DESC(skylake_xeon, IAP, skylake_xeon, iap);
+PMC_CLASS_TABLE_DESC(kabylake, IAP, kabylake, iap);
 PMC_CLASS_TABLE_DESC(ivybridge, IAP, ivybridge, iap);
 PMC_CLASS_TABLE_DESC(ivybridge_xeon, IAP, ivybridge_xeon, iap);
 PMC_CLASS_TABLE_DESC(sandybridge, IAP, sandybridge, iap);
@@ -416,6 +430,7 @@ PMC_CLASS_TABLE_DESC(p6, P6, p6, p6);
 #endif
 #if	defined(__i386__) || defined(__amd64__)
 PMC_CLASS_TABLE_DESC(tsc, TSC, tsc, tsc);
+PMC_CLASS_TABLE_DESC(pt, PT, pt, pt);
 #endif
 #if	defined(__arm__)
 #if	defined(__XSCALE__)
@@ -730,6 +745,8 @@ static struct pmc_event_alias core2_aliases_without_iaf[] = {
 #define skylake_aliases_without_iaf	core2_aliases_without_iaf
 #define skylake_xeon_aliases		core2_aliases
 #define skylake_xeon_aliases_without_iaf	core2_aliases_without_iaf
+#define kabylake_aliases		core2_aliases
+#define kabylake_aliases_without_iaf	core2_aliases_without_iaf
 #define ivybridge_aliases		core2_aliases
 #define ivybridge_aliases_without_iaf	core2_aliases_without_iaf
 #define ivybridge_xeon_aliases		core2_aliases
@@ -1048,6 +1065,11 @@ iap_allocate_pmc(enum pmc_event pe, char *ctrspec,
 
 		} else if (cpu_info.pm_cputype == PMC_CPU_INTEL_SKYLAKE ||
 		    cpu_info.pm_cputype == PMC_CPU_INTEL_SKYLAKE_XEON) {
+			if (KWPREFIXMATCH(p, IAP_KW_RSP "=")) {
+				n = pmc_parse_mask(iap_rsp_mask_skylake, p, &rsp);
+			} else
+				return (-1);
+		} else if (cpu_info.pm_cputype == PMC_CPU_INTEL_KABYLAKE) {
 			if (KWPREFIXMATCH(p, IAP_KW_RSP "=")) {
 				n = pmc_parse_mask(iap_rsp_mask_skylake, p, &rsp);
 			} else
@@ -2491,6 +2513,22 @@ tsc_allocate_pmc(enum pmc_event pe, char *ctrspec,
 
 	return (0);
 }
+static int
+pt_allocate_pmc(enum pmc_event pe, char *ctrspec,
+    struct pmc_op_pmcallocate *pmc_config)
+{
+	if (pe != PMC_EV_PT_PT)
+		return (-1);
+
+	/* PT events must be unqualified. */
+	if (ctrspec && *ctrspec != '\0')
+		return (-1);
+
+	pmc_config->pm_md.pm_amd.pm_amd_config = 0;
+	pmc_config->pm_caps |= PMC_CAP_READ;
+
+	return (0);
+}
 #endif
 
 static struct pmc_event_alias generic_aliases[] = {
@@ -2774,11 +2812,14 @@ pmc_allocate(const char *ctrspec, enum pmc_mode mode,
 	struct pmc_op_pmcallocate pmc_config;
 	const struct pmc_class_descr *pcd;
 
+	printf("%s\n", __func__);
+
 	spec_copy = NULL;
 	retval    = -1;
 
 	if (mode != PMC_MODE_SS && mode != PMC_MODE_TS &&
-	    mode != PMC_MODE_SC && mode != PMC_MODE_TC) {
+	    mode != PMC_MODE_SC && mode != PMC_MODE_TC &&
+	    mode != PMC_MODE_ST && mode != PMC_MODE_TT) {
 		errno = EINVAL;
 		goto out;
 	}
@@ -3021,6 +3062,10 @@ pmc_event_names_of_class(enum pmc_class cl, const char ***eventnames,
 			ev = skylake_xeon_event_table;
 			count = PMC_EVENT_TABLE_SIZE(skylake_xeon);
 			break;
+		case PMC_CPU_INTEL_KABYLAKE:
+			ev = kabylake_event_table;
+			count = PMC_EVENT_TABLE_SIZE(kabylake);
+			break;
 		case PMC_CPU_INTEL_IVYBRIDGE:
 			ev = ivybridge_event_table;
 			count = PMC_EVENT_TABLE_SIZE(ivybridge);
@@ -3083,6 +3128,10 @@ pmc_event_names_of_class(enum pmc_class cl, const char ***eventnames,
 	case PMC_CLASS_TSC:
 		ev = tsc_event_table;
 		count = PMC_EVENT_TABLE_SIZE(tsc);
+		break;
+	case PMC_CLASS_PT:
+		ev = pt_event_table;
+		count = PMC_EVENT_TABLE_SIZE(pt);
 		break;
 	case PMC_CLASS_K7:
 		ev = k7_event_table;
@@ -3403,6 +3452,10 @@ pmc_init(void)
 	case PMC_CPU_INTEL_SKYLAKE_XEON:
 		PMC_MDEP_INIT_INTEL_V2(skylake_xeon);
 		break;
+	case PMC_CPU_INTEL_KABYLAKE:
+		pmc_class_table[n++] = &pt_class_table_descr;
+		PMC_MDEP_INIT_INTEL_V2(kabylake);
+		break;
 	case PMC_CPU_INTEL_IVYBRIDGE:
 		PMC_MDEP_INIT_INTEL_V2(ivybridge);
 		break;
@@ -3620,6 +3673,11 @@ _pmc_name_of_event(enum pmc_event pe, enum pmc_cputype cpu)
 			evfence = skylake_xeon_event_table +
 			    PMC_EVENT_TABLE_SIZE(skylake_xeon);
 			break;
+		case PMC_CPU_INTEL_KABYLAKE:
+			ev = kabylake_event_table;
+			evfence = kabylake_event_table +
+			    PMC_EVENT_TABLE_SIZE(kabylake);
+			break;
 		case PMC_CPU_INTEL_IVYBRIDGE:
 			ev = ivybridge_event_table;
 			evfence = ivybridge_event_table + PMC_EVENT_TABLE_SIZE(ivybridge);
@@ -3733,6 +3791,9 @@ _pmc_name_of_event(enum pmc_event pe, enum pmc_cputype cpu)
 	} else if (pe == PMC_EV_TSC_TSC) {
 		ev = tsc_event_table;
 		evfence = tsc_event_table + PMC_EVENT_TABLE_SIZE(tsc);
+	} else if (pe == PMC_EV_PT_PT) {
+		ev = pt_event_table;
+		evfence = pt_event_table + PMC_EVENT_TABLE_SIZE(pt);
 	} else if ((int)pe >= PMC_EV_SOFT_FIRST && (int)pe <= PMC_EV_SOFT_LAST) {
 		ev = soft_event_table;
 		evfence = soft_event_table + soft_event_info.pm_nevent;

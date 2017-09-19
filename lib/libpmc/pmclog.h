@@ -134,6 +134,11 @@ struct pmclog_ev_sysexit {
 	pid_t		pl_pid;
 };
 
+struct pmclog_ev_trace {
+	uint64_t	pl_cycle;
+	uint64_t	pl_offset;
+};
+
 struct pmclog_ev_userdata {
 	uint32_t	pl_userdata;
 };
@@ -162,6 +167,7 @@ struct pmclog_ev {
 		struct pmclog_ev_procfork	pl_f;
 		struct pmclog_ev_sysexit	pl_se;
 		struct pmclog_ev_userdata	pl_u;
+		struct pmclog_ev_trace		pl_tr;
 	} pl_u;
 };
 
