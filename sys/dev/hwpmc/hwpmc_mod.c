@@ -998,7 +998,7 @@ pmc_attach_one_process(struct proc *p, struct pmc *pm)
 	char *fullpath, *freepath;
 	struct pmc_process	*pp;
 
-	printf("%s\n", __func__);
+	printf("%s: pid %d\n", __func__, p->p_pid);
 
 	sx_assert(&pmc_sx, SX_XLOCKED);
 
@@ -1249,8 +1249,6 @@ pmc_process_csw_in(struct thread *td)
 	struct pmc_process *pp;
 	struct pmc_classdep *pcd;
 
-	return;
-
 	p = td->td_proc;
 
 	if ((pp = pmc_find_process_descriptor(p, PMC_FLAG_NONE)) == NULL)
@@ -1382,10 +1380,6 @@ pmc_process_csw_out(struct thread *td)
 	struct pmc_process *pp;
 	struct pmc_classdep *pcd;
 
-	return;
-
-	printf("%s\n", __func__);
-
 	/*
 	 * Locate our process descriptor; this may be NULL if
 	 * this process is exiting and we have already removed
@@ -1443,9 +1437,6 @@ pmc_process_csw_out(struct thread *td)
 		if (!PMC_IS_VIRTUAL_MODE(mode))
 			continue; /* not a process virtual PMC */
 
-		if (mode == PMC_MODE_ST || mode  == PMC_MODE_TT)
-			continue;
-
 		KASSERT(PMC_TO_ROWINDEX(pm) == ri,
 		    ("[pmc,%d] ri mismatch pmc(%d) ri(%d)",
 			__LINE__, PMC_TO_ROWINDEX(pm), ri));
@@ -1502,7 +1493,7 @@ pmc_process_csw_out(struct thread *td)
 				    pm->pm_sc.pm_reloadcount)
 					pp->pp_pmcs[ri].pp_pmcval -=
 					    pm->pm_sc.pm_reloadcount;
-				KASSERT(pp->pp_pmcs[ri].pp_pmcval > 0 &&
+				KASSERT(pp->pp_pmcs[ri].pp_pmcval >= 0 &&
 				    pp->pp_pmcs[ri].pp_pmcval <=
 				    pm->pm_sc.pm_reloadcount,
 				    ("[pmc,%d] pp_pmcval outside of expected "
@@ -1573,6 +1564,8 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 
 	pid = td->td_proc->p_pid;
 
+	printf("%s: pid %d\n", __func__, pid);
+
 	/* Inform owners of all system-wide sampling PMCs. */
 	LIST_FOREACH(po, &pmc_ss_owners, po_ssnext)
 	    if (po->po_flags & PMC_PO_OWNS_LOGFILE)
@@ -1584,11 +1577,13 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 	/*
 	 * Inform sampling PMC owners tracking this process.
 	 */
-	for (ri = 0; ri < md->pmd_npmc; ri++)
-		if ((pm = pp->pp_pmcs[ri].pp_pmc) != NULL &&
-		    PMC_IS_SAMPLING_MODE(PMC_TO_MODE(pm)))
+	for (ri = 0; ri < md->pmd_npmc; ri++) {
+		if ((pm = pp->pp_pmcs[ri].pp_pmc) == NULL)
+			continue;
+		if (PMC_IS_SAMPLING_MODE(PMC_TO_MODE(pm)) || PMC_TO_MODE(pm) == PMC_MODE_TT)
 			pmclog_process_map_in(pm->pm_owner,
 			    pid, pkm->pm_address, fullpath);
+	}
 
   done:
 	if (freepath)
@@ -1908,6 +1903,16 @@ pmc_hook_handler(struct thread *td, int function, void *arg)
 		struct pmckern_procexec *pk;
 
 		printf("%s: PMC_FN_PROCESS_EXEC\n", __func__);
+		printf("%s: PMC_FN_PROCESS_EXEC: name %s\n", __func__, td->td_name);
+
+#if 0
+		pmap_t pmap;  
+		uint64_t cr3;
+		pmap = vmspace_pmap(td->td_proc->p_vmspace);
+		cr3 = pmap->pm_cr3;
+		wrmsr(MSR_IA32_RTIT_CR3_MATCH, cr3);
+#endif
+
 		sx_assert(&pmc_sx, SX_XLOCKED);
 
 		p = td->td_proc;
@@ -4924,7 +4929,7 @@ pmc_pg_fault(vm_object_t object, vm_ooffset_t offset,
 	vm_page_t page;
 	int error;
 
-	printf("%s: offset 0x%lx\n", __func__, offset);
+	//printf("%s: offset 0x%lx\n", __func__, offset);
 
 	vmh = object->handle;
 	if (vmh == NULL)
@@ -4991,6 +4996,8 @@ pmc_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
     struct thread *td)
 {
 
+	printf("%s\n", __func__);
+
 	return (0);
 }
 
@@ -4999,8 +5006,12 @@ pmc_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
     vm_size_t mapsize, struct vm_object **objp, int nprot)
 {
 
+	printf("%s\n", __func__);
+
 	vmh = malloc(sizeof(struct pmc_vm_handle),
 	    M_PMC, M_WAITOK | M_ZERO);
+
+	printf("%s: cdev_pager_alloc\n", __func__);
 
 	vmh->cc = cdev->si_drv1;
 	vmh->mem = cdev_pager_allocate(vmh, OBJT_DEVICE, &pmc_pg_ops,
@@ -5009,6 +5020,10 @@ pmc_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 		printf("cdev_pager_allocate failed\n");
 		return (ENXIO);
 	}
+
+	printf("%s: done\n", __func__);
+
+	*objp = vmh->mem;
 
 	return (0);
 }

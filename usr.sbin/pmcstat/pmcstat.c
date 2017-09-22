@@ -181,13 +181,15 @@ pmcstat_attach_pmcs(void)
 	STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
 		if (PMC_IS_SYSTEM_MODE(ev->ev_mode))
 			continue;
-		SLIST_FOREACH(pt, &args.pa_targets, pt_next)
+		SLIST_FOREACH(pt, &args.pa_targets, pt_next) {
+			printf("%s: attaching pid %d\n", __func__, pt->pt_pid);
 			if (pmc_attach(ev->ev_pmcid, pt->pt_pid) == 0)
 				count++;
 			else if (errno != ESRCH)
 				err(EX_OSERR,
 "ERROR: cannot attach pmc \"%s\" to process %d",
 				    ev->ev_name, (int)pt->pt_pid);
+		}
 	}
 
 	if (count == 0)
@@ -577,6 +579,7 @@ main(int argc, char **argv)
 	struct winsize ws;
 	struct stat sb;
 	char buffer[PATH_MAX];
+	int i;
 
 	check_driver_stats      = 0;
 	current_sampling_count  = DEFAULT_SAMPLE_COUNT;
@@ -792,6 +795,9 @@ main(int argc, char **argv)
 				pmcstat_clone_event_descriptor(ev, &cpumask);
 				CPU_SET(ev->ev_cpu, &cpumask);
 			}
+
+			for (i = 0; i < 4; i++)
+				pmc_ipt_init(i);
 
 			break;
 		case 'p':	/* process virtual counting PMC */
@@ -1483,7 +1489,7 @@ main(int argc, char **argv)
 				continue;
 		}
 
-#if 0
+#if 1
 		printf("%s: pmcstat event: filter %d, ident %ld\n",
 		    __func__, kev.filter, kev.ident);
 #endif
@@ -1503,6 +1509,7 @@ main(int argc, char **argv)
 				if (pmcstat_keypress_log())
 					runstate = pmcstat_close_log();
 			} else {
+				printf("%s: process log\n", __func__);
 				do_read = 0;
 				runstate = pmcstat_process_log();
 			}
@@ -1559,6 +1566,8 @@ main(int argc, char **argv)
 			     pmc_flush_logfile() == 0)
 				do_read = 1;
 #else
+			args.pa_flags &= ~FLAG_DO_PRINT;
+			args.pa_flags |= FLAG_DO_ANALYSIS;
 			pmc_flush_logfile();
 			do_read = 1;
 #endif

@@ -14,6 +14,7 @@ SRCS+=  hwpmc_arm64.c hwpmc_arm64_md.c
 
 .if ${MACHINE_CPUARCH} == "amd64"
 SRCS+=	hwpmc_amd.c hwpmc_core.c hwpmc_intel.c hwpmc_piv.c hwpmc_tsc.c
+SRCS+=	hwpmc_pt.c
 SRCS+=	hwpmc_x86.c hwpmc_uncore.c
 SRCS+=	device_if.h bus_if.h
 .endif

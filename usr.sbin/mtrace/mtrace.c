@@ -565,6 +565,14 @@ main(int argc, char *argv[])
 
 	//LIST_INSERT_HEAD(&pmcstat_process_hash[hash], pp, pp_next);
 
+	//libc
+	//uint64_t libstart;
+	image_path = pmcstat_string_intern("/lib/libc.so.7");
+	//image = pmcstat_image_from_path(image_path, 0);
+	//libstart = 0x3c3a0 - image->pi_entry;
+	//pmcstat_image_link(pp, image, libstart);
+	pmcstat_process_exec(pp, image_path, 0x3c3a0);
+
 	image_path = pmcstat_string_intern(app_filename);
 	pmcstat_process_exec(pp, image_path, 0x4004a0);
 

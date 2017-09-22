@@ -66,7 +66,8 @@ enum pmclog_type {
 	 *
 	 * New variant of PMCLOG_TYPE_PMCALLOCATE for dynamic event.
 	 */
-	PMCLOG_TYPE_PMCALLOCATEDYN
+	PMCLOG_TYPE_PMCALLOCATEDYN,
+	PMCLOG_TYPE_TRACE
 };
 
 /*
@@ -205,6 +206,13 @@ struct pmclog_sysexit {
 	uint32_t		pl_pid;
 } __packed;
 
+struct pmclog_trace {
+	PMCLOG_ENTRY_HEADER
+	uint32_t		pl_cpu;
+	uint32_t		pl_cycle;
+	uint64_t		pl_offset;
+} __packed;
+
 struct pmclog_userdata {
 	PMCLOG_ENTRY_HEADER
 	uint32_t		pl_userdata;
@@ -236,6 +244,7 @@ union pmclog_entry {		/* only used to size scratch areas */
 	struct pmclog_procfork		pl_f;
 	struct pmclog_sysexit		pl_se;
 	struct pmclog_userdata		pl_u;
+	struct pmclog_trace		pl_tr;
 };
 
 #define	PMCLOG_HEADER_MAGIC					0xEEU
@@ -277,6 +286,7 @@ void	pmclog_process_procexec(struct pmc_owner *_po, pmc_id_t _pmid, pid_t _pid,
 void	pmclog_process_procexit(struct pmc *_pm, struct pmc_process *_pp);
 void	pmclog_process_procfork(struct pmc_owner *_po, pid_t _oldpid, pid_t _newpid);
 void	pmclog_process_sysexit(struct pmc_owner *_po, pid_t _pid);
+void	pmclog_process_trace(struct pmc_owner *_po, uint32_t cpu, uint32_t cycle, uint64_t offset);
 int	pmclog_process_userlog(struct pmc_owner *_po,
     struct pmc_op_writelog *_wl);
 void	pmclog_shutdown(void);

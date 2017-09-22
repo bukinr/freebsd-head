@@ -43,6 +43,7 @@ struct pmc_mdep;
 #include <dev/hwpmc/hwpmc_core.h>
 #include <dev/hwpmc/hwpmc_piv.h>
 #include <dev/hwpmc/hwpmc_tsc.h>
+#include <dev/hwpmc/hwpmc_pt.h>
 #include <dev/hwpmc/hwpmc_uncore.h>
 
 /*
@@ -55,6 +56,7 @@ struct pmc_mdep;
 #define	PMC_MDEP_CLASS_INDEX_P4		2
 #define	PMC_MDEP_CLASS_INDEX_IAP	2
 #define	PMC_MDEP_CLASS_INDEX_IAF	3
+#define	PMC_MDEP_CLASS_INDEX_PT		4
 #define	PMC_MDEP_CLASS_INDEX_UCP	4
 #define	PMC_MDEP_CLASS_INDEX_UCF	5
 
@@ -68,6 +70,7 @@ struct pmc_mdep;
  * IAF		Intel fixed-function PMCs in Core2 and later CPUs.
  * UCP		Intel Uncore programmable PMCs.
  * UCF		Intel Uncore fixed-function PMCs.
+ * PT		Intel PT event.
  */
 
 union pmc_md_op_pmcallocate  {
@@ -93,6 +96,7 @@ union pmc_md_pmc {
 	struct pmc_md_ucf_pmc	pm_ucf;
 	struct pmc_md_ucp_pmc	pm_ucp;
 	struct pmc_md_p4_pmc	pm_p4;
+	struct pmc_md_pt_pmc	pm_pt;
 };
 
 #define	PMC_TRAPFRAME_TO_PC(TF)	((TF)->tf_rip)

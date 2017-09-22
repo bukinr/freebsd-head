@@ -135,7 +135,8 @@ struct pmclog_ev_sysexit {
 };
 
 struct pmclog_ev_trace {
-	uint64_t	pl_cycle;
+	uint32_t	pl_cpu;
+	uint32_t	pl_cycle;
 	uint64_t	pl_offset;
 };
 

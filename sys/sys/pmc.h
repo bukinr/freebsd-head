@@ -99,6 +99,7 @@
 	__PMC_CPU(INTEL_BROADWELL_XEON, 0x97,   "Intel Broadwell Xeon") \
 	__PMC_CPU(INTEL_SKYLAKE, 0x98,   "Intel Skylake")		\
 	__PMC_CPU(INTEL_SKYLAKE_XEON, 0x99,   "Intel Skylake Xeon")	\
+	__PMC_CPU(INTEL_KABYLAKE, 0x9A,   "Intel Kabylake")	\
 	__PMC_CPU(INTEL_XSCALE,	0x100,	"Intel XScale")		\
 	__PMC_CPU(MIPS_24K,     0x200,  "MIPS 24K")		\
 	__PMC_CPU(MIPS_OCTEON,  0x201,  "Cavium Octeon")	\
@@ -149,7 +150,8 @@ enum pmc_cputype {
 	__PMC_CLASS(ARMV7,	0x10,	"ARMv7")			\
 	__PMC_CLASS(ARMV8,	0x11,	"ARMv8")			\
 	__PMC_CLASS(MIPS74K,	0x12,	"MIPS 74K")			\
-	__PMC_CLASS(E500,	0x13,	"Freescale e500 class")
+	__PMC_CLASS(E500,	0x13,	"Freescale e500 class")		\
+	__PMC_CLASS(PT,		0x14,	"Intel PT")
 
 enum pmc_class {
 #undef  __PMC_CLASS
@@ -158,7 +160,7 @@ enum pmc_class {
 };
 
 #define	PMC_CLASS_FIRST	PMC_CLASS_TSC
-#define	PMC_CLASS_LAST	PMC_CLASS_E500
+#define	PMC_CLASS_LAST	PMC_CLASS_PT
 
 /*
  * A PMC can be in the following states:
@@ -229,7 +231,9 @@ enum pmc_state {
 	__PMC_MODE(SS,	0)			\
 	__PMC_MODE(SC,	1)			\
 	__PMC_MODE(TS,	2)			\
-	__PMC_MODE(TC,	3)
+	__PMC_MODE(TC,	3)			\
+	__PMC_MODE(ST,	4)			\
+	__PMC_MODE(TT,	5)
 
 enum pmc_mode {
 #undef	__PMC_MODE
@@ -243,11 +247,11 @@ enum pmc_mode {
 #define	PMC_IS_COUNTING_MODE(mode)				\
 	((mode) == PMC_MODE_SC || (mode) == PMC_MODE_TC)
 #define	PMC_IS_SYSTEM_MODE(mode)				\
-	((mode) == PMC_MODE_SS || (mode) == PMC_MODE_SC)
+	((mode) == PMC_MODE_SS || (mode) == PMC_MODE_SC || (mode) == PMC_MODE_ST)
 #define	PMC_IS_SAMPLING_MODE(mode)				\
 	((mode) == PMC_MODE_SS || (mode) == PMC_MODE_TS)
 #define	PMC_IS_VIRTUAL_MODE(mode)				\
-	((mode) == PMC_MODE_TS || (mode) == PMC_MODE_TC)
+	((mode) == PMC_MODE_TS || (mode) == PMC_MODE_TC || (mode) == PMC_MODE_TT)
 
 /*
  * PMC row disposition
@@ -976,7 +980,7 @@ struct pmc_classdep {
  * Machine dependent bits needed per CPU type.
  */
 
-struct pmc_mdep  {
+struct pmc_mdep {
 	uint32_t	pmd_cputype;    /* from enum pmc_cputype */
 	uint32_t	pmd_npmc;	/* number of PMCs per CPU */
 	uint32_t	pmd_nclass;	/* number of PMC classes present */
@@ -995,6 +999,9 @@ struct pmc_mdep  {
 
 	/* handle a PMC interrupt */
 	int (*pmd_intr)(int _cpu, struct trapframe *_tf);
+
+	/* trace buffer */
+	int (*pmd_get_page)(int _cpu, vm_ooffset_t offset, vm_paddr_t *paddr);
 
 	/*
 	 * PMC class dependent information.

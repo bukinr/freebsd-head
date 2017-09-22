@@ -34,6 +34,7 @@
 #define	_PMCSTAT_H_
 
 #include <sys/_cpuset.h>
+#include <libpmcstat.h>
 
 #define	FLAG_HAS_TARGET			0x00000001	/* process target */
 #define	FLAG_HAS_WAIT_INTERVAL		0x00000002	/* -w secs */
@@ -177,6 +178,8 @@ int	pmcstat_process_log(void);
 int	pmcstat_keypress_log(void);
 void	pmcstat_display_log(void);
 void	pmcstat_pluginconfigure_log(char *_opt);
-void    pmcstat_topexit(void);
+void	pmcstat_topexit(void);
+int	ipt_process(struct pmcstat_process *pp, uint32_t cpu, uint32_t cycle, uint64_t offset);
+int	pmc_ipt_init(uint32_t cpu);
 
 #endif	/* _PMCSTAT_H_ */

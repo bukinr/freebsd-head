@@ -628,6 +628,7 @@ pmcstat_analyze_log(void)
 	struct pmclog_ev ev;
 	struct pmcstat_pmcrecord *pmcr;
 	pmcstat_interned_string image_path;
+	struct pmcstat_target *pt;
 
 	assert(args.pa_flags & FLAG_DO_ANALYSIS);
 
@@ -859,7 +860,16 @@ pmcstat_analyze_log(void)
 				ppm->ppm_lowpc);
 			break;
 		case PMCLOG_TYPE_TRACE:
-			printf("trace event\n");
+			pt = SLIST_FIRST(&args.pa_targets);
+
+			if (pt != NULL) {
+				pp = pmcstat_process_lookup(pt->pt_pid, 0);
+				printf("pid %d\n", pt->pt_pid);
+			} else {
+				pp = pmcstat_kernproc;
+			}
+
+			ipt_process(pp, ev.pl_u.pl_tr.pl_cpu, ev.pl_u.pl_tr.pl_cycle, ev.pl_u.pl_tr.pl_offset);
 			break;
 
 		default:	/* other types of entries are not relevant */
@@ -993,7 +1003,8 @@ pmcstat_print_log(void)
 			    ev.pl_u.pl_se.pl_pid);
 			break;
 		case PMCLOG_TYPE_TRACE:
-			PMCSTAT_PRINT_ENTRY("trace","%ld, %ld",
+			PMCSTAT_PRINT_ENTRY("trace","cpu: %d, cycle: %d, offset: %ld",
+			    ev.pl_u.pl_tr.pl_cpu,
 			    ev.pl_u.pl_tr.pl_cycle,
 			    ev.pl_u.pl_tr.pl_offset);
 			break;
