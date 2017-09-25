@@ -1061,7 +1061,7 @@ main(int argc, char **argv)
 	if ((args.pa_required & (FLAG_HAS_COMMANDLINE | FLAG_HAS_TARGET)) &&
 	    (args.pa_flags & (FLAG_HAS_COMMANDLINE | FLAG_HAS_TARGET)) == 0)
 		errx(EX_USAGE,
-"ERROR: options -P and -p require a target process or a command line."
+"ERROR: options -P, -p and -h require a target process or a command line."
 		    );
 
 	/* check for process-mode options without a process-mode PMC */
@@ -1489,7 +1489,7 @@ main(int argc, char **argv)
 				continue;
 		}
 
-#if 1
+#if 0
 		printf("%s: pmcstat event: filter %d, ident %ld\n",
 		    __func__, kev.filter, kev.ident);
 #endif
