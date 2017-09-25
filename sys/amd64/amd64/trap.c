@@ -207,9 +207,12 @@ trap(struct trapframe *frame)
 	}
 
 	if (type == T_NMI) {
+#if 0
 		if (pt_intr != NULL &&
 		    (*pt_intr)(PCPU_GET(cpuid), frame) != 0)
 			return;
+#endif
+
 #ifdef HWPMC_HOOKS
 		/*
 		 * CPU PMCs interrupt using an NMI.  If the PMC module is

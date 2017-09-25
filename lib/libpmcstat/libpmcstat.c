@@ -123,7 +123,7 @@ pmcstat_image_add_symbols(struct pmcstat_image *image, Elf *e,
 	GElf_Sym sym;
 	Elf_Data *data;
 
-	printf("%s\n", __func__);
+	printf("%s: path %s\n", __func__, pmcstat_string_unintern(image->pi_execpath));
 
 	if ((data = elf_getdata(scn, NULL)) == NULL)
 		return;
@@ -185,11 +185,12 @@ pmcstat_image_add_symbols(struct pmcstat_image *image, Elf *e,
 
 		symptr->ps_name  = pmcstat_string_intern(fnname);
 		symptr->ps_start = sym.st_value - image->pi_vaddr;
-			printf("start %lx %lx\n", sym.st_value, image->pi_vaddr);
 		symptr->ps_end   = symptr->ps_start + sym.st_size;
-			//printf("start %lx end %lx\n", symptr->ps_start, symptr->ps_end);
-		symptr++;
 
+		printf("start %lx end %lx name %s image->pi_vaddr %lx\n",
+		    symptr->ps_start, symptr->ps_end, fnname, image->pi_vaddr);
+
+		symptr++;
 		newsyms++;
 	}
 
@@ -313,6 +314,8 @@ pmcstat_image_get_elf_params(struct pmcstat_image *image)
 	enum pmcstat_image_type image_type;
 	char buffer[PATH_MAX];
 
+	printf("%s: %d\n", __func__, image->pi_iskernelmodule);
+
 	assert(image->pi_type == PMCSTAT_IMAGE_UNKNOWN);
 
 	image->pi_start = minva = ~(uintfptr_t) 0;
@@ -338,6 +341,9 @@ pmcstat_image_get_elf_params(struct pmcstat_image *image)
 		    args.pa_fsroot, path);
 #else
 	/* TODO */
+	if (image->pi_iskernelmodule)
+		(void) snprintf(buffer, sizeof(buffer), "/boot/kernel/%s", path);
+	else
 		(void) snprintf(buffer, sizeof(buffer), "%s", path);
 #endif
 
@@ -627,6 +633,7 @@ pmcstat_image_link(struct pmcstat_process *pp, struct pmcstat_image *image,
 	assert(image->pi_type != PMCSTAT_IMAGE_UNKNOWN &&
 	    image->pi_type != PMCSTAT_IMAGE_INDETERMINABLE);
 
+	warnx("Linking %s\n", pmcstat_string_unintern(image->pi_execpath));
 	if ((pcmnew = malloc(sizeof(*pcmnew))) == NULL)
 		err(EX_OSERR, "ERROR: Cannot create a map entry");
 

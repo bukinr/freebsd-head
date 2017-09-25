@@ -4929,11 +4929,14 @@ pmc_pg_fault(vm_object_t object, vm_ooffset_t offset,
 	vm_page_t page;
 	int error;
 
-	//printf("%s: offset 0x%lx\n", __func__, offset);
+	printf("%s: offset 0x%lx\n", __func__, offset);
 
 	vmh = object->handle;
-	if (vmh == NULL)
+	if (vmh == NULL) {
+		printf("%s: offset 0x%lx, VM_PAGER_FAIL: vmh is null\n",
+		    __func__, offset);
 		return (VM_PAGER_FAIL);
+	}
 
 	cc = vmh->cc;
 

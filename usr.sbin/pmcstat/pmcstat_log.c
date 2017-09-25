@@ -861,7 +861,6 @@ pmcstat_analyze_log(void)
 			break;
 		case PMCLOG_TYPE_TRACE:
 			pt = SLIST_FIRST(&args.pa_targets);
-
 			if (pt != NULL) {
 				pp = pmcstat_process_lookup(pt->pt_pid, 0);
 				printf("pid %d\n", pt->pt_pid);
