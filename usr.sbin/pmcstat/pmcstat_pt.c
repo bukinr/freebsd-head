@@ -161,15 +161,20 @@ symbol_lookup(struct mtrace_data *mdata)
 			printf("cpu%d: 0x%lx %s\n", mdata->cpu,
 			    ip,
 			    pmcstat_string_unintern(sym->ps_name));
+#if 0
 		else
 			printf("cpu%d: 0x%lx not found, newpc %lx\n", mdata->cpu,
 			    ip, newpc);
-		
-	} else {
+#endif
+	}
+
+#if 0
+	else {
 		printf("cpu%d: 0x%lx .\n", mdata->cpu, ip);
 		//printf("map not found, pp %lx, ip %lx\n", (uint64_t)mdata->pp, >ip);
 		//return (12);
 	}
+#endif
 
 	//printf("ok\n");
 }
@@ -407,6 +412,8 @@ init_ipt(struct mtrace_data *mdata, uint64_t base,
 	config.begin = (uint8_t *)(base + start);
 	config.end = (uint8_t *)(base + end);
 
+	printf("%s: begin %lx end %lx\n", __func__, (uint64_t)config.begin, (uint64_t)config.end);
+
 	decoder = pt_pkt_alloc_decoder(&config);
 	if (decoder == NULL) {
 		printf("Can't allocate decoder\n");
@@ -489,13 +496,17 @@ ipt_process(struct pmcstat_process *pp, uint32_t cpu, uint32_t cycle, uint64_t o
 
 	cc = &trace_cpus[cpu];
 
+#if 0
 	printf("pp is %lx\n", (uint64_t)pp);
+#endif
 
 	mdata = &cc->mdata;
 	mdata->pp = pp;
 
+#if 0
 	printf("%s: cpu %d, cycle %d, offset %ld\n",
 	    __func__, cpu, cycle, offset);
+#endif
 
 	if (offset == cc->offset)
 		return (0);

@@ -3911,6 +3911,26 @@ pmc_read(pmc_id_t pmc, pmc_value_t *value)
 }
 
 int
+pmc_read_trace(uint32_t cpu, pmc_id_t pmc,
+    pmc_value_t *cycle, pmc_value_t *offset)
+{
+	struct pmc_op_trace_read pmc_trace_read;
+
+	pmc_trace_read.pm_pmcid = pmc;
+	pmc_trace_read.cpu = cpu;
+	pmc_trace_read.pm_cycle = 0;
+	pmc_trace_read.pm_offset = 0;
+
+	if (PMC_CALL(TRACE_READ, &pmc_trace_read) < 0)
+		return (-1);
+
+	*cycle = pmc_trace_read.pm_cycle;
+	*offset = pmc_trace_read.pm_offset;
+
+	return (0);
+}
+
+int
 pmc_release(pmc_id_t pmc)
 {
 	struct pmc_op_simple	pmc_release_args;

@@ -1570,6 +1570,8 @@ main(int argc, char **argv)
 			args.pa_flags |= FLAG_DO_ANALYSIS;
 			pmc_flush_logfile();
 			do_read = 1;
+
+			pmcstat_log_pt(ev);
 #endif
 
 			do_print = 1;

@@ -1338,7 +1338,7 @@ pmc_process_csw_in(struct thread *td)
 
 		PMCDBG3(CSW,SWI,1,"cpu=%d ri=%d new=%jd", cpu, ri, newvalue);
 
-		pcd->pcd_write_pmc(cpu, adjri, newvalue);
+		pcd->pcd_write_pmc(cpu, adjri, pm, newvalue);
 
 		/* If a sampling mode PMC, reset stalled state. */
 		if (PMC_TO_MODE(pm) == PMC_MODE_TS || PMC_TO_MODE(pm) == PMC_MODE_TT)
@@ -1469,7 +1469,7 @@ pmc_process_csw_out(struct thread *td)
 			    ("[pmc,%d] pp refcnt = %d", __LINE__,
 				pp->pp_refcnt));
 
-			pcd->pcd_read_pmc(cpu, adjri, &newvalue);
+			pcd->pcd_read_pmc(cpu, adjri, pm, &newvalue);
 
 			if (mode == PMC_MODE_TS || mode == PMC_MODE_TT) {
 				PMCDBG3(CSW,SWO,1,"cpu=%d ri=%d tmp=%jd (samp)",
@@ -2781,7 +2781,7 @@ pmc_start(struct pmc *pm)
 	pm->pm_state = PMC_STATE_RUNNING;
 
 	critical_enter();
-	if ((error = pcd->pcd_write_pmc(cpu, adjri,
+	if ((error = pcd->pcd_write_pmc(cpu, adjri, pm,
 		 PMC_IS_SAMPLING_MODE(mode) ?
 		 pm->pm_sc.pm_reloadcount :
 		 pm->pm_sc.pm_initial)) == 0) {
@@ -2857,7 +2857,7 @@ pmc_stop(struct pmc *pm)
 	CPU_CLR_ATOMIC(cpu, &pm->pm_cpustate);
 	critical_enter();
 	if ((error = pcd->pcd_stop_pmc(cpu, adjri)) == 0)
-		error = pcd->pcd_read_pmc(cpu, adjri, &pm->pm_sc.pm_initial);
+		error = pcd->pcd_read_pmc(cpu, adjri, pm, &pm->pm_sc.pm_initial);
 	critical_exit();
 
 	pmc_restore_cpu_binding(&pb);
@@ -3839,6 +3839,66 @@ pmc_syscall_handler(struct thread *td, void *syscall_args)
 
 
 	/*
+	 * Read a PMC trace buffer ptr.
+	 */
+	case PMC_OP_TRACE_READ:
+	{
+		struct pmc_op_trace_read trr;
+		struct pmc_op_trace_read *trr_ret;
+		struct pmc_binding pb;
+		struct pmc_classdep *pcd;
+		struct pmc *pm;
+		pmc_value_t cycle;
+		pmc_value_t offset;
+		uint32_t cpu;
+		uint32_t ri;
+		int adjri;
+
+		PMC_DOWNGRADE_SX();
+
+		if ((error = copyin(arg, &trr, sizeof(trr))) != 0)
+			break;
+
+		cpu = trr.cpu;
+
+		/* locate pmc descriptor */
+		if ((error = pmc_find_pmc(trr.pm_pmcid, &pm)) != 0)
+			break;
+
+		/* Can't read a PMC that hasn't been started. */
+		if (pm->pm_state != PMC_STATE_ALLOCATED &&
+		    pm->pm_state != PMC_STATE_STOPPED &&
+		    pm->pm_state != PMC_STATE_RUNNING) {
+			error = EINVAL;
+			break;
+		}
+
+		if (PMC_IS_VIRTUAL_MODE(PMC_TO_MODE(pm))) {
+			ri = PMC_TO_ROWINDEX(pm);
+			pcd = pmc_ri_to_classdep(md, ri, &adjri);
+
+			/* switch to CPU 'cpu' */
+			pmc_save_cpu_binding(&pb);
+			pmc_select_cpu(cpu);
+
+			mtx_pool_lock_spin(pmc_mtxpool, pm);
+			error = (*pcd->pcd_read_trace)(cpu, adjri,
+			    pm, &cycle, &offset);
+			mtx_pool_unlock_spin(pmc_mtxpool, pm);
+
+			pmc_restore_cpu_binding(&pb);
+		} else { /* System mode PMCs */
+		}
+
+		trr_ret = (struct pmc_op_trace_read *)arg;
+		if ((error = copyout(&cycle, &trr_ret->pm_cycle, sizeof(trr.pm_cycle))))
+			break;
+		if ((error = copyout(&offset, &trr_ret->pm_offset, sizeof(trr.pm_offset))))
+			break;
+	}
+	break;
+
+	/*
 	 * Read and/or write a PMC.
 	 */
 
@@ -3913,7 +3973,7 @@ pmc_syscall_handler(struct thread *td, void *syscall_args)
 				if ((pm->pm_flags & PMC_F_ATTACHED_TO_OWNER) &&
 				    (pm->pm_state == PMC_STATE_RUNNING))
 					error = (*pcd->pcd_read_pmc)(cpu, adjri,
-					    &oldvalue);
+					    pm, &oldvalue);
 				else
 					oldvalue = pm->pm_gv.pm_savedvalue;
 			}
@@ -3940,11 +4000,11 @@ pmc_syscall_handler(struct thread *td, void *syscall_args)
 			/* save old value */
 			if (prw.pm_flags & PMC_F_OLDVALUE)
 				if ((error = (*pcd->pcd_read_pmc)(cpu, adjri,
-					 &oldvalue)))
+				    pm, &oldvalue)))
 					goto error;
 			/* write out new value */
 			if (prw.pm_flags & PMC_F_NEWVALUE)
-				error = (*pcd->pcd_write_pmc)(cpu, adjri,
+				error = (*pcd->pcd_write_pmc)(cpu, adjri, pm,
 				    prw.pm_value);
 		error:
 			critical_exit();
@@ -4619,7 +4679,7 @@ pmc_process_exit(void *arg __unused, struct proc *p)
 				if (!CPU_ISSET(cpu, &pm->pm_stalled)) {
 					(void) pcd->pcd_stop_pmc(cpu, adjri);
 					pcd->pcd_read_pmc(cpu, adjri,
-					    &newvalue);
+					    pm, &newvalue);
 					tmp = newvalue -
 					    PMC_PCPU_SAVED(cpu,ri);
 

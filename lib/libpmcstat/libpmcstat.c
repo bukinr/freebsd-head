@@ -159,21 +159,33 @@ pmcstat_image_add_symbols(struct pmcstat_image *image, Elf *e,
 	 */
 	symptr += image->pi_symcount;
 
-			printf("nshmsyms %ld\n", nshsyms);
-	for (n = newsyms = 0; n < nshsyms; n++) {
-		if (gelf_getsym(data, (int) n, &sym) != &sym)
-			return;
-		if (GELF_ST_TYPE(sym.st_info) != STT_FUNC)
-			continue;
-		if (sym.st_shndx == STN_UNDEF)
-			continue;
+	printf("nshmsyms %ld\n", nshsyms);
 
-		if (!firsttime && pmcstat_symbol_search(image, sym.st_value))
+	for (n = newsyms = 0; n < nshsyms; n++) {
+		if (gelf_getsym(data, (int) n, &sym) != &sym) {
+			printf("%s: err 1\n", __func__);
+			return;
+		}
+		if (GELF_ST_TYPE(sym.st_info) != STT_FUNC) {
+			printf("%s: err 2\n", __func__);
+			continue;
+		}
+
+		if (sym.st_shndx == STN_UNDEF) {
+			printf("%s: err 3\n", __func__);
+			continue;
+		}
+
+		if (!firsttime && pmcstat_symbol_search(image, sym.st_value)) {
+			printf("%s: err 4\n", __func__);
 			continue; /* We've seen this symbol already. */
+		}
 
 		if ((fnname = elf_strptr(e, sh->sh_link, sym.st_name))
-		    == NULL)
+		    == NULL) {
+			printf("%s: err 5\n", __func__);
 			continue;
+		}
 #ifdef __arm__
 		/* Remove spurious ARM function name. */
 		if (fnname[0] == '$' &&

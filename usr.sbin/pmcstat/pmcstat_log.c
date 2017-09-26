@@ -611,6 +611,35 @@ pmcstat_process_lookup(pid_t pid, int allocate)
 	return (pp);
 }
 
+int
+pmcstat_log_pt(struct pmcstat_ev *ev)
+{
+	pmc_value_t cycle;
+	pmc_value_t offset;
+	struct pmcstat_target *pt;
+	struct pmcstat_process *pp;
+	int i;
+
+	STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
+		for (i = 0; i < 4; i++) {
+			pmc_read_trace(i, ev->ev_pmcid, &cycle, &offset);
+			//printf("cpu %d cycle %lx offset %lx\n", i, cycle, offset);
+
+			pt = SLIST_FIRST(&args.pa_targets);
+			if (pt != NULL) {
+				pp = pmcstat_process_lookup(pt->pt_pid, 0);
+				//printf("pid %d\n", pt->pt_pid);
+			} else {
+				pp = pmcstat_kernproc;
+			}
+			if (pp)
+				ipt_process(pp, i, cycle, offset);
+		}
+	}
+
+	return (0);
+}
+
 /*
  * Convert a hwpmc(4) log to profile information.  A system-wide
  * callgraph is generated if FLAG_DO_CALLGRAPHS is set.  gmon.out

@@ -86,6 +86,7 @@ int	pmc_get_driver_stats(struct pmc_driverstats *_gms);
 int	pmc_get_msr(pmc_id_t _pmc, uint32_t *_msr);
 int	pmc_init(void);
 int	pmc_read(pmc_id_t _pmc, pmc_value_t *_value);
+int	pmc_read_trace(uint32_t cpu, pmc_id_t pmc, pmc_value_t *cycle, pmc_value_t *offset);
 int	pmc_release(pmc_id_t _pmc);
 int	pmc_rw(pmc_id_t _pmc, pmc_value_t _newvalue, pmc_value_t *_oldvalue);
 int	pmc_set(pmc_id_t _pmc, pmc_value_t _value);

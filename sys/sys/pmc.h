@@ -343,7 +343,8 @@ enum pmc_event {
 	__PMC_OP(PMCSTOP, "Stop a PMC")					\
 	__PMC_OP(WRITELOG, "Write a cookie to the log file")		\
 	__PMC_OP(CLOSELOG, "Close log file")				\
-	__PMC_OP(GETDYNEVENTINFO, "Get dynamic events list")
+	__PMC_OP(GETDYNEVENTINFO, "Get dynamic events list")		\
+	__PMC_OP(TRACE_READ, "Read trace buffer pointer")
 
 
 enum pmc_ops {
@@ -487,6 +488,13 @@ struct pmc_op_pmcrw {
 	uint32_t	pm_flags;	/* PMC_F_{OLD,NEW}VALUE*/
 	pmc_id_t	pm_pmcid;	/* pmc id */
 	pmc_value_t	pm_value;	/* new&returned value */
+};
+
+struct pmc_op_trace_read {
+	uint32_t	cpu;
+	pmc_id_t	pm_pmcid;	/* pmc id */
+	pmc_value_t	pm_cycle;	/* returned value */
+	pmc_value_t	pm_offset;	/* returned value */
 };
 
 
@@ -950,8 +958,11 @@ struct pmc_classdep {
 	/* configuring/reading/writing the hardware PMCs */
 	int (*pcd_config_pmc)(int _cpu, int _ri, struct pmc *_pm);
 	int (*pcd_get_config)(int _cpu, int _ri, struct pmc **_ppm);
-	int (*pcd_read_pmc)(int _cpu, int _ri, pmc_value_t *_value);
-	int (*pcd_write_pmc)(int _cpu, int _ri, pmc_value_t _value);
+	int (*pcd_read_pmc)(int _cpu, int _ri, struct pmc *_pm, pmc_value_t *_value);
+	int (*pcd_write_pmc)(int _cpu, int _ri, struct pmc *_pm, pmc_value_t _value);
+
+	/* trace */
+	int (*pcd_read_trace)(int _cpu, int _ri, struct pmc *_pm, pmc_value_t *_cycle, pmc_value_t *_offset);
 
 	/* pmc allocation/release */
 	int (*pcd_allocate_pmc)(int _cpu, int _ri, struct pmc *_t,

@@ -180,6 +180,11 @@ pt_allocate_pmc(int cpu, int ri, struct pmc *pm,
 int
 pmc_pt_intr(int cpu, struct trapframe *tf)
 {
+
+#if 1
+	lapic_reenable_pmc();
+	return (1);
+#else
 	struct pmc_md_pt_pmc *pm_pt;
 	struct pt_cpu *pt_pc;
 	struct pmc_hw *phw;
@@ -220,6 +225,7 @@ pmc_pt_intr(int cpu, struct trapframe *tf)
 	pmclog_process_trace(pm->pm_owner, cpu, cycle, offset);
 
 	lapic_reenable_pmc();
+#endif
 
 	return (1);
 }
@@ -257,7 +263,7 @@ pt_configure(int cpu, struct pmc *pm)
 	//	reg |= RTIT_CTL_PTWEN;
 	//}
 	//if (config->retc == 0)
-	//reg |= RTIT_CTL_DISRETC;
+	reg |= RTIT_CTL_DISRETC;
 
 	if (mode == PMC_MODE_ST)
 		reg |= RTIT_CTL_OS;
@@ -271,10 +277,10 @@ pt_configure(int cpu, struct pmc *pm)
 
 	/* Enable FUP, TIP, TIP.PGE, TIP.PGD, TNT, MODE.Exec and MODE.TSX packets */
 	reg |= RTIT_CTL_BRANCHEN;
-	//reg |= RTIT_CTL_TSCEN;
+	reg |= RTIT_CTL_TSCEN;
 	reg |= RTIT_CTL_TOPA;
-	//reg |= RTIT_CTL_MTCEN;
-	//reg |= RTIT_CTL_MTC_FREQ(6);
+	reg |= RTIT_CTL_MTCEN;
+	reg |= RTIT_CTL_MTC_FREQ(6);
 	wrmsr(MSR_IA32_RTIT_CTL, reg);
 
 	return (0);
@@ -512,6 +518,7 @@ pmc_pt_buffer_get_page(int cpu, vm_ooffset_t offset, vm_paddr_t *paddr)
 		}
 		offset -= pt_buf->topa_sw[i].size;
 	}
+	printf("%s: paddr %lx\n", __func__, *paddr);
 
 	return (0);
 }
@@ -592,11 +599,47 @@ pt_pcpu_fini(struct pmc_mdep *md, int cpu)
 }
 
 static int
-pt_read_pmc(int cpu, int ri, pmc_value_t *v)
+pt_read_trace(int cpu, int ri, struct pmc *pm,
+    pmc_value_t *cycle, pmc_value_t *voffset)
 {
-	struct pmc *pm;
+	struct pmc_md_pt_pmc *pm_pt;
+	//struct pt_cpu *pt_pc;
+	struct pt_buffer *pt_buf;
+	uint64_t offset;
+	uint64_t reg;
+	uint32_t idx;
+
+	//pt_pc = pt_pcpu[cpu];
+
+	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
+	pt_buf = &pm_pt->pt_buffers[cpu];
+
+	//*cycle = pt_pc->intr_cnt / pt_buf->topa_n;
+
+	reg = rdmsr(MSR_IA32_RTIT_CTL);
+	if (reg & RTIT_CTL_TRACEEN) {
+		reg = rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS);
+	} else {
+		reg = pt_buf->pt_output_mask_ptrs;
+	}
+
+	idx = (reg & 0xffffffff) >> 7;
+	*cycle = idx;
+
+	offset = reg >> 32;
+	*voffset = pt_buf->topa_sw[idx].offset + offset;
+
+	return (0);
+}
+
+static int
+pt_read_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t *v)
+{
+	//struct pmc *pm;
+	struct pmc_md_pt_pmc *pm_pt;
 	enum pmc_mode mode;
 	const struct pmc_hw *phw;
+	struct pt_buffer *pt_buf;
 
 	printf("%s: cpu %d\n", __func__, cpu);
 
@@ -604,8 +647,12 @@ pt_read_pmc(int cpu, int ri, pmc_value_t *v)
 	    ("[pt,%d] illegal CPU value %d", __LINE__, cpu));
 	KASSERT(ri == 0, ("[pt,%d] illegal ri %d", __LINE__, ri));
 
+	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
+	pt_buf = &pm_pt->pt_buffers[cpu];
+
+
 	phw = &pt_pcpu[cpu]->tc_hw;
-	pm = phw->phw_pmc;
+	//pm = phw->phw_pmc;
 
 	KASSERT(pm != NULL,
 	    ("[pt,%d] no owner for PHW [cpu%d,pmc%d]", __LINE__, cpu, ri));
@@ -624,14 +671,14 @@ pt_read_pmc(int cpu, int ri, pmc_value_t *v)
 }
 
 static int
-pt_release_pmc(int cpu, int ri, struct pmc *pmc)
+pt_release_pmc(int cpu, int ri, struct pmc *pm)
 {
 	struct pmc_md_pt_pmc *pm_pt;
 	struct pmc_hw *phw;
-	(void) pmc;
+	(void) pm;
 	int i;
 
-	pm_pt = (struct pmc_md_pt_pmc *)&pmc->pm_md;
+	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 
 	printf("%s: cpu %d (curcpu %d)\n", __func__, cpu, PCPU_GET(cpuid));
 
@@ -739,7 +786,7 @@ pt_stop_pmc(int cpu, int ri)
 }
 
 static int
-pt_write_pmc(int cpu, int ri, pmc_value_t v)
+pt_write_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t v)
 {
 	(void) cpu; (void) ri; (void) v;
 
@@ -789,6 +836,7 @@ pmc_pt_initialize(struct pmc_mdep *md, int maxcpu)
 	pcd->pcd_pcpu_init    = pt_pcpu_init;
 	pcd->pcd_pcpu_fini    = pt_pcpu_fini;
 	pcd->pcd_read_pmc     = pt_read_pmc;
+	pcd->pcd_read_trace   = pt_read_trace;
 	pcd->pcd_release_pmc  = pt_release_pmc;
 	pcd->pcd_start_pmc    = pt_start_pmc;
 	pcd->pcd_stop_pmc     = pt_stop_pmc;
