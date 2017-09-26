@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012-2016 Ruslan Bukin <br@bsdpad.com>
+ * Copyright (c) 2012-2017 Ruslan Bukin <br@bsdpad.com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -222,9 +222,9 @@ hdspe_map_dmabuf(struct sc_info *sc)
 
 	for (i = 0; i < HDSPE_MAX_SLOTS * 16; i++) {
 		hdspe_write_4(sc, HDSPE_PAGE_ADDR_BUF_OUT + 4 * i,
-                    paddr + i * 4096);
+		    paddr + i * 4096);
 		hdspe_write_4(sc, HDSPE_PAGE_ADDR_BUF_IN + 4 * i,
-                    raddr + i * 4096);
+		    raddr + i * 4096);
 	}
 }
 
