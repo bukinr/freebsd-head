@@ -280,8 +280,16 @@ hdspe_init(struct sc_info *sc)
 	period /= sc->speed;
 	hdspe_write_4(sc, HDSPE_FREQ_REG, period);
 
+#define	AD_GAIN0	(1 << 20)
+#define	AD_GAIN1	(1 << 21)
+#define	DA_GAIN0	(1 << 22)
+#define	DA_GAIN1	(1 << 23)
+#define	PH_GAIN0	(1 << 24)
+#define	PH_GAIN1	(1 << 25)
+#define	SYM6DB		(1 << 26)
+
 	/* Other settings. */
-	sc->settings_register = 0;
+	sc->settings_register = PH_GAIN1;
 	hdspe_write_4(sc, HDSPE_SETTINGS_REG, sc->settings_register);
 
 	return (0);
