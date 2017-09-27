@@ -260,9 +260,9 @@ soft_pcpu_init(struct pmc_mdep *md, int cpu)
 }
 
 static int
-soft_read_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t *v)
+soft_read_pmc(int cpu, int ri, pmc_value_t *v)
 {
-	//struct pmc *pm;
+	struct pmc *pm;
 	const struct pmc_hw *phw;
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
@@ -271,7 +271,7 @@ soft_read_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t *v)
 	    ("[soft,%d] illegal row-index %d", __LINE__, ri));
 
 	phw = &soft_pcpu[cpu]->soft_hw[ri];
-	//pm  = phw->phw_pmc;
+	pm  = phw->phw_pmc;
 
 	KASSERT(pm != NULL,
 	    ("[soft,%d] no owner for PHW [cpu%d,pmc%d]", __LINE__, cpu, ri));
@@ -284,9 +284,9 @@ soft_read_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t *v)
 }
 
 static int
-soft_write_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t v)
+soft_write_pmc(int cpu, int ri, pmc_value_t v)
 {
-	//struct pmc *pm;
+	struct pmc *pm;
 	const struct soft_descr *pd;
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
@@ -294,7 +294,7 @@ soft_write_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t v)
 	KASSERT(ri >= 0 && ri < SOFT_NPMCS,
 	    ("[soft,%d] illegal row-index %d", __LINE__, ri));
 
-	//pm = soft_pcpu[cpu]->soft_hw[ri].phw_pmc;
+	pm = soft_pcpu[cpu]->soft_hw[ri].phw_pmc;
 	pd = &soft_pmcdesc[ri];
 
 	KASSERT(pm,

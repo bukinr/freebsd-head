@@ -258,11 +258,11 @@ static struct amd_cpu **amd_pcpu;
  */
 
 static int
-amd_read_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t *v)
+amd_read_pmc(int cpu, int ri, pmc_value_t *v)
 {
 	enum pmc_mode mode;
 	const struct amd_descr *pd;
-	//struct pmc *pm;
+	struct pmc *pm;
 	pmc_value_t tmp;
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
@@ -272,7 +272,7 @@ amd_read_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t *v)
 	KASSERT(amd_pcpu[cpu],
 	    ("[amd,%d] null per-cpu, cpu %d", __LINE__, cpu));
 
-	//pm = amd_pcpu[cpu]->pc_amdpmcs[ri].phw_pmc;
+	pm = amd_pcpu[cpu]->pc_amdpmcs[ri].phw_pmc;
 	pd = &amd_pmcdesc[ri];
 
 	KASSERT(pm != NULL,
@@ -308,18 +308,18 @@ amd_read_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t *v)
  */
 
 static int
-amd_write_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t v)
+amd_write_pmc(int cpu, int ri, pmc_value_t v)
 {
 	const struct amd_descr *pd;
 	enum pmc_mode mode;
-	//struct pmc *pm;
+	struct pmc *pm;
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
 	    ("[amd,%d] illegal CPU value %d", __LINE__, cpu));
 	KASSERT(ri >= 0 && ri < AMD_NPMCS,
 	    ("[amd,%d] illegal row-index %d", __LINE__, ri));
 
-	//pm = amd_pcpu[cpu]->pc_amdpmcs[ri].phw_pmc;
+	pm = amd_pcpu[cpu]->pc_amdpmcs[ri].phw_pmc;
 	pd = &amd_pmcdesc[ri];
 
 	KASSERT(pm != NULL,

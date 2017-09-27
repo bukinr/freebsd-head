@@ -232,9 +232,9 @@ tsc_pcpu_init(struct pmc_mdep *md, int cpu)
 }
 
 static int
-tsc_read_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t *v)
+tsc_read_pmc(int cpu, int ri, pmc_value_t *v)
 {
-	//struct pmc *pm;
+	struct pmc *pm;
 	enum pmc_mode mode;
 	const struct pmc_hw *phw;
 
@@ -243,7 +243,7 @@ tsc_read_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t *v)
 	KASSERT(ri == 0, ("[tsc,%d] illegal ri %d", __LINE__, ri));
 
 	phw = &tsc_pcpu[cpu]->tc_hw;
-	//pm  = phw->phw_pmc;
+	pm  = phw->phw_pmc;
 
 	KASSERT(pm != NULL,
 	    ("[tsc,%d] no owner for PHW [cpu%d,pmc%d]", __LINE__, cpu, ri));
@@ -308,7 +308,7 @@ tsc_stop_pmc(int cpu, int ri)
 }
 
 static int
-tsc_write_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t v)
+tsc_write_pmc(int cpu, int ri, pmc_value_t v)
 {
 	(void) cpu; (void) ri; (void) v;
 

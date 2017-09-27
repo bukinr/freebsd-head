@@ -673,9 +673,9 @@ p4_pcpu_fini(struct pmc_mdep *md, int cpu)
  */
 
 static int
-p4_read_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t *v)
+p4_read_pmc(int cpu, int ri, pmc_value_t *v)
 {
-	//struct pmc *pm;
+	struct pmc *pm;
 	pmc_value_t tmp;
 	struct p4_cpu *pc;
 	enum pmc_mode mode;
@@ -687,7 +687,7 @@ p4_read_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t *v)
 	    ("[p4,%d] illegal row-index %d", __LINE__, ri));
 
 	pc = p4_pcpu[P4_TO_HTT_PRIMARY(cpu)];
-	//pm = pc->pc_p4pmcs[ri].phw_pmc;
+	pm = pc->pc_p4pmcs[ri].phw_pmc;
 	pd = &p4_pmcdesc[ri];
 
 	KASSERT(pm != NULL,
@@ -730,10 +730,10 @@ p4_read_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t *v)
  */
 
 static int
-p4_write_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t v)
+p4_write_pmc(int cpu, int ri, pmc_value_t v)
 {
 	enum pmc_mode mode;
-	//struct pmc *pm;
+	struct pmc *pm;
 	struct p4_cpu *pc;
 	const struct pmc_hw *phw;
 	const struct p4pmc_descr *pd;
@@ -745,7 +745,7 @@ p4_write_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t v)
 
 	pc  = p4_pcpu[P4_TO_HTT_PRIMARY(cpu)];
 	phw = &pc->pc_p4pmcs[ri];
-	//pm  = phw->phw_pmc;
+	pm  = phw->phw_pmc;
 	pd  = &p4_pmcdesc[ri];
 
 	KASSERT(pm != NULL,

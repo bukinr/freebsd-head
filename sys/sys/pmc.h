@@ -958,8 +958,8 @@ struct pmc_classdep {
 	/* configuring/reading/writing the hardware PMCs */
 	int (*pcd_config_pmc)(int _cpu, int _ri, struct pmc *_pm);
 	int (*pcd_get_config)(int _cpu, int _ri, struct pmc **_ppm);
-	int (*pcd_read_pmc)(int _cpu, int _ri, struct pmc *_pm, pmc_value_t *_value);
-	int (*pcd_write_pmc)(int _cpu, int _ri, struct pmc *_pm, pmc_value_t _value);
+	int (*pcd_read_pmc)(int _cpu, int _ri, pmc_value_t *_value);
+	int (*pcd_write_pmc)(int _cpu, int _ri, pmc_value_t _value);
 
 	/* trace */
 	int (*pcd_read_trace)(int _cpu, int _ri, struct pmc *_pm, pmc_value_t *_cycle, pmc_value_t *_offset);

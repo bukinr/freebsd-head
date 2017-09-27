@@ -273,9 +273,9 @@ ucf_get_config(int cpu, int ri, struct pmc **ppm)
 }
 
 static int
-ucf_read_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t *v)
+ucf_read_pmc(int cpu, int ri, pmc_value_t *v)
 {
-	//struct pmc *pm;
+	struct pmc *pm;
 	pmc_value_t tmp;
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
@@ -283,7 +283,7 @@ ucf_read_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t *v)
 	KASSERT(ri >= 0 && ri < uncore_ucf_npmc,
 	    ("[uncore,%d] illegal row-index %d", __LINE__, ri));
 
-	//pm = uncore_pcpu[cpu]->pc_uncorepmcs[ri + uncore_ucf_ri].phw_pmc;
+	pm = uncore_pcpu[cpu]->pc_uncorepmcs[ri + uncore_ucf_ri].phw_pmc;
 
 	KASSERT(pm,
 	    ("[uncore,%d] cpu %d ri %d(%d) pmc not configured", __LINE__, cpu,
@@ -386,10 +386,10 @@ ucf_stop_pmc(int cpu, int ri)
 }
 
 static int
-ucf_write_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t v)
+ucf_write_pmc(int cpu, int ri, pmc_value_t v)
 {
 	struct uncore_cpu *cc;
-	//struct pmc *pm;
+	struct pmc *pm;
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
 	    ("[uncore,%d] illegal cpu value %d", __LINE__, cpu));
@@ -397,7 +397,7 @@ ucf_write_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t v)
 	    ("[uncore,%d] illegal row-index %d", __LINE__, ri));
 
 	cc = uncore_pcpu[cpu];
-	//pm = cc->pc_uncorepmcs[ri + uncore_ucf_ri].phw_pmc;
+	pm = cc->pc_uncorepmcs[ri + uncore_ucf_ri].phw_pmc;
 
 	KASSERT(pm,
 	    ("[uncore,%d] cpu %d ri %d pmc not configured", __LINE__, cpu, ri));
@@ -977,9 +977,9 @@ ucp_get_config(int cpu, int ri, struct pmc **ppm)
 }
 
 static int
-ucp_read_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t *v)
+ucp_read_pmc(int cpu, int ri, pmc_value_t *v)
 {
-	//struct pmc *pm;
+	struct pmc *pm;
 	pmc_value_t tmp;
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
@@ -987,7 +987,7 @@ ucp_read_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t *v)
 	KASSERT(ri >= 0 && ri < uncore_ucp_npmc,
 	    ("[uncore,%d] illegal row-index %d", __LINE__, ri));
 
-	//pm = uncore_pcpu[cpu]->pc_uncorepmcs[ri].phw_pmc;
+	pm = uncore_pcpu[cpu]->pc_uncorepmcs[ri].phw_pmc;
 
 	KASSERT(pm,
 	    ("[uncore,%d] cpu %d ri %d pmc not configured", __LINE__, cpu,
@@ -1117,9 +1117,9 @@ ucp_stop_pmc(int cpu, int ri)
 }
 
 static int
-ucp_write_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t v)
+ucp_write_pmc(int cpu, int ri, pmc_value_t v)
 {
-	//struct pmc *pm;
+	struct pmc *pm;
 	struct uncore_cpu *cc;
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
@@ -1128,7 +1128,7 @@ ucp_write_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t v)
 	    ("[uncore,%d] illegal row index %d", __LINE__, ri));
 
 	cc = uncore_pcpu[cpu];
-	//pm = cc->pc_uncorepmcs[ri].phw_pmc;
+	pm = cc->pc_uncorepmcs[ri].phw_pmc;
 
 	KASSERT(pm,
 	    ("[uncore,%d] cpu%d ri%d no configured PMC to stop", __LINE__,

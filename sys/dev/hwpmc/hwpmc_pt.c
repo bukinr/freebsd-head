@@ -680,9 +680,10 @@ pt_read_trace(int cpu, int ri, struct pmc *pm,
 }
 
 static int
-pt_read_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t *v)
+pt_read_pmc(int cpu, int ri, pmc_value_t *v)
 {
-	//struct pmc *pm;
+#if 0
+	struct pmc *pm;
 	struct pmc_md_pt_pmc *pm_pt;
 	enum pmc_mode mode;
 	const struct pmc_hw *phw;
@@ -697,9 +698,8 @@ pt_read_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t *v)
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pt_buf = &pm_pt->pt_buffers[cpu];
 
-
 	phw = &pt_pcpu[cpu]->tc_hw;
-	//pm = phw->phw_pmc;
+	pm = phw->phw_pmc;
 
 	KASSERT(pm != NULL,
 	    ("[pt,%d] no owner for PHW [cpu%d,pmc%d]", __LINE__, cpu, ri));
@@ -713,6 +713,7 @@ pt_read_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t *v)
 
 	*v = 0;
 	//*v = rdpt();
+#endif
 
 	return (0);
 }
@@ -843,7 +844,7 @@ pt_stop_pmc(int cpu, int ri)
 }
 
 static int
-pt_write_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t v)
+pt_write_pmc(int cpu, int ri, pmc_value_t v)
 {
 	(void) cpu; (void) ri; (void) v;
 

@@ -344,9 +344,9 @@ iaf_get_msr(int ri, uint32_t *msr)
 }
 
 static int
-iaf_read_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t *v)
+iaf_read_pmc(int cpu, int ri, pmc_value_t *v)
 {
-	//struct pmc *pm;
+	struct pmc *pm;
 	pmc_value_t tmp;
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
@@ -354,7 +354,7 @@ iaf_read_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t *v)
 	KASSERT(ri >= 0 && ri < core_iaf_npmc,
 	    ("[core,%d] illegal row-index %d", __LINE__, ri));
 
-	//pm = core_pcpu[cpu]->pc_corepmcs[ri + core_iaf_ri].phw_pmc;
+	pm = core_pcpu[cpu]->pc_corepmcs[ri + core_iaf_ri].phw_pmc;
 
 	KASSERT(pm,
 	    ("[core,%d] cpu %d ri %d(%d) pmc not configured", __LINE__, cpu,
@@ -470,10 +470,10 @@ iaf_stop_pmc(int cpu, int ri)
 }
 
 static int
-iaf_write_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t v)
+iaf_write_pmc(int cpu, int ri, pmc_value_t v)
 {
 	struct core_cpu *cc;
-	//struct pmc *pm;
+	struct pmc *pm;
 	uint64_t msr;
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
@@ -482,7 +482,7 @@ iaf_write_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t v)
 	    ("[core,%d] illegal row-index %d", __LINE__, ri));
 
 	cc = core_pcpu[cpu];
-	//pm = cc->pc_corepmcs[ri + core_iaf_ri].phw_pmc;
+	pm = cc->pc_corepmcs[ri + core_iaf_ri].phw_pmc;
 
 	KASSERT(pm,
 	    ("[core,%d] cpu %d ri %d pmc not configured", __LINE__, cpu, ri));
@@ -2565,9 +2565,9 @@ iap_get_msr(int ri, uint32_t *msr)
 }
 
 static int
-iap_read_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t *v)
+iap_read_pmc(int cpu, int ri, pmc_value_t *v)
 {
-	//struct pmc *pm;
+	struct pmc *pm;
 	pmc_value_t tmp;
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
@@ -2575,7 +2575,7 @@ iap_read_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t *v)
 	KASSERT(ri >= 0 && ri < core_iap_npmc,
 	    ("[core,%d] illegal row-index %d", __LINE__, ri));
 
-	//pm = core_pcpu[cpu]->pc_corepmcs[ri].phw_pmc;
+	pm = core_pcpu[cpu]->pc_corepmcs[ri].phw_pmc;
 
 	KASSERT(pm,
 	    ("[core,%d] cpu %d ri %d pmc not configured", __LINE__, cpu,
@@ -2703,9 +2703,9 @@ iap_stop_pmc(int cpu, int ri)
 }
 
 static int
-iap_write_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t v)
+iap_write_pmc(int cpu, int ri, pmc_value_t v)
 {
-	//struct pmc *pm;
+	struct pmc *pm;
 	struct core_cpu *cc;
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
@@ -2714,7 +2714,7 @@ iap_write_pmc(int cpu, int ri, struct pmc *pm, pmc_value_t v)
 	    ("[core,%d] illegal row index %d", __LINE__, ri));
 
 	cc = core_pcpu[cpu];
-	//pm = cc->pc_corepmcs[ri].phw_pmc;
+	pm = cc->pc_corepmcs[ri].phw_pmc;
 
 	KASSERT(pm,
 	    ("[core,%d] cpu%d ri%d no configured PMC to stop", __LINE__,
