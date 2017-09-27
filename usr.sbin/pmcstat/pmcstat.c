@@ -1521,6 +1521,7 @@ main(int argc, char **argv)
 
 		case EVFILT_SIGNAL:
 			if (kev.ident == SIGCHLD) {
+				printf("sigchld rcvd\n");
 				/*
 				 * The child process sends us a
 				 * SIGCHLD if its exec() failed.  We
@@ -1530,6 +1531,9 @@ main(int argc, char **argv)
 				(void) wait(&c);
 				runstate = PMCSTAT_FINISHED;
 			} else if (kev.ident == SIGIO) {
+				printf("sigio rcvd\n");
+				pmcstat_log_pt(ev);
+
 				/*
 				 * We get a SIGIO if a PMC loses all
 				 * of its targets, or if logfile

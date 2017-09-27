@@ -997,6 +997,8 @@ pmc_attach_one_process(struct proc *p, struct pmc *pm)
 	int ri;
 	char *fullpath, *freepath;
 	struct pmc_process	*pp;
+	unsigned int adjri;
+	struct pmc_classdep *pcd;
 
 	printf("%s: pid %d\n", __func__, p->p_pid);
 
@@ -1033,6 +1035,9 @@ pmc_attach_one_process(struct proc *p, struct pmc *pm)
 		pm->pm_flags |= PMC_F_NEEDS_LOGFILE;
 
 	pm->pm_flags |= PMC_F_ATTACH_DONE; /* mark as attached */
+
+	pcd = pmc_ri_to_classdep(md, ri, &adjri);
+	pcd->pcd_attach_proc(ri, pm, p);
 
 	/* issue an attach event to a configured log file */
 	if (pm->pm_owner->po_flags & PMC_PO_OWNS_LOGFILE) {
@@ -1902,16 +1907,8 @@ pmc_hook_handler(struct thread *td, int function, void *arg)
 		struct pmc_process *pp;
 		struct pmckern_procexec *pk;
 
-		printf("%s: PMC_FN_PROCESS_EXEC\n", __func__);
+		//printf("%s: PMC_FN_PROCESS_EXEC\n", __func__);
 		printf("%s: PMC_FN_PROCESS_EXEC: name %s\n", __func__, td->td_name);
-
-#if 0
-		pmap_t pmap;  
-		uint64_t cr3;
-		pmap = vmspace_pmap(td->td_proc->p_vmspace);
-		cr3 = pmap->pm_cr3;
-		wrmsr(MSR_IA32_RTIT_CR3_MATCH, cr3);
-#endif
 
 		sx_assert(&pmc_sx, SX_XLOCKED);
 
@@ -3873,7 +3870,7 @@ pmc_syscall_handler(struct thread *td, void *syscall_args)
 			break;
 		}
 
-		if (PMC_IS_VIRTUAL_MODE(PMC_TO_MODE(pm))) {
+		//if (PMC_IS_VIRTUAL_MODE(PMC_TO_MODE(pm))) {
 			ri = PMC_TO_ROWINDEX(pm);
 			pcd = pmc_ri_to_classdep(md, ri, &adjri);
 
@@ -3887,8 +3884,8 @@ pmc_syscall_handler(struct thread *td, void *syscall_args)
 			mtx_pool_unlock_spin(pmc_mtxpool, pm);
 
 			pmc_restore_cpu_binding(&pb);
-		} else { /* System mode PMCs */
-		}
+		//} else { /* System mode PMCs */
+		//}
 
 		trr_ret = (struct pmc_op_trace_read *)arg;
 		if ((error = copyout(&cycle, &trr_ret->pm_cycle, sizeof(trr.pm_cycle))))
@@ -4989,7 +4986,9 @@ pmc_pg_fault(vm_object_t object, vm_ooffset_t offset,
 	vm_page_t page;
 	int error;
 
+#if 0
 	printf("%s: offset 0x%lx\n", __func__, offset);
+#endif
 
 	vmh = object->handle;
 	if (vmh == NULL) {

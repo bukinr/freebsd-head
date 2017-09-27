@@ -56,11 +56,13 @@ struct pt_buffer {
 	int				topa_n;
 	uint64_t			pt_output_base;
 	uint64_t			pt_output_mask_ptrs;
+	uint64_t			cycle;
 };
 
 /* MD extension for 'struct pmc' */
 struct pmc_md_pt_pmc {
 	struct pt_buffer	pt_buffers[4];	/* TODO */
+	uint64_t		cr3;
 };
 
 /*

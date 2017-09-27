@@ -963,6 +963,7 @@ struct pmc_classdep {
 
 	/* trace */
 	int (*pcd_read_trace)(int _cpu, int _ri, struct pmc *_pm, pmc_value_t *_cycle, pmc_value_t *_offset);
+	int (*pcd_attach_proc)(int _ri, struct pmc *_pm, struct proc *_p);
 
 	/* pmc allocation/release */
 	int (*pcd_allocate_pmc)(int _cpu, int _ri, struct pmc *_t,

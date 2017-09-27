@@ -614,16 +614,18 @@ pmcstat_process_lookup(pid_t pid, int allocate)
 int
 pmcstat_log_pt(struct pmcstat_ev *ev)
 {
-	pmc_value_t cycle;
-	pmc_value_t offset;
-	struct pmcstat_target *pt;
 	struct pmcstat_process *pp;
+	struct pmcstat_target *pt;
+	pmc_value_t offset;
+	pmc_value_t cycle;
 	int i;
 
 	STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
 		for (i = 0; i < 4; i++) {
 			pmc_read_trace(i, ev->ev_pmcid, &cycle, &offset);
-			//printf("cpu %d cycle %lx offset %lx\n", i, cycle, offset);
+#if 0
+			printf("cpu %d cycle %lx offset %lx\n", i, cycle, offset);
+#endif
 
 			pt = SLIST_FIRST(&args.pa_targets);
 			if (pt != NULL) {
@@ -634,6 +636,10 @@ pmcstat_log_pt(struct pmcstat_ev *ev)
 			}
 			if (pp)
 				ipt_process(pp, i, cycle, offset);
+#if 0
+			else
+				printf("pp not found\n");
+#endif
 		}
 	}
 
@@ -819,7 +825,6 @@ pmcstat_analyze_log(void)
 			break;
 
 		case PMCLOG_TYPE_PROCEXEC:
-
 			/*
 			 * Change the executable image associated with
 			 * a process.
@@ -1419,6 +1424,8 @@ pmcstat_initialize_logging(void)
 {
 	int i;
 
+	printf("%s\n", __func__);
+
 	/* use a convenient format for 'ldd' output */
 	if (setenv("LD_TRACE_LOADED_OBJECTS_FMT1","%o \"%p\" %x\n",1) != 0)
 		err(EX_OSERR, "ERROR: Cannot setenv");
@@ -1467,6 +1474,8 @@ pmcstat_shutdown_logging(void)
 	struct pmcstat_image *pi, *pitmp;
 	struct pmcstat_process *pp, *pptmp;
 	struct pmcstat_pcmap *ppm, *ppmtmp;
+
+	printf("%s\n", __func__);
 
 	/* determine where to send the map file */
 	mf = NULL;

@@ -503,7 +503,7 @@ ipt_process(struct pmcstat_process *pp, uint32_t cpu, uint32_t cycle, uint64_t o
 	mdata = &cc->mdata;
 	mdata->pp = pp;
 
-#if 0
+#if 1
 	printf("%s: cpu %d, cycle %d, offset %ld\n",
 	    __func__, cpu, cycle, offset);
 #endif
@@ -521,8 +521,8 @@ ipt_process(struct pmcstat_process *pp, uint32_t cpu, uint32_t cycle, uint64_t o
 		}
 	} else if (cycle > cc->cycle) {
 		if ((cycle - cc->cycle) > 1)
-			err(EXIT_FAILURE, "trace is too fast, machine cycle %d, mtrace cycle %d",
-			    cycle, cc->cycle);
+			err(EXIT_FAILURE, "cpu%d: trace is too fast, machine cycle %d, mtrace cycle %d",
+			    cpu, cycle, cc->cycle);
 		init_ipt(mdata, (uint64_t)cc->base, cc->offset, cc->bufsize);
 		cc->offset = 0;
 		cc->cycle += 1;
