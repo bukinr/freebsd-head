@@ -147,36 +147,7 @@ struct pmcstat_process *pmcstat_kernproc; /* kernel 'process' */
 #include "pmcpl_annotate_cg.h"
 #include "pmcpl_calltree.h"
 
-static struct pmc_plugins  {
-	const char 	*pl_name;	/* name */
-
-	/* configure */
-	int (*pl_configure)(char *opt);
-
-	/* init and shutdown */
-	int (*pl_init)(void);
-	void (*pl_shutdown)(FILE *mf);
-
-	/* sample processing */
-	void (*pl_process)(struct pmcstat_process *pp,
-	    struct pmcstat_pmcrecord *pmcr, uint32_t nsamples,
-	    uintfptr_t *cc, int usermode, uint32_t cpu);
-
-	/* image */
-	void (*pl_initimage)(struct pmcstat_image *pi);
-	void (*pl_shutdownimage)(struct pmcstat_image *pi);
-
-	/* pmc */
-	void (*pl_newpmc)(pmcstat_interned_string ps,
-		struct pmcstat_pmcrecord *pr);
-	
-	/* top display */
-	void (*pl_topdisplay)(void);
-
-	/* top keypress */
-	int (*pl_topkeypress)(int c, WINDOW *w);
-
-} plugins[] = {
+static struct pmc_plugins plugins[] = {
 	{
 		.pl_name		= "none",
 	},
@@ -703,9 +674,10 @@ pmcstat_analyze_log(void)
 
 			image_path = pmcstat_string_intern(ev.pl_u.pl_mi.
 			    pl_pathname);
-			image = pmcstat_image_from_path(image_path, pid == -1);
+			image = pmcstat_image_from_path(image_path, pid == -1,
+			    &args, plugins);
 			if (image->pi_type == PMCSTAT_IMAGE_UNKNOWN)
-				pmcstat_image_determine_type(image);
+				pmcstat_image_determine_type(image, &args);
 			if (image->pi_type != PMCSTAT_IMAGE_INDETERMINABLE)
 				pmcstat_image_link(pp, image,
 				    ev.pl_u.pl_mi.pl_start);
@@ -845,7 +817,8 @@ pmcstat_analyze_log(void)
 				ev.pl_u.pl_x.pl_pathname);
 			assert(image_path != NULL);
 			pmcstat_process_exec(pp, image_path,
-			    ev.pl_u.pl_x.pl_entryaddr);
+			    ev.pl_u.pl_x.pl_entryaddr, &args,
+			    plugins, &pmcstat_stats);
 			break;
 
 		case PMCLOG_TYPE_PROCEXIT:

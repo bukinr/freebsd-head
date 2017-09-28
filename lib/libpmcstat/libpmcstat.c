@@ -28,6 +28,7 @@
 __FBSDID("$FreeBSD$");
 
 #include <sys/types.h>
+#include <sys/cpuset.h>
 #include <sys/param.h>
 #include <sys/endian.h>
 #include <sys/module.h>
@@ -41,6 +42,7 @@ __FBSDID("$FreeBSD$");
 
 #include <assert.h>
 #include <ctype.h>
+#include <curses.h>
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -311,7 +313,8 @@ pmcstat_string_lookup(const char *s)
  */
 
 void
-pmcstat_image_get_elf_params(struct pmcstat_image *image)
+pmcstat_image_get_elf_params(struct pmcstat_image *image,
+    struct pmcstat_args *args)
 {
 	int fd;
 	size_t i, nph, nsh;
@@ -344,20 +347,12 @@ pmcstat_image_get_elf_params(struct pmcstat_image *image)
 	 * Look for kernel modules under FSROOT/KERNELPATH/NAME,
 	 * and user mode executable objects under FSROOT/PATHNAME.
 	 */
-#if 0
 	if (image->pi_iskernelmodule)
 		(void) snprintf(buffer, sizeof(buffer), "%s%s/%s",
-		    args.pa_fsroot, args.pa_kernel, path);
+		    args->pa_fsroot, args->pa_kernel, path);
 	else
 		(void) snprintf(buffer, sizeof(buffer), "%s%s",
-		    args.pa_fsroot, path);
-#else
-	/* TODO */
-	if (image->pi_iskernelmodule)
-		(void) snprintf(buffer, sizeof(buffer), "/boot/kernel/%s", path);
-	else
-		(void) snprintf(buffer, sizeof(buffer), "%s", path);
-#endif
+		    args->pa_fsroot, path);
 
 	e = NULL;
 	if ((fd = open(buffer, O_RDONLY, 0)) < 0) {
@@ -378,9 +373,7 @@ pmcstat_image_get_elf_params(struct pmcstat_image *image)
 	}
 
 	if (elf_kind(e) != ELF_K_ELF) {
-#if 0
-		if (args.pa_verbosity >= 2)
-#endif
+		if (args->pa_verbosity >= 2)
 			warnx("WARNING: Cannot determine the type of \"%s\".",
 			    buffer);
 		goto done;
@@ -505,7 +498,8 @@ pmcstat_image_get_elf_params(struct pmcstat_image *image)
 
 struct pmcstat_image *
 pmcstat_image_from_path(pmcstat_interned_string internedpath,
-    int iskernelmodule)
+    int iskernelmodule, struct pmcstat_args *args,
+    struct pmc_plugins *plugins)
 {
 	int hash;
 	struct pmcstat_image *pi;
@@ -539,12 +533,10 @@ pmcstat_image_from_path(pmcstat_interned_string internedpath,
 	pi->pi_symcount = 0;
 	pi->pi_addr2line = NULL;
 
-#if 0
-	if (plugins[args.pa_pplugin].pl_initimage != NULL)
-		plugins[args.pa_pplugin].pl_initimage(pi);
-	if (plugins[args.pa_plugin].pl_initimage != NULL)
-		plugins[args.pa_plugin].pl_initimage(pi);
-#endif
+	if (plugins[args->pa_pplugin].pl_initimage != NULL)
+		plugins[args->pa_pplugin].pl_initimage(pi);
+	if (plugins[args->pa_plugin].pl_initimage != NULL)
+		plugins[args->pa_plugin].pl_initimage(pi);
 
 	LIST_INSERT_HEAD(&pmcstat_image_hash[hash], pi, pi_next);
 
@@ -566,7 +558,9 @@ pmcstat_string_lookup_hash(pmcstat_interned_string s)
 
 void
 pmcstat_process_elf_exec(struct pmcstat_process *pp,
-    struct pmcstat_image *image, uintfptr_t entryaddr)
+    struct pmcstat_image *image, uintfptr_t entryaddr,
+    struct pmcstat_args *args, struct pmc_plugins *plugins,
+    struct pmcstat_stats *pmcstat_stats)
 {
 	uintmax_t libstart;
 	struct pmcstat_image *rtldimage;
@@ -605,18 +599,17 @@ pmcstat_process_elf_exec(struct pmcstat_process *pp,
 		 * this we can figure out the address where the
 		 * runtime loader's file object had been mapped to.
 		 */
-		rtldimage = pmcstat_image_from_path(image->pi_dynlinkerpath, 0);
+		rtldimage = pmcstat_image_from_path(image->pi_dynlinkerpath,
+		    0, args, plugins);
 		if (rtldimage == NULL) {
 			warnx("WARNING: Cannot find image for \"%s\".",
 			    pmcstat_string_unintern(image->pi_dynlinkerpath));
-#if 0
-			pmcstat_stats.ps_exec_errors++;
-#endif
+			pmcstat_stats->ps_exec_errors++;
 			return;
 		}
 
 		if (rtldimage->pi_type == PMCSTAT_IMAGE_UNKNOWN)
-			pmcstat_image_get_elf_params(rtldimage);
+			pmcstat_image_get_elf_params(rtldimage, args);
 
 		if (rtldimage->pi_type != PMCSTAT_IMAGE_ELF32 &&
 		    rtldimage->pi_type != PMCSTAT_IMAGE_ELF64) {
@@ -692,7 +685,8 @@ pmcstat_process_aout_exec(struct pmcstat_process *pp,
  */
 
 void
-pmcstat_image_get_aout_params(struct pmcstat_image *image)
+pmcstat_image_get_aout_params(struct pmcstat_image *image,
+    struct pmcstat_args *args)
 {
 	int fd;
 	ssize_t nbytes;
@@ -707,18 +701,12 @@ pmcstat_image_get_aout_params(struct pmcstat_image *image)
 		errx(EX_SOFTWARE,
 		    "ERROR: a.out kernel modules are unsupported \"%s\"", path);
 
-#if 0
 	(void) snprintf(buffer, sizeof(buffer), "%s%s",
-	    args.pa_fsroot, path);
-#else
-	(void) snprintf(buffer, sizeof(buffer), "%s", path);
-#endif
+	    args->pa_fsroot, path);
 
 	if ((fd = open(buffer, O_RDONLY, 0)) < 0 ||
 	    (nbytes = read(fd, &ex, sizeof(ex))) < 0) {
-#if 0
-		if (args.pa_verbosity >= 2)
-#endif
+		if (args->pa_verbosity >= 2)
 			warn("WARNING: Cannot determine type of \"%s\"",
 			    path);
 		image->pi_type = PMCSTAT_IMAGE_INDETERMINABLE;
@@ -747,15 +735,16 @@ pmcstat_image_get_aout_params(struct pmcstat_image *image)
  */
 
 void
-pmcstat_image_determine_type(struct pmcstat_image *image)
+pmcstat_image_determine_type(struct pmcstat_image *image,
+    struct pmcstat_args *args)
 {
 	assert(image->pi_type == PMCSTAT_IMAGE_UNKNOWN);
 
 	/* Try each kind of handler in turn */
 	if (image->pi_type == PMCSTAT_IMAGE_UNKNOWN)
-		pmcstat_image_get_elf_params(image);
+		pmcstat_image_get_elf_params(image, args);
 	if (image->pi_type == PMCSTAT_IMAGE_UNKNOWN)
-		pmcstat_image_get_aout_params(image);
+		pmcstat_image_get_aout_params(image, args);
 
 	/*
 	 * Otherwise, remember that we tried to determine
@@ -771,42 +760,38 @@ pmcstat_image_determine_type(struct pmcstat_image *image)
 
 void
 pmcstat_process_exec(struct pmcstat_process *pp,
-    pmcstat_interned_string path, uintfptr_t entryaddr)
+    pmcstat_interned_string path, uintfptr_t entryaddr,
+    struct pmcstat_args *args, struct pmc_plugins *plugins,
+    struct pmcstat_stats *pmcstat_stats)
 {
 	struct pmcstat_image *image;
 
-	if ((image = pmcstat_image_from_path(path, 0)) == NULL) {
-#if 0
-		pmcstat_stats.ps_exec_errors++;
-#endif
+	if ((image = pmcstat_image_from_path(path, 0,
+	    args, plugins)) == NULL) {
+		pmcstat_stats->ps_exec_errors++;
 		return;
 	}
 
 	if (image->pi_type == PMCSTAT_IMAGE_UNKNOWN)
-		pmcstat_image_determine_type(image);
+		pmcstat_image_determine_type(image, args);
 
 	assert(image->pi_type != PMCSTAT_IMAGE_UNKNOWN);
 
 	switch (image->pi_type) {
 	case PMCSTAT_IMAGE_ELF32:
 	case PMCSTAT_IMAGE_ELF64:
-#if 0
-		pmcstat_stats.ps_exec_elf++;
-#endif
-		pmcstat_process_elf_exec(pp, image, entryaddr);
+		pmcstat_stats->ps_exec_elf++;
+		pmcstat_process_elf_exec(pp, image, entryaddr,
+		    args, plugins, pmcstat_stats);
 		break;
 
 	case PMCSTAT_IMAGE_AOUT:
-#if 0
-		pmcstat_stats.ps_exec_aout++;
-#endif
+		pmcstat_stats->ps_exec_aout++;
 		pmcstat_process_aout_exec(pp, image, entryaddr);
 		break;
 
 	case PMCSTAT_IMAGE_INDETERMINABLE:
-#if 0
-		pmcstat_stats.ps_exec_indeterminable++;
-#endif
+		pmcstat_stats->ps_exec_indeterminable++;
 		break;
 
 	default:

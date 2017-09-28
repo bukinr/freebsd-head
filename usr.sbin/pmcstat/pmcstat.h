@@ -103,57 +103,6 @@ enum pmcstat_state {
 	PMCSTAT_RUNNING  = 2
 };
 
-struct pmcstat_ev {
-	STAILQ_ENTRY(pmcstat_ev) ev_next;
-	int		ev_count; /* associated count if in sampling mode */
-	uint32_t	ev_cpu;	  /* cpus for this event */
-	int		ev_cumulative;  /* show cumulative counts */
-	int		ev_flags; /* PMC_F_* */
-	int		ev_fieldskip;   /* #leading spaces */
-	int		ev_fieldwidth;  /* print width */
-	enum pmc_mode	ev_mode;  /* desired mode */
-	char	       *ev_name;  /* (derived) event name */
-	pmc_id_t	ev_pmcid; /* allocated ID */
-	pmc_value_t	ev_saved; /* for incremental counts */
-	char	       *ev_spec;  /* event specification */
-};
-
-struct pmcstat_target {
-	SLIST_ENTRY(pmcstat_target) pt_next;
-	pid_t		pt_pid;
-};
-
-struct pmcstat_args {
-	int	pa_flags;		/* argument flags */
-	int	pa_required;		/* required features */
-	int	pa_pplugin;		/* pre-processing plugin */
-	int	pa_plugin;		/* analysis plugin */
-	int	pa_verbosity;		/* verbosity level */
-	FILE	*pa_printfile;		/* where to send printed output */
-	int	pa_logfd;		/* output log file */
-	char	*pa_inputpath;		/* path to input log */
-	char	*pa_outputpath;		/* path to output log */
-	void	*pa_logparser;		/* log file parser */
-	const char	*pa_fsroot;	/* FS root where executables reside */
-	char	*pa_kernel;		/* pathname of the kernel */
-	const char	*pa_samplesdir;	/* directory for profile files */
-	const char	*pa_mapfilename;/* mapfile name */
-	FILE	*pa_graphfile;		/* where to send the callgraph */
-	int	pa_graphdepth;		/* print depth for callgraphs */
-	double	pa_interval;		/* printing interval in seconds */
-	cpuset_t	pa_cpumask;	/* filter for CPUs analysed */
-	int	pa_ctdumpinstr;		/* dump instructions with calltree */
-	int	pa_topmode;		/* delta or accumulative */
-	int	pa_toptty;		/* output to tty or file */
-	int	pa_topcolor;		/* terminal support color */
-	int	pa_mergepmc;		/* merge PMC with same name */
-	double	pa_duration;		/* time duration */
-	int	pa_argc;
-	char	**pa_argv;
-	STAILQ_HEAD(, pmcstat_ev) pa_events;
-	SLIST_HEAD(, pmcstat_target) pa_targets;
-};
-
 extern int pmcstat_displayheight;	/* current terminal height */
 extern int pmcstat_displaywidth;	/* current terminal width */
 extern struct pmcstat_args args;	/* command line args */

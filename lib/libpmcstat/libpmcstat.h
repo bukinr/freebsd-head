@@ -5,9 +5,61 @@ int libpmcstat_test(void);
 int pmcstat_symbol_compare(const void *a, const void *b);
 
 typedef const void *pmcstat_interned_string;
+struct pmc_plugins;
 
 #define	PMCSTAT_NHASH			256
 #define	PMCSTAT_HASH_MASK		0xFF
+
+struct pmcstat_ev {
+	STAILQ_ENTRY(pmcstat_ev) ev_next;
+	int		ev_count; /* associated count if in sampling mode */
+	uint32_t	ev_cpu;	  /* cpus for this event */
+	int		ev_cumulative;  /* show cumulative counts */
+	int		ev_flags; /* PMC_F_* */
+	int		ev_fieldskip;   /* #leading spaces */
+	int		ev_fieldwidth;  /* print width */
+	enum pmc_mode	ev_mode;  /* desired mode */
+	char	       *ev_name;  /* (derived) event name */
+	pmc_id_t	ev_pmcid; /* allocated ID */
+	pmc_value_t	ev_saved; /* for incremental counts */
+	char	       *ev_spec;  /* event specification */
+};
+
+struct pmcstat_target {
+	SLIST_ENTRY(pmcstat_target) pt_next;
+	pid_t		pt_pid;
+};
+
+struct pmcstat_args {
+	int	pa_flags;		/* argument flags */
+	int	pa_required;		/* required features */
+	int	pa_pplugin;		/* pre-processing plugin */
+	int	pa_plugin;		/* analysis plugin */
+	int	pa_verbosity;		/* verbosity level */
+	FILE	*pa_printfile;		/* where to send printed output */
+	int	pa_logfd;		/* output log file */
+	char	*pa_inputpath;		/* path to input log */
+	char	*pa_outputpath;		/* path to output log */
+	void	*pa_logparser;		/* log file parser */
+	const char	*pa_fsroot;	/* FS root where executables reside */
+	char	*pa_kernel;		/* pathname of the kernel */
+	const char	*pa_samplesdir;	/* directory for profile files */
+	const char	*pa_mapfilename;/* mapfile name */
+	FILE	*pa_graphfile;		/* where to send the callgraph */
+	int	pa_graphdepth;		/* print depth for callgraphs */
+	double	pa_interval;		/* printing interval in seconds */
+	cpuset_t	pa_cpumask;	/* filter for CPUs analysed */
+	int	pa_ctdumpinstr;		/* dump instructions with calltree */
+	int	pa_topmode;		/* delta or accumulative */
+	int	pa_toptty;		/* output to tty or file */
+	int	pa_topcolor;		/* terminal support color */
+	int	pa_mergepmc;		/* merge PMC with same name */
+	double	pa_duration;		/* time duration */
+	int	pa_argc;
+	char	**pa_argv;
+	STAILQ_HEAD(, pmcstat_ev) pa_events;
+	SLIST_HEAD(, pmcstat_target) pa_targets;
+};
 
 /*
  * Each function symbol tracked by pmcstat(8).
@@ -104,16 +156,17 @@ struct pmcstat_string {
 
 static LIST_HEAD(,pmcstat_string)	pmcstat_string_hash[PMCSTAT_NHASH];
 
-void pmcstat_image_get_elf_params(struct pmcstat_image *image);
+void pmcstat_image_get_elf_params(struct pmcstat_image *image, struct pmcstat_args *args);
 
 #define	min(A,B)		((A) < (B) ? (A) : (B))
 #define	max(A,B)		((A) > (B) ? (A) : (B))
 
-void pmcstat_image_get_elf_params(struct pmcstat_image *image);
+void pmcstat_image_get_elf_params(struct pmcstat_image *image, struct pmcstat_args *args);
 
 struct pmcstat_image *
 pmcstat_image_from_path(pmcstat_interned_string internedpath,
-    int iskernelmodule);
+    int iskernelmodule, struct pmcstat_args *args,
+    struct pmc_plugins *plugins);
 
 int pmcstat_string_lookup_hash(pmcstat_interned_string _is);
 
@@ -149,8 +202,72 @@ struct pmcstat_process {
 };
 extern LIST_HEAD(pmcstat_process_hash_list, pmcstat_process) pmcstat_process_hash[PMCSTAT_NHASH];
 
+/*
+ * 'pmcstat_pmcrecord' is a mapping from PMC ids to human-readable
+ * names.
+ */
+
+struct pmcstat_pmcrecord {
+	LIST_ENTRY(pmcstat_pmcrecord)	pr_next;
+	pmc_id_t			pr_pmcid;
+	int				pr_pmcin;
+	pmcstat_interned_string		pr_pmcname;
+	int				pr_samples;
+	int				pr_dubious_frames;
+	struct pmcstat_pmcrecord	*pr_merge;
+};
+extern LIST_HEAD(pmcstat_pmcs, pmcstat_pmcrecord) pmcstat_pmcs; /* PMC list */
+
+struct pmc_plugins {
+	const char *pl_name;
+
+	/* configure */
+	int (*pl_configure)(char *opt);
+
+	/* init and shutdown */
+	int (*pl_init)(void);
+	void (*pl_shutdown)(FILE *mf);
+
+	/* sample processing */
+	void (*pl_process)(struct pmcstat_process *pp,
+	    struct pmcstat_pmcrecord *pmcr, uint32_t nsamples,
+	    uintfptr_t *cc, int usermode, uint32_t cpu);
+
+	/* image */
+	void (*pl_initimage)(struct pmcstat_image *pi);
+	void (*pl_shutdownimage)(struct pmcstat_image *pi);
+
+	/* pmc */
+	void (*pl_newpmc)(pmcstat_interned_string ps,
+		struct pmcstat_pmcrecord *pr);
+	
+	/* top display */
+	void (*pl_topdisplay)(void);
+
+	/* top keypress */
+	int (*pl_topkeypress)(int c, WINDOW *w);
+};
+
+/*
+ * Misc. statistics
+ */
+struct pmcstat_stats {
+	int ps_exec_aout;	/* # a.out executables seen */
+	int ps_exec_elf;	/* # elf executables seen */
+	int ps_exec_errors;	/* # errors processing executables */
+	int ps_exec_indeterminable; /* # unknown executables seen */
+	int ps_samples_total;	/* total number of samples processed */
+	int ps_samples_skipped; /* #samples filtered out for any reason */
+	int ps_samples_unknown_offset;	/* #samples of rank 0 not in a map */
+	int ps_samples_indeterminable;	/* #samples in indeterminable images */
+	int ps_samples_unknown_function;/* #samples with unknown function at offset */
+	int ps_callchain_dubious_frames;/* #dubious frame pointers seen */
+};
+
 void pmcstat_process_elf_exec(struct pmcstat_process *_pp,
-    struct pmcstat_image *_image, uintfptr_t _entryaddr);
+    struct pmcstat_image *_image, uintfptr_t _entryaddr,
+    struct pmcstat_args *args, struct pmc_plugins *plugins,
+    struct pmcstat_stats *pmcstat_stats);
 
 void pmcstat_image_link(struct pmcstat_process *_pp,
     struct pmcstat_image *_i, uintfptr_t _lpc);
@@ -158,9 +275,11 @@ void pmcstat_image_link(struct pmcstat_process *_pp,
 void pmcstat_process_aout_exec(struct pmcstat_process *_pp,
     struct pmcstat_image *_image, uintfptr_t _entryaddr);
 void pmcstat_process_exec(struct pmcstat_process *_pp,
-    pmcstat_interned_string _path, uintfptr_t _entryaddr);
-void pmcstat_image_determine_type(struct pmcstat_image *_image);
-void pmcstat_image_get_aout_params(struct pmcstat_image *_image);
+    pmcstat_interned_string _path, uintfptr_t _entryaddr,
+    struct pmcstat_args *args, struct pmc_plugins *plugins,
+    struct pmcstat_stats *pmcstat_stats);
+void pmcstat_image_determine_type(struct pmcstat_image *_image, struct pmcstat_args *args);
+void pmcstat_image_get_aout_params(struct pmcstat_image *_image, struct pmcstat_args *args);
 struct pmcstat_pcmap *pmcstat_process_find_map(struct pmcstat_process *_p,
 	uintfptr_t _pc);
 

@@ -436,7 +436,7 @@ pmcpl_gmon_process(struct pmcstat_process *pp, struct pmcstat_pmcrecord *pmcr,
 	 * this executable image, try determine its parameters.
 	 */
 	if (image->pi_type == PMCSTAT_IMAGE_UNKNOWN)
-		pmcstat_image_determine_type(image);
+		pmcstat_image_determine_type(image, &args);
 
 	assert(image->pi_type != PMCSTAT_IMAGE_UNKNOWN);
 
