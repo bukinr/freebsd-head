@@ -36,28 +36,6 @@
 #include <sys/_cpuset.h>
 #include <libpmcstat.h>
 
-#define	FLAG_HAS_TARGET			0x00000001	/* process target */
-#define	FLAG_HAS_WAIT_INTERVAL		0x00000002	/* -w secs */
-#define	FLAG_HAS_OUTPUT_LOGFILE		0x00000004	/* -O file or pipe */
-#define	FLAG_HAS_COMMANDLINE		0x00000008	/* command */
-#define	FLAG_HAS_SAMPLING_PMCS		0x00000010	/* -S or -P */
-#define	FLAG_HAS_COUNTING_PMCS		0x00000020	/* -s or -p */
-#define	FLAG_HAS_PROCESS_PMCS		0x00000040	/* -P or -p */
-#define	FLAG_HAS_SYSTEM_PMCS		0x00000080	/* -S or -s */
-#define	FLAG_HAS_PIPE			0x00000100	/* implicit log */
-#define	FLAG_READ_LOGFILE		0x00000200	/* -R file */
-#define	FLAG_DO_GPROF			0x00000400	/* -g */
-#define	FLAG_HAS_SAMPLESDIR		0x00000800	/* -D dir */
-#define	FLAG_HAS_KERNELPATH		0x00001000	/* -k kernel */
-#define	FLAG_DO_PRINT			0x00002000	/* -o */
-#define	FLAG_DO_CALLGRAPHS		0x00004000	/* -G or -F */
-#define	FLAG_DO_ANNOTATE		0x00008000	/* -m */
-#define	FLAG_DO_TOP			0x00010000	/* -T */
-#define	FLAG_DO_ANALYSIS		0x00020000	/* -g or -G or -m or -T */
-#define	FLAGS_HAS_CPUMASK		0x00040000	/* -c */
-#define	FLAG_HAS_DURATION		0x00080000	/* -l secs */
-#define	FLAG_DO_WIDE_GPROF_HC		0x00100000	/* -e */
-
 #define	DEFAULT_SAMPLE_COUNT		65536
 #define	DEFAULT_WAIT_INTERVAL		5.0
 #define	DEFAULT_DISPLAY_HEIGHT		256		/* file virtual height */
@@ -69,10 +47,6 @@
 #define	READPIPEFD			0
 #define	WRITEPIPEFD			1
 #define	NPIPEFD				2
-
-#define	NSOCKPAIRFD			2
-#define	PARENTSOCKET			0
-#define	CHILDSOCKET			1
 
 #define	PMCSTAT_OPEN_FOR_READ		0
 #define	PMCSTAT_OPEN_FOR_WRITE		1
@@ -108,28 +82,32 @@ extern int pmcstat_displaywidth;	/* current terminal width */
 extern struct pmcstat_args args;	/* command line args */
 
 /* Function prototypes */
-void	pmcstat_attach_pmcs(void);
+//void	pmcstat_attach_pmcs(void);
 void	pmcstat_cleanup(void);
 int	pmcstat_close_log(void);
-void	pmcstat_create_process(void);
+//void	pmcstat_create_process(void);
 void	pmcstat_find_targets(const char *_arg);
-void	pmcstat_initialize_logging(void);
 void	pmcstat_kill_process(void);
 int	pmcstat_open_log(const char *_p, int _mode);
 void	pmcstat_print_counters(void);
 void	pmcstat_print_headers(void);
 void	pmcstat_print_pmcs(void);
 void	pmcstat_show_usage(void);
-void	pmcstat_shutdown_logging(void);
 void	pmcstat_start_pmcs(void);
-void	pmcstat_start_process(void);
+//void	pmcstat_start_process(void);
 int	pmcstat_process_log(void);
 int	pmcstat_keypress_log(void);
 void	pmcstat_display_log(void);
 void	pmcstat_pluginconfigure_log(char *_opt);
 void	pmcstat_topexit(void);
+
 int	ipt_process(struct pmcstat_process *pp, uint32_t cpu, uint32_t cycle, uint64_t offset);
 int	pmcstat_log_pt(struct pmcstat_ev *ev);
 int	pmc_ipt_init(uint32_t cpu);
+
+void pmcstat_log_shutdown_logging(void);
+void pmcstat_log_initialize_logging(void);
+
+void pmcstat_attach_pmcs(struct pmcstat_args *args);
 
 #endif	/* _PMCSTAT_H_ */

@@ -77,6 +77,8 @@ __FBSDID("$FreeBSD$");
 #include "hwtrace_pt.h"
 
 static struct pmcstat_args args;
+static int pmcstat_sockpair[NSOCKPAIRFD];
+static int pmcstat_kq;
 static struct pmcstat_process *pmcstat_kernproc;
 static int pmcstat_npmcs;
 static int pmcstat_mergepmc;
@@ -115,8 +117,8 @@ int
 main(int argc, char *argv[])
 {
 	struct pmcstat_ev *ev;
-	char *app_filename;
-	struct stat sb;
+	//char *app_filename;
+	//struct stat sb;
 	int user_mode;
 	int option;
 	cpuset_t cpumask;
@@ -131,14 +133,19 @@ main(int argc, char *argv[])
 		switch (option) {
 		case 'u':
 			user_mode = 1;
+#if 0
 			if (stat(optarg, &sb) < 0)
 				err(EX_OSERR, "ERROR: Cannot stat \"%s\"",
 				    optarg);
 			app_filename = optarg;
+#endif
 			break;
 		default:
 			break;
 		};
+
+	args.pa_argc = (argc -= optind);
+	args.pa_argv = (argv += optind);
 
 	if ((ev = malloc(sizeof(*ev))) == NULL)
 		errx(EX_SOFTWARE, "ERROR: Out of memory.");
@@ -201,7 +208,15 @@ main(int argc, char *argv[])
 			    "system" : "process", ev->ev_spec);
 	}
 
+	if ((pmcstat_kq = kqueue()) < 0)
+		err(EX_OSERR, "ERROR: Cannot allocate kqueue");
+
+	pmcstat_create_process(pmcstat_sockpair, &args, pmcstat_kq);
+
+	pmcstat_attach_pmcs(&args);
 	hwtrace_start_pmcs();
+
+	pmcstat_start_process(pmcstat_sockpair);
 
 	while (1);
 

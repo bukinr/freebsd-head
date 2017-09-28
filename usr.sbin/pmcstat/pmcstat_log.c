@@ -73,8 +73,6 @@ __FBSDID("$FreeBSD$");
 #include "pmcstat_log.h"
 #include "pmcstat_top.h"
 
-#define	PMCSTAT_ALLOCATE		1
-
 /*
  * PUBLIC INTERFACES
  *
@@ -130,6 +128,11 @@ __FBSDID("$FreeBSD$");
  */
 
 struct pmcstat_pmcs pmcstat_pmcs = LIST_HEAD_INITIALIZER(pmcstat_pmcs);
+
+/*
+ * All image descriptors are kept in a hash table.
+ */
+struct pmcstat_image_hash_list pmcstat_image_hash[PMCSTAT_NHASH];
 
 /*
  * All process descriptors are kept in a hash table.
@@ -202,10 +205,6 @@ float pmcstat_threshold = 0.5; /* Cost filter for top mode. */
 static void	pmcstat_pmcid_add(pmc_id_t _pmcid,
     pmcstat_interned_string _name);
 
-static struct pmcstat_process *pmcstat_process_lookup(pid_t _pid,
-    int _allocate);
-static void pmcstat_string_initialize(void);
-static void pmcstat_string_shutdown(void);
 static void pmcstat_stats_reset(int _reset_global);
 
 /*
@@ -233,38 +232,6 @@ pmcstat_stats_reset(int reset_global)
 	/* Flush global stats. */
 	if (reset_global)
 		bzero(&pmcstat_stats, sizeof(struct pmcstat_stats));
-}
-
-/*
- * Initialize the string interning facility.
- */
-
-static void
-pmcstat_string_initialize(void)
-{
-	int i;
-
-	for (i = 0; i < PMCSTAT_NHASH; i++)
-		LIST_INIT(&pmcstat_string_hash[i]);
-}
-
-/*
- * Destroy the string table, free'ing up space.
- */
-
-static void
-pmcstat_string_shutdown(void)
-{
-	int i;
-	struct pmcstat_string *ps, *pstmp;
-
-	for (i = 0; i < PMCSTAT_NHASH; i++)
-		LIST_FOREACH_SAFE(ps, &pmcstat_string_hash[i], ps_next,
-		    pstmp) {
-			LIST_REMOVE(ps, ps_next);
-			free(ps->ps_string);
-			free(ps);
-		}
 }
 
 /*
@@ -528,58 +495,6 @@ pmcstat_lookup_pmcid(pmc_id_t pmcid)
 	}
 
 	return NULL;
-}
-
-/*
- * Find the process descriptor corresponding to a PID.  If 'allocate'
- * is zero, we return a NULL if a pid descriptor could not be found or
- * a process descriptor process.  If 'allocate' is non-zero, then we
- * will attempt to allocate a fresh process descriptor.  Zombie
- * process descriptors are only removed if a fresh allocation for the
- * same PID is requested.
- */
-
-static struct pmcstat_process *
-pmcstat_process_lookup(pid_t pid, int allocate)
-{
-	uint32_t hash;
-	struct pmcstat_pcmap *ppm, *ppmtmp;
-	struct pmcstat_process *pp, *pptmp;
-
-	hash = (uint32_t) pid & PMCSTAT_HASH_MASK;	/* simplicity wins */
-
-	LIST_FOREACH_SAFE(pp, &pmcstat_process_hash[hash], pp_next, pptmp)
-		if (pp->pp_pid == pid) {
-			/* Found a descriptor, check and process zombies */
-			if (allocate && pp->pp_isactive == 0) {
-				/* remove maps */
-				TAILQ_FOREACH_SAFE(ppm, &pp->pp_map, ppm_next,
-				    ppmtmp) {
-					TAILQ_REMOVE(&pp->pp_map, ppm,
-					    ppm_next);
-					free(ppm);
-				}
-				/* remove process entry */
-				LIST_REMOVE(pp, pp_next);
-				free(pp);
-				break;
-			}
-			return (pp);
-		}
-
-	if (!allocate)
-		return (NULL);
-
-	if ((pp = malloc(sizeof(*pp))) == NULL)
-		err(EX_OSERR, "ERROR: Cannot allocate pid descriptor");
-
-	pp->pp_pid = pid;
-	pp->pp_isactive = 1;
-
-	TAILQ_INIT(&pp->pp_map);
-
-	LIST_INSERT_HEAD(&pmcstat_process_hash[hash], pp, pp_next);
-	return (pp);
 }
 
 int
@@ -1366,7 +1281,6 @@ pmcstat_display_log(void)
 		if (plugins[args.pa_plugin].pl_init != NULL)
 			plugins[args.pa_plugin].pl_init();
 	}
-
 }
 
 /*
@@ -1388,141 +1302,17 @@ pmcstat_pluginconfigure_log(char *opt)
 	}
 }
 
-/*
- * Initialize module.
- */
-
 void
-pmcstat_initialize_logging(void)
+pmcstat_log_shutdown_logging(void)
 {
-	int i;
 
-	printf("%s\n", __func__);
-
-	/* use a convenient format for 'ldd' output */
-	if (setenv("LD_TRACE_LOADED_OBJECTS_FMT1","%o \"%p\" %x\n",1) != 0)
-		err(EX_OSERR, "ERROR: Cannot setenv");
-
-	/* Initialize hash tables */
-	pmcstat_string_initialize();
-	for (i = 0; i < PMCSTAT_NHASH; i++) {
-		LIST_INIT(&pmcstat_image_hash[i]);
-		LIST_INIT(&pmcstat_process_hash[i]);
-	}
-
-	/*
-	 * Create a fake 'process' entry for the kernel with pid -1.
-	 * hwpmc(4) will subsequently inform us about where the kernel
-	 * and any loaded kernel modules are mapped.
-	 */
-	if ((pmcstat_kernproc = pmcstat_process_lookup((pid_t) -1,
-		 PMCSTAT_ALLOCATE)) == NULL)
-		err(EX_OSERR, "ERROR: Cannot initialize logging");
-
-	/* PMC count. */
-	pmcstat_npmcs = 0;
-
-	/* Merge PMC with same name. */
-	pmcstat_mergepmc = args.pa_mergepmc;
-
-	/*
-	 * Initialize plugins
-	 */
-
-	if (plugins[args.pa_pplugin].pl_init != NULL)
-		plugins[args.pa_pplugin].pl_init();
-	if (plugins[args.pa_plugin].pl_init != NULL)
-		plugins[args.pa_plugin].pl_init();
+	pmcstat_shutdown_logging(&args, plugins, &pmcstat_stats);
 }
 
-/*
- * Shutdown module.
- */
-
 void
-pmcstat_shutdown_logging(void)
+pmcstat_log_initialize_logging(void)
 {
-	int i;
-	FILE *mf;
-	struct pmcstat_image *pi, *pitmp;
-	struct pmcstat_process *pp, *pptmp;
-	struct pmcstat_pcmap *ppm, *ppmtmp;
 
-	printf("%s\n", __func__);
-
-	/* determine where to send the map file */
-	mf = NULL;
-	if (args.pa_mapfilename != NULL)
-		mf = (strcmp(args.pa_mapfilename, "-") == 0) ?
-		    args.pa_printfile : fopen(args.pa_mapfilename, "w");
-
-	if (mf == NULL && args.pa_flags & FLAG_DO_GPROF &&
-	    args.pa_verbosity >= 2)
-		mf = args.pa_printfile;
-
-	if (mf)
-		(void) fprintf(mf, "MAP:\n");
-
-	/*
-	 * Shutdown the plugins
-	 */
-
-	if (plugins[args.pa_plugin].pl_shutdown != NULL)
-		plugins[args.pa_plugin].pl_shutdown(mf);
-	if (plugins[args.pa_pplugin].pl_shutdown != NULL)
-		plugins[args.pa_pplugin].pl_shutdown(mf);
-
-	for (i = 0; i < PMCSTAT_NHASH; i++) {
-		LIST_FOREACH_SAFE(pi, &pmcstat_image_hash[i], pi_next,
-		    pitmp) {
-			if (plugins[args.pa_plugin].pl_shutdownimage != NULL)
-				plugins[args.pa_plugin].pl_shutdownimage(pi);
-			if (plugins[args.pa_pplugin].pl_shutdownimage != NULL)
-				plugins[args.pa_pplugin].pl_shutdownimage(pi);
-
-			free(pi->pi_symbols);
-			if (pi->pi_addr2line != NULL)
-				pclose(pi->pi_addr2line);
-			LIST_REMOVE(pi, pi_next);
-			free(pi);
-		}
-
-		LIST_FOREACH_SAFE(pp, &pmcstat_process_hash[i], pp_next,
-		    pptmp) {
-			TAILQ_FOREACH_SAFE(ppm, &pp->pp_map, ppm_next, ppmtmp) {
-				TAILQ_REMOVE(&pp->pp_map, ppm, ppm_next);
-				free(ppm);
-			}
-			LIST_REMOVE(pp, pp_next);
-			free(pp);
-		}
-	}
-
-	pmcstat_string_shutdown();
-
-	/*
-	 * Print errors unless -q was specified.  Print all statistics
-	 * if verbosity > 1.
-	 */
-#define	PRINT(N,V) do {							\
-		if (pmcstat_stats.ps_##V || args.pa_verbosity >= 2)	\
-			(void) fprintf(args.pa_printfile, " %-40s %d\n",\
-			    N, pmcstat_stats.ps_##V);			\
-	} while (0)
-
-	if (args.pa_verbosity >= 1 && (args.pa_flags & FLAG_DO_ANALYSIS)) {
-		(void) fprintf(args.pa_printfile, "CONVERSION STATISTICS:\n");
-		PRINT("#exec/a.out", exec_aout);
-		PRINT("#exec/elf", exec_elf);
-		PRINT("#exec/unknown", exec_indeterminable);
-		PRINT("#exec handling errors", exec_errors);
-		PRINT("#samples/total", samples_total);
-		PRINT("#samples/unclaimed", samples_unknown_offset);
-		PRINT("#samples/unknown-object", samples_indeterminable);
-		PRINT("#samples/unknown-function", samples_unknown_function);
-		PRINT("#callchain/dubious-frames", callchain_dubious_frames);
-	}
-
-	if (mf)
-		(void) fclose(mf);
+	pmcstat_initialize_logging(&pmcstat_kernproc,
+	    &args, plugins, &pmcstat_npmcs, &pmcstat_mergepmc);
 }

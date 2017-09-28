@@ -32,6 +32,28 @@ struct pmcstat_target {
 
 struct pmcstat_args {
 	int	pa_flags;		/* argument flags */
+#define	FLAG_HAS_TARGET			0x00000001	/* process target */
+#define	FLAG_HAS_WAIT_INTERVAL		0x00000002	/* -w secs */
+#define	FLAG_HAS_OUTPUT_LOGFILE		0x00000004	/* -O file or pipe */
+#define	FLAG_HAS_COMMANDLINE		0x00000008	/* command */
+#define	FLAG_HAS_SAMPLING_PMCS		0x00000010	/* -S or -P */
+#define	FLAG_HAS_COUNTING_PMCS		0x00000020	/* -s or -p */
+#define	FLAG_HAS_PROCESS_PMCS		0x00000040	/* -P or -p */
+#define	FLAG_HAS_SYSTEM_PMCS		0x00000080	/* -S or -s */
+#define	FLAG_HAS_PIPE			0x00000100	/* implicit log */
+#define	FLAG_READ_LOGFILE		0x00000200	/* -R file */
+#define	FLAG_DO_GPROF			0x00000400	/* -g */
+#define	FLAG_HAS_SAMPLESDIR		0x00000800	/* -D dir */
+#define	FLAG_HAS_KERNELPATH		0x00001000	/* -k kernel */
+#define	FLAG_DO_PRINT			0x00002000	/* -o */
+#define	FLAG_DO_CALLGRAPHS		0x00004000	/* -G or -F */
+#define	FLAG_DO_ANNOTATE		0x00008000	/* -m */
+#define	FLAG_DO_TOP			0x00010000	/* -T */
+#define	FLAG_DO_ANALYSIS		0x00020000	/* -g or -G or -m or -T */
+#define	FLAGS_HAS_CPUMASK		0x00040000	/* -c */
+#define	FLAG_HAS_DURATION		0x00080000	/* -l secs */
+#define	FLAG_DO_WIDE_GPROF_HC		0x00100000	/* -e */
+
 	int	pa_required;		/* required features */
 	int	pa_pplugin;		/* pre-processing plugin */
 	int	pa_plugin;		/* analysis plugin */
@@ -282,5 +304,24 @@ void pmcstat_image_determine_type(struct pmcstat_image *_image, struct pmcstat_a
 void pmcstat_image_get_aout_params(struct pmcstat_image *_image, struct pmcstat_args *args);
 struct pmcstat_pcmap *pmcstat_process_find_map(struct pmcstat_process *_p,
 	uintfptr_t _pc);
+void pmcstat_initialize_logging(struct pmcstat_process **pmcstat_kernproc,
+    struct pmcstat_args *args, struct pmc_plugins *plugins,
+    int *pmcstat_npmcs, int *pmcstat_mergepmc);
+void pmcstat_shutdown_logging(struct pmcstat_args *args,
+    struct pmc_plugins *plugins,
+    struct pmcstat_stats *pmcstat_stats);
+struct pmcstat_process *pmcstat_process_lookup(pid_t _pid, int _allocate);
+void pmcstat_clone_event_descriptor(struct pmcstat_ev *ev, const cpuset_t *cpumask, struct pmcstat_args *args);
+
+void pmcstat_create_process(int *pmcstat_sockpair, struct pmcstat_args *args, int pmcstat_kq);
+void pmcstat_start_process(int *pmcstat_sockpair);
+
+void pmcstat_attach_pmcs(struct pmcstat_args *args);
+
+#define	PMCSTAT_ALLOCATE		1
+
+#define	NSOCKPAIRFD			2
+#define	PARENTSOCKET			0
+#define	CHILDSOCKET			1
 
 #endif /* !_LIBPMCSTAT_H_ */
