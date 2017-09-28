@@ -48,8 +48,6 @@
 #define	WRITEPIPEFD			1
 #define	NPIPEFD				2
 
-#define	PMCSTAT_OPEN_FOR_READ		0
-#define	PMCSTAT_OPEN_FOR_WRITE		1
 #define	PMCSTAT_DEFAULT_NW_HOST		"localhost"
 #define	PMCSTAT_DEFAULT_NW_PORT		"9000"
 
@@ -71,12 +69,6 @@
 #define PMCSTAT_TOP_DELTA 	0
 #define PMCSTAT_TOP_ACCUM	1
 
-enum pmcstat_state {
-	PMCSTAT_FINISHED = 0,
-	PMCSTAT_EXITING  = 1,
-	PMCSTAT_RUNNING  = 2
-};
-
 extern int pmcstat_displayheight;	/* current terminal height */
 extern int pmcstat_displaywidth;	/* current terminal width */
 extern struct pmcstat_args args;	/* command line args */
@@ -88,7 +80,6 @@ int	pmcstat_close_log(void);
 //void	pmcstat_create_process(void);
 void	pmcstat_find_targets(const char *_arg);
 void	pmcstat_kill_process(void);
-int	pmcstat_open_log(const char *_p, int _mode);
 void	pmcstat_print_counters(void);
 void	pmcstat_print_headers(void);
 void	pmcstat_print_pmcs(void);

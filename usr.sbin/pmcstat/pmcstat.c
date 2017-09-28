@@ -66,6 +66,7 @@ __FBSDID("$FreeBSD$");
 #include <unistd.h>
 
 #include <libpmcstat.h>
+
 #include "pmcstat.h"
 
 /*

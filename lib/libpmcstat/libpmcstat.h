@@ -324,4 +324,23 @@ void pmcstat_attach_pmcs(struct pmcstat_args *args);
 #define	PARENTSOCKET			0
 #define	CHILDSOCKET			1
 
+int pmcstat_analyze_log(struct pmcstat_args *args,
+    struct pmc_plugins *plugins,
+    struct pmcstat_stats *pmcstat_stats,
+    struct pmcstat_process *pmcstat_kernproc,
+    int pmcstat_mergepmc,
+    int *pmcstat_npmcs,
+    int *ps_samples_period);
+
+enum pmcstat_state {
+	PMCSTAT_FINISHED = 0,
+	PMCSTAT_EXITING  = 1,
+	PMCSTAT_RUNNING  = 2
+};
+
+#define	PMCSTAT_OPEN_FOR_READ		0
+#define	PMCSTAT_OPEN_FOR_WRITE		1
+
+int pmcstat_open_log(const char *_p, int _mode);
+
 #endif /* !_LIBPMCSTAT_H_ */

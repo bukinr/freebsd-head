@@ -93,6 +93,8 @@ struct pmcstat_image_hash_list pmcstat_image_hash[PMCSTAT_NHASH];
  */
 struct pmcstat_process_hash_list pmcstat_process_hash[PMCSTAT_NHASH];
 
+struct pmcstat_pmcs pmcstat_pmcs = LIST_HEAD_INITIALIZER(pmcstat_pmcs);
+
 static struct pmc_plugins plugins[] = {};
 
 static int
