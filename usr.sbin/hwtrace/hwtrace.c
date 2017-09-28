@@ -95,6 +95,47 @@ struct pmcstat_process_hash_list pmcstat_process_hash[PMCSTAT_NHASH];
 
 static struct pmc_plugins plugins[] = {};
 
+static int
+pmcstat_log_pt(struct pmcstat_ev *ev)
+{
+	struct pmcstat_process *pp;
+	struct pmcstat_target *pt;
+	pmc_value_t offset;
+	pmc_value_t cycle;
+	int i;
+
+	STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
+		for (i = 0; i < 4; i++) {
+			pmc_read_trace(i, ev->ev_pmcid, &cycle, &offset);
+#if 1
+			printf("cpu %d cycle %lx offset %lx\n", i, cycle, offset);
+#endif
+
+			pt = SLIST_FIRST(&args.pa_targets);
+			if (pt != NULL) {
+				pp = pmcstat_process_lookup(pt->pt_pid, 0);
+				//printf("pid %d\n", pt->pt_pid);
+			} else {
+				pp = pmcstat_kernproc;
+			}
+			if (pp)
+				ipt_process(pp, i, cycle, offset);
+#if 0
+			else
+				printf("pp not found\n");
+#endif
+		}
+	}
+
+	return (0);
+}
+
+/*
+ * Convert a hwpmc(4) log to profile information.  A system-wide
+ * callgraph is generated if FLAG_DO_CALLGRAPHS is set.  gmon.out
+ * files usable by gprof(1) are created if FLAG_DO_GPROF is set.
+ */
+
 static void
 hwtrace_start_pmcs(void)
 {
@@ -122,6 +163,8 @@ main(int argc, char *argv[])
 	int user_mode;
 	int option;
 	cpuset_t cpumask;
+	struct kevent kev;
+	int c;
 	int i;
 
 	STAILQ_INIT(&args.pa_events);
@@ -218,7 +261,32 @@ main(int argc, char *argv[])
 
 	pmcstat_start_process(pmcstat_sockpair);
 
-	while (1);
+	EV_SET(&kev, 0, EVFILT_TIMER, EV_ADD, 0, 1000, NULL);
+	if (kevent(pmcstat_kq, &kev, 1, NULL, 0, NULL) < 0)
+		err(EX_OSERR, "ERROR: Cannot register kevent for timer");
+
+	do {
+		if ((c = kevent(pmcstat_kq, NULL, 0, &kev, 1, NULL)) <= 0) {
+			if (errno != EINTR)
+				err(EX_OSERR, "ERROR: kevent failed");
+			else
+				continue;
+		}
+
+#if 1
+		printf("%s: pmcstat event: filter %d, ident %ld\n",
+		    __func__, kev.filter, kev.ident);
+#endif
+
+		if (kev.flags & EV_ERROR)
+			errc(EX_OSERR, kev.data, "ERROR: kevent failed");
+
+		switch (kev.filter) {
+		case EVFILT_TIMER:
+			pmcstat_log_pt(ev);
+			break;
+		}
+	} while (1);
 
 	return (0);
 }
