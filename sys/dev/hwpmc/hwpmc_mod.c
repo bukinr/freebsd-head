@@ -5003,22 +5003,9 @@ pmc_pg_fault(vm_object_t object, vm_ooffset_t offset,
 
 	pidx = OFF_TO_IDX(offset);
 
-#if 0
-	int i;
-	for (i = 0; i < sc->topa_n; i++) {
-		if (offset < sc->topa_sw[i].size) {
-			paddr = vtophys(sc->topa_sw[i].base) + offset;
-			break;
-		}
-		offset -= sc->topa_sw[i].size;
-	}
-
-#else
-	//(*pcd->pcd_get_page)(cc->cpu, offset, &paddr);
 	error = (*md->pmd_get_page)(cc->cpu, offset, &paddr);
 	if (error != 0)
 		return (VM_PAGER_FAIL);
-#endif
 
 	if (((*mres)->flags & PG_FICTITIOUS) != 0) {
 		printf("PG_FICTITIOUS\n");
