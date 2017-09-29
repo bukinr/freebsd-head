@@ -1340,9 +1340,6 @@ pmcstat_analyze_log(struct pmcstat_args *args,
 	struct pmclog_ev ev;
 	struct pmcstat_pmcrecord *pmcr;
 	pmcstat_interned_string image_path;
-#if 0
-	struct pmcstat_target *pt;
-#endif
 
 	assert(args->pa_flags & FLAG_DO_ANALYSIS);
 
@@ -1351,10 +1348,6 @@ pmcstat_analyze_log(struct pmcstat_args *args,
 
 	while (pmclog_read(args->pa_logparser, &ev) == 0) {
 		assert(ev.pl_state == PMCLOG_OK);
-
-#if 0
-		printf("%s: ev.pl_type %d\n", __func__, ev.pl_type);
-#endif
 
 		switch (ev.pl_type) {
 		case PMCLOG_TYPE_INITIALIZE:
@@ -1581,17 +1574,6 @@ pmcstat_analyze_log(struct pmcstat_args *args,
 				ppm->ppm_lowpc);
 			break;
 		case PMCLOG_TYPE_TRACE:
-#if 0
-			pt = SLIST_FIRST(&args->pa_targets);
-			if (pt != NULL) {
-				pp = pmcstat_process_lookup(pt->pt_pid, 0);
-				printf("pid %d\n", pt->pt_pid);
-			} else {
-				pp = pmcstat_kernproc;
-			}
-
-			ipt_process(pp, ev.pl_u.pl_tr.pl_cpu, ev.pl_u.pl_tr.pl_cycle, ev.pl_u.pl_tr.pl_offset);
-#endif
 			break;
 
 		default:	/* other types of entries are not relevant */
