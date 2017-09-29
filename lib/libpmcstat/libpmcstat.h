@@ -340,7 +340,11 @@ enum pmcstat_state {
 
 #define	PMCSTAT_OPEN_FOR_READ		0
 #define	PMCSTAT_OPEN_FOR_WRITE		1
+#define	READPIPEFD			0
+#define	WRITEPIPEFD			1
+#define	NPIPEFD				2
 
 int pmcstat_open_log(const char *_p, int _mode);
+int pmcstat_close_log(struct pmcstat_args *args);
 
 #endif /* !_LIBPMCSTAT_H_ */

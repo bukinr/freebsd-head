@@ -547,26 +547,6 @@ pmcstat_print_log(void)
  */
 
 /*
- * Close a logfile, after first flushing all in-module queued data.
- */
-
-int
-pmcstat_close_log(void)
-{
-	/* If a local logfile is configured ask the kernel to stop
-	 * and flush data. Kernel will close the file when data is flushed
-	 * so keep the status to EXITING.
-	 */
-	if (args.pa_logfd != -1) {
-		if (pmc_close_logfile() < 0)
-			err(EX_OSERR, "ERROR: logging failed");
-	}
-
-	return (args.pa_flags & FLAG_HAS_PIPE ? PMCSTAT_EXITING :
-	    PMCSTAT_FINISHED);
-}
-
-/*
  * Process a log file in offline analysis mode.
  */
 
@@ -807,3 +787,4 @@ pmcstat_log_initialize_logging(void)
 	pmcstat_initialize_logging(&pmcstat_kernproc,
 	    &args, plugins, &pmcstat_npmcs, &pmcstat_mergepmc);
 }
+

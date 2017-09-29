@@ -1352,6 +1352,10 @@ pmcstat_analyze_log(struct pmcstat_args *args,
 	while (pmclog_read(args->pa_logparser, &ev) == 0) {
 		assert(ev.pl_state == PMCLOG_OK);
 
+#if 0
+		printf("%s: ev.pl_type %d\n", __func__, ev.pl_type);
+#endif
+
 		switch (ev.pl_type) {
 		case PMCLOG_TYPE_INITIALIZE:
 			if ((ev.pl_u.pl_i.pl_version & 0xFF000000) !=
@@ -1706,4 +1710,24 @@ pmcstat_open_log(const char *path, int mode)
 		    errstr);
 
 	return (fd);
+}
+
+/*
+ * Close a logfile, after first flushing all in-module queued data.
+ */
+
+int
+pmcstat_close_log(struct pmcstat_args *args)
+{
+	/* If a local logfile is configured ask the kernel to stop
+	 * and flush data. Kernel will close the file when data is flushed
+	 * so keep the status to EXITING.
+	 */
+	if (args->pa_logfd != -1) {
+		if (pmc_close_logfile() < 0)
+			err(EX_OSERR, "ERROR: logging failed");
+	}
+
+	return (args->pa_flags & FLAG_HAS_PIPE ? PMCSTAT_EXITING :
+	    PMCSTAT_FINISHED);
 }

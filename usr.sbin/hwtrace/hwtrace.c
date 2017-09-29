@@ -52,6 +52,7 @@ __FBSDID("$FreeBSD$");
 #include <errno.h>
 #include <fcntl.h>
 #include <locale.h>
+#include <libgen.h>
 #include <sysexits.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -125,7 +126,7 @@ pmcstat_log_pt(struct pmcstat_ev *ev)
 			}
 			if (pp)
 				ipt_process(pp, i, cycle, offset);
-#if 0
+#if 1
 			else
 				printf("pp not found\n");
 #endif
@@ -162,23 +163,80 @@ hwtrace_start_pmcs(void)
 int
 main(int argc, char *argv[])
 {
+	size_t len;
 	struct pmcstat_ev *ev;
 	//char *app_filename;
-	//struct stat sb;
+	struct stat sb;
 	int user_mode;
 	int option;
 	cpuset_t cpumask;
+	cpuset_t rootmask;
 	struct kevent kev;
 	int pipefd[2];
 	int c;
 	int i;
+	char buffer[PATH_MAX];
+	char *tmp;
+
+	user_mode = 0;
 
 	STAILQ_INIT(&args.pa_events);
 	SLIST_INIT(&args.pa_targets);
 	CPU_ZERO(&cpumask);
 
+	args.pa_fsroot = strdup("/");
+
+	/* Default to using the running system kernel. */
+	len = 0;
+	if (sysctlbyname("kern.bootfile", NULL, &len, NULL, 0) == -1)
+		err(EX_OSERR, "ERROR: Cannot determine path of running kernel");
+	args.pa_kernel = malloc(len);
+	if (args.pa_kernel == NULL)
+		errx(EX_SOFTWARE, "ERROR: Out of memory.");
+	if (sysctlbyname("kern.bootfile", args.pa_kernel, &len, NULL, 0) == -1)
+		err(EX_OSERR, "ERROR: Cannot determine path of running kernel");
+
+	/*
+	 * Check if 'kerneldir' refers to a file rather than a
+	 * directory.  If so, use `dirname path` to determine the
+	 * kernel directory.
+	 */
+	(void) snprintf(buffer, sizeof(buffer), "%s%s", args.pa_fsroot,
+	    args.pa_kernel);
+	if (stat(buffer, &sb) < 0)
+		err(EX_OSERR, "ERROR: Cannot locate kernel \"%s\"",
+		    buffer);
+	if (!S_ISREG(sb.st_mode) && !S_ISDIR(sb.st_mode))
+		errx(EX_USAGE, "ERROR: \"%s\": Unsupported file type.",
+		    buffer);
+	if (!S_ISDIR(sb.st_mode)) {
+		tmp = args.pa_kernel;
+		args.pa_kernel = strdup(dirname(args.pa_kernel));
+		if (args.pa_kernel == NULL)
+			errx(EX_SOFTWARE, "ERROR: Out of memory");
+		free(tmp);
+		(void) snprintf(buffer, sizeof(buffer), "%s%s",
+		    args.pa_fsroot, args.pa_kernel);
+		if (stat(buffer, &sb) < 0)
+			err(EX_OSERR, "ERROR: Cannot stat \"%s\"",
+			    buffer);
+		if (!S_ISDIR(sb.st_mode))
+			errx(EX_USAGE,
+			    "ERROR: \"%s\" is not a directory.",
+			    buffer);
+	}
+
+	/*
+	 * The initial CPU mask specifies the root mask of this process
+	 * which is usually all CPUs in the system.
+	 */
+	if (cpuset_getaffinity(CPU_LEVEL_ROOT, CPU_WHICH_PID, -1,
+	    sizeof(rootmask), &rootmask) == -1)
+		err(EX_OSERR, "ERROR: Cannot determine the root set of CPUs");
+	CPU_COPY(&rootmask, &cpumask);
+
 	while ((option = getopt(argc, argv,
-	    "u:")) != -1)
+	    "u:s:")) != -1)
 		switch (option) {
 		case 'u':
 			user_mode = 1;
@@ -189,6 +247,9 @@ main(int argc, char *argv[])
 			app_filename = optarg;
 #endif
 			break;
+		case 's':
+			user_mode = 0;
+			break;
 		default:
 			break;
 		};
@@ -196,7 +257,8 @@ main(int argc, char *argv[])
 	args.pa_argc = (argc -= optind);
 	args.pa_argv = (argv += optind);
 	args.pa_cpumask = cpumask;
-	args.pa_fsroot = strdup("/");
+
+	printf("%s\n", __func__);
 
 	if ((ev = malloc(sizeof(*ev))) == NULL)
 		errx(EX_SOFTWARE, "ERROR: Out of memory.");
@@ -237,6 +299,8 @@ main(int argc, char *argv[])
 
 	STAILQ_INSERT_TAIL(&args.pa_events, ev, ev_next);
 
+	printf("%s\n", __func__);
+
 	if (!user_mode) {
 		CPU_CLR(ev->ev_cpu, &cpumask);
 		pmcstat_clone_event_descriptor(ev, &cpumask, &args);
@@ -245,6 +309,8 @@ main(int argc, char *argv[])
 
 	for (i = 0; i < 4; i++)
 		pmc_ipt_init(i);
+
+	printf("%s\n", __func__);
 
 	if (pmc_init() < 0)
 		err(EX_UNAVAILABLE, "ERROR: Initialization of the pmc(3) library failed");
@@ -267,6 +333,8 @@ main(int argc, char *argv[])
 
 	if (kevent(pmcstat_kq, &kev, 1, NULL, 0, NULL) < 0)
 		err(EX_OSERR, "ERROR: Cannot register kevent");
+
+	printf("%s\n", __func__);
 
 	args.pa_logfd = pipefd[WRITEPIPEFD];
 
@@ -291,11 +359,14 @@ main(int argc, char *argv[])
 	if (kevent(pmcstat_kq, &kev, 1, NULL, 0, NULL) < 0)
 		err(EX_OSERR, "ERROR: Cannot register kevent for timer");
 
-	/* User Process */
-	pmcstat_create_process(pmcstat_sockpair, &args, pmcstat_kq);
-	pmcstat_attach_pmcs(&args);
+	if (user_mode) {
+		pmcstat_create_process(pmcstat_sockpair, &args, pmcstat_kq);
+		pmcstat_attach_pmcs(&args);
+	}
 	hwtrace_start_pmcs();
-	pmcstat_start_process(pmcstat_sockpair);
+
+	if (user_mode)
+		pmcstat_start_process(pmcstat_sockpair);
 
 	pmcstat_initialize_logging(&pmcstat_kernproc,
 	    &args, plugins, &pmcstat_npmcs, &pmcstat_mergepmc);

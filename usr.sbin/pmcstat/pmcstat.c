@@ -1380,7 +1380,7 @@ main(int argc, char **argv)
 
 		switch (kev.filter) {
 		case EVFILT_PROC:  /* target has exited */
-			runstate = pmcstat_close_log();
+			runstate = pmcstat_close_log(&args);
 			do_print = 1;
 			break;
 
@@ -1388,7 +1388,7 @@ main(int argc, char **argv)
 			if (kev.ident == (unsigned)fileno(stdin) &&
 			    (args.pa_flags & FLAG_DO_TOP)) {
 				if (pmcstat_keypress_log())
-					runstate = pmcstat_close_log();
+					runstate = pmcstat_close_log(&args);
 			} else {
 				printf("%s: process log\n", __func__);
 				do_read = 0;
@@ -1420,13 +1420,13 @@ main(int argc, char **argv)
 				 * of its targets, or if logfile
 				 * writes encounter an error.
 				 */
-				runstate = pmcstat_close_log();
+				runstate = pmcstat_close_log(&args);
 				do_print = 1; /* print PMCs at exit */
 			} else if (kev.ident == SIGINT) {
 				/* Kill the child process if we started it */
 				if (args.pa_flags & FLAG_HAS_COMMANDLINE)
 					pmcstat_kill_process();
-				runstate = pmcstat_close_log();
+				runstate = pmcstat_close_log(&args);
 			} else if (kev.ident == SIGWINCH) {
 				if (ioctl(fileno(args.pa_printfile),
 					TIOCGWINSZ, &ws) < 0)

@@ -44,9 +44,6 @@
 #define	DEFAULT_CALLGRAPH_DEPTH		16
 
 #define	PRINT_HEADER_PREFIX		"# "
-#define	READPIPEFD			0
-#define	WRITEPIPEFD			1
-#define	NPIPEFD				2
 
 #define	PMCSTAT_DEFAULT_NW_HOST		"localhost"
 #define	PMCSTAT_DEFAULT_NW_PORT		"9000"
@@ -76,7 +73,7 @@ extern struct pmcstat_args args;	/* command line args */
 /* Function prototypes */
 //void	pmcstat_attach_pmcs(void);
 void	pmcstat_cleanup(void);
-int	pmcstat_close_log(void);
+//int	pmcstat_close_log(void);
 //void	pmcstat_create_process(void);
 void	pmcstat_find_targets(const char *_arg);
 void	pmcstat_kill_process(void);
