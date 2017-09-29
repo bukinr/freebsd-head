@@ -71,6 +71,7 @@ __FBSDID("$FreeBSD$");
 #include <libipt/intel-pt.h>
 
 #include <pmc.h>
+#include <pmclog.h>
 #include <libpmcstat.h>
 
 #include <machine/pt.h>
@@ -82,6 +83,8 @@ static int pmcstat_kq;
 static struct pmcstat_process *pmcstat_kernproc;
 static int pmcstat_npmcs;
 static int pmcstat_mergepmc;
+static struct pmcstat_stats pmcstat_stats;
+static int ps_samples_period;
 
 /*
  * All image descriptors are kept in a hash table.
@@ -166,6 +169,7 @@ main(int argc, char *argv[])
 	int option;
 	cpuset_t cpumask;
 	struct kevent kev;
+	int pipefd[2];
 	int c;
 	int i;
 
@@ -191,20 +195,24 @@ main(int argc, char *argv[])
 
 	args.pa_argc = (argc -= optind);
 	args.pa_argv = (argv += optind);
+	args.pa_cpumask = cpumask;
+	args.pa_fsroot = strdup("/");
 
 	if ((ev = malloc(sizeof(*ev))) == NULL)
 		errx(EX_SOFTWARE, "ERROR: Out of memory.");
 
 	if (!user_mode)
 		ev->ev_mode = PMC_MODE_ST;
-	else
+	else {
 		ev->ev_mode = PMC_MODE_TT;
+		args.pa_flags |= FLAG_HAS_PROCESS_PMCS;
+	}
 
 	ev->ev_spec = strdup("pt");
 	if (ev->ev_spec == NULL)
 		errx(EX_SOFTWARE, "ERROR: Out of memory.");
 
-	//args.pa_required |= (FLAG_HAS_PIPE | FLAG_HAS_OUTPUT_LOGFILE);
+	args.pa_required |= (FLAG_HAS_PIPE | FLAG_HAS_OUTPUT_LOGFILE);
 
 	ev->ev_saved = 0LL;
 	ev->ev_pmcid = PMC_ID_INVALID;
@@ -241,8 +249,34 @@ main(int argc, char *argv[])
 	if (pmc_init() < 0)
 		err(EX_UNAVAILABLE, "ERROR: Initialization of the pmc(3) library failed");
 
-	pmcstat_initialize_logging(&pmcstat_kernproc,
-	    &args, plugins, &pmcstat_npmcs, &pmcstat_mergepmc);
+	if ((pmcstat_kq = kqueue()) < 0)
+		err(EX_OSERR, "ERROR: Cannot allocate kqueue");
+
+	/*
+	 * process the log on the fly by reading it in
+	 * through a pipe.
+	 */
+	if (pipe(pipefd) < 0)
+		err(EX_OSERR, "ERROR: pipe(2) failed");
+
+	if (fcntl(pipefd[READPIPEFD], F_SETFL, O_NONBLOCK) < 0)
+		err(EX_OSERR, "ERROR: fcntl(2) failed");
+
+	EV_SET(&kev, pipefd[READPIPEFD], EVFILT_READ, EV_ADD,
+	    0, 0, NULL);
+
+	if (kevent(pmcstat_kq, &kev, 1, NULL, 0, NULL) < 0)
+		err(EX_OSERR, "ERROR: Cannot register kevent");
+
+	args.pa_logfd = pipefd[WRITEPIPEFD];
+
+	args.pa_flags |= FLAG_HAS_PIPE;
+	//if ((args.pa_flags & FLAG_DO_TOP) == 0)
+	//	args.pa_flags |= FLAG_DO_PRINT;
+	args.pa_logparser = pmclog_open(pipefd[READPIPEFD]);
+
+	if (pmc_configure_logfile(args.pa_logfd) < 0)
+		err(EX_OSERR, "ERROR: Cannot configure log file");
 
 	STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
 		if (pmc_allocate(ev->ev_spec, ev->ev_mode,
@@ -253,20 +287,24 @@ main(int argc, char *argv[])
 			    "system" : "process", ev->ev_spec);
 	}
 
-	if ((pmcstat_kq = kqueue()) < 0)
-		err(EX_OSERR, "ERROR: Cannot allocate kqueue");
-
-	pmcstat_create_process(pmcstat_sockpair, &args, pmcstat_kq);
-
-	pmcstat_attach_pmcs(&args);
-	hwtrace_start_pmcs();
-
-	pmcstat_start_process(pmcstat_sockpair);
-
-	EV_SET(&kev, 0, EVFILT_TIMER, EV_ADD, 0, 1000, NULL);
+	EV_SET(&kev, 0, EVFILT_TIMER, EV_ADD, 0, 100, NULL);
 	if (kevent(pmcstat_kq, &kev, 1, NULL, 0, NULL) < 0)
 		err(EX_OSERR, "ERROR: Cannot register kevent for timer");
 
+	/* User Process */
+	pmcstat_create_process(pmcstat_sockpair, &args, pmcstat_kq);
+	pmcstat_attach_pmcs(&args);
+	hwtrace_start_pmcs();
+	pmcstat_start_process(pmcstat_sockpair);
+
+	pmcstat_initialize_logging(&pmcstat_kernproc,
+	    &args, plugins, &pmcstat_npmcs, &pmcstat_mergepmc);
+
+	int running;
+	int stopping;
+
+	stopping = 0;
+	running = 10;
 	do {
 		if ((c = kevent(pmcstat_kq, NULL, 0, &kev, 1, NULL)) <= 0) {
 			if (errno != EINTR)
@@ -284,11 +322,23 @@ main(int argc, char *argv[])
 			errc(EX_OSERR, kev.data, "ERROR: kevent failed");
 
 		switch (kev.filter) {
+		case EVFILT_PROC:
+			stopping = 1;
+			break;
+		case EVFILT_READ:
+			printf("%s: read data available\n", __func__);
+			args.pa_flags |= FLAG_DO_ANALYSIS;
+			pmcstat_analyze_log(&args, plugins, &pmcstat_stats, pmcstat_kernproc,
+			    pmcstat_mergepmc, &pmcstat_npmcs, &ps_samples_period);
+			break;
 		case EVFILT_TIMER:
+			pmc_flush_logfile();
 			pmcstat_log_pt(ev);
+			if (stopping)
+				running -= 1;
 			break;
 		}
-	} while (1);
+	} while (running > 0);
 
 	return (0);
 }
