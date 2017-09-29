@@ -81,6 +81,8 @@ __FBSDID("$FreeBSD$");
 static struct pmcstat_args args;
 static int pmcstat_sockpair[NSOCKPAIRFD];
 static int pmcstat_kq;
+static struct kevent kev;
+
 static struct pmcstat_process *pmcstat_kernproc;
 static int pmcstat_npmcs;
 static int pmcstat_mergepmc;
@@ -160,31 +162,46 @@ hwtrace_start_pmcs(void)
 	}
 }
 
-int
-main(int argc, char *argv[])
+static int
+hwtrace_open_logfile(void)
 {
-	size_t len;
-	struct pmcstat_ev *ev;
-	//char *app_filename;
-	struct stat sb;
-	int user_mode;
-	int option;
-	cpuset_t cpumask;
-	cpuset_t rootmask;
-	struct kevent kev;
 	int pipefd[2];
-	int c;
-	int i;
+
+	/*
+	 * process the log on the fly by reading it in
+	 * through a pipe.
+	 */
+	if (pipe(pipefd) < 0)
+		err(EX_OSERR, "ERROR: pipe(2) failed");
+
+	if (fcntl(pipefd[READPIPEFD], F_SETFL, O_NONBLOCK) < 0)
+		err(EX_OSERR, "ERROR: fcntl(2) failed");
+
+	EV_SET(&kev, pipefd[READPIPEFD], EVFILT_READ, EV_ADD,
+	    0, 0, NULL);
+
+	if (kevent(pmcstat_kq, &kev, 1, NULL, 0, NULL) < 0)
+		err(EX_OSERR, "ERROR: Cannot register kevent");
+
+	args.pa_logfd = pipefd[WRITEPIPEFD];
+	args.pa_flags |= FLAG_HAS_PIPE;
+	//if ((args.pa_flags & FLAG_DO_TOP) == 0)
+	//	args.pa_flags |= FLAG_DO_PRINT;
+	args.pa_logparser = pmclog_open(pipefd[READPIPEFD]);
+
+	if (pmc_configure_logfile(args.pa_logfd) < 0)
+		err(EX_OSERR, "ERROR: Cannot configure log file");
+
+	return (0);
+}
+
+static int
+hwtrace_find_kernel(void)
+{
+	struct stat sb;
 	char buffer[PATH_MAX];
+	size_t len;
 	char *tmp;
-
-	user_mode = 0;
-
-	STAILQ_INIT(&args.pa_events);
-	SLIST_INIT(&args.pa_targets);
-	CPU_ZERO(&cpumask);
-
-	args.pa_fsroot = strdup("/");
 
 	/* Default to using the running system kernel. */
 	len = 0;
@@ -226,6 +243,14 @@ main(int argc, char *argv[])
 			    buffer);
 	}
 
+	return (0);
+}
+
+static void
+hwtrace_setup_cpumask(cpuset_t *cpumask)
+{
+	cpuset_t rootmask;
+
 	/*
 	 * The initial CPU mask specifies the root mask of this process
 	 * which is usually all CPUs in the system.
@@ -233,7 +258,30 @@ main(int argc, char *argv[])
 	if (cpuset_getaffinity(CPU_LEVEL_ROOT, CPU_WHICH_PID, -1,
 	    sizeof(rootmask), &rootmask) == -1)
 		err(EX_OSERR, "ERROR: Cannot determine the root set of CPUs");
-	CPU_COPY(&rootmask, &cpumask);
+	CPU_COPY(&rootmask, cpumask);
+}
+
+int
+main(int argc, char *argv[])
+{
+	struct pmcstat_ev *ev;
+	//char *app_filename;
+	int user_mode;
+	int option;
+	cpuset_t cpumask;
+	int c;
+	int i;
+
+	user_mode = 0;
+
+	STAILQ_INIT(&args.pa_events);
+	SLIST_INIT(&args.pa_targets);
+	CPU_ZERO(&cpumask);
+
+	args.pa_fsroot = strdup("/");
+
+	hwtrace_find_kernel();
+	hwtrace_setup_cpumask(&cpumask);
 
 	while ((option = getopt(argc, argv,
 	    "u:s:")) != -1)
@@ -318,33 +366,7 @@ main(int argc, char *argv[])
 	if ((pmcstat_kq = kqueue()) < 0)
 		err(EX_OSERR, "ERROR: Cannot allocate kqueue");
 
-	/*
-	 * process the log on the fly by reading it in
-	 * through a pipe.
-	 */
-	if (pipe(pipefd) < 0)
-		err(EX_OSERR, "ERROR: pipe(2) failed");
-
-	if (fcntl(pipefd[READPIPEFD], F_SETFL, O_NONBLOCK) < 0)
-		err(EX_OSERR, "ERROR: fcntl(2) failed");
-
-	EV_SET(&kev, pipefd[READPIPEFD], EVFILT_READ, EV_ADD,
-	    0, 0, NULL);
-
-	if (kevent(pmcstat_kq, &kev, 1, NULL, 0, NULL) < 0)
-		err(EX_OSERR, "ERROR: Cannot register kevent");
-
-	printf("%s\n", __func__);
-
-	args.pa_logfd = pipefd[WRITEPIPEFD];
-
-	args.pa_flags |= FLAG_HAS_PIPE;
-	//if ((args.pa_flags & FLAG_DO_TOP) == 0)
-	//	args.pa_flags |= FLAG_DO_PRINT;
-	args.pa_logparser = pmclog_open(pipefd[READPIPEFD]);
-
-	if (pmc_configure_logfile(args.pa_logfd) < 0)
-		err(EX_OSERR, "ERROR: Cannot configure log file");
+	hwtrace_open_logfile();
 
 	STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
 		if (pmc_allocate(ev->ev_spec, ev->ev_mode,
@@ -371,6 +393,7 @@ main(int argc, char *argv[])
 	pmcstat_initialize_logging(&pmcstat_kernproc,
 	    &args, plugins, &pmcstat_npmcs, &pmcstat_mergepmc);
 
+	struct pmcstat_process *pp;
 	int running;
 	int stopping;
 
@@ -404,6 +427,11 @@ main(int argc, char *argv[])
 			break;
 		case EVFILT_TIMER:
 			pmc_flush_logfile();
+
+			pp = pmcstat_kernproc;
+			if (!user_mode && TAILQ_EMPTY(&pp->pp_map))
+				break;
+
 			pmcstat_log_pt(ev);
 			if (stopping)
 				running -= 1;
