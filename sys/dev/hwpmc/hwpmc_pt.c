@@ -174,8 +174,6 @@ pt_allocate_pmc(int cpu, int ri, struct pmc *pm,
 int
 pmc_pt_intr(int cpu, struct trapframe *tf)
 {
-
-#if 1
 	struct pmc_md_pt_pmc *pm_pt;
 	struct pt_buffer *pt_buf;
 	struct pt_cpu *pt_pc;
@@ -187,13 +185,6 @@ pmc_pt_intr(int cpu, struct trapframe *tf)
 
 	if (phw == NULL || phw->phw_pmc == NULL)
 		return (0);
-
-	KASSERT(phw != NULL && phw->phw_pmc != NULL,
-	    ("pm is NULL\n"));
-#if 0
-	if (phw == NULL || phw->phw_pmc == NULL)
-		return (0);
-#endif
 
 	pm = phw->phw_pmc;
 	if (pm == NULL)
@@ -207,50 +198,6 @@ pmc_pt_intr(int cpu, struct trapframe *tf)
 	atomic_add_long(&pt_buf->cycle, 1);
 
 	lapic_reenable_pmc();
-
-	return (1);
-#else
-	struct pmc_md_pt_pmc *pm_pt;
-	struct pt_cpu *pt_pc;
-	struct pmc_hw *phw;
-	struct pmc *pm;
-	uint64_t offset;
-	uint64_t cycle;
-	uint64_t reg;
-	uint32_t idx;
-	struct pt_buffer *pt_buf;
-
-	pt_pc = pt_pcpu[cpu];
-
-	atomic_add_long(&pt_pc->intr_cnt, 1);
-
-	phw = &pt_pc->tc_hw;
-	if (phw == NULL || phw->phw_pmc == NULL)
-		return (0);
-
-	pm = phw->phw_pmc;
-	KASSERT(pm != NULL, ("pm is NULL\n"));
-
-	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
-	pt_buf = &pm_pt->pt_buffers[cpu];
-
-#define IA32_GLOBAL_STATUS_RESET        0x390
-
-	reg = (1UL << 55);
-	wrmsr(IA32_GLOBAL_STATUS_RESET, reg);
-
-	cycle = pt_pc->intr_cnt / pt_buf->topa_n;
-	offset = 0;
-
-	reg = rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS);
-	idx = (reg & 0xffffffff) >> 7;
-	offset = reg >> 32;
-	offset += pt_buf->topa_sw[idx].offset;
-
-	pmclog_process_trace(pm->pm_owner, cpu, cycle, offset);
-
-	lapic_reenable_pmc();
-#endif
 
 	return (1);
 }
