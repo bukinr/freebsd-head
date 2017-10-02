@@ -368,41 +368,6 @@ pmcstat_pmcindex_to_pmcr(int pmcin)
 	return NULL;
 }
 
-int
-pmcstat_log_pt(struct pmcstat_ev *ev)
-{
-	struct pmcstat_process *pp;
-	struct pmcstat_target *pt;
-	pmc_value_t offset;
-	pmc_value_t cycle;
-	int i;
-
-	STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
-		for (i = 0; i < 4; i++) {
-			pmc_read_trace(i, ev->ev_pmcid, &cycle, &offset);
-#if 0
-			printf("cpu %d cycle %lx offset %lx\n", i, cycle, offset);
-#endif
-
-			pt = SLIST_FIRST(&args.pa_targets);
-			if (pt != NULL) {
-				pp = pmcstat_process_lookup(pt->pt_pid, 0);
-				//printf("pid %d\n", pt->pt_pid);
-			} else {
-				pp = pmcstat_kernproc;
-			}
-			if (pp)
-				ipt_process(pp, i, cycle, offset);
-#if 0
-			else
-				printf("pp not found\n");
-#endif
-		}
-	}
-
-	return (0);
-}
-
 /*
  * Print log entries as text.
  */
@@ -518,14 +483,7 @@ pmcstat_print_log(void)
 			PMCSTAT_PRINT_ENTRY("exit","%d",
 			    ev.pl_u.pl_se.pl_pid);
 			break;
-		case PMCLOG_TYPE_TRACE:
-			PMCSTAT_PRINT_ENTRY("trace","cpu: %d, cycle: %d, offset: %ld",
-			    ev.pl_u.pl_tr.pl_cpu,
-			    ev.pl_u.pl_tr.pl_cycle,
-			    ev.pl_u.pl_tr.pl_offset);
-			break;
 		default:
-			printf("event %d\n", ev.pl_type);
 			fprintf(args.pa_printfile, "unknown event (type %d).\n",
 			    ev.pl_type);
 		}
@@ -537,8 +495,8 @@ pmcstat_print_log(void)
 		return (PMCSTAT_RUNNING);
 
 	errx(EX_DATAERR,
-	    "ERROR: event parsing failed (record %jd, offset 0x%jx, type %d, PMCLOG_TYPE_TRACE %d).",
-	    (uintmax_t) ev.pl_count + 1, ev.pl_offset, ev.pl_type, PMCLOG_TYPE_TRACE);
+	    "ERROR: event parsing failed (record %jd, offset 0x%jx).",
+	    (uintmax_t) ev.pl_count + 1, ev.pl_offset);
 	/*NOTREACHED*/
 }
 
@@ -787,4 +745,3 @@ pmcstat_log_initialize_logging(void)
 	pmcstat_initialize_logging(&pmcstat_kernproc,
 	    &args, plugins, &pmcstat_npmcs, &pmcstat_mergepmc);
 }
-

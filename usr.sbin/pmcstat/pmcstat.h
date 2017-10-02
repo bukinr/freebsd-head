@@ -71,10 +71,7 @@ extern int pmcstat_displaywidth;	/* current terminal width */
 extern struct pmcstat_args args;	/* command line args */
 
 /* Function prototypes */
-//void	pmcstat_attach_pmcs(void);
 void	pmcstat_cleanup(void);
-//int	pmcstat_close_log(void);
-//void	pmcstat_create_process(void);
 void	pmcstat_find_targets(const char *_arg);
 void	pmcstat_kill_process(void);
 void	pmcstat_print_counters(void);
@@ -82,7 +79,6 @@ void	pmcstat_print_headers(void);
 void	pmcstat_print_pmcs(void);
 void	pmcstat_show_usage(void);
 void	pmcstat_start_pmcs(void);
-//void	pmcstat_start_process(void);
 int	pmcstat_process_log(void);
 int	pmcstat_keypress_log(void);
 void	pmcstat_display_log(void);
