@@ -185,6 +185,9 @@ pmc_pt_intr(int cpu, struct trapframe *tf)
 	pt_pc = pt_pcpu[cpu];
 	phw = &pt_pc->tc_hw;
 
+	if (phw == NULL || phw->phw_pmc == NULL)
+		return (0);
+
 	KASSERT(phw != NULL && phw->phw_pmc != NULL,
 	    ("pm is NULL\n"));
 #if 0
@@ -193,6 +196,9 @@ pmc_pt_intr(int cpu, struct trapframe *tf)
 #endif
 
 	pm = phw->phw_pmc;
+	if (pm == NULL)
+		return (0);
+
 	KASSERT(pm != NULL, ("pm is NULL\n"));
 
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
@@ -310,8 +316,15 @@ pt_attach_proc(int ri, struct pmc *pm, struct proc *p)
 {
 	struct pmc_md_pt_pmc *pm_pt;
 	//struct pt_buffer *pt_buf;
+	enum pmc_mode mode;
 	pmap_t pmap;  
 	uint64_t cr3;
+
+	printf("%s\n", __func__);
+
+	mode = PMC_TO_MODE(pm);
+	if (mode != PMC_MODE_ST && mode != PMC_MODE_TT)
+		return (0);
 
 	//pmap = vmspace_pmap(td->td_proc->p_vmspace);
 	pmap = vmspace_pmap(p->p_vmspace);
@@ -322,8 +335,6 @@ pt_attach_proc(int ri, struct pmc *pm, struct proc *p)
 
 	//pt_buf = &pm_pt->pt_buffers[cpu];
 	//pt_buf->cr3 = cr3;
-
-	printf("%s\n", __func__);
 
 	return (0);
 }

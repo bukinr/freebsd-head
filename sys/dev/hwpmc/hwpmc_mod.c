@@ -1037,7 +1037,8 @@ pmc_attach_one_process(struct proc *p, struct pmc *pm)
 	pm->pm_flags |= PMC_F_ATTACH_DONE; /* mark as attached */
 
 	pcd = pmc_ri_to_classdep(md, ri, &adjri);
-	pcd->pcd_attach_proc(ri, pm, p);
+	if (pcd->pcd_attach_proc != NULL)
+		pcd->pcd_attach_proc(ri, pm, p);
 
 	/* issue an attach event to a configured log file */
 	if (pm->pm_owner->po_flags & PMC_PO_OWNS_LOGFILE) {
