@@ -267,12 +267,14 @@ main(int argc, char *argv[])
 	struct pmcstat_ev *ev;
 	//char *app_filename;
 	int user_mode;
+	int supervisor_mode;
 	int option;
 	cpuset_t cpumask;
 	int c;
 	int i;
 
 	user_mode = 0;
+	supervisor_mode = 0;
 
 	STAILQ_INIT(&args.pa_events);
 	SLIST_INIT(&args.pa_targets);
@@ -287,7 +289,22 @@ main(int argc, char *argv[])
 	    "u:s:")) != -1)
 		switch (option) {
 		case 'u':
-			user_mode = 1;
+		case 's':
+			if ((ev = malloc(sizeof(*ev))) == NULL)
+				errx(EX_SOFTWARE, "ERROR: Out of memory.");
+			if (option == 'u') {
+				user_mode = 1;
+				ev->ev_mode = PMC_MODE_TT;
+				args.pa_flags |= FLAG_HAS_PROCESS_PMCS;
+			} else {
+				ev->ev_mode = PMC_MODE_ST;
+				supervisor_mode = 1;
+			}
+
+			ev->ev_spec = strdup(optarg);
+			if (ev->ev_spec == NULL)
+				errx(EX_SOFTWARE, "ERROR: Out of memory.");
+
 #if 0
 			if (stat(optarg, &sb) < 0)
 				err(EX_OSERR, "ERROR: Cannot stat \"%s\"",
@@ -295,19 +312,26 @@ main(int argc, char *argv[])
 			app_filename = optarg;
 #endif
 			break;
-		case 's':
-			user_mode = 0;
-			break;
 		default:
 			break;
 		};
+
+	if ((user_mode == 0 && supervisor_mode == 0) ||
+	    (user_mode == 1 && supervisor_mode == 1))
+		errx(EX_USAGE, "ERROR: specify -u or -s");
 
 	args.pa_argc = (argc -= optind);
 	args.pa_argv = (argv += optind);
 	args.pa_cpumask = cpumask;
 
+	if (user_mode && !argc)
+		errx(EX_USAGE, "ERROR: user mode requires command to be specified");
+	if (supervisor_mode && argc)
+		errx(EX_USAGE, "ERROR: supervisor mode does not require command");
+
 	printf("%s\n", __func__);
 
+#if 0
 	if ((ev = malloc(sizeof(*ev))) == NULL)
 		errx(EX_SOFTWARE, "ERROR: Out of memory.");
 
@@ -317,10 +341,11 @@ main(int argc, char *argv[])
 		ev->ev_mode = PMC_MODE_TT;
 		args.pa_flags |= FLAG_HAS_PROCESS_PMCS;
 	}
+#endif
 
-	ev->ev_spec = strdup("pt");
-	if (ev->ev_spec == NULL)
-		errx(EX_SOFTWARE, "ERROR: Out of memory.");
+	//ev->ev_spec = strdup("pt");
+	//if (ev->ev_spec == NULL)
+	//	errx(EX_SOFTWARE, "ERROR: Out of memory.");
 
 	args.pa_required |= (FLAG_HAS_PIPE | FLAG_HAS_OUTPUT_LOGFILE);
 
