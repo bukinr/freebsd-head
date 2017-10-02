@@ -119,13 +119,20 @@ static int
 pt_allocate_pmc(int cpu, int ri, struct pmc *pm,
     const struct pmc_op_pmcallocate *a)
 {
-	(void) cpu;
+	const struct pmc_md_pt_op_pmcallocate *pm_pta;
 	struct pmc_md_pt_pmc *pm_pt;
 	struct pt_buffer *pt_buf;
+	(void) cpu;
 	int error;
 	int i;
 
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
+
+	pm_pta = (const struct pmc_md_pt_op_pmcallocate *)&a->pm_md.pm_pt;
+	if (pm_pta->flags & INTEL_PT_FLAG_BRANCHES)
+		pm_pt->flags |= INTEL_PT_FLAG_BRANCHES;
+
+	pm_pt->flags = pm_pta->flags;
 
 	for (i = 0; i < 4; i++) {
 		pt_buf = &pm_pt->pt_buffers[i];
@@ -248,7 +255,9 @@ pt_configure(int cpu, struct pmc *pm)
 	}
 
 	/* Enable FUP, TIP, TIP.PGE, TIP.PGD, TNT, MODE.Exec and MODE.TSX packets */
-	reg |= RTIT_CTL_BRANCHEN;
+	if (pm_pt->flags & INTEL_PT_FLAG_BRANCHES)
+		reg |= RTIT_CTL_BRANCHEN;
+
 	//reg |= RTIT_CTL_TSCEN;
 	reg |= RTIT_CTL_TOPA;
 	//reg |= RTIT_CTL_MTCEN;

@@ -361,7 +361,7 @@ main(int argc, char *argv[])
 	(void) strncpy(ev->ev_name, optarg, c);
 	*(ev->ev_name + c) = '\0';
 #endif
-	ev->ev_name = strdup("pt");
+	ev->ev_name = strdup("testname");
 
 	if (!user_mode)
 		ev->ev_cpu = CPU_FFS(&cpumask) - 1;

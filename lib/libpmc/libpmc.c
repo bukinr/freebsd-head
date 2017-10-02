@@ -2513,18 +2513,38 @@ tsc_allocate_pmc(enum pmc_event pe, char *ctrspec,
 
 	return (0);
 }
+
+#define	INTEL_PT_KW_BRANCHES	"branches"
+#define	INTEL_PT_KW_TSC		"tsc"
+
 static int
 pt_allocate_pmc(enum pmc_event pe, char *ctrspec,
     struct pmc_op_pmcallocate *pmc_config)
 {
+	char *p;
+	struct pmc_md_pt_op_pmcallocate *pm_pt;
+
 	if (pe != PMC_EV_PT_PT)
 		return (-1);
 
-	/* PT events must be unqualified. */
-	if (ctrspec && *ctrspec != '\0')
-		return (-1);
+	pm_pt = (struct pmc_md_pt_op_pmcallocate *)&pmc_config->pm_md.pm_pt;
 
-	pmc_config->pm_md.pm_amd.pm_amd_config = 0;
+	printf("ctrspec %s\n", ctrspec);
+
+	while ((p = strsep(&ctrspec, ",")) != NULL) {
+		if (KWMATCH(p, INTEL_PT_KW_TSC)) {
+			pm_pt->flags |= INTEL_PT_FLAG_TSC;
+		}
+		if (KWMATCH(p, INTEL_PT_KW_BRANCHES)) {
+			pm_pt->flags |= INTEL_PT_FLAG_BRANCHES;
+		}
+	};
+
+	/* PT events must be unqualified. */
+	//if (ctrspec && *ctrspec != '\0')
+	//	return (-1);
+
+	//pmc_config->pm_md.pm_pt.pm_amd_config = 0;
 	pmc_config->pm_caps |= PMC_CAP_READ;
 
 	return (0);
@@ -2942,6 +2962,7 @@ pmc_configure_logfile(int fd)
 int
 pmc_cpuinfo(const struct pmc_cpuinfo **pci)
 {
+
 	if (pmc_syscall == -1) {
 		errno = ENXIO;
 		return (-1);
@@ -3231,12 +3252,14 @@ pmc_event_names_of_class(enum pmc_class cl, const char ***eventnames,
 int
 pmc_flush_logfile(void)
 {
+
 	return (PMC_CALL(FLUSHLOG,0));
 }
 
 int
 pmc_close_logfile(void)
 {
+
 	return (PMC_CALL(CLOSELOG,0));
 }
 
