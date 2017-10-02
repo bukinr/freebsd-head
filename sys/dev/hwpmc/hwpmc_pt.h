@@ -40,6 +40,16 @@
 #ifndef LOCORE
 #endif
 
+struct pmc_md_pt_op_pmcallocate {
+	uint32_t flags;
+#define	INTEL_PT_FLAG_BRANCHES	(1 << 0)
+#define	INTEL_PT_FLAG_TSC	(1 << 1)
+#define	INTEL_PT_FLAG_MTC	(1 << 2)
+#define	INTEL_PT_FLAG_DISRETC	(1 << 3)
+	uint64_t ip_start;
+	uint64_t ip_end;
+};
+
 #ifdef	_KERNEL
 
 #define	PT_NPMCS	1
@@ -63,6 +73,7 @@ struct pt_buffer {
 struct pmc_md_pt_pmc {
 	struct pt_buffer	pt_buffers[4];	/* TODO */
 	uint64_t		cr3;
+	uint32_t		flags;
 };
 
 /*

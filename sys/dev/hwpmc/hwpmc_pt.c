@@ -235,14 +235,12 @@ pt_configure(int cpu, struct pmc *pm)
 	wrmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS, pt_buf->pt_output_mask_ptrs);
 
 	/* Configure tracing */
-	reg = 0;
+	reg = RTIT_CTL_TOPA;
 
 	//if (sc->s0_ebx & S0_EBX_PRW) {
 	//	reg |= RTIT_CTL_FUPONPTW;
 	//	reg |= RTIT_CTL_PTWEN;
 	//}
-	//if (config->retc == 0)
-	//reg |= RTIT_CTL_DISRETC;
 
 	if (mode == PMC_MODE_ST)
 		reg |= RTIT_CTL_OS;
@@ -258,10 +256,17 @@ pt_configure(int cpu, struct pmc *pm)
 	if (pm_pt->flags & INTEL_PT_FLAG_BRANCHES)
 		reg |= RTIT_CTL_BRANCHEN;
 
-	//reg |= RTIT_CTL_TSCEN;
-	reg |= RTIT_CTL_TOPA;
-	//reg |= RTIT_CTL_MTCEN;
+	if (pm_pt->flags & INTEL_PT_FLAG_TSC)
+		reg |= RTIT_CTL_TSCEN;
+
+	if (pm_pt->flags & INTEL_PT_FLAG_MTC)
+		reg |= RTIT_CTL_MTCEN;
+
+	if (pm_pt->flags & INTEL_PT_FLAG_DISRETC)
+		reg |= RTIT_CTL_DISRETC;
+
 	//reg |= RTIT_CTL_MTC_FREQ(6);
+
 	wrmsr(MSR_IA32_RTIT_CTL, reg);
 
 	return (0);

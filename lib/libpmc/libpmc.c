@@ -2516,6 +2516,8 @@ tsc_allocate_pmc(enum pmc_event pe, char *ctrspec,
 
 #define	INTEL_PT_KW_BRANCHES	"branches"
 #define	INTEL_PT_KW_TSC		"tsc"
+#define	INTEL_PT_KW_MTC		"mtc"
+#define	INTEL_PT_KW_DISRETC	"disretc"
 
 static int
 pt_allocate_pmc(enum pmc_event pe, char *ctrspec,
@@ -2532,11 +2534,20 @@ pt_allocate_pmc(enum pmc_event pe, char *ctrspec,
 	printf("ctrspec %s\n", ctrspec);
 
 	while ((p = strsep(&ctrspec, ",")) != NULL) {
+		if (KWMATCH(p, INTEL_PT_KW_BRANCHES)) {
+			pm_pt->flags |= INTEL_PT_FLAG_BRANCHES;
+		}
+
 		if (KWMATCH(p, INTEL_PT_KW_TSC)) {
 			pm_pt->flags |= INTEL_PT_FLAG_TSC;
 		}
-		if (KWMATCH(p, INTEL_PT_KW_BRANCHES)) {
-			pm_pt->flags |= INTEL_PT_FLAG_BRANCHES;
+
+		if (KWMATCH(p, INTEL_PT_KW_MTC)) {
+			pm_pt->flags |= INTEL_PT_FLAG_MTC;
+		}
+
+		if (KWMATCH(p, INTEL_PT_KW_DISRETC)) {
+			pm_pt->flags |= INTEL_PT_FLAG_DISRETC;
 		}
 	};
 

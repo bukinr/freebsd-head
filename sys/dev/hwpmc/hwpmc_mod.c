@@ -5505,7 +5505,6 @@ load (struct module *module __unused, int cmd, void *arg __unused)
 		    pmc_syscall_num, pmc_cpu_max());
 		break;
 
-
 	case MOD_UNLOAD :
 	case MOD_SHUTDOWN:
 		pmc_cleanup();
