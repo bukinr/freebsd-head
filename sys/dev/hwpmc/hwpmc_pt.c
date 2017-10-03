@@ -108,9 +108,13 @@ static struct pt_descr pt_pmcdesc[PT_NPMCS] =
 
 struct pt_cpu {
 	struct pmc_hw			tc_hw;
-	uint64_t			intr_cnt;
 	uint8_t				state;
 #define	STATE_ENABLED			(1 << 0)
+	uint32_t			s0_eax;
+	uint32_t			s0_ebx;
+	uint32_t			s0_ecx;
+	uint32_t			s1_eax;
+	uint32_t			s1_ebx;
 };
 
 static struct pt_cpu **pt_pcpu;
@@ -570,6 +574,39 @@ pmc_pt_buffer_get_page(int cpu, vm_ooffset_t offset, vm_paddr_t *paddr)
 	return (0);
 }
 
+static void
+pt_enumerate(struct pt_cpu *pt_pc)
+{
+	u_int cp[4];
+	u_int *eax;
+	u_int *ebx;
+	u_int *ecx;
+
+	eax = &cp[0];
+	ebx = &cp[1];
+	ecx = &cp[2];
+
+	printf("Enumerating part 1\n");
+
+	cpuid_count(PT_CPUID, 0, cp);
+	printf("%s: Maximum valid sub-leaf Index: %x\n", __func__, cp[0]);
+	printf("%s: ebx %x\n", __func__, cp[1]);
+	printf("%s: ecx %x\n", __func__, cp[2]);
+
+	pt_pc->s0_eax = cp[0];
+	pt_pc->s0_ebx = cp[1];
+	pt_pc->s0_ecx = cp[2];
+
+	printf("Enumerating part 2\n");
+
+	cpuid_count(PT_CPUID, 1, cp);
+	printf("%s: eax %x\n", __func__, cp[0]);
+	printf("%s: ebx %x\n", __func__, cp[1]);
+
+	pt_pc->s1_eax = cp[0];
+	pt_pc->s1_ebx = cp[1];
+}
+
 static int
 pt_pcpu_init(struct pmc_mdep *md, int cpu)
 {
@@ -578,6 +615,8 @@ pt_pcpu_init(struct pmc_mdep *md, int cpu)
 	int ri;
 
 	printf("%s: cpu %d\n", __func__, cpu);
+
+	KASSERT(cpu == PCPU_GET(cpuid), ("Init on wrong CPU\n"));
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
 	    ("[pt,%d] illegal cpu %d", __LINE__, cpu));
@@ -611,6 +650,8 @@ pt_pcpu_init(struct pmc_mdep *md, int cpu)
 	KASSERT(pc, ("[pt,%d] null generic per-cpu", __LINE__));
 
 	pc->pc_hwpmcs[ri] = &pt_pc->tc_hw;
+
+	pt_enumerate(pt_pc);
 
 	return (0);
 }
@@ -656,12 +697,8 @@ pt_read_trace(int cpu, int ri, struct pmc *pm,
 	uint64_t reg;
 	uint32_t idx;
 
-	//pt_pc = pt_pcpu[cpu];
-
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pt_buf = &pm_pt->pt_buffers[cpu];
-
-	//*cycle = pt_pc->intr_cnt / pt_buf->topa_n;
 
 	reg = rdmsr(MSR_IA32_RTIT_CTL);
 	if (reg & RTIT_CTL_TRACEEN) {
@@ -671,7 +708,6 @@ pt_read_trace(int cpu, int ri, struct pmc *pm,
 	}
 
 	idx = (reg & 0xffffffff) >> 7;
-	//*cycle = idx;
 	*cycle = pt_buf->cycle;
 
 	offset = reg >> 32;
@@ -903,34 +939,6 @@ pmc_pt_initialize(struct pmc_mdep *md, int maxcpu)
 	pcd->pcd_write_pmc    = pt_write_pmc;
 
 	md->pmd_npmc += PT_NPMCS;
-
-	/* Enumerate */
-	u_int cp[4];
-	u_int *eax;
-	u_int *ebx;
-	u_int *ecx;
-
-	eax = &cp[0];
-	ebx = &cp[1];
-	ecx = &cp[2];
-
-	printf("Enumerating part 1\n");
-	cpuid_count(PT_CPUID, 0, cp);
-	printf("%s: Maximum valid sub-leaf Index: %x\n", __func__, cp[0]);
-	printf("%s: ebx %x\n", __func__, cp[1]);
-	printf("%s: ecx %x\n", __func__, cp[2]);
-
-	//sc->s0_eax = cp[0];
-	//sc->s0_ebx = cp[1];
-	//sc->s0_ecx = cp[2];
-
-	printf("Enumerating part 2\n");
-	cpuid_count(PT_CPUID, 1, cp);
-	printf("%s: eax %x\n", __func__, cp[0]);
-	printf("%s: ebx %x\n", __func__, cp[1]);
-
-	//sc->s1_eax = cp[0];
-	//sc->s1_ebx = cp[1];
 
 	return (0);
 }
