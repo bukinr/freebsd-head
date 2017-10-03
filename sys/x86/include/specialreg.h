@@ -428,6 +428,7 @@
 #define	 RTIT_CTL_CYC_THRESH_M	(0xf << RTIT_CTL_CYC_THRESH_S)
 #define	 RTIT_CTL_PSB_FREQ_S	24
 #define	 RTIT_CTL_PSB_FREQ_M	(0xf << RTIT_CTL_PSB_FREQ_S)
+#define	 RTIT_CTL_ADDR_CFG_S(n) (32 + (n) * 4)
 #define	 RTIT_CTL_ADDR0_CFG_S	32
 #define	 RTIT_CTL_ADDR0_CFG_M	(0xf << RTIT_CTL_ADDR0_CFG_S)
 #define	 RTIT_CTL_ADDR1_CFG_S	36
@@ -445,6 +446,8 @@
 #define	 RTIT_STATUS_PACKETBYTECNT_S	32
 #define	 RTIT_STATUS_PACKETBYTECNT_M	(0x1ffff << RTIT_STATUS_PACKETBYTECNT_S)
 #define	MSR_IA32_RTIT_CR3_MATCH		0x572	/* Trace Filter CR3 Match Register (R/W) */
+#define	MSR_IA32_RTIT_ADDR_A(n)		(0x580 + (n) * 2)
+#define	MSR_IA32_RTIT_ADDR_B(n)		(0x581 + (n) * 2)
 #define	MSR_IA32_RTIT_ADDR0_A		0x580	/* Region 0 Start Address (R/W) */
 #define	MSR_IA32_RTIT_ADDR0_B		0x581	/* Region 0 End Address (R/W) */
 #define	MSR_IA32_RTIT_ADDR1_A		0x582	/* Region 1 Start Address (R/W) */

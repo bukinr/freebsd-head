@@ -39,6 +39,8 @@ __FBSDID("$FreeBSD$");
 #include <pmc.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <limits.h>
+#include <inttypes.h>
 #include <string.h>
 #include <strings.h>
 #include <unistd.h>
@@ -2518,13 +2520,19 @@ tsc_allocate_pmc(enum pmc_event pe, char *ctrspec,
 #define	INTEL_PT_KW_TSC		"tsc"
 #define	INTEL_PT_KW_MTC		"mtc"
 #define	INTEL_PT_KW_DISRETC	"disretc"
+#define	INTEL_PT_KW_ADDRA	"addra"
+#define	INTEL_PT_KW_ADDRB	"addrb"
 
 static int
 pt_allocate_pmc(enum pmc_event pe, char *ctrspec,
     struct pmc_op_pmcallocate *pmc_config)
 {
 	char *p;
+	char *q;
+	char *e;
 	struct pmc_md_pt_op_pmcallocate *pm_pt;
+	uint64_t addr;
+	uint32_t addrn;
 
 	if (pe != PMC_EV_PT_PT)
 		return (-1);
@@ -2533,6 +2541,7 @@ pt_allocate_pmc(enum pmc_event pe, char *ctrspec,
 
 	printf("ctrspec %s\n", ctrspec);
 
+	addrn = 0;
 	while ((p = strsep(&ctrspec, ",")) != NULL) {
 		if (KWMATCH(p, INTEL_PT_KW_BRANCHES)) {
 			pm_pt->flags |= INTEL_PT_FLAG_BRANCHES;
@@ -2549,7 +2558,43 @@ pt_allocate_pmc(enum pmc_event pe, char *ctrspec,
 		if (KWMATCH(p, INTEL_PT_KW_DISRETC)) {
 			pm_pt->flags |= INTEL_PT_FLAG_DISRETC;
 		}
+
+		//if (KWMATCH(p, INTEL_PT_KW_ADDRA)) {
+		//	pm_pt->addra[addrn] = 
+		//}
+
+		if (KWPREFIXMATCH(p, INTEL_PT_KW_ADDRA "=")) {
+			q = strchr(p, '=');
+			if (*++q == '\0') /* skip '=' */
+				return (-1);
+
+			addr = strtoul(q, &e, 0);
+			if (e == q || *e != '\0')
+				return (-1);
+			printf("Addr %lx\n", addr);
+			pm_pt->addra[addrn] = addr;
+		}
+
+		if (KWPREFIXMATCH(p, INTEL_PT_KW_ADDRB "=")) {
+			q = strchr(p, '=');
+			if (*++q == '\0') /* skip '=' */
+				return (-1);
+
+			addr = strtoul(q, &e, 0);
+			if (e == q || *e != '\0')
+				return (-1);
+			pm_pt->addrb[addrn] = addr;
+
+			if (pm_pt->addrb[addrn] < pm_pt->addra[addrn])
+				return (-1);
+			printf("Addr %lx %lx\n", pm_pt->addra[addrn], pm_pt->addrb[addrn]);
+			addrn += 1;
+			if (addrn > PT_NADDR)
+				return (-1);
+		}
 	};
+
+	pm_pt->addrn = addrn;
 
 	/* PT events must be unqualified. */
 	//if (ctrspec && *ctrspec != '\0')

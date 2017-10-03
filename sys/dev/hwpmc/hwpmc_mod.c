@@ -3854,7 +3854,7 @@ pmc_syscall_handler(struct thread *td, void *syscall_args)
 		uint32_t ri;
 		int adjri;
 
-		PMC_DOWNGRADE_SX();
+		//PMC_DOWNGRADE_SX();
 
 		if ((error = copyin(arg, &trr, sizeof(trr))) != 0)
 			break;

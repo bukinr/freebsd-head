@@ -133,6 +133,11 @@ pt_allocate_pmc(int cpu, int ri, struct pmc *pm,
 		pm_pt->flags |= INTEL_PT_FLAG_BRANCHES;
 
 	pm_pt->flags = pm_pta->flags;
+	pm_pt->addrn = pm_pta->addrn;
+	for (i = 0; i < PT_NADDR; i++) {
+		pm_pt->addra[i] = pm_pta->addra[i];
+		pm_pt->addrb[i] = pm_pta->addrb[i];
+	}
 
 	for (i = 0; i < 4; i++) {
 		pt_buf = &pm_pt->pt_buffers[i];
@@ -187,9 +192,14 @@ pmc_pt_intr(int cpu, struct trapframe *tf)
 	struct pmc_hw *phw;
 	struct pmc *pm;
 
-	pt_pc = pt_pcpu[cpu];
-	phw = &pt_pc->tc_hw;
+	if (pt_pcpu == NULL)
+		return (0);
 
+	pt_pc = pt_pcpu[cpu];
+	if (pt_pc == NULL)
+		return (0);
+
+	phw = &pt_pc->tc_hw;
 	if (phw == NULL || phw->phw_pmc == NULL)
 		return (0);
 
@@ -217,12 +227,15 @@ pt_configure(int cpu, struct pmc *pm)
 	enum pmc_mode mode;
 	struct pt_buffer *pt_buf;
 	uint64_t reg;
+	int i;
 
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pt_buf = &pm_pt->pt_buffers[cpu];
 
 	printf("%s: cpu %d (curcpu %d), pt_buf->pt_output_base %lx\n",
 	    __func__, cpu, PCPU_GET(cpuid), pt_buf->pt_output_base);
+
+	KASSERT(cpu == PCPU_GET(cpuid), ("Configuring wrong CPU\n"));
 
 	mode = PMC_TO_MODE(pm);
 
@@ -266,6 +279,22 @@ pt_configure(int cpu, struct pmc *pm)
 		reg |= RTIT_CTL_DISRETC;
 
 	//reg |= RTIT_CTL_MTC_FREQ(6);
+
+	if (pm_pt->addrn > 0 && pm_pt->addrn < PT_NADDR) {
+		/* TODO: check caps: how many address ranges supported ? */
+
+		for (i = 0; i < pm_pt->addrn; i++) {
+			reg |= (1UL << RTIT_CTL_ADDR_CFG_S(i));
+
+#if 0
+			printf("i %d, addra %lx, addrb %lx, shift %d\n",
+			    i, pm_pt->addra[i], pm_pt->addrb[i], RTIT_CTL_ADDR_CFG_S(i));
+#endif
+
+			wrmsr(MSR_IA32_RTIT_ADDR_A(i), pm_pt->addra[i]);
+			wrmsr(MSR_IA32_RTIT_ADDR_B(i), pm_pt->addrb[i]);
+		}
+	}
 
 	wrmsr(MSR_IA32_RTIT_CTL, reg);
 
@@ -846,7 +875,7 @@ pmc_pt_initialize(struct pmc_mdep *md, int maxcpu)
 	    __LINE__, md->pmd_nclass));
 
 	pt_pcpu = malloc(sizeof(struct pt_cpu *) * maxcpu, M_PMC,
-	    M_ZERO|M_WAITOK);
+	    M_ZERO | M_WAITOK);
 
 	pcd = &md->pmd_classdep[PMC_MDEP_CLASS_INDEX_PT];
 
@@ -874,6 +903,34 @@ pmc_pt_initialize(struct pmc_mdep *md, int maxcpu)
 	pcd->pcd_write_pmc    = pt_write_pmc;
 
 	md->pmd_npmc += PT_NPMCS;
+
+	/* Enumerate */
+	u_int cp[4];
+	u_int *eax;
+	u_int *ebx;
+	u_int *ecx;
+
+	eax = &cp[0];
+	ebx = &cp[1];
+	ecx = &cp[2];
+
+	printf("Enumerating part 1\n");
+	cpuid_count(PT_CPUID, 0, cp);
+	printf("%s: Maximum valid sub-leaf Index: %x\n", __func__, cp[0]);
+	printf("%s: ebx %x\n", __func__, cp[1]);
+	printf("%s: ecx %x\n", __func__, cp[2]);
+
+	//sc->s0_eax = cp[0];
+	//sc->s0_ebx = cp[1];
+	//sc->s0_ecx = cp[2];
+
+	printf("Enumerating part 2\n");
+	cpuid_count(PT_CPUID, 1, cp);
+	printf("%s: eax %x\n", __func__, cp[0]);
+	printf("%s: ebx %x\n", __func__, cp[1]);
+
+	//sc->s1_eax = cp[0];
+	//sc->s1_ebx = cp[1];
 
 	return (0);
 }
