@@ -74,7 +74,7 @@ __FBSDID("$FreeBSD$");
 #include <libpmcstat.h>
 //#include "pmcstat_log.h"
 //#include "pmcstat.h"
-#include "hwtrace_pt.h"
+#include "pmctrace_pt.h"
 
 #include <pmc.h>
 

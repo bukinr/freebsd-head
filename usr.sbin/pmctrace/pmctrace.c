@@ -76,7 +76,7 @@ __FBSDID("$FreeBSD$");
 #include <libpmcstat.h>
 
 #include <machine/pt.h>
-#include "hwtrace_pt.h"
+#include "pmctrace_pt.h"
 
 static struct pmcstat_args args;
 static int pmcstat_sockpair[NSOCKPAIRFD];
@@ -145,7 +145,7 @@ pmcstat_log_pt(struct pmcstat_ev *ev)
  */
 
 static void
-hwtrace_start_pmcs(void)
+pmctrace_start_pmcs(void)
 {
 	struct pmcstat_ev *ev;
 
@@ -163,7 +163,7 @@ hwtrace_start_pmcs(void)
 }
 
 static int
-hwtrace_open_logfile(void)
+pmctrace_open_logfile(void)
 {
 	int pipefd[2];
 
@@ -196,7 +196,7 @@ hwtrace_open_logfile(void)
 }
 
 static int
-hwtrace_find_kernel(void)
+pmctrace_find_kernel(void)
 {
 	struct stat sb;
 	char buffer[PATH_MAX];
@@ -247,7 +247,7 @@ hwtrace_find_kernel(void)
 }
 
 static void
-hwtrace_setup_cpumask(cpuset_t *cpumask)
+pmctrace_setup_cpumask(cpuset_t *cpumask)
 {
 	cpuset_t rootmask;
 
@@ -282,8 +282,8 @@ main(int argc, char *argv[])
 
 	args.pa_fsroot = strdup("/");
 
-	hwtrace_find_kernel();
-	hwtrace_setup_cpumask(&cpumask);
+	pmctrace_find_kernel();
+	pmctrace_setup_cpumask(&cpumask);
 
 	while ((option = getopt(argc, argv,
 	    "u:s:")) != -1)
@@ -391,7 +391,7 @@ main(int argc, char *argv[])
 	if ((pmcstat_kq = kqueue()) < 0)
 		err(EX_OSERR, "ERROR: Cannot allocate kqueue");
 
-	hwtrace_open_logfile();
+	pmctrace_open_logfile();
 
 	STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
 		if (pmc_allocate(ev->ev_spec, ev->ev_mode,
@@ -410,7 +410,7 @@ main(int argc, char *argv[])
 		pmcstat_create_process(pmcstat_sockpair, &args, pmcstat_kq);
 		pmcstat_attach_pmcs(&args);
 	}
-	hwtrace_start_pmcs();
+	pmctrace_start_pmcs();
 
 	if (user_mode)
 		pmcstat_start_process(pmcstat_sockpair);

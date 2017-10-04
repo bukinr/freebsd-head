@@ -5,17 +5,22 @@ if [ "$1" = "fast" ]; then
     A=FAST
 fi
 
+cp sys/dev/hwpmc/hwpmc_pt.h /home/br/obj/usr/home/br/dev/freebsd-head/tmp/usr/include/dev/hwpmc/hwpmc_pt.h
+
 make -j8 KERN${A}=PT buildkernel || exit 1
 
 VARS=`make buildenvvars`
 eval $VARS make -C lib/libipt || exit 1
 eval $VARS make -C lib/libpmc || exit 1
 eval $VARS make -C usr.sbin/pmcstat || exit 1
+
+eval $VARS make -C usr.sbin/pmctrace clean all || exit 1
 #eval $VARS make -C usr.sbin/mtrace clean all || exit 1
 
 scp \
  /home/br/obj/usr/home/br/dev/freebsd-head/usr.sbin/pmcstat/pmcstat \
  /home/br/obj/usr/home/br/dev/freebsd-head/usr.sbin/mtrace/mtrace \
+ /home/br/dev/freebsd-head/usr.sbin/pmctrace/pmctrace \
  /home/br/obj/usr/home/br/dev/freebsd-head/lib/libpmc/libpmc.so.5 \
  /home/br/obj/usr/home/br/dev/freebsd-head/lib/libipt/libipt.so.0 \
  /home/br/obj/usr/home/br/dev/freebsd-head/lib/libpmcstat/libpmcstat.so.5 \

@@ -2,7 +2,7 @@
 # $FreeBSD$
 
 PROG=	pmctrace
-SRCS=	pmctrace.c pmctrace.h pmctrace_pt.c pmctrace_pt.h
+SRCS=	pmctrace.c pmctrace_pt.c pmctrace_pt.h
 
 LIBADD=	elf ipt pmc pmcstat
 
