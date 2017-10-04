@@ -261,6 +261,21 @@ pmctrace_setup_cpumask(cpuset_t *cpumask)
 	CPU_COPY(&rootmask, cpumask);
 }
 
+static int
+pmctrace_ncpu(void)
+{
+	size_t ncpu_size;
+	int error;
+	int ncpu;
+
+	ncpu_size = sizeof(ncpu);
+	error = sysctlbyname("hw.ncpu", &ncpu, &ncpu_size, NULL, 0);
+	if (error)
+		return (-1);
+
+	return (ncpu);
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -269,6 +284,7 @@ main(int argc, char *argv[])
 	int user_mode;
 	int supervisor_mode;
 	int option;
+	int ncpu;
 	cpuset_t cpumask;
 	int c;
 	int i;
@@ -379,6 +395,10 @@ main(int argc, char *argv[])
 		pmcstat_clone_event_descriptor(ev, &cpumask, &args);
 		CPU_SET(ev->ev_cpu, &cpumask);
 	}
+
+	ncpu = pmctrace_ncpu();
+	if (ncpu < 0)
+		errx(EX_SOFTWARE, "ERROR: Can't get cpus\n");
 
 	for (i = 0; i < 4; i++)
 		pmc_ipt_init(i);
