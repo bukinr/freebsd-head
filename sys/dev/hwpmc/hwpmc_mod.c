@@ -1319,7 +1319,8 @@ pmc_process_csw_in(struct thread *td)
 		 * counting mode PMCs use a per-pmc value that is
 		 * inherited across descendants.
 		 */
-		if (PMC_TO_MODE(pm) == PMC_MODE_TS || PMC_TO_MODE(pm) == PMC_MODE_TT) {
+		if (PMC_TO_MODE(pm) == PMC_MODE_TS ||
+		    PMC_TO_MODE(pm) == PMC_MODE_TT) {
 			mtx_pool_lock_spin(pmc_mtxpool, pm);
 
 			/*
@@ -1347,7 +1348,8 @@ pmc_process_csw_in(struct thread *td)
 		pcd->pcd_write_pmc(cpu, adjri, newvalue);
 
 		/* If a sampling mode PMC, reset stalled state. */
-		if (PMC_TO_MODE(pm) == PMC_MODE_TS || PMC_TO_MODE(pm) == PMC_MODE_TT)
+		if (PMC_TO_MODE(pm) == PMC_MODE_TS ||
+		    PMC_TO_MODE(pm) == PMC_MODE_TT)
 			CPU_CLR_ATOMIC(cpu, &pm->pm_stalled);
 
 		/* Indicate that we desire this to run. */
@@ -1408,6 +1410,8 @@ pmc_process_csw_out(struct thread *td)
 	 */
 
 	critical_enter();
+
+	printf("PROCCSW\n");
 
 	cpu = PCPU_GET(cpuid); /* td->td_oncpu is invalid */
 
@@ -1588,7 +1592,8 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 	for (ri = 0; ri < md->pmd_npmc; ri++) {
 		if ((pm = pp->pp_pmcs[ri].pp_pmc) == NULL)
 			continue;
-		if (PMC_IS_SAMPLING_MODE(PMC_TO_MODE(pm)) || PMC_TO_MODE(pm) == PMC_MODE_TT)
+		if (PMC_IS_SAMPLING_MODE(PMC_TO_MODE(pm)) ||
+		    PMC_TO_MODE(pm) == PMC_MODE_TT)
 			pmclog_process_map_in(pm->pm_owner,
 			    pid, pkm->pm_address, fullpath);
 	}
@@ -1622,11 +1627,14 @@ pmc_process_munmap(struct thread *td, struct pmckern_map_out *pkm)
 	if ((pp = pmc_find_process_descriptor(td->td_proc, 0)) == NULL)
 		return;
 
-	for (ri = 0; ri < md->pmd_npmc; ri++)
-		if ((pm = pp->pp_pmcs[ri].pp_pmc) != NULL &&
-		    PMC_IS_SAMPLING_MODE(PMC_TO_MODE(pm)))
+	for (ri = 0; ri < md->pmd_npmc; ri++) {
+		if ((pm = pp->pp_pmcs[ri].pp_pmc) == NULL)
+			continue;
+		if (PMC_IS_SAMPLING_MODE(PMC_TO_MODE(pm)) ||
+		    PMC_TO_MODE(pm) == PMC_MODE_TT)
 			pmclog_process_map_out(pm->pm_owner, pid,
 			    pkm->pm_address, pkm->pm_address + pkm->pm_size);
+	}
 }
 
 /*
@@ -2704,10 +2712,11 @@ pmc_start(struct pmc *pm)
 	 * If this is a sampling mode PMC, log mapping information for
 	 * the kernel modules that are currently loaded.
 	 */
-	if (PMC_IS_SAMPLING_MODE(PMC_TO_MODE(pm)) || PMC_TO_MODE(pm) == PMC_MODE_ST)
+	if (PMC_IS_SAMPLING_MODE(PMC_TO_MODE(pm)) ||
+	    PMC_TO_MODE(pm) == PMC_MODE_ST)
 	    pmc_log_kernel_mappings(pm);
 
-	if (PMC_IS_VIRTUAL_MODE(mode) || PMC_TO_MODE(pm) == PMC_MODE_TT) {
+	if (PMC_IS_VIRTUAL_MODE(mode)) {
 
 		/*
 		 * If a PMCATTACH has never been done on this PMC,
@@ -2829,7 +2838,7 @@ pmc_stop(struct pmc *pm)
 	 * switched out.
 	 */
 
-	if (PMC_IS_VIRTUAL_MODE(PMC_TO_MODE(pm)) || PMC_TO_MODE(pm) == PMC_MODE_TT)
+	if (PMC_IS_VIRTUAL_MODE(PMC_TO_MODE(pm)))
 		return 0;
 
 	/*
@@ -3837,6 +3846,10 @@ pmc_syscall_handler(struct thread *td, void *syscall_args)
 	}
 	break;
 
+	case PMC_OP_TRACE_FILTER:
+	{
+	}
+	break;
 
 	/*
 	 * Read a PMC trace buffer ptr.

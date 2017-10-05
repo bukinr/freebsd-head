@@ -64,11 +64,58 @@ __FBSDID("$FreeBSD$");
 
 #include "libpmcstat.h"
 
-int
-libpmcstat_test(void)
+struct pmcstat_symbol *
+pmcstat_name_to_addr(struct pmcstat_process *pp, const char *pi_name,
+    const char *name, uintptr_t *addr_start, uintptr_t *addr_end)
 {
+	struct pmcstat_symbol *sym;
+	struct pmcstat_image *image;
+	struct pmcstat_pcmap *pcm;
+	const char *name1;
+	const char *name2;
+	bool found;
+	size_t i;
 
-	return (0);
+	found = 0;
+
+	TAILQ_FOREACH(pcm, &pp->pp_map, ppm_next) {
+		image = pcm->ppm_image;
+		printf("IMAGE name %s\n", pmcstat_string_unintern(image->pi_name));
+		name1 = pmcstat_string_unintern(image->pi_name);
+		if (strcmp(name1, pi_name) == 0) {
+			//printf("IMAGE name %s\n", pmcstat_string_unintern(image->pi_name));
+			found = 1;
+			break;
+		}
+	}
+
+	if (!found)
+		return (0);
+
+	//printf("IMAGE FOUND\n");
+
+	if (image->pi_symbols == NULL)
+		return (NULL);
+
+	found = 0;
+
+	for (i = 0; i < image->pi_symcount; i++) {
+		sym = &image->pi_symbols[i];
+		name2 = pmcstat_string_unintern(sym->ps_name);
+		if (strcmp(name2, name) == 0) {
+			//printf("SYM NAME %s\n", pmcstat_string_unintern(sym->ps_name));
+			found = 1;
+			break;
+		}
+	}
+
+	if (!found)
+		return (0);
+
+	*addr_start = (image->pi_vaddr + sym->ps_start);
+	*addr_end = (image->pi_vaddr + sym->ps_end);
+
+	return (sym);
 }
 
 /*
@@ -107,8 +154,8 @@ pmcstat_symbol_search(struct pmcstat_image *image, uintfptr_t addr)
 	sym.ps_end   = addr + 1;
 
 	return (bsearch((void *) &sym, image->pi_symbols,
-		    image->pi_symcount, sizeof(struct pmcstat_symbol),
-		    pmcstat_symbol_compare));
+	    image->pi_symcount, sizeof(struct pmcstat_symbol),
+	    pmcstat_symbol_compare));
 }
 
 /*
@@ -1377,6 +1424,8 @@ pmcstat_analyze_log(struct pmcstat_args *args,
 
 			assert(pp != NULL);
 
+			printf("MMAP: %s\n", ev.pl_u.pl_mi.pl_pathname);
+
 			image_path = pmcstat_string_intern(ev.pl_u.pl_mi.
 			    pl_pathname);
 			image = pmcstat_image_from_path(image_path, pid == -1,
@@ -1503,6 +1552,9 @@ pmcstat_analyze_log(struct pmcstat_args *args,
 			    args, plugins, pmcstat_npmcs);
 			break;
 
+		case PMCLOG_TYPE_PROCCSW:
+			printf("PROCCSW\n");
+			break;
 		case PMCLOG_TYPE_PROCEXEC:
 			/*
 			 * Change the executable image associated with

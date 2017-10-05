@@ -1,7 +1,6 @@
 #ifndef	_LIBPMCSTAT_H_
 #define	_LIBPMCSTAT_H_
 
-int libpmcstat_test(void);
 int pmcstat_symbol_compare(const void *a, const void *b);
 
 typedef const void *pmcstat_interned_string;
@@ -317,6 +316,7 @@ void pmcstat_create_process(int *pmcstat_sockpair, struct pmcstat_args *args, in
 void pmcstat_start_process(int *pmcstat_sockpair);
 
 void pmcstat_attach_pmcs(struct pmcstat_args *args);
+struct pmcstat_symbol *pmcstat_name_to_addr(struct pmcstat_process *pp, const char *pi_name, const char *name, uintptr_t *, uintptr_t *);
 
 #define	PMCSTAT_ALLOCATE		1
 

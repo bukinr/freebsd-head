@@ -344,7 +344,8 @@ enum pmc_event {
 	__PMC_OP(WRITELOG, "Write a cookie to the log file")		\
 	__PMC_OP(CLOSELOG, "Close log file")				\
 	__PMC_OP(GETDYNEVENTINFO, "Get dynamic events list")		\
-	__PMC_OP(TRACE_READ, "Read trace buffer pointer")
+	__PMC_OP(TRACE_READ, "Read trace buffer pointer")		\
+	__PMC_OP(TRACE_FILTER, "Setup trace IP ranges")
 
 
 enum pmc_ops {
