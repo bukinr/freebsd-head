@@ -69,10 +69,10 @@ __FBSDID("$FreeBSD$");
 #define	NULL_LDT_BASE	((caddr_t)NULL)
 
 #ifdef SMP
-static void set_user_ldt_rv(struct vmspace *vmsp);
+static void set_user_ldt_rv(void *arg);
 #endif
 static int i386_set_ldt_data(struct thread *, int start, int num,
-	union descriptor *descs);
+    union descriptor *descs);
 static int i386_ldt_grow(struct thread *td, int len);
 
 void
@@ -89,6 +89,37 @@ fill_based_sd(struct segment_descriptor *sdp, uint32_t base)
 	sdp->sd_xx = 0;
 	sdp->sd_def32 = 1;
 	sdp->sd_gran = 1;
+}
+
+/*
+ * Construct special descriptors for "base" selectors.  Store them in
+ * the PCB for later use by cpu_switch().  Store them in the GDT for
+ * more immediate use.  The GDT entries are part of the current
+ * context.  Callers must load related segment registers to complete
+ * setting up the current context.
+ */
+void
+set_fsbase(struct thread *td, uint32_t base)
+{
+	struct segment_descriptor sd;
+
+	fill_based_sd(&sd, base);
+	critical_enter();
+	td->td_pcb->pcb_fsd = sd;
+	PCPU_GET(fsgs_gdt)[0] = sd;
+	critical_exit();
+}
+
+void
+set_gsbase(struct thread *td, uint32_t base)
+{
+	struct segment_descriptor sd;
+
+	fill_based_sd(&sd, base);
+	critical_enter();
+	td->td_pcb->pcb_gsd = sd;
+	PCPU_GET(fsgs_gdt)[1] = sd;
+	critical_exit();
 }
 
 #ifndef _SYS_SYSPROTO_H_
@@ -109,7 +140,7 @@ sysarch(struct thread *td, struct sysarch_args *uap)
 		struct i386_get_xfpustate xfpu;
 	} kargs;
 	uint32_t base;
-	struct segment_descriptor sd, *sdp;
+	struct segment_descriptor *sdp;
 
 	AUDIT_ARG_CMD(uap->op);
 
@@ -204,16 +235,11 @@ sysarch(struct thread *td, struct sysarch_args *uap)
 		error = copyin(uap->parms, &base, sizeof(base));
 		if (error == 0) {
 			/*
-			 * Construct a descriptor and store it in the pcb for
-			 * the next context switch.  Also store it in the gdt
-			 * so that the load of tf_fs into %fs will activate it
-			 * at return to userland.
+			 * Construct the special descriptor for fsbase
+			 * and arrange for doreti to load its selector
+			 * soon enough.
 			 */
-			fill_based_sd(&sd, base);
-			critical_enter();
-			td->td_pcb->pcb_fsd = sd;
-			PCPU_GET(fsgs_gdt)[0] = sd;
-			critical_exit();
+			set_fsbase(td, base);
 			td->td_frame->tf_fs = GSEL(GUFS_SEL, SEL_UPL);
 		}
 		break;
@@ -226,15 +252,11 @@ sysarch(struct thread *td, struct sysarch_args *uap)
 		error = copyin(uap->parms, &base, sizeof(base));
 		if (error == 0) {
 			/*
-			 * Construct a descriptor and store it in the pcb for
-			 * the next context switch.  Also store it in the gdt
-			 * because we have to do a load_gs() right now.
+			 * Construct the special descriptor for gsbase.
+			 * The selector is loaded immediately, since we
+			 * normally only reload %gs on context switches.
 			 */
-			fill_based_sd(&sd, base);
-			critical_enter();
-			td->td_pcb->pcb_gsd = sd;
-			PCPU_GET(fsgs_gdt)[1] = sd;
-			critical_exit();
+			set_gsbase(td, base);
 			load_gs(GSEL(GUGS_SEL, SEL_UPL));
 		}
 		break;
@@ -383,41 +405,40 @@ done:
  * Update the GDT entry pointing to the LDT to point to the LDT of the
  * current process. Manage dt_lock holding/unholding autonomously.
  */   
+static void
+set_user_ldt_locked(struct mdproc *mdp)
+{
+	struct proc_ldt *pldt;
+	int gdt_idx;
+
+	mtx_assert(&dt_lock, MA_OWNED);
+
+	pldt = mdp->md_ldt;
+	gdt_idx = GUSERLDT_SEL;
+	gdt_idx += PCPU_GET(cpuid) * NGDT;	/* always 0 on UP */
+	gdt[gdt_idx].sd = pldt->ldt_sd;
+	lldt(GSEL(GUSERLDT_SEL, SEL_KPL));
+	PCPU_SET(currentldt, GSEL(GUSERLDT_SEL, SEL_KPL));
+}
+
 void
 set_user_ldt(struct mdproc *mdp)
 {
-	struct proc_ldt *pldt;
-	int dtlocked;
 
-	dtlocked = 0;
-	if (!mtx_owned(&dt_lock)) {
-		mtx_lock_spin(&dt_lock);
-		dtlocked = 1;
-	}
-
-	pldt = mdp->md_ldt;
-#ifdef SMP
-	gdt[PCPU_GET(cpuid) * NGDT + GUSERLDT_SEL].sd = pldt->ldt_sd;
-#else
-	gdt[GUSERLDT_SEL].sd = pldt->ldt_sd;
-#endif
-	lldt(GSEL(GUSERLDT_SEL, SEL_KPL));
-	PCPU_SET(currentldt, GSEL(GUSERLDT_SEL, SEL_KPL));
-	if (dtlocked)
-		mtx_unlock_spin(&dt_lock);
+	mtx_lock_spin(&dt_lock);
+	set_user_ldt_locked(mdp);
+	mtx_unlock_spin(&dt_lock);
 }
 
 #ifdef SMP
 static void
-set_user_ldt_rv(struct vmspace *vmsp)
+set_user_ldt_rv(void *arg)
 {
-	struct thread *td;
+	struct proc *p;
 
-	td = curthread;
-	if (vmsp != td->td_proc->p_vmspace)
-		return;
-
-	set_user_ldt(&td->td_proc->p_md);
+	p = curproc;
+	if (arg == p->p_vmspace)
+		set_user_ldt(&p->p_md);
 }
 #endif
 
@@ -513,23 +534,20 @@ i386_get_ldt(struct thread *td, struct i386_ldt_args *uap)
 	    uap->start, uap->num, (void *)uap->descs);
 #endif
 
-	if (uap->start >= MAX_LD)
-		return (EINVAL);
-	num = min(uap->num, MAX_LD - uap->start);
-	data = malloc(uap->num * sizeof(union descriptor), M_TEMP, M_WAITOK);
+	num = min(uap->num, MAX_LD);
+	data = malloc(num * sizeof(union descriptor), M_TEMP, M_WAITOK);
 	mtx_lock_spin(&dt_lock);
 	pldt = td->td_proc->p_md.md_ldt;
 	nldt = pldt != NULL ? pldt->ldt_len : nitems(ldt);
-	num = min(num, nldt);
-	if (uap->start > nldt || uap->start + num > nldt) {
-		mtx_unlock_spin(&dt_lock);
-		return (EINVAL);
+	if (uap->start >= nldt) {
+		num = 0;
+	} else {
+		num = min(num, nldt - uap->start);
+		bcopy(pldt != NULL ?
+		    &((union descriptor *)(pldt->ldt_base))[uap->start] :
+		    &ldt[uap->start], data, num * sizeof(union descriptor));
 	}
-	bcopy(pldt != NULL ?
-	    &((union descriptor *)(pldt->ldt_base))[uap->start] :
-	    &ldt[uap->start], data, num * sizeof(union descriptor));
 	mtx_unlock_spin(&dt_lock);
-
 	error = copyout(data, uap->descs, num * sizeof(union descriptor));
 	if (error == 0)
 		td->td_retval[0] = num;
@@ -717,10 +735,10 @@ i386_set_ldt_data(struct thread *td, int start, int num,
 static int
 i386_ldt_grow(struct thread *td, int len) 
 {
-	struct mdproc *mdp = &td->td_proc->p_md;
+	struct mdproc *mdp;
 	struct proc_ldt *new_ldt, *pldt;
-	caddr_t old_ldt_base = NULL_LDT_BASE;
-	int old_ldt_len = 0;
+	caddr_t old_ldt_base;
+	int old_ldt_len;
 
 	mtx_assert(&dt_lock, MA_OWNED);
 
@@ -728,6 +746,10 @@ i386_ldt_grow(struct thread *td, int len)
 		return (ENOMEM);
 	if (len < NLDT + 1)
 		len = NLDT + 1;
+
+	mdp = &td->td_proc->p_md;
+	old_ldt_base = NULL_LDT_BASE;
+	old_ldt_len = 0;
 
 	/* Allocate a user ldt. */
 	if ((pldt = mdp->md_ldt) == NULL || len > pldt->ldt_len) {
@@ -770,10 +792,10 @@ i386_ldt_grow(struct thread *td, int len)
 		 * to acquire it.
 		 */
 		mtx_unlock_spin(&dt_lock);
-		smp_rendezvous(NULL, (void (*)(void *))set_user_ldt_rv,
-		    NULL, td->td_proc->p_vmspace);
+		smp_rendezvous(NULL, set_user_ldt_rv, NULL,
+		    td->td_proc->p_vmspace);
 #else
-		set_user_ldt(&td->td_proc->p_md);
+		set_user_ldt_locked(&td->td_proc->p_md);
 		mtx_unlock_spin(&dt_lock);
 #endif
 		if (old_ldt_base != NULL_LDT_BASE) {
