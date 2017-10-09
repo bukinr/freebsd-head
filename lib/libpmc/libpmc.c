@@ -3996,7 +3996,7 @@ pmc_read_trace(uint32_t cpu, pmc_id_t pmc,
 	struct pmc_op_trace_read pmc_trace_read;
 
 	pmc_trace_read.pm_pmcid = pmc;
-	pmc_trace_read.cpu = cpu;
+	pmc_trace_read.pm_cpu = cpu;
 	pmc_trace_read.pm_cycle = 0;
 	pmc_trace_read.pm_offset = 0;
 
@@ -4007,6 +4007,38 @@ pmc_read_trace(uint32_t cpu, pmc_id_t pmc,
 	*offset = pmc_trace_read.pm_offset;
 
 	return (0);
+}
+
+int
+pmc_trace_config(uint32_t cpu, pmc_id_t pmc,
+    struct pmc_trace_filter_ip_range *ranges,
+    uint32_t nranges)
+{
+	struct pmc_op_trace_config trc;
+
+	trc.pm_pmcid = pmc;
+	trc.pm_cpu = cpu;
+	trc.nranges = nranges;
+
+	if (nranges > PMC_FILTER_MAX_IP_RANGES)
+		return (-1);
+
+	memcpy(&trc.ip_ranges, ranges,
+	    sizeof(struct pmc_trace_filter_ip_range) * nranges);
+
+	if (PMC_CALL(TRACE_CONFIG, &trc) < 0)
+		return (-1);
+
+	return (0);
+}
+
+int
+pmc_log_kmap(pmc_id_t pmc)
+{
+	struct pmc_op_simple pmc_log_km;
+
+	pmc_log_km.pm_pmcid = pmc;
+	return (PMC_CALL(LOG_KERNEL_MAP, &pmc_log_km));
 }
 
 int

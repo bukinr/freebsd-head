@@ -71,6 +71,10 @@ struct pt_buffer {
 	uint64_t			pt_output_base;
 	uint64_t			pt_output_mask_ptrs;
 	uint64_t			cycle;
+
+	uint64_t		addra[PT_NADDR];
+	uint64_t		addrb[PT_NADDR];
+	uint32_t		addrn;
 };
 
 /* MD extension for 'struct pmc' */

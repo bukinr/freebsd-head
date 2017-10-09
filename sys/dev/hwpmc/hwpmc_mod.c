@@ -1411,8 +1411,6 @@ pmc_process_csw_out(struct thread *td)
 
 	critical_enter();
 
-	printf("PROCCSW\n");
-
 	cpu = PCPU_GET(cpuid); /* td->td_oncpu is invalid */
 
 	PMCDBG5(CSW,SWO,1, "cpu=%d proc=%p (%d, %s) pp=%p", cpu, p,
@@ -3846,8 +3844,97 @@ pmc_syscall_handler(struct thread *td, void *syscall_args)
 	}
 	break;
 
-	case PMC_OP_TRACE_FILTER:
+	case PMC_OP_LOG_KERNEL_MAP:
 	{
+		struct pmc_op_simple sp;
+		struct pmc *pm;
+
+		if ((error = copyin(arg, &sp, sizeof(sp))) != 0)
+			break;
+
+		/* locate pmc descriptor */
+		if ((error = pmc_find_pmc(sp.pm_pmcid, &pm)) != 0)
+			break;
+
+		if (PMC_TO_MODE(pm) != PMC_MODE_ST)
+			break;
+
+		if (pm->pm_state != PMC_STATE_ALLOCATED &&
+		    pm->pm_state != PMC_STATE_STOPPED &&
+		    pm->pm_state != PMC_STATE_RUNNING) {
+			error = EINVAL;
+			break;
+		}
+
+		pmc_log_kernel_mappings(pm);
+	}
+	break;
+
+	case PMC_OP_TRACE_CONFIG:
+	{
+		struct pmc_op_trace_config trc;
+		struct pmc_trace_filter_ip_range *ranges;
+		struct pmc *pm;
+		struct pmc_binding pb;
+		struct pmc_classdep *pcd;
+		uint32_t nranges;
+		uint32_t cpu;
+		uint32_t ri;
+		int adjri;
+
+		printf("%s: PMC_OP_TRACE_CONFIG ranges 0\n", __func__);
+
+		if ((error = copyin(arg, &trc, sizeof(trc))) != 0)
+			break;
+
+		printf("%s: PMC_OP_TRACE_CONFIG ranges 1\n", __func__);
+
+		/* locate pmc descriptor */
+		if ((error = pmc_find_pmc(trc.pm_pmcid, &pm)) != 0)
+			break;
+
+		printf("%s: PMC_OP_TRACE_CONFIG ranges 2\n", __func__);
+
+		if (PMC_TO_MODE(pm) != PMC_MODE_ST &&
+		    PMC_TO_MODE(pm) != PMC_MODE_TT)
+			break;
+
+		printf("%s: PMC_OP_TRACE_CONFIG ranges 3\n", __func__);
+
+		/* Can't read a PMC that hasn't been started. */
+		if (pm->pm_state != PMC_STATE_ALLOCATED &&
+		    pm->pm_state != PMC_STATE_STOPPED &&
+		    pm->pm_state != PMC_STATE_RUNNING) {
+			error = EINVAL;
+			break;
+		}
+
+		printf("%s: PMC_OP_TRACE_CONFIG ranges 4\n", __func__);
+
+		cpu = trc.pm_cpu;
+
+		ri = PMC_TO_ROWINDEX(pm);
+		pcd = pmc_ri_to_classdep(md, ri, &adjri);
+		if (pcd->pcd_trace_config == NULL)
+			break;
+
+		printf("%s: PMC_OP_TRACE_CONFIG ranges 5\n", __func__);
+
+		/* switch to CPU 'cpu' */
+		pmc_save_cpu_binding(&pb);
+		pmc_select_cpu(cpu);
+
+		ranges = trc.ip_ranges;
+		nranges = trc.nranges;
+
+		printf("%s: PMC_OP_TRACE_CONFIG ranges 6\n", __func__);
+
+		mtx_pool_lock_spin(pmc_mtxpool, pm);
+		error = (*pcd->pcd_trace_config)(cpu, adjri,
+		    pm, ranges, nranges);
+		mtx_pool_unlock_spin(pmc_mtxpool, pm);
+
+		pmc_restore_cpu_binding(&pb);
 	}
 	break;
 
@@ -3867,15 +3954,17 @@ pmc_syscall_handler(struct thread *td, void *syscall_args)
 		uint32_t ri;
 		int adjri;
 
-		//PMC_DOWNGRADE_SX();
+		//printf("%s: PMC_OP_TRACE_READ 1\n", __func__);
 
 		if ((error = copyin(arg, &trr, sizeof(trr))) != 0)
 			break;
 
-		cpu = trr.cpu;
-
 		/* locate pmc descriptor */
 		if ((error = pmc_find_pmc(trr.pm_pmcid, &pm)) != 0)
+			break;
+
+		if (PMC_TO_MODE(pm) != PMC_MODE_ST &&
+		    PMC_TO_MODE(pm) != PMC_MODE_TT)
 			break;
 
 		/* Can't read a PMC that hasn't been started. */
@@ -3886,27 +3975,28 @@ pmc_syscall_handler(struct thread *td, void *syscall_args)
 			break;
 		}
 
-		//if (PMC_IS_VIRTUAL_MODE(PMC_TO_MODE(pm))) {
-			ri = PMC_TO_ROWINDEX(pm);
-			pcd = pmc_ri_to_classdep(md, ri, &adjri);
+		cpu = trr.pm_cpu;
 
-			/* switch to CPU 'cpu' */
-			pmc_save_cpu_binding(&pb);
-			pmc_select_cpu(cpu);
+		ri = PMC_TO_ROWINDEX(pm);
+		pcd = pmc_ri_to_classdep(md, ri, &adjri);
 
-			mtx_pool_lock_spin(pmc_mtxpool, pm);
-			error = (*pcd->pcd_read_trace)(cpu, adjri,
-			    pm, &cycle, &offset);
-			mtx_pool_unlock_spin(pmc_mtxpool, pm);
+		/* switch to CPU 'cpu' */
+		pmc_save_cpu_binding(&pb);
+		pmc_select_cpu(cpu);
 
-			pmc_restore_cpu_binding(&pb);
-		//} else { /* System mode PMCs */
-		//}
+		mtx_pool_lock_spin(pmc_mtxpool, pm);
+		error = (*pcd->pcd_read_trace)(cpu, adjri,
+		    pm, &cycle, &offset);
+		mtx_pool_unlock_spin(pmc_mtxpool, pm);
+
+		pmc_restore_cpu_binding(&pb);
 
 		trr_ret = (struct pmc_op_trace_read *)arg;
-		if ((error = copyout(&cycle, &trr_ret->pm_cycle, sizeof(trr.pm_cycle))))
+		if ((error = copyout(&cycle, &trr_ret->pm_cycle,
+		    sizeof(trr.pm_cycle))))
 			break;
-		if ((error = copyout(&offset, &trr_ret->pm_offset, sizeof(trr.pm_offset))))
+		if ((error = copyout(&offset, &trr_ret->pm_offset,
+		    sizeof(trr.pm_offset))))
 			break;
 	}
 	break;

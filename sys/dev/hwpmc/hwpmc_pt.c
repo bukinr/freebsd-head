@@ -181,7 +181,8 @@ pt_allocate_pmc(int cpu, int ri, struct pmc *pm,
 	if (a->pm_ev != PMC_EV_PT_PT)
 		return (EINVAL);
 
-	if (a->pm_mode != PMC_MODE_ST && a->pm_mode != PMC_MODE_TT)
+	if (a->pm_mode != PMC_MODE_ST &&
+	    a->pm_mode != PMC_MODE_TT)
 		return (EINVAL);
 
 	return (0);
@@ -232,6 +233,8 @@ pt_configure(int cpu, struct pmc *pm)
 	struct pt_buffer *pt_buf;
 	uint64_t reg;
 	int i;
+
+	printf("%s\n", __func__);
 
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pt_buf = &pm_pt->pt_buffers[cpu];
@@ -284,6 +287,7 @@ pt_configure(int cpu, struct pmc *pm)
 
 	//reg |= RTIT_CTL_MTC_FREQ(6);
 
+#if 0
 	if (pm_pt->addrn > 0 && pm_pt->addrn < PT_NADDR) {
 		/* TODO: check caps: how many address ranges supported ? */
 
@@ -298,6 +302,17 @@ pt_configure(int cpu, struct pmc *pm)
 			wrmsr(MSR_IA32_RTIT_ADDR_A(i), pm_pt->addra[i]);
 			wrmsr(MSR_IA32_RTIT_ADDR_B(i), pm_pt->addrb[i]);
 		}
+	}
+#endif
+
+	if (pt_buf->addrn == 0)
+		printf("%s: no ranges\n", __func__);
+
+	for (i = 0; i < pt_buf->addrn; i++) {
+		printf("%s: range %lx -> %lx\n", __func__, pt_buf->addra[i], pt_buf->addrb[i]);
+		reg |= (1UL << RTIT_CTL_ADDR_CFG_S(i));
+		wrmsr(MSR_IA32_RTIT_ADDR_A(i), pt_buf->addra[i]);
+		wrmsr(MSR_IA32_RTIT_ADDR_B(i), pt_buf->addrb[i]);
 	}
 
 	wrmsr(MSR_IA32_RTIT_CTL, reg);
@@ -413,7 +428,7 @@ pt_get_config(int cpu, int ri, struct pmc **ppm)
 	struct pt_cpu *pt_pc;
 	(void) ri;
 
-	printf("%s\n", __func__);
+	//printf("%s\n", __func__);
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
 	    ("[pt,%d] illegal CPU %d", __LINE__, cpu));
@@ -687,6 +702,49 @@ pt_pcpu_fini(struct pmc_mdep *md, int cpu)
 }
 
 static int
+pt_trace_config(int cpu, int ri, struct pmc *pm,
+    struct pmc_trace_filter_ip_range *ranges, uint32_t nranges)
+{
+	struct pt_buffer *pt_buf;
+	struct pmc_md_pt_pmc *pm_pt;
+	uint64_t reg;
+	int i;
+
+	KASSERT(cpu == PCPU_GET(cpuid), ("Configuring wrong CPU\n"));
+
+	printf("%s\n", __func__);
+	
+	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
+	pt_buf = &pm_pt->pt_buffers[cpu];
+
+	/* Turn off tracing */
+	reg = rdmsr(MSR_IA32_RTIT_CTL);
+	if (reg & RTIT_CTL_TRACEEN)
+		wrmsr(MSR_IA32_RTIT_CTL, reg & ~RTIT_CTL_TRACEEN);
+
+	pt_buf->addrn = nranges;
+
+	for (i = 0; i < nranges; i++) {
+		printf("%s: range %lx -> %lx\n", __func__, ranges[0].addra, ranges[0].addrb);
+ 
+		pt_buf->addra[i] = ranges[i].addra;
+		pt_buf->addrb[i] = ranges[i].addrb;
+
+		reg |= (1UL << RTIT_CTL_ADDR_CFG_S(i));
+		wrmsr(MSR_IA32_RTIT_ADDR_A(i), ranges[i].addra);
+		wrmsr(MSR_IA32_RTIT_ADDR_B(i), ranges[i].addrb);
+	}
+
+	//if (reg & RTIT_CTL_TRACEEN)
+
+	wrmsr(MSR_IA32_RTIT_CTL, reg);
+
+	printf("%s: range CTL %lx\n", __func__, reg);
+
+	return (0);
+}
+
+static int
 pt_read_trace(int cpu, int ri, struct pmc *pm,
     pmc_value_t *cycle, pmc_value_t *voffset)
 {
@@ -712,6 +770,8 @@ pt_read_trace(int cpu, int ri, struct pmc *pm,
 
 	offset = reg >> 32;
 	*voffset = pt_buf->topa_sw[idx].offset + offset;
+
+	printf("%s: %lx\n", __func__, rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS));
 
 	return (0);
 }
@@ -828,6 +888,8 @@ pt_start_pmc(int cpu, int ri)
 	reg |= RTIT_CTL_TRACEEN;
 	wrmsr(MSR_IA32_RTIT_CTL, reg);
 
+	printf("%s: ctl %lx\n", __func__, reg);
+
 	//lapic_enable_pmc();
 
 	return (0);	/* PTs are always running. */
@@ -932,6 +994,7 @@ pmc_pt_initialize(struct pmc_mdep *md, int maxcpu)
 	pcd->pcd_pcpu_fini    = pt_pcpu_fini;
 	pcd->pcd_read_pmc     = pt_read_pmc;
 	pcd->pcd_read_trace   = pt_read_trace;
+	pcd->pcd_trace_config = pt_trace_config;
 	pcd->pcd_attach_proc  = pt_attach_proc;
 	pcd->pcd_release_pmc  = pt_release_pmc;
 	pcd->pcd_start_pmc    = pt_start_pmc;

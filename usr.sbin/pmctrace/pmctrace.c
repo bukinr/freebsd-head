@@ -276,6 +276,15 @@ pmctrace_ncpu(void)
 	return (ncpu);
 }
 
+#if 0
+static int
+pmctrace_reconfig(uint32_t cpu, pmc_id_t pmc, ranges
+int
+pmc_trace_config(uint32_t cpu, pmc_id_t pmc,
+    struct pmc_trace_filter_ip_range *ranges,
+    uint32_t nranges)
+#endif
+
 int
 main(int argc, char *argv[])
 {
@@ -413,6 +422,7 @@ main(int argc, char *argv[])
 
 	pmctrace_open_logfile();
 
+#if 1
 	STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
 		if (pmc_allocate(ev->ev_spec, ev->ev_mode,
 			ev->ev_flags, ev->ev_cpu, &ev->ev_pmcid) < 0)
@@ -421,29 +431,46 @@ main(int argc, char *argv[])
 			    PMC_IS_SYSTEM_MODE(ev->ev_mode) ?
 			    "system" : "process", ev->ev_spec);
 	}
+#endif
 
 	EV_SET(&kev, 0, EVFILT_TIMER, EV_ADD, 0, 100, NULL);
 	if (kevent(pmcstat_kq, &kev, 1, NULL, 0, NULL) < 0)
 		err(EX_OSERR, "ERROR: Cannot register kevent for timer");
 
-	if (user_mode) {
-		pmcstat_create_process(pmcstat_sockpair, &args, pmcstat_kq);
-		pmcstat_attach_pmcs(&args);
-	}
-	pmctrace_start_pmcs();
-
-	if (user_mode)
-		pmcstat_start_process(pmcstat_sockpair);
-
 	pmcstat_initialize_logging(&pmcstat_kernproc,
 	    &args, plugins, &pmcstat_npmcs, &pmcstat_mergepmc);
 
+	if (user_mode) {
+		pmcstat_create_process(pmcstat_sockpair, &args, pmcstat_kq);
+		if (1 == 1)
+			pmcstat_attach_pmcs(&args);
+	}
+
+	STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
+		pmc_log_kmap(ev->ev_pmcid);
+	}
+
+	if (user_mode) {
+		pmctrace_start_pmcs();
+		pmcstat_start_process(pmcstat_sockpair);
+	}
+
 	struct pmcstat_process *pp;
+	struct pmcstat_symbol *sym;
+	uintptr_t addr_start;
+	uintptr_t addr_end;
+
 	int running;
 	int stopping;
 
+	int started;
+
+	started = 0;
 	stopping = 0;
 	running = 10;
+
+	struct pmc_trace_filter_ip_range ranges[16];
+
 	do {
 		if ((c = kevent(pmcstat_kq, NULL, 0, &kev, 1, NULL)) <= 0) {
 			if (errno != EINTR)
@@ -469,9 +496,28 @@ main(int argc, char *argv[])
 			args.pa_flags |= FLAG_DO_ANALYSIS;
 			pmcstat_analyze_log(&args, plugins, &pmcstat_stats, pmcstat_kernproc,
 			    pmcstat_mergepmc, &pmcstat_npmcs, &ps_samples_period);
+
+			pp = pmcstat_kernproc;
+			sym = pmcstat_name_to_addr(pp, "kernel", "tcp_output", &addr_start, &addr_end);
+			if (sym) {
+				printf("SYM addr start %lx end %lx\n", addr_start, addr_end);
+				
+				ranges[0].addra = addr_start;
+				ranges[0].addrb = addr_end;
+				STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
+					for (i = 0; i < 4; i++)
+						pmc_trace_config(i, ev->ev_pmcid, &ranges[0], 1);
+				}
+				if (started == 0) {
+					started = 1;
+					pmctrace_start_pmcs();
+				}
+
+			}
+
 			break;
 		case EVFILT_TIMER:
-			pmc_flush_logfile();
+			//pmc_flush_logfile();
 
 			pp = pmcstat_kernproc;
 			if (!user_mode && TAILQ_EMPTY(&pp->pp_map))

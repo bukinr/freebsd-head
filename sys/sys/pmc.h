@@ -344,8 +344,9 @@ enum pmc_event {
 	__PMC_OP(WRITELOG, "Write a cookie to the log file")		\
 	__PMC_OP(CLOSELOG, "Close log file")				\
 	__PMC_OP(GETDYNEVENTINFO, "Get dynamic events list")		\
+	__PMC_OP(LOG_KERNEL_MAP, "Log kernel mappings")			\
 	__PMC_OP(TRACE_READ, "Read trace buffer pointer")		\
-	__PMC_OP(TRACE_FILTER, "Setup trace IP ranges")
+	__PMC_OP(TRACE_CONFIG, "Setup trace IP ranges")
 
 
 enum pmc_ops {
@@ -491,14 +492,6 @@ struct pmc_op_pmcrw {
 	pmc_value_t	pm_value;	/* new&returned value */
 };
 
-struct pmc_op_trace_read {
-	uint32_t	cpu;
-	pmc_id_t	pm_pmcid;	/* pmc id */
-	pmc_value_t	pm_cycle;	/* returned value */
-	pmc_value_t	pm_offset;	/* returned value */
-};
-
-
 /*
  * OP GETPMCINFO
  *
@@ -524,13 +517,40 @@ struct pmc_op_getpmcinfo {
 	struct pmc_info	pm_pmcs[];	/* space for 'npmc' structures */
 };
 
+/*
+ * OP TRACE_CONFIG
+ */
+
+#define	PMC_FILTER_MAX_IP_RANGES	16
+
+struct pmc_trace_filter_ip_range {
+	uintptr_t	addra;
+	uintptr_t	addrb;
+};
+
+struct pmc_op_trace_config {
+	pmc_id_t	pm_pmcid;
+	uint32_t	pm_cpu;		/* CPU number or PMC_CPU_ANY */
+	struct pmc_trace_filter_ip_range	ip_ranges[PMC_FILTER_MAX_IP_RANGES];
+	uint32_t	nranges;
+};
+
+/*
+ * OP TRACE_READ
+ */
+
+struct pmc_op_trace_read {
+	pmc_id_t	pm_pmcid;
+	uint32_t	pm_cpu;
+	pmc_value_t	pm_cycle;	/* returned value */
+	pmc_value_t	pm_offset;	/* returned value */
+};
 
 /*
  * OP GETCPUINFO
  *
  * Retrieve system CPU information.
  */
-
 
 struct pmc_classinfo {
 	enum pmc_class	pm_class;	/* class id */
@@ -964,6 +984,8 @@ struct pmc_classdep {
 
 	/* trace */
 	int (*pcd_read_trace)(int _cpu, int _ri, struct pmc *_pm, pmc_value_t *_cycle, pmc_value_t *_offset);
+	int (*pcd_trace_config)(int _cpu, int _ri, struct pmc *_pm,
+	    struct pmc_trace_filter_ip_range *ranges, uint32_t nranges);
 	int (*pcd_attach_proc)(int _ri, struct pmc *_pm, struct proc *_p);
 
 	/* pmc allocation/release */
