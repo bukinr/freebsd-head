@@ -112,8 +112,13 @@ pmcstat_name_to_addr(struct pmcstat_process *pp, const char *pi_name,
 	if (!found)
 		return (0);
 
-	*addr_start = (image->pi_vaddr + sym->ps_start);
-	*addr_end = (image->pi_vaddr + sym->ps_end);
+	//if (image->pi_vaddr == 0)
+	//	image->pi_vaddr = 0xffffffff82c07000;
+
+	printf("%s: IMAGE pi_vaddr %lx, pcm->ppm_lowpc %lx sym->ps_start %lx\n",
+	    __func__, image->pi_vaddr, pcm->ppm_lowpc, sym->ps_start);
+	*addr_start = (image->pi_vaddr - image->pi_start + pcm->ppm_lowpc + sym->ps_start);
+	*addr_end = (image->pi_vaddr - image->pi_start + pcm->ppm_lowpc + sym->ps_end);
 
 	return (sym);
 }
@@ -686,7 +691,7 @@ pmcstat_image_link(struct pmcstat_process *pp, struct pmcstat_image *image,
 	assert(image->pi_type != PMCSTAT_IMAGE_UNKNOWN &&
 	    image->pi_type != PMCSTAT_IMAGE_INDETERMINABLE);
 
-	warnx("Linking %s\n", pmcstat_string_unintern(image->pi_execpath));
+	warnx("Linking %s: start %lx\n", pmcstat_string_unintern(image->pi_execpath), start);
 	if ((pcmnew = malloc(sizeof(*pcmnew))) == NULL)
 		err(EX_OSERR, "ERROR: Cannot create a map entry");
 

@@ -115,7 +115,7 @@ pmcstat_log_pt(struct pmcstat_ev *ev)
 	STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
 		for (i = 0; i < 4; i++) {
 			pmc_read_trace(i, ev->ev_pmcid, &cycle, &offset);
-#if 1
+#if 0
 			printf("cpu %d cycle %lx offset %lx\n", i, cycle, offset);
 #endif
 
@@ -295,6 +295,8 @@ main(int argc, char *argv[])
 	int option;
 	int ncpu;
 	cpuset_t cpumask;
+	char *func_name;
+	char *func_domain;
 	int c;
 	int i;
 
@@ -311,8 +313,14 @@ main(int argc, char *argv[])
 	pmctrace_setup_cpumask(&cpumask);
 
 	while ((option = getopt(argc, argv,
-	    "u:s:")) != -1)
+	    "u:s:f:d:")) != -1)
 		switch (option) {
+		case 'd':
+			func_domain = strdup(optarg);
+			break;
+		case 'f':
+			func_name = strdup(optarg);
+			break;
 		case 'u':
 		case 's':
 			if ((ev = malloc(sizeof(*ev))) == NULL)
@@ -442,17 +450,14 @@ main(int argc, char *argv[])
 
 	if (user_mode) {
 		pmcstat_create_process(pmcstat_sockpair, &args, pmcstat_kq);
-		if (1 == 1)
-			pmcstat_attach_pmcs(&args);
-	}
-
-	STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
-		pmc_log_kmap(ev->ev_pmcid);
-	}
-
-	if (user_mode) {
+		pmcstat_attach_pmcs(&args);
 		pmctrace_start_pmcs();
 		pmcstat_start_process(pmcstat_sockpair);
+	} else {
+
+		STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
+			pmc_log_kmap(ev->ev_pmcid);
+		}
 	}
 
 	struct pmcstat_process *pp;
@@ -498,7 +503,8 @@ main(int argc, char *argv[])
 			    pmcstat_mergepmc, &pmcstat_npmcs, &ps_samples_period);
 
 			pp = pmcstat_kernproc;
-			sym = pmcstat_name_to_addr(pp, "kernel", "tcp_output", &addr_start, &addr_end);
+			//sym = pmcstat_name_to_addr(pp, "kernel", "tcp_output", &addr_start, &addr_end);
+			sym = pmcstat_name_to_addr(pp, func_domain, func_name, &addr_start, &addr_end);
 			if (sym) {
 				printf("SYM addr start %lx end %lx\n", addr_start, addr_end);
 				
@@ -517,7 +523,7 @@ main(int argc, char *argv[])
 
 			break;
 		case EVFILT_TIMER:
-			//pmc_flush_logfile();
+			pmc_flush_logfile();
 
 			pp = pmcstat_kernproc;
 			if (!user_mode && TAILQ_EMPTY(&pp->pp_map))

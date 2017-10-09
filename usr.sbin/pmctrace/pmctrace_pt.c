@@ -163,10 +163,10 @@ symbol_lookup(struct mtrace_data *mdata)
 			printf("cpu%d: 0x%lx %s\n", mdata->cpu,
 			    ip,
 			    pmcstat_string_unintern(sym->ps_name));
-#if 0
+#if 1
 		else
-			printf("cpu%d: 0x%lx not found, newpc %lx\n", mdata->cpu,
-			    ip, newpc);
+			printf("cpu%d: 0x%lx not found, image->pi_vaddr %lx, image->pi_start %lx, map->ppm_lowpc %lx, pc %lx, newpc %lx\n",
+			    mdata->cpu, ip, image->pi_vaddr, image->pi_start, map->ppm_lowpc, mdata->ip, newpc);
 #endif
 	}
 
@@ -294,7 +294,9 @@ dump_packets(struct mtrace_data *mdata, struct pt_packet_decoder *decoder,
 	const char *sep;
 	int error;
 
+#if 0
 	printf("%s\n", __func__);
+#endif
 
 	sep = "";
 
@@ -401,7 +403,9 @@ init_ipt(struct mtrace_data *mdata, uint64_t base,
 	struct pt_config config;
 	int error;
 
+#if 0
 	printf("%s\n", __func__);
+#endif
 
 	memset(&config, 0, sizeof(config));
 	pt_config_init(&config);
@@ -414,7 +418,9 @@ init_ipt(struct mtrace_data *mdata, uint64_t base,
 	config.begin = (uint8_t *)(base + start);
 	config.end = (uint8_t *)(base + end);
 
+#if 0
 	printf("%s: begin %lx end %lx\n", __func__, (uint64_t)config.begin, (uint64_t)config.end);
+#endif
 
 	decoder = pt_pkt_alloc_decoder(&config);
 	if (decoder == NULL) {
@@ -505,7 +511,7 @@ ipt_process(struct pmcstat_process *pp, uint32_t cpu, uint32_t cycle, uint64_t o
 	mdata = &cc->mdata;
 	mdata->pp = pp;
 
-#if 1
+#if 0
 	printf("%s: cpu %d, cycle %d, offset %ld\n",
 	    __func__, cpu, cycle, offset);
 #endif
