@@ -200,13 +200,29 @@ struct pkthdr {
 typedef	void m_ext_free_t(struct mbuf *);
 struct m_ext {
 	union {
-		volatile u_int	 ext_count;	/* value of ref count info */
-		volatile u_int	*ext_cnt;	/* pointer to ref count info */
+		/*
+		 * If EXT_FLAG_EMBREF is set, then we use refcount in the
+		 * mbuf, the 'ext_count' member.  Otherwise, we have a
+		 * shadow copy and we use pointer 'ext_cnt'.  The original
+		 * mbuf is responsible to carry the pointer to free routine
+		 * and its arguments.  They aren't copied into shadows in
+		 * mb_dupcl() to avoid dereferencing next cachelines.
+		 */
+		volatile u_int	 ext_count;
+		volatile u_int	*ext_cnt;
 	};
 	char		*ext_buf;	/* start of buffer */
 	uint32_t	 ext_size;	/* size of buffer, for ext_free */
 	uint32_t	 ext_type:8,	/* type of external storage */
 			 ext_flags:24;	/* external storage mbuf flags */
+	/*
+	 * Fields below store the free context for the external storage.
+	 * They are valid only in the refcount carrying mbuf, the one with
+	 * EXT_FLAG_EMBREF flag, with exclusion for EXT_EXTREF type, where
+	 * the free context is copied into all mbufs that use same external
+	 * storage.
+	 */
+#define	m_ext_copylen	offsetof(struct m_ext, ext_free)
 	m_ext_free_t	*ext_free;	/* free routine if not the usual */
 	void		*ext_arg1;	/* optional argument pointer */
 	void		*ext_arg2;	/* optional argument pointer */
@@ -410,7 +426,6 @@ struct mbuf {
 #define	EXT_JUMBO16	5	/* jumbo cluster 16184 bytes */
 #define	EXT_PACKET	6	/* mbuf+cluster from packet zone */
 #define	EXT_MBUF	7	/* external mbuf reference */
-#define	EXT_SFBUF_NOCACHE 8	/* sendfile(2)'s sf_buf not to be cached */
 
 #define	EXT_VENDOR1	224	/* for vendor-internal use */
 #define	EXT_VENDOR2	225	/* for vendor-internal use */
@@ -454,12 +469,6 @@ struct mbuf {
     "\21EXT_FLAG_VENDOR1\22EXT_FLAG_VENDOR2\23EXT_FLAG_VENDOR3" \
     "\24EXT_FLAG_VENDOR4\25EXT_FLAG_EXP1\26EXT_FLAG_EXP2\27EXT_FLAG_EXP3" \
     "\30EXT_FLAG_EXP4"
-
-/*
- * External reference/free functions.
- */
-void sf_ext_free(void *, void *);
-void sf_ext_free_nocache(void *, void *);
 
 /*
  * Flags indicating checksum, segmentation and other offload work to be
