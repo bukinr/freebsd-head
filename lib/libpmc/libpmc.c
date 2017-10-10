@@ -3990,6 +3990,17 @@ pmc_read(pmc_id_t pmc, pmc_value_t *value)
 }
 
 int
+pmc_proc_unsuspend(pmc_id_t pmc, pid_t pid)
+{
+	struct pmc_op_proc_unsuspend u;
+
+	u.pm_pmcid = pmc;
+	u.pm_pid = pid;
+
+	return (PMC_CALL(THREAD_UNSUSPEND, &u));
+}
+
+int
 pmc_read_trace(uint32_t cpu, pmc_id_t pmc,
     pmc_value_t *cycle, pmc_value_t *offset)
 {

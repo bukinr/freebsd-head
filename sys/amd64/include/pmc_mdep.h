@@ -80,6 +80,7 @@ union pmc_md_op_pmcallocate  {
 	struct pmc_md_ucf_op_pmcallocate	pm_ucf;
 	struct pmc_md_ucp_op_pmcallocate	pm_ucp;
 	struct pmc_md_p4_op_pmcallocate		pm_p4;
+	struct pmc_md_pt_op_pmcallocate		pm_pt;
 	uint64_t				__pad[4];
 };
 

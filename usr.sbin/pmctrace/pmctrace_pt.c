@@ -303,13 +303,13 @@ dump_packets(struct mtrace_data *mdata, struct pt_packet_decoder *decoder,
 	while (1) {
 		error = pt_pkt_get_offset(decoder, &offset);
 		if (error < 0) {
-			printf("err %d, offset 0x%lx\n", error, offset);
+			//printf("err %d, offset 0x%lx\n", error, offset);
 			break;
 		}
 
 		error = pt_pkt_next(decoder, &packet, sizeof(packet));
 		if (error < 0) {
-			printf("err %d, packet.type %d\n", error, packet.type);
+			//printf("err %d, packet.type %d\n", error, packet.type);
 			break;
 		}
 

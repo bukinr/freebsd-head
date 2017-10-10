@@ -8,10 +8,13 @@ fi
 VARS=`make buildenvvars`
 
 ##cp sys/amd64/sgx/sgx_user.h usr.bin/secure_app/
-##make -C app clean all || exit 1
-##make -C usr.bin/secure_app || exit 1
-##cp usr.bin/secure_app/secure_app amd64_disk/usr/bin/
-##cp app/app amd64_disk/usr/bin/
+
+make -C app clean all || exit 1
+cp app/app amd64_disk/usr/bin/
+
+make -C usr.bin/secure_app || exit 1
+cp usr.bin/secure_app/secure_app amd64_disk/usr/bin/
+
 ##cp /home/br/dev/sgx/libsgx_urts amd64_disk/usr/bin/
 
 if [ "$2" = "linux" ]; then
@@ -45,6 +48,11 @@ if [ "$2" = "" ]; then
 	cp /usr/local/lib/libprotobuf.so.13 amd64_disk/usr/local/lib/
 	cp /usr/local/lib/gcc46/libstdc++.so.6 amd64_disk/usr/local/lib/
 	cp /usr/local/lib/libnghttp2.so.14 amd64_disk/usr/local/lib/
+
+
+	cp /home/br/dev/freebsd-sgx/SampleCode/hello-enclave/app amd64_disk/usr/bin/sgx_hello_app
+	cp /home/br/dev/freebsd-sgx/SampleCode/hello-enclave/enclave.signed.so amd64_disk/usr/bin/
+	cp /home/br/dev/freebsd-sgx/SampleCode/hello-enclave/enclave.so amd64_disk/usr/bin/
 fi
 
 export DESTDIR=/home/br/world-amd64
@@ -62,6 +70,9 @@ cp -f /home/br/obj/usr/home/br/dev/freebsd-head/sys/SGX/modules/usr/home/br/dev/
 cp -f /home/br/obj/usr/home/br/dev/freebsd-head/sys/SGX/modules/usr/home/br/dev/freebsd-head/sys/modules/sgx/sgx.ko $DESTDIR/boot/kernel/
 cp -f /home/br/obj/usr/home/br/dev/freebsd-head/sys/SGX/modules/usr/home/br/dev/freebsd-head/sys/modules/linux_common/linux_common.ko $DESTDIR/boot/kernel/
 cp -f /home/br/obj/usr/home/br/dev/freebsd-head/sys/SGX/modules/usr/home/br/dev/freebsd-head/sys/modules/linux64/linux64.ko $DESTDIR/boot/kernel/
+
+# pt modules
+cp -f /home/br/obj/usr/home/br/dev/freebsd-head/sys/SGX/modules/usr/home/br/dev/freebsd-head/sys/modules/pt/pt.ko $DESTDIR/boot/kernel/
 
 MD=`sudo mdconfig -n disk_amd64.img`
 

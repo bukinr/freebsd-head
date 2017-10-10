@@ -78,10 +78,22 @@ pmcstat_name_to_addr(struct pmcstat_process *pp, const char *pi_name,
 
 	found = 0;
 
+	if (pp == NULL)
+		return (NULL);
+
+	printf("%s: 1\n", __func__);
+
 	TAILQ_FOREACH(pcm, &pp->pp_map, ppm_next) {
+		printf("%s: 1 1\n", __func__);
+		
 		image = pcm->ppm_image;
-		printf("IMAGE name %s\n", pmcstat_string_unintern(image->pi_name));
+		printf("%s: 1 2\n", __func__);
+		//printf("IMAGE name %s\n", pmcstat_string_unintern(image->pi_name));
+		if (image->pi_name == NULL)
+			continue;
+		printf("%s: 1 3\n", __func__);
 		name1 = pmcstat_string_unintern(image->pi_name);
+		printf("%s: 1 4\n", __func__);
 		if (strcmp(name1, pi_name) == 0) {
 			//printf("IMAGE name %s\n", pmcstat_string_unintern(image->pi_name));
 			found = 1;
@@ -89,21 +101,27 @@ pmcstat_name_to_addr(struct pmcstat_process *pp, const char *pi_name,
 		}
 	}
 
-	if (!found)
-		return (0);
+	printf("%s: 2\n", __func__);
 
-	//printf("IMAGE FOUND\n");
+	if (!found) {
+		printf("IMAGE not found\n");
+		return (0);
+	}
+
+	printf("IMAGE FOUND, symcount %zu\n", image->pi_symcount);
 
 	if (image->pi_symbols == NULL)
 		return (NULL);
 
 	found = 0;
 
+	printf("%s: 3\n", __func__);
+
 	for (i = 0; i < image->pi_symcount; i++) {
 		sym = &image->pi_symbols[i];
 		name2 = pmcstat_string_unintern(sym->ps_name);
+		printf("SYM NAME %s\n", pmcstat_string_unintern(sym->ps_name));
 		if (strcmp(name2, name) == 0) {
-			//printf("SYM NAME %s\n", pmcstat_string_unintern(sym->ps_name));
 			found = 1;
 			break;
 		}
@@ -114,6 +132,8 @@ pmcstat_name_to_addr(struct pmcstat_process *pp, const char *pi_name,
 
 	//if (image->pi_vaddr == 0)
 	//	image->pi_vaddr = 0xffffffff82c07000;
+
+	printf("%s: 4\n", __func__);
 
 	printf("%s: IMAGE pi_vaddr %lx, pcm->ppm_lowpc %lx sym->ps_start %lx\n",
 	    __func__, image->pi_vaddr, pcm->ppm_lowpc, sym->ps_start);

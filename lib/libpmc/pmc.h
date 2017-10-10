@@ -75,6 +75,7 @@ __BEGIN_DECLS
 int	pmc_allocate(const char *_ctrspec, enum pmc_mode _mode, uint32_t _flags,
     int _cpu, pmc_id_t *_pmcid);
 int	pmc_attach(pmc_id_t _pmcid, pid_t _pid);
+int	pmc_proc_unsuspend(pmc_id_t pmc, pid_t pid);
 int	pmc_capabilities(pmc_id_t _pmc, uint32_t *_caps);
 int	pmc_configure_logfile(int _fd);
 int	pmc_flush_logfile(void);

@@ -1568,6 +1568,9 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 	const struct pmc *pm;
 	struct pmc_owner *po;
 	const struct pmc_process *pp;
+	struct proc *p;
+
+	sx_slock(&pmc_sx);
 
 	freepath = fullpath = NULL;
 	pmc_getfilename((struct vnode *) pkm->pm_file, &fullpath, &freepath);
@@ -1581,8 +1584,16 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 	    if (po->po_flags & PMC_PO_OWNS_LOGFILE)
 		pmclog_process_map_in(po, pid, pkm->pm_address, fullpath);
 
-	if ((pp = pmc_find_process_descriptor(td->td_proc, 0)) == NULL)
+	if ((pp = pmc_find_process_descriptor(td->td_proc, 0)) == NULL) {
+		sx_sunlock(&pmc_sx);
 		goto done;
+	}
+
+	p = td->td_proc;
+	if ((p->p_flag & P_HWPMC) == 0) {
+		sx_sunlock(&pmc_sx);
+		goto done;
+	}
 
 	/*
 	 * Inform sampling PMC owners tracking this process.
@@ -1595,6 +1606,13 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 			pmclog_process_map_in(pm->pm_owner,
 			    pid, pkm->pm_address, fullpath);
 	}
+
+	PROC_LOCK(td->td_proc);
+	PROC_SLOCK(td->td_proc);
+	sx_sunlock(&pmc_sx);
+	thread_suspend_switch(td, td->td_proc);
+	PROC_SUNLOCK(td->td_proc);
+	PROC_UNLOCK(td->td_proc);
 
   done:
 	if (freepath)
@@ -2054,7 +2072,7 @@ pmc_hook_handler(struct thread *td, int function, void *arg)
 		break;
 
 	case PMC_FN_MMAP:
-		sx_assert(&pmc_sx, SX_LOCKED);
+		//sx_assert(&pmc_sx, SX_LOCKED);
 		pmc_process_mmap(td, (struct pmckern_map_in *) arg);
 		break;
 
@@ -2170,8 +2188,8 @@ pmc_find_process_descriptor(struct proc *p, uint32_t mode)
 
 	mtx_lock_spin(&pmc_processhash_mtx);
 	LIST_FOREACH(pp, pph, pp_next)
-	    if (pp->pp_proc == p)
-		    break;
+		if (pp->pp_proc == p)
+			break;
 
 	if ((mode & PMC_FLAG_REMOVE) && pp != NULL)
 		LIST_REMOVE(pp, pp_next);
@@ -3616,9 +3634,9 @@ pmc_syscall_handler(struct thread *td, void *syscall_args)
 
 	case PMC_OP_PMCATTACH:
 	{
+		struct pmc_op_pmcattach a;
 		struct pmc *pm;
 		struct proc *p;
-		struct pmc_op_pmcattach a;
 
 		printf("%s: PMC_OP_PMCATTACH\n", __func__);
 
@@ -3867,6 +3885,44 @@ pmc_syscall_handler(struct thread *td, void *syscall_args)
 		}
 
 		pmc_log_kernel_mappings(pm);
+	}
+	break;
+
+	case PMC_OP_THREAD_UNSUSPEND:
+	{
+		struct pmc_op_proc_unsuspend u;
+		struct proc *p;
+		struct pmc *pm;
+		//struct thread *td;
+
+		if ((error = copyin(arg, &u, sizeof(u))) != 0)
+			break;
+
+		/* locate pmc descriptor */
+		if ((error = pmc_find_pmc(u.pm_pmcid, &pm)) != 0)
+			break;
+
+		/* lookup pid */
+		if ((p = pfind(u.pm_pid)) == NULL) {
+			error = ESRCH;
+			break;
+		}
+
+		if ((p->p_flag & P_HWPMC) == 0)
+			break;
+
+		PROC_SLOCK(p);
+		thread_unsuspend(p);
+#if 0
+		FOREACH_THREAD_IN_PROC(p, td) {
+			thread_lock(td);
+			if (TD_IS_SUSPENDED(td))
+				thread_unsuspend_one(td, p, false);
+			thread_unlock(td);
+		}
+#endif
+		PROC_SUNLOCK(p);
+		PROC_UNLOCK(p);
 	}
 	break;
 

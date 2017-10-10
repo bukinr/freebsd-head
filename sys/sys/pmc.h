@@ -345,6 +345,7 @@ enum pmc_event {
 	__PMC_OP(CLOSELOG, "Close log file")				\
 	__PMC_OP(GETDYNEVENTINFO, "Get dynamic events list")		\
 	__PMC_OP(LOG_KERNEL_MAP, "Log kernel mappings")			\
+	__PMC_OP(THREAD_UNSUSPEND, "Thread unsuspend")			\
 	__PMC_OP(TRACE_READ, "Read trace buffer pointer")		\
 	__PMC_OP(TRACE_CONFIG, "Setup trace IP ranges")
 
@@ -515,6 +516,17 @@ struct pmc_info {
 struct pmc_op_getpmcinfo {
 	int32_t		pm_cpu;		/* 0 <= cpu < mp_maxid */
 	struct pmc_info	pm_pmcs[];	/* space for 'npmc' structures */
+};
+
+/*
+ * OP PROC_UNSUSPEND
+ *
+ * Unsuspend all threads of proc.
+ */
+
+struct pmc_op_proc_unsuspend {
+	pmc_id_t	pm_pmcid;
+	pid_t		pm_pid;
 };
 
 /*

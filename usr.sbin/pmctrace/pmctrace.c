@@ -296,7 +296,7 @@ main(int argc, char *argv[])
 	int ncpu;
 	cpuset_t cpumask;
 	char *func_name;
-	char *func_domain;
+	char *func_proc;
 	int c;
 	int i;
 
@@ -313,10 +313,10 @@ main(int argc, char *argv[])
 	pmctrace_setup_cpumask(&cpumask);
 
 	while ((option = getopt(argc, argv,
-	    "u:s:f:d:")) != -1)
+	    "u:s:f:p:")) != -1)
 		switch (option) {
-		case 'd':
-			func_domain = strdup(optarg);
+		case 'p':
+			func_proc = strdup(optarg);
 			break;
 		case 'f':
 			func_name = strdup(optarg);
@@ -448,10 +448,14 @@ main(int argc, char *argv[])
 	pmcstat_initialize_logging(&pmcstat_kernproc,
 	    &args, plugins, &pmcstat_npmcs, &pmcstat_mergepmc);
 
+	int started;
+	started = 0;
+
 	if (user_mode) {
 		pmcstat_create_process(pmcstat_sockpair, &args, pmcstat_kq);
 		pmcstat_attach_pmcs(&args);
-		pmctrace_start_pmcs();
+		//pmctrace_start_pmcs();
+		//started = 1;
 		pmcstat_start_process(pmcstat_sockpair);
 	} else {
 
@@ -468,11 +472,10 @@ main(int argc, char *argv[])
 	int running;
 	int stopping;
 
-	int started;
-
-	started = 0;
 	stopping = 0;
 	running = 10;
+
+	struct pmcstat_target *pt;
 
 	struct pmc_trace_filter_ip_range ranges[16];
 
@@ -484,7 +487,7 @@ main(int argc, char *argv[])
 				continue;
 		}
 
-#if 1
+#if 0
 		printf("%s: pmcstat event: filter %d, ident %ld\n",
 		    __func__, kev.filter, kev.ident);
 #endif
@@ -501,24 +504,53 @@ main(int argc, char *argv[])
 			args.pa_flags |= FLAG_DO_ANALYSIS;
 			pmcstat_analyze_log(&args, plugins, &pmcstat_stats, pmcstat_kernproc,
 			    pmcstat_mergepmc, &pmcstat_npmcs, &ps_samples_period);
+			printf("%s: log analyzed\n", __func__);
 
-			pp = pmcstat_kernproc;
-			//sym = pmcstat_name_to_addr(pp, "kernel", "tcp_output", &addr_start, &addr_end);
-			sym = pmcstat_name_to_addr(pp, func_domain, func_name, &addr_start, &addr_end);
+			if (!user_mode)
+				pp = pmcstat_kernproc;
+			else {
+				pt = SLIST_FIRST(&args.pa_targets);
+				if (pt != NULL) {
+					pp = pmcstat_process_lookup(pt->pt_pid, 0);
+					if (pp == NULL) {
+						printf("pp is NULL, pid %d\n", (uint32_t)pt->pt_pid);
+						continue;
+						exit(3);
+					}
+				} else
+					exit(2);
+			}
+
+			printf("%s: name to addr\n", __func__);
+
+			sym = pmcstat_name_to_addr(pp, func_proc, func_name, &addr_start, &addr_end);
+			printf("%s: name to addr done\n", __func__);
 			if (sym) {
 				printf("SYM addr start %lx end %lx\n", addr_start, addr_end);
-				
+
 				ranges[0].addra = addr_start;
 				ranges[0].addrb = addr_end;
-				STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
-					for (i = 0; i < 4; i++)
-						pmc_trace_config(i, ev->ev_pmcid, &ranges[0], 1);
-				}
-				if (started == 0) {
-					started = 1;
-					pmctrace_start_pmcs();
-				}
 
+				pt = SLIST_FIRST(&args.pa_targets);
+				STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
+					for (i = 0; i < 4; i++) {
+						printf("cpu%d: trace config\n", i);
+						pmc_trace_config(i, ev->ev_pmcid, &ranges[0], 1);
+					}
+
+					if (started == 0) {
+						started = 1;
+						pmctrace_start_pmcs();
+						printf("pmc started\n");
+					}
+					pmc_proc_unsuspend(ev->ev_pmcid, pt->pt_pid);
+				}
+			} else {
+				//pt = SLIST_FIRST(&args.pa_targets);
+				//STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
+				//	pmc_proc_unsuspend(ev->ev_pmcid, pt->pt_pid);
+				//}
+				printf("SYM not found\n");
 			}
 
 			break;

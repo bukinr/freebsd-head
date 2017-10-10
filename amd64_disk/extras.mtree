@@ -1,15 +1,21 @@
 ./etc/fstab type=file uname=root gname=wheel mode=644
 ./etc/ttys type=file uname=root gname=wheel mode=644
-##./usr/bin/secure_app type=file uname=root gname=wheel mode=755
-##./usr/bin/app type=file uname=root gname=wheel mode=755
+./usr/bin/secure_app type=file uname=root gname=wheel mode=755
+./usr/bin/app type=file uname=root gname=wheel mode=755
 ##./usr/bin/libsgx_urts type=file uname=root gname=wheel mode=755
 ./usr/bin/libenclave1.so type=file uname=root gname=wheel mode=755
 ./usr/bin/libenclave2.so type=file uname=root gname=wheel mode=755
 ./usr/bin/libenclave3.so type=file uname=root gname=wheel mode=755
 ./usr/bin/sgx_app type=file uname=root gname=wheel mode=755
+
 #./usr/bin/enclave.so type=file uname=root gname=wheel mode=755
 #./usr/bin/enclave.signed.so type=file uname=root gname=wheel mode=755
 #./usr/bin/sample_enclave_app type=file uname=root gname=wheel mode=755
+
+./usr/bin/enclave.so type=file uname=root gname=wheel mode=755
+./usr/bin/enclave.signed.so type=file uname=root gname=wheel mode=755
+./usr/bin/sgx_hello_app type=file uname=root gname=wheel mode=755
+
 ./usr/bin/aesm_service type=file uname=root gname=wheel mode=755
 ./usr/local/lib/libsgx_urts.so type=file uname=root gname=wheel mode=755
 ./usr/local/lib/libsgx_uae_service.so type=file uname=root gname=wheel mode=755
