@@ -30,7 +30,7 @@
 
 /*
  * Cadence Quad SPI Flash Controller driver.
- * 4B-addressing supported only.
+ * 4B-addressing mode supported only.
  */
 
 #include <sys/cdefs.h>

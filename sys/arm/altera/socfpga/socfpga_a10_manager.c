@@ -95,6 +95,7 @@ __FBSDID("$FreeBSD$");
 #define	 F2S_NSTATUS_PIN		(1 << 4)
 #define	 F2S_CONDONE_PIN		(1 << 6)
 #define	 F2S_USERMODE			(1 << 2)
+#define	 F2S_EARLY_USERMODE		(1 << 1)
 
 struct fpgamgr_a10_softc {
 	struct resource		*res[2];
@@ -152,6 +153,12 @@ fpga_open(struct cdev *dev, int flags __unused,
 	int reg;
 
 	sc = dev->si_drv1;
+
+	reg = READ4(sc, IMGCFG_STAT);
+	if ((reg & F2S_EARLY_USERMODE) == 0) {
+		device_printf(sc->dev, "Error: usermode not set\n");
+		return (ENXIO);
+	}
 
 	/* Step 1 */
 	reg = READ4(sc, IMGCFG_STAT);

@@ -257,6 +257,9 @@
 
 		interrupt-parent = <&gpe>;
 		interrupts = <19 0x4>;
+
+		dmas = <&dma 0 0 0xffffffff>;
+		dma-names = "fifo";
 	};
 };
 

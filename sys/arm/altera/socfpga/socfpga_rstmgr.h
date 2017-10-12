@@ -48,7 +48,9 @@
 #define	 BRGMODRST_HPS2FPGA	(1 << 0)
 #define	RSTMGR_MISCMODRST	0x20	/* Miscellaneous Module Reset */
 #define	RSTMGR_PER0MODRST	0x24
+#define	 PER0MODRST_QSPI_OCP	(1 << 14)
 #define	 PER0MODRST_QSPI	(1 << 6) /* Resets QSPI flash controller */
+#define	RSTMGR_PER1MODRST	0x28
 
 #define	RSTMGR_A10_CTRL		0xC	/* Control */
 #define	RSTMGR_A10_MPUMODRST	0x20	/* MPU Module Reset */

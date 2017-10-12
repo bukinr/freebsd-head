@@ -45,6 +45,7 @@ __FBSDID("$FreeBSD$");
 
 #include <machine/bus.h>
 #include <machine/resource.h>
+#include <machine/cache.h>
 
 #include <net/if.h>
 #include <net/if_arp.h>
@@ -65,6 +66,8 @@ __FBSDID("$FreeBSD$");
 
 #include <dev/extres/regulator/regulator.h>
 #include <dev/gpio/gpiobusvar.h>
+
+#include <dev/xdma/xdma.h>
 
 #include "miibus_if.h"
 
@@ -88,6 +91,12 @@ struct dme_softc {
 	uint8_t			dme_txbusy: 1;
 	uint8_t			dme_txready: 1;
 	uint16_t		dme_txlen;
+
+	/* xDMA */
+	xdma_controller_t	*xdma;
+	xdma_channel_t		*xchan;
+	void			*xdma_ih;
+	int			g_intr;
 };
 
 #define DME_CHIP_DM9000		0x00
@@ -152,6 +161,24 @@ dme_write_reg(struct dme_softc *sc, uint8_t reg, uint8_t value)
 	bus_space_write_1(sc->dme_tag, sc->dme_handle, DATA_ADDR, value);
 	bus_space_barrier(sc->dme_tag, sc->dme_handle, DATA_ADDR, 1,
 	    BUS_SPACE_BARRIER_WRITE);
+}
+
+static int
+dme_xdma_intr(void *arg, xdma_transfer_status_t *status)
+{
+	//xdma_transfer_status_t st;
+	struct dme_softc *sc;
+	//struct ifnet *ifp;
+	//struct mbuf *m;
+	//int err;
+
+	printf("%s\n", __func__);
+
+	sc = arg;
+
+	sc->g_intr = 1;
+
+	return (0);
 }
 
 static void
@@ -346,12 +373,51 @@ dme_prepare(struct dme_softc *sc)
 		total_len += len;
 
 #if 0
+#if 0
 		bus_space_write_multi_2(sc->dme_tag, sc->dme_handle,
 		    DATA_ADDR, mtod(mp, uint16_t *), (len + 1) / 2);
 #else
 		bus_space_write_multi_1(sc->dme_tag, sc->dme_handle,
 		    DATA_ADDR, mtod(mp, uint8_t *), len);
 #endif
+#endif
+	}
+
+	uint32_t dst_addr;
+	dst_addr = rman_get_start(sc->dme_res) + DATA_ADDR;
+
+	//struct mbuf *m2;
+	//m2 = m_getcl(M_NOWAIT, MT_DATA, M_PKTHDR);
+	//m2->m_pkthdr.len = m2->m_len = m2->m_ext.ext_size;
+
+#if 0
+	uint32_t *tcsm;
+	tcsm = (void *)0xf4000000;
+	bzero(tcsm, 2048);
+	m_copydata(m, 0, m->m_pkthdr.len, (caddr_t)0xf4000000);
+	mips_dcache_wbinv_all();
+#endif
+
+	sc->g_intr = 0;
+	xdma_enqueue_mbuf(sc->xchan, &m, dst_addr, XDMA_MEM_TO_DEV);
+	xdma_queue_submit(sc->xchan);
+	printf("tx m enqueued\n");
+	int i;
+
+	for (i = 0; i < 20; i++) {
+		if (sc->g_intr == 1) {
+			break;
+		}
+		printf(".");
+		//mtx_sleep(sc, &sc->sc_mtx, PCATCH, "zy7i1", hz);
+		//if (g_intr == 1) {
+		//	break;
+		//}
+	}
+	if (i == 20) {
+		printf("tx m failed\n");
+	} else {
+		printf("tx m processed\n");
 	}
 
 	if (total_len % (sc->dme_bits >> 3) != 0)
@@ -362,7 +428,7 @@ dme_prepare(struct dme_softc *sc)
 	DTR3("dme_prepare done, flags %#x busy %d ready %d",
 	    sc->dme_ifp->if_drv_flags, sc->dme_txbusy, sc->dme_txready);
 
-	m_freem(m);
+	//m_freem(m);
 }
 
 void
@@ -915,6 +981,32 @@ dme_attach(device_t dev)
 		ether_ifdetach(ifp);
 		goto fail;
 	}
+
+	/* Get xDMA controller */
+	sc->xdma = xdma_ofw_get(sc->dme_dev, "fifo");
+	if (sc->xdma == NULL) {
+		device_printf(dev, "Can't find DMA controller.\n");
+		return (ENXIO);
+	}
+
+	/* Alloc xDMA virtual channel. */
+	sc->xchan = xdma_channel_alloc(sc->xdma);
+	if (sc->xchan == NULL) {
+		device_printf(dev, "Can't alloc virtual DMA channel.\n");
+		return (ENXIO);
+	}
+
+	/* Setup interrupt handler. */
+	error = xdma_setup_intr(sc->xchan, dme_xdma_intr, sc, &sc->xdma_ih);
+	if (error) {
+		device_printf(sc->dme_dev,
+		    "Can't setup xDMA interrupt handler.\n");
+		return (ENXIO);
+	}
+
+	xdma_prep_sg(sc->xchan, 32, 128);
+	//xdma_prep_sg(sc->xchan, NUM_TX_DESC, TX_QUEUE_SIZE);
+
 fail:
 	if (error != 0)
 		dme_detach(dev);
@@ -1058,4 +1150,3 @@ MODULE_DEPEND(dme, ether, 1, 1, 1);
 MODULE_DEPEND(dme, miibus, 1, 1, 1);
 DRIVER_MODULE(dme, simplebus, dme_driver, dme_devclass, 0, 0);
 DRIVER_MODULE(miibus, dme, miibus_driver, miibus_devclass, 0, 0);
-

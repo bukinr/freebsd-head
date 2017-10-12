@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2016 Ruslan Bukin <br@bsdpad.com>
+ * Copyright (c) 2016-2017 Ruslan Bukin <br@bsdpad.com>
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -82,6 +82,9 @@ struct pdma_channel {
 	int			used;
 	int			index;
 	int			flags;
+	uint32_t		idx_head;
+	uint32_t		idx_tail;
+	uint32_t		enq;
 #define	CHAN_DESCR_RELINK	(1 << 0)
 };
 
@@ -103,6 +106,8 @@ static void
 pdma_intr(void *arg)
 {
 	xdma_transfer_status_t status;
+	xdma_transfer_status_t st;
+	struct pdma_hwdesc *desc;
 	struct pdma_channel *chan;
 	struct pdma_softc *sc;
 	xdma_channel_t *xchan;
@@ -119,11 +124,13 @@ pdma_intr(void *arg)
 
 	for (i = 0; i < PDMA_NCHANNELS; i++) {
 		if (pending & (1 << i)) {
+			printf("pdma_intr %d\n", i);
 			chan = &pdma_channels[i];
 			xchan = chan->xchan;
 			conf = &xchan->conf;
 
 			/* TODO: check for AR, HLT error bits here. */
+			printf("DCS %x\n", READ4(sc, PDMA_DCS(chan->index)));
 
 			/* Disable channel */
 			WRITE4(sc, PDMA_DCS(chan->index), 0);
@@ -133,6 +140,19 @@ pdma_intr(void *arg)
 				chan->cur_desc = (chan->cur_desc + 1) % \
 				    conf->block_num;
 				chan_start(sc, chan);
+			} else {
+				//for
+				for (i = 0; i < chan->enq; i++) {
+					xchan_desc_sync_post(xchan, chan->idx_tail);
+					st.error = 0;
+					st.transferred = 0;
+
+					desc = xchan->descs[chan->idx_tail].desc;
+					printf("%s: desc src_addr %x\n", __func__, desc->dsa);
+
+					xchan_desc_done(xchan, chan->idx_tail, &st);
+					chan->idx_tail = xchan_next_desc(xchan, chan->idx_tail);
+				}
 			}
 
 			status.error = 0;
@@ -191,6 +211,7 @@ pdma_attach(device_t dev)
 	reg = READ4(sc, PDMA_DMAC);
 	reg &= ~(DMAC_HLT | DMAC_AR);
 	reg |= (DMAC_DMAE);
+	//reg |= (1 << 1); //CH01
 	WRITE4(sc, PDMA_DMAC, reg);
 
 	WRITE4(sc, PDMA_DMACP, 0);
@@ -270,6 +291,10 @@ pdma_channel_alloc(device_t dev, struct xdma_channel *xchan)
 			xchan->chan = (void *)chan;
 			chan->used = 1;
 			chan->index = i;
+			chan->idx_tail = 0;
+			chan->idx_head = 0;
+
+			printf("channel %d allocated\n", i);
 
 			return (0);
 		}
@@ -310,7 +335,7 @@ pdma_channel_prep_memcpy(device_t dev, struct xdma_channel *xchan)
 	/* Ensure we are not in operation */
 	chan_stop(sc, chan);
 
-	ret = xchan_desc_alloc(xchan, sizeof(struct pdma_hwdesc), 8);
+	ret = xchan_desc_alloc(xchan, sizeof(struct pdma_hwdesc), 16);
 	if (ret != 0) {
 		device_printf(sc->dev,
 		    "%s: Can't allocate descriptors.\n", __func__);
@@ -408,7 +433,7 @@ pdma_channel_prep_cyclic(device_t dev, struct xdma_channel *xchan)
 	xdma = xchan->xdma;
 	data = (struct pdma_fdt_data *)xdma->data;
 
-	ret = xchan_desc_alloc(xchan, sizeof(struct pdma_hwdesc), 8);
+	ret = xchan_desc_alloc(xchan, sizeof(struct pdma_hwdesc), 16);
 	if (ret != 0) {
 		device_printf(sc->dev,
 		    "%s: Can't allocate descriptors.\n", __func__);
@@ -449,7 +474,7 @@ pdma_channel_prep_cyclic(device_t dev, struct xdma_channel *xchan)
 			return (-1);
 		}
 
-		desc->dcm |= dcm | DCM_TIE;
+		desc->dcm |= (dcm | DCM_TIE);
 		desc->dtc = (conf->block_len / max_width);
 
 		xchan_desc_sync_pre(xchan, i);
@@ -472,6 +497,212 @@ pdma_channel_prep_cyclic(device_t dev, struct xdma_channel *xchan)
 
 	return (0);
 }
+
+static int
+pdma_channel_prep_sg(device_t dev, struct xdma_channel *xchan)
+{
+	xdma_descriptor_t *descs;
+	struct pdma_hwdesc *desc;
+	struct pdma_softc *sc;
+	uint32_t reg;
+	int ret;
+	int i;
+
+	printf("%s\n", __func__);
+
+	ret = xchan_desc_alloc(xchan, sizeof(struct pdma_hwdesc), 16);
+	if (ret != 0) {
+		device_printf(sc->dev,
+		    "%s: Can't allocate descriptors.\n", __func__);
+		return (-1);
+	}
+
+	descs = xchan->descs;
+
+	for (i = 0; i < xchan->descs_num; i++) {
+		desc = (struct pdma_hwdesc *)descs[i].desc;
+
+		if (i != (xchan->descs_num - 1)) {
+			desc->dcm = DCM_LINK;
+			reg = ((i + 1) * sizeof(struct pdma_hwdesc));
+			desc->dtc = (reg >> 4) << 24;
+		}
+
+		desc->dsa = 0;
+		desc->dta = 0;
+		desc->drt = 0;
+		desc->dcm = 0;
+		desc->dtc = 0;
+	}
+
+	sc = device_get_softc(dev);
+
+	return (0);
+}
+
+#if 0
+static int
+pdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
+    struct xdma_sglist *sg, uint32_t sg_n)
+{
+	struct pdma_channel *chan;
+	struct pdma_softc *sc;
+	uint32_t src_addr;
+	uint32_t dst_addr;
+	uint32_t len;
+	uint32_t enq;
+	uint32_t reg;
+	int i;
+
+	printf("%s: sg_n %d\n", __func__, sg_n);
+
+	sc = device_get_softc(dev);
+
+	chan = (struct pdma_channel *)xchan->chan;
+
+	enq = 0;
+
+	//uint32_t ds_addr;
+	//ds_addr = xchan->descs[chan->idx_head].ds_addr;
+	//void *a = malloc(2048, M_DEVBUF);
+
+	for (i = 0; i < sg_n; i++) {
+		src_addr = (uint32_t)sg[i].src_paddr;
+		dst_addr = (uint32_t)sg[i].dst_paddr;
+		len = (uint32_t)sg[i].len;
+
+		WRITE4(sc, PDMA_DSA(chan->index), src_addr);
+		WRITE4(sc, PDMA_DTA(chan->index), 0x13422000); //dst_addr);
+		WRITE4(sc, PDMA_DTC(chan->index), len / 4);
+		WRITE4(sc, PDMA_DRT(chan->index), DRT_AUTO);
+
+		reg = DCM_SP_4 | DCM_DP_4 | DCM_TSZ_A | DCM_TIE;
+		if (sg->direction == XDMA_MEM_TO_DEV) {
+			reg |= DCM_SAI;
+			//desc->dcm |= (1 << 24); // destination is NEMC
+			//desc->dcm |= (2 << 26); // source is DDR
+		} else if (sg->direction == XDMA_DEV_TO_MEM) {
+			reg |= DCM_DAI;
+			//desc->dcm |= (1 << 26); // source is NEMC
+		} else {
+			panic("here\n");
+		}
+		WRITE4(sc, PDMA_DCM(chan->index), reg);
+	}
+
+	chan->enq = 1;
+
+	/* No descriptor mode. */
+	WRITE4(sc, PDMA_DCS(chan->index), DCS_NDES);
+	WRITE4(sc, PDMA_DDS, (1 << chan->index));
+	/* Channel transfer enable. */
+	WRITE4(sc, PDMA_DCS(chan->index), (DCS_NDES | DCS_CTE));
+
+	return (0);
+}
+#endif
+
+#if 1
+static int
+pdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
+    struct xdma_sglist *sg, uint32_t sg_n)
+{
+	struct pdma_channel *chan;
+	struct pdma_hwdesc *desc;
+	struct pdma_softc *sc;
+	uint32_t src_addr;
+	uint32_t dst_addr;
+	uint32_t len;
+	uint32_t tmp;
+	uint32_t enq;
+	uint32_t reg;
+	int i;
+
+	printf("%s: sg_n %d\n", __func__, sg_n);
+
+	sc = device_get_softc(dev);
+
+	chan = (struct pdma_channel *)xchan->chan;
+
+	enq = 0;
+
+	uint32_t ds_addr;
+	ds_addr = xchan->descs[chan->idx_head].ds_addr;
+
+	//void *a = malloc(2048, M_DEVBUF);
+
+	for (i = 0; i < sg_n; i++) {
+		src_addr = (uint32_t)sg[i].src_addr;
+		dst_addr = (uint32_t)sg[i].dst_addr;
+		len = (uint32_t)sg[i].len;
+
+		printf("src addr %x dst addr %x len %d, desc idx_head %d\n",
+		    src_addr, dst_addr, len, chan->idx_head);
+
+		desc = xchan->descs[chan->idx_head].desc;
+
+		desc->dsa = 0;
+		desc->dta = 0;
+		desc->drt = 0;
+		desc->dcm = 0;
+		desc->dtc = 0;
+
+		//desc->dsa = 0x13422000; //TCSM
+		//desc->dta = 0x13422000; //TCSM
+
+		desc->dsa = src_addr;
+		desc->dta = dst_addr;
+		desc->drt = DRT_AUTO;
+		desc->dcm = DCM_SP_1 | DCM_DP_1 | DCM_TSZ_A | DCM_TIE;
+		//desc->dtc &= ~(0xffffff);
+		desc->dtc = len;
+
+		if (sg->direction == XDMA_MEM_TO_DEV) {
+			desc->dcm |= DCM_SAI;
+			//desc->dcm |= (1 << 24); // destination is NEMC
+			//desc->dcm |= (2 << 26); // source is DDR
+		} else if (sg->direction == XDMA_DEV_TO_MEM) {
+			desc->dcm |= DCM_DAI;
+			desc->dcm |= (1 << 26); // source is NEMC
+		} else {
+			panic("here\n");
+		}
+
+		//desc->dcm |= (1 << 16); //RDIL Recommended data unit size (unit: byte) for triggering device`s DMA request when TSZ is autonomy.
+
+		if (i != (sg_n - 1)) {
+			//desc->dcm |= DCM_LINK;
+
+			reg = ((i + 1) * sizeof(struct pdma_hwdesc));
+			//desc->dtc |= (reg >> 4) << 24;
+		}
+
+		tmp = chan->idx_head;
+		chan->idx_head = xchan_next_desc(xchan, chan->idx_head);
+		//desc->control |= htole32(CONTROL_OWN | CONTROL_GO);
+		xchan_desc_sync_pre(xchan, tmp);
+
+		enq++;
+	}
+
+	if (enq != 0) {
+		chan->enq = enq;
+		printf("ds addr %x\n", ds_addr);
+
+		/* 8 byte descriptor. */
+		WRITE4(sc, PDMA_DCS(chan->index), DCS_DES8);
+		//WRITE4(sc, PDMA_DDA(chan->index),
+		//    xchan->descs[chan->idx_tail].ds_addr);
+		WRITE4(sc, PDMA_DDA(chan->index), ds_addr);
+		WRITE4(sc, PDMA_DDS, (1 << chan->index));
+
+		/* Channel transfer enable. */
+		WRITE4(sc, PDMA_DCS(chan->index), (DCS_DES8 | DCS_CTE));
+	}
+
+	return (0);
+}
+#endif
 
 static int
 pdma_channel_control(device_t dev, xdma_channel_t *xchan, int cmd)
@@ -536,6 +767,11 @@ static device_method_t pdma_methods[] = {
 	DEVMETHOD(xdma_channel_prep_cyclic,	pdma_channel_prep_cyclic),
 	DEVMETHOD(xdma_channel_prep_memcpy,	pdma_channel_prep_memcpy),
 	DEVMETHOD(xdma_channel_control,		pdma_channel_control),
+
+	/* xDMA SG Interface */
+	DEVMETHOD(xdma_channel_prep_sg,		pdma_channel_prep_sg),
+	DEVMETHOD(xdma_channel_submit_sg,	pdma_channel_submit_sg),
+
 #ifdef FDT
 	DEVMETHOD(xdma_ofw_md_data,		pdma_ofw_md_data),
 #endif

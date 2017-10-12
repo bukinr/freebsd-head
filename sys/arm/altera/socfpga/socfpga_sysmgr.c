@@ -226,7 +226,7 @@ static int
 sysmgr_attach(device_t dev)
 {
 	struct sysmgr_softc *sc;
-	//uint32_t reg;
+	uint32_t reg;
 
 	sc = device_get_softc(dev);
 	sc->dev = dev;
@@ -241,11 +241,12 @@ sysmgr_attach(device_t dev)
 	sc->bsh = rman_get_bushandle(sc->res[0]);
 
 	sysmgr_sc = sc;
-	//sysmgr_add_sysctl(sc);
 
+	//sysmgr_add_sysctl(sc);
 	//return (0);
 
-#if 0
+#if 1
+	printf("Disabling bridges\n");
 	WRITE4(sc, FPGAINTF_EN_GLOBAL, 0);
 
 	reg = (FPGA2SDRAM2 | FPGA2SDRAM1 | FPGA2SDRAM0);
@@ -261,9 +262,9 @@ sysmgr_attach(device_t dev)
 
 #endif
 
-	//rstmgr_a10_reset();
+	rstmgr_a10_reset();
 
-#if 0
+#if 1
 	WRITE4(sc, NOC_TIMEOUT, 0);
 #endif
 
