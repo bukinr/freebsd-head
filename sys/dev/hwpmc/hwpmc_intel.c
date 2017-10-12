@@ -214,6 +214,11 @@ pmc_intel_initialize(void)
 			nclasses = 3;
 			break;
 		}
+		case 0x8E:
+		case 0x9E:
+			cputype = PMC_CPU_INTEL_KABYLAKE;
+			nclasses = 3 + 1;
+			break;
 		break;
 #if	defined(__i386__) || defined(__amd64__)
 	case 0xF00:		/* P4 */
@@ -250,6 +255,7 @@ pmc_intel_initialize(void)
 	case PMC_CPU_INTEL_BROADWELL_XEON:
 	case PMC_CPU_INTEL_SKYLAKE_XEON:
 	case PMC_CPU_INTEL_SKYLAKE:
+	case PMC_CPU_INTEL_KABYLAKE:
 	case PMC_CPU_INTEL_CORE:
 	case PMC_CPU_INTEL_CORE2:
 	case PMC_CPU_INTEL_CORE2EXTREME:
@@ -347,6 +353,7 @@ pmc_intel_finalize(struct pmc_mdep *md)
 	case PMC_CPU_INTEL_BROADWELL_XEON:
 	case PMC_CPU_INTEL_SKYLAKE_XEON:
 	case PMC_CPU_INTEL_SKYLAKE:
+	case PMC_CPU_INTEL_KABYLAKE:
 	case PMC_CPU_INTEL_CORE:
 	case PMC_CPU_INTEL_CORE2:
 	case PMC_CPU_INTEL_CORE2EXTREME:
