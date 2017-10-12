@@ -1569,6 +1569,7 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 	struct pmc_owner *po;
 	const struct pmc_process *pp;
 	struct proc *p;
+	bool pause_thread;
 
 	sx_slock(&pmc_sx);
 
@@ -1595,6 +1596,8 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 		goto done;
 	}
 
+	pause_thread = 0;
+
 	/*
 	 * Inform sampling PMC owners tracking this process.
 	 */
@@ -1605,14 +1608,22 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 		    PMC_TO_MODE(pm) == PMC_MODE_TT)
 			pmclog_process_map_in(pm->pm_owner,
 			    pid, pkm->pm_address, fullpath);
+		if (PMC_TO_MODE(pm) == PMC_MODE_TT)
+			pause_thread = 1;
 	}
 
-	PROC_LOCK(td->td_proc);
-	PROC_SLOCK(td->td_proc);
+	if (pause_thread) {
+		PROC_LOCK(td->td_proc);
+		PROC_SLOCK(td->td_proc);
+	}
+
 	sx_sunlock(&pmc_sx);
-	thread_suspend_switch(td, td->td_proc);
-	PROC_SUNLOCK(td->td_proc);
-	PROC_UNLOCK(td->td_proc);
+
+	if (pause_thread) {
+		thread_suspend_switch(td, td->td_proc);
+		PROC_SUNLOCK(td->td_proc);
+		PROC_UNLOCK(td->td_proc);
+	}
 
   done:
 	if (freepath)
