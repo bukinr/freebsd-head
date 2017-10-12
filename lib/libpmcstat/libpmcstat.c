@@ -81,19 +81,19 @@ pmcstat_name_to_addr(struct pmcstat_process *pp, const char *pi_name,
 	if (pp == NULL)
 		return (NULL);
 
-	printf("%s: 1\n", __func__);
+	//printf("%s: 1\n", __func__);
 
 	TAILQ_FOREACH(pcm, &pp->pp_map, ppm_next) {
-		printf("%s: 1 1\n", __func__);
-		
+		//printf("%s: 1 1\n", __func__);
+
 		image = pcm->ppm_image;
-		printf("%s: 1 2\n", __func__);
+		//printf("%s: 1 2\n", __func__);
 		//printf("IMAGE name %s\n", pmcstat_string_unintern(image->pi_name));
 		if (image->pi_name == NULL)
 			continue;
-		printf("%s: 1 3\n", __func__);
+		//printf("%s: 1 3\n", __func__);
 		name1 = pmcstat_string_unintern(image->pi_name);
-		printf("%s: 1 4\n", __func__);
+		//printf("%s: 1 4\n", __func__);
 		if (strcmp(name1, pi_name) == 0) {
 			//printf("IMAGE name %s\n", pmcstat_string_unintern(image->pi_name));
 			found = 1;
@@ -101,26 +101,26 @@ pmcstat_name_to_addr(struct pmcstat_process *pp, const char *pi_name,
 		}
 	}
 
-	printf("%s: 2\n", __func__);
+	//printf("%s: 2\n", __func__);
 
 	if (!found) {
 		printf("IMAGE not found\n");
 		return (0);
 	}
 
-	printf("IMAGE FOUND, symcount %zu\n", image->pi_symcount);
+	//printf("IMAGE FOUND, symcount %zu\n", image->pi_symcount);
 
 	if (image->pi_symbols == NULL)
 		return (NULL);
 
 	found = 0;
 
-	printf("%s: 3\n", __func__);
+	//printf("%s: 3\n", __func__);
 
 	for (i = 0; i < image->pi_symcount; i++) {
 		sym = &image->pi_symbols[i];
 		name2 = pmcstat_string_unintern(sym->ps_name);
-		printf("SYM NAME %s\n", pmcstat_string_unintern(sym->ps_name));
+		//printf("SYM NAME %s\n", pmcstat_string_unintern(sym->ps_name));
 		if (strcmp(name2, name) == 0) {
 			found = 1;
 			break;
@@ -133,10 +133,9 @@ pmcstat_name_to_addr(struct pmcstat_process *pp, const char *pi_name,
 	//if (image->pi_vaddr == 0)
 	//	image->pi_vaddr = 0xffffffff82c07000;
 
-	printf("%s: 4\n", __func__);
-
-	printf("%s: IMAGE pi_vaddr %lx, pcm->ppm_lowpc %lx sym->ps_start %lx\n",
-	    __func__, image->pi_vaddr, pcm->ppm_lowpc, sym->ps_start);
+	//printf("%s: 4\n", __func__);
+	//printf("%s: IMAGE pi_vaddr %lx, pcm->ppm_lowpc %lx sym->ps_start %lx\n",
+	//   __func__, image->pi_vaddr, pcm->ppm_lowpc, sym->ps_start);
 	*addr_start = (image->pi_vaddr - image->pi_start + pcm->ppm_lowpc + sym->ps_start);
 	*addr_end = (image->pi_vaddr - image->pi_start + pcm->ppm_lowpc + sym->ps_end);
 
@@ -234,31 +233,33 @@ pmcstat_image_add_symbols(struct pmcstat_image *image, Elf *e,
 	 */
 	symptr += image->pi_symcount;
 
+#if 0
 	printf("nshmsyms %ld\n", nshsyms);
+#endif
 
 	for (n = newsyms = 0; n < nshsyms; n++) {
 		if (gelf_getsym(data, (int) n, &sym) != &sym) {
-			printf("%s: err 1\n", __func__);
+			//printf("%s: err 1\n", __func__);
 			return;
 		}
 		if (GELF_ST_TYPE(sym.st_info) != STT_FUNC) {
-			printf("%s: err 2\n", __func__);
+			//printf("%s: err 2\n", __func__);
 			continue;
 		}
 
 		if (sym.st_shndx == STN_UNDEF) {
-			printf("%s: err 3\n", __func__);
+			//printf("%s: err 3\n", __func__);
 			continue;
 		}
 
 		if (!firsttime && pmcstat_symbol_search(image, sym.st_value)) {
-			printf("%s: err 4\n", __func__);
+			//printf("%s: err 4\n", __func__);
 			continue; /* We've seen this symbol already. */
 		}
 
 		if ((fnname = elf_strptr(e, sh->sh_link, sym.st_name))
 		    == NULL) {
-			printf("%s: err 5\n", __func__);
+			//printf("%s: err 5\n", __func__);
 			continue;
 		}
 #ifdef __arm__
@@ -274,8 +275,10 @@ pmcstat_image_add_symbols(struct pmcstat_image *image, Elf *e,
 		symptr->ps_start = sym.st_value - image->pi_vaddr;
 		symptr->ps_end   = symptr->ps_start + sym.st_size;
 
+#if 0
 		printf("start %lx end %lx name %s image->pi_vaddr %lx\n",
 		    symptr->ps_start, symptr->ps_end, fnname, image->pi_vaddr);
+#endif
 
 		symptr++;
 		newsyms++;
