@@ -219,6 +219,7 @@ pmc_intel_initialize(void)
 			break;
 		}
 		case 0x8E:
+		case 0x9E:
 			cputype = PMC_CPU_INTEL_KABYLAKE;
 			nclasses = 3 + 1;
 			break;
@@ -259,6 +260,7 @@ pmc_intel_initialize(void)
 	case PMC_CPU_INTEL_BROADWELL_XEON:
 	case PMC_CPU_INTEL_SKYLAKE_XEON:
 	case PMC_CPU_INTEL_SKYLAKE:
+	case PMC_CPU_INTEL_KABYLAKE:
 	case PMC_CPU_INTEL_CORE:
 	case PMC_CPU_INTEL_CORE2:
 	case PMC_CPU_INTEL_CORE2EXTREME:
@@ -272,7 +274,6 @@ pmc_intel_initialize(void)
 	case PMC_CPU_INTEL_IVYBRIDGE_XEON:
 	case PMC_CPU_INTEL_HASWELL:
 	case PMC_CPU_INTEL_HASWELL_XEON:
-	case PMC_CPU_INTEL_KABYLAKE:
 		error = pmc_core_initialize(pmc_mdep, ncpus, verov);
 		break;
 
