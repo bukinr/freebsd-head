@@ -163,7 +163,7 @@ symbol_lookup(struct mtrace_data *mdata)
 			printf("cpu%d: 0x%lx %s\n", mdata->cpu,
 			    ip,
 			    pmcstat_string_unintern(sym->ps_name));
-#if 1
+#if 0
 		else
 			printf("cpu%d: 0x%lx not found, image->pi_vaddr %lx, image->pi_start %lx, map->ppm_lowpc %lx, pc %lx, newpc %lx\n",
 			    mdata->cpu, ip, image->pi_vaddr, image->pi_start, map->ppm_lowpc, mdata->ip, newpc);
