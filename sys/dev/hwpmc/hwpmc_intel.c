@@ -217,7 +217,7 @@ pmc_intel_initialize(void)
 		case 0x8E:
 		case 0x9E:
 			cputype = PMC_CPU_INTEL_KABYLAKE;
-			nclasses = 3 + 1;
+			nclasses = 3;
 			break;
 		break;
 #if	defined(__i386__) || defined(__amd64__)
