@@ -3422,7 +3422,6 @@ pmc_init(void)
 		PMC_MDEP_INIT_INTEL_V2(skylake_xeon);
 		break;
 	case PMC_CPU_INTEL_KABYLAKE:
-		pmc_class_table[n++] = &pt_class_table_descr;
 		PMC_MDEP_INIT_INTEL_V2(kabylake);
 		break;
 	case PMC_CPU_INTEL_IVYBRIDGE:
