@@ -214,8 +214,8 @@ pmc_intel_initialize(void)
 			nclasses = 3;
 			break;
 		}
-		case 0x8E:
-		case 0x9E:
+		case 0x8E:	/* Per Intel document 325462-063US July 2017. */
+		case 0x9E:	/* Per Intel document 325462-063US July 2017. */
 			cputype = PMC_CPU_INTEL_KABYLAKE;
 			nclasses = 3;
 			break;
