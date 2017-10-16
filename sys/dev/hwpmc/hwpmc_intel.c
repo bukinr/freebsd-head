@@ -80,8 +80,6 @@ pmc_intel_initialize(void)
 	enum pmc_cputype cputype;
 	int error, model, nclasses, ncpus, stepping, verov;
 
-	printf("%s\n", __func__);
-
 	KASSERT(cpu_vendor_id == CPU_VENDOR_INTEL,
 	    ("[intel,%d] Initializing non-intel processor", __LINE__));
 
@@ -94,8 +92,6 @@ pmc_intel_initialize(void)
 	model = ((cpu_id & 0xF0000) >> 12) | ((cpu_id & 0xF0) >> 4);
 	stepping = cpu_id & 0xF;
 
-	printf("cpuid %x\n", cpu_id & 0xF00);
-	printf("model %x\n", model);
 	switch (cpu_id & 0xF00) {
 #if	defined(__i386__)
 	case 0x500:		/* Pentium family processors */
@@ -218,8 +214,8 @@ pmc_intel_initialize(void)
 			nclasses = 3;
 			break;
 		}
-		case 0x8E:
-		case 0x9E:
+		case 0x8E:	/* Per Intel document 325462-063US July 2017. */
+		case 0x9E:	/* Per Intel document 325462-063US July 2017. */
 			cputype = PMC_CPU_INTEL_KABYLAKE;
 			nclasses = 4;
 			break;
