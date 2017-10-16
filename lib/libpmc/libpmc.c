@@ -243,7 +243,8 @@ static const struct pmc_event_descr skylake_xeon_event_table[] =
 
 static const struct pmc_event_descr kabylake_event_table[] =
 {
-	__PMC_EV_ALIAS_KABYLAKE()
+	/* Kabylake events are similar to Skylake */
+	__PMC_EV_ALIAS_SKYLAKE()
 };
 
 static const struct pmc_event_descr ivybridge_event_table[] =

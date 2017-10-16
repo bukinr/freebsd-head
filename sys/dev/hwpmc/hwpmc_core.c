@@ -2285,6 +2285,7 @@ iap_allocate_pmc(int cpu, int ri, struct pmc *pm,
 		break;
 	case PMC_CPU_INTEL_SKYLAKE:
 	case PMC_CPU_INTEL_SKYLAKE_XEON:
+	case PMC_CPU_INTEL_KABYLAKE:
 	case PMC_CPU_INTEL_BROADWELL:
 	case PMC_CPU_INTEL_BROADWELL_XEON:
 	case PMC_CPU_INTEL_SANDYBRIDGE:
@@ -2323,6 +2324,7 @@ iap_allocate_pmc(int cpu, int ri, struct pmc *pm,
 		cpuflag = IAP_F_SLX;
 		break;
 	case PMC_CPU_INTEL_SKYLAKE:
+	case PMC_CPU_INTEL_KABYLAKE:
 		cpuflag = IAP_F_SL;
 		break;
 	case PMC_CPU_INTEL_BROADWELL_XEON:

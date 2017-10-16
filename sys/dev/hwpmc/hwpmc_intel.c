@@ -183,12 +183,8 @@ pmc_intel_initialize(void)
 			cputype = PMC_CPU_INTEL_IVYBRIDGE_XEON;
 			nclasses = 3;
 			break;
-			/* Skylake */
 		case 0x4e:
 		case 0x5e:
-			/* Kabylake */
-		case 0x8E:	/* Per Intel document 325462-063US July 2017. */
-		case 0x9E:	/* Per Intel document 325462-063US July 2017. */
 			cputype = PMC_CPU_INTEL_SKYLAKE;
 			nclasses = 3;
 			break;
@@ -225,7 +221,7 @@ pmc_intel_initialize(void)
 		case 0x8E:
 		case 0x9E:
 			cputype = PMC_CPU_INTEL_KABYLAKE;
-			nclasses = 3 + 1;
+			nclasses = 4;
 			break;
 		break;
 #if	defined(__i386__) || defined(__amd64__)
@@ -321,16 +317,10 @@ pmc_intel_initialize(void)
 		goto error;
 	}
 
-	error = pmc_pt_initialize(pmc_mdep, ncpus);
-	if (error) {
-		pmc_pt_finalize(pmc_mdep);
-		goto error;
-	}
-
+#if defined(__i386__) || defined(__amd64__)
 	/*
 	 * Init the uncore class.
 	 */
-#if	defined(__i386__) || defined(__amd64__)
 	switch (cputype) {
 		/*
 		 * Intel Corei7 and Westmere processors.
@@ -345,7 +335,19 @@ pmc_intel_initialize(void)
 	default:
 		break;
 	}
+
+	/*
+	 * Intel Processor Tracing (PT).
+	 */
+	if (cputype == PMC_CPU_INTEL_KABYLAKE) {
+		error = pmc_pt_initialize(pmc_mdep, ncpus);
+		if (error) {
+			pmc_pt_finalize(pmc_mdep);
+			goto error;
+		}
+	}
 #endif
+
   error:
 	if (error) {
 		pmc_mdep_free(pmc_mdep);
@@ -368,6 +370,7 @@ pmc_intel_finalize(struct pmc_mdep *md)
 	case PMC_CPU_INTEL_BROADWELL_XEON:
 	case PMC_CPU_INTEL_SKYLAKE_XEON:
 	case PMC_CPU_INTEL_SKYLAKE:
+	case PMC_CPU_INTEL_KABYLAKE:
 	case PMC_CPU_INTEL_CORE:
 	case PMC_CPU_INTEL_CORE2:
 	case PMC_CPU_INTEL_CORE2EXTREME:
@@ -381,7 +384,6 @@ pmc_intel_finalize(struct pmc_mdep *md)
 	case PMC_CPU_INTEL_WESTMERE_EX:
 	case PMC_CPU_INTEL_SANDYBRIDGE_XEON:
 	case PMC_CPU_INTEL_IVYBRIDGE_XEON:
-	case PMC_CPU_INTEL_KABYLAKE:
 		pmc_core_finalize(md);
 		break;
 
@@ -405,10 +407,10 @@ pmc_intel_finalize(struct pmc_mdep *md)
 		KASSERT(0, ("[intel,%d] unknown CPU type", __LINE__));
 	}
 
+#if defined(__i386__) || defined(__amd64__)
 	/*
 	 * Uncore.
 	 */
-#if	defined(__i386__) || defined(__amd64__)
 	switch (md->pmd_cputype) {
 	case PMC_CPU_INTEL_BROADWELL:
 	case PMC_CPU_INTEL_COREI7:
@@ -420,5 +422,11 @@ pmc_intel_finalize(struct pmc_mdep *md)
 	default:
 		break;
 	}
+
+	/*
+	 * Intel Processor Tracing (PT).
+	 */
+	if (md->pmd_cputype == PMC_CPU_INTEL_KABYLAKE)
+		pmc_pt_finalize(md);
 #endif
 }
