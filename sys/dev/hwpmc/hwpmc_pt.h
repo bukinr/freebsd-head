@@ -65,13 +65,14 @@ struct topa_entry {
 };
 
 struct pt_buffer {
-	uint64_t			*topa_hw;
-	struct topa_entry		*topa_sw;
-	int				topa_n;
-	uint64_t			pt_output_base;
-	uint64_t			pt_output_mask_ptrs;
-	uint64_t			cycle;
+	uint64_t		*topa_hw;
+	struct topa_entry	*topa_sw;
+	int			topa_n;
+	uint64_t		pt_output_base;
+	uint64_t		pt_output_mask_ptrs;
+	uint64_t		cycle;
 
+	uint32_t		flags;
 	uint64_t		addra[PT_NADDR];
 	uint64_t		addrb[PT_NADDR];
 	uint32_t		addrn;
@@ -81,10 +82,6 @@ struct pt_buffer {
 struct pmc_md_pt_pmc {
 	struct pt_buffer	pt_buffers[4];	/* TODO */
 	uint64_t		cr3;
-	uint32_t		flags;
-	uint64_t		addra[PT_NADDR];
-	uint64_t		addrb[PT_NADDR];
-	uint32_t		addrn;
 };
 
 /*

@@ -120,12 +120,14 @@ struct pt_cpu {
 static struct pt_cpu **pt_pcpu;
 
 static int
-pt_buf_allocate(struct pmc *pm, uint32_t cpu)
+pt_buf_allocate(uint32_t cpu, struct pmc *pm, const struct pmc_op_pmcallocate *a)
 {
+	const struct pmc_md_pt_op_pmcallocate *pm_pta;
 	struct pmc_md_pt_pmc *pm_pt;
 	struct pt_buffer *pt_buf;
 	(void) cpu;
 	int error;
+	int i;
 
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pt_buf = &pm_pt->pt_buffers[cpu];
@@ -141,6 +143,19 @@ pt_buf_allocate(struct pmc *pm, uint32_t cpu)
 	pt_buf->pt_output_base = (uint64_t)vtophys(pt_buf->topa_hw);
 	pt_buf->pt_output_mask_ptrs = 0x7f;
 
+	pm_pta = (const struct pmc_md_pt_op_pmcallocate *)&a->pm_md.pm_pt;
+
+	pt_buf->flags = pm_pta->flags;
+	pt_buf->addrn = pm_pta->addrn;
+
+	for (i = 0; i < PT_NADDR; i++) {
+		pt_buf->addra[i] = pm_pta->addra[i];
+		pt_buf->addrb[i] = pm_pta->addrb[i];
+	}
+
+	if (pm_pta->flags & INTEL_PT_FLAG_BRANCHES)
+		pt_buf->flags |= INTEL_PT_FLAG_BRANCHES;
+
 	return (0);
 }
 
@@ -148,14 +163,16 @@ static int
 pt_allocate_pmc(int cpu, int ri, struct pmc *pm,
     const struct pmc_op_pmcallocate *a)
 {
-	const struct pmc_md_pt_op_pmcallocate *pm_pta;
 	struct pmc_md_pt_pmc *pm_pt;
 	struct pt_buffer *pt_buf;
-	(void) cpu;
 	int i;
 
-	/* Sanity checks */
+	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
+	    ("[pt,%d] illegal CPU value %d", __LINE__, cpu));
+	KASSERT(ri >= 0 && ri < PT_NPMCS,
+	    ("[pt,%d] illegal row index %d", __LINE__, ri));
 
+	/* Sanity checks */
 	if (a->pm_class != PMC_CLASS_PT)
 		return (EINVAL);
 
@@ -172,38 +189,19 @@ pt_allocate_pmc(int cpu, int ri, struct pmc *pm,
 	    a->pm_mode != PMC_MODE_TT)
 		return (EINVAL);
 
-	//wrmsr(MSR_IA32_RTIT_CTL, 0);
-	//wrmsr(MSR_IA32_RTIT_STATUS, 0);
-
-	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
-	    ("[pt,%d] illegal CPU value %d", __LINE__, cpu));
-	KASSERT(ri >= 0 && ri < PT_NPMCS,
-	    ("[pt,%d] illegal row index %d", __LINE__, ri));
-
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pt_buf = &pm_pt->pt_buffers[cpu];
 
-	printf("%s: cpu %d (curcpu %d)\n", __func__, cpu, PCPU_GET(cpuid));
-	printf("pm_mode %d\n", a->pm_mode);
-
-	pm_pta = (const struct pmc_md_pt_op_pmcallocate *)&a->pm_md.pm_pt;
-	if (pm_pta->flags & INTEL_PT_FLAG_BRANCHES)
-		pm_pt->flags |= INTEL_PT_FLAG_BRANCHES;
-
-	pm_pt->flags = pm_pta->flags;
-	pm_pt->addrn = pm_pta->addrn;
-	for (i = 0; i < PT_NADDR; i++) {
-		pm_pt->addra[i] = pm_pta->addra[i];
-		pm_pt->addrb[i] = pm_pta->addrb[i];
-	}
+	//printf("%s: cpu %d (curcpu %d)\n", __func__, cpu, PCPU_GET(cpuid));
+	//printf("pm_mode %d\n", a->pm_mode);
 
 	if (a->pm_mode == PMC_MODE_TT)
 		for (i = 0; i < pmc_cpu_max(); i++) {
-			if (pt_buf_allocate(pm, i))
+			if (pt_buf_allocate(i, pm, a))
 				return (EINVAL);
 		}
 	else
-		if (pt_buf_allocate(pm, cpu))
+		if (pt_buf_allocate(cpu, pm, a))
 			return (EINVAL);
 
 	return (0);
@@ -294,16 +292,16 @@ pt_configure(int cpu, struct pmc *pm)
 	}
 
 	/* Enable FUP, TIP, TIP.PGE, TIP.PGD, TNT, MODE.Exec and MODE.TSX packets */
-	if (pm_pt->flags & INTEL_PT_FLAG_BRANCHES)
+	if (pt_buf->flags & INTEL_PT_FLAG_BRANCHES)
 		reg |= RTIT_CTL_BRANCHEN;
 
-	if (pm_pt->flags & INTEL_PT_FLAG_TSC)
+	if (pt_buf->flags & INTEL_PT_FLAG_TSC)
 		reg |= RTIT_CTL_TSCEN;
 
-	if (pm_pt->flags & INTEL_PT_FLAG_MTC)
+	if (pt_buf->flags & INTEL_PT_FLAG_MTC)
 		reg |= RTIT_CTL_MTCEN;
 
-	if (pm_pt->flags & INTEL_PT_FLAG_DISRETC)
+	if (pt_buf->flags & INTEL_PT_FLAG_DISRETC)
 		reg |= RTIT_CTL_DISRETC;
 
 	//reg |= RTIT_CTL_MTC_FREQ(6);
