@@ -120,6 +120,31 @@ struct pt_cpu {
 static struct pt_cpu **pt_pcpu;
 
 static int
+pt_buf_allocate(struct pmc *pm, uint32_t cpu)
+{
+	struct pmc_md_pt_pmc *pm_pt;
+	struct pt_buffer *pt_buf;
+	(void) cpu;
+	int error;
+
+	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
+	pt_buf = &pm_pt->pt_buffers[cpu];
+
+	error = pt_buffer_allocate(pt_buf, 256 * 1024 * 1024);
+
+	KASSERT(error == 0, ("Can't alloc buf\n"));
+	if (error != 0) {
+		printf("%s: can't allocate buffers\n", __func__);
+		return (EINVAL);
+	}
+
+	pt_buf->pt_output_base = (uint64_t)vtophys(pt_buf->topa_hw);
+	pt_buf->pt_output_mask_ptrs = 0x7f;
+
+	return (0);
+}
+
+static int
 pt_allocate_pmc(int cpu, int ri, struct pmc *pm,
     const struct pmc_op_pmcallocate *a)
 {
@@ -127,10 +152,39 @@ pt_allocate_pmc(int cpu, int ri, struct pmc *pm,
 	struct pmc_md_pt_pmc *pm_pt;
 	struct pt_buffer *pt_buf;
 	(void) cpu;
-	int error;
 	int i;
 
+	/* Sanity checks */
+
+	if (a->pm_class != PMC_CLASS_PT)
+		return (EINVAL);
+
+	if (a->pm_ev != PMC_EV_PT_PT)
+		return (EINVAL);
+
+	if ((pm->pm_caps & PT_CAPS) == 0)
+		return (EINVAL);
+
+	if ((pm->pm_caps & ~PT_CAPS) != 0)
+		return (EPERM);
+
+	if (a->pm_mode != PMC_MODE_ST &&
+	    a->pm_mode != PMC_MODE_TT)
+		return (EINVAL);
+
+	//wrmsr(MSR_IA32_RTIT_CTL, 0);
+	//wrmsr(MSR_IA32_RTIT_STATUS, 0);
+
+	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
+	    ("[pt,%d] illegal CPU value %d", __LINE__, cpu));
+	KASSERT(ri >= 0 && ri < PT_NPMCS,
+	    ("[pt,%d] illegal row index %d", __LINE__, ri));
+
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
+	pt_buf = &pm_pt->pt_buffers[cpu];
+
+	printf("%s: cpu %d (curcpu %d)\n", __func__, cpu, PCPU_GET(cpuid));
+	printf("pm_mode %d\n", a->pm_mode);
 
 	pm_pta = (const struct pmc_md_pt_op_pmcallocate *)&a->pm_md.pm_pt;
 	if (pm_pta->flags & INTEL_PT_FLAG_BRANCHES)
@@ -143,47 +197,14 @@ pt_allocate_pmc(int cpu, int ri, struct pmc *pm,
 		pm_pt->addrb[i] = pm_pta->addrb[i];
 	}
 
-	for (i = 0; i < 4; i++) {
-		pt_buf = &pm_pt->pt_buffers[i];
-		error = pt_buffer_allocate(pt_buf, 256 * 1024 * 1024);
-		KASSERT(error == 0, ("Can't alloc buf\n"));
-		if (error != 0) {
-			printf("%s: can't allocate buffers\n", __func__);
-			return (EINVAL);
+	if (a->pm_mode == PMC_MODE_TT)
+		for (i = 0; i < pmc_cpu_max(); i++) {
+			if (pt_buf_allocate(pm, i))
+				return (EINVAL);
 		}
-		pt_buf->pt_output_base = (uint64_t)vtophys(pt_buf->topa_hw);
-		pt_buf->pt_output_mask_ptrs = 0x7f;
-	}
-
-	pt_buf = &pm_pt->pt_buffers[cpu];
-
-	printf("%s: cpu %d (curcpu %d)\n", __func__, cpu, PCPU_GET(cpuid));
-
-	wrmsr(MSR_IA32_RTIT_CTL, 0);
-	wrmsr(MSR_IA32_RTIT_STATUS, 0);
-
-	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
-	    ("[pt,%d] illegal CPU value %d", __LINE__, cpu));
-	KASSERT(ri >= 0 && ri < PT_NPMCS,
-	    ("[pt,%d] illegal row index %d", __LINE__, ri));
-
-	if (a->pm_class != PMC_CLASS_PT)
-		return (EINVAL);
-
-	if ((pm->pm_caps & PT_CAPS) == 0)
-		return (EINVAL);
-
-	if ((pm->pm_caps & ~PT_CAPS) != 0)
-		return (EPERM);
-
-	printf("pm_mode %d\n", a->pm_mode);
-
-	if (a->pm_ev != PMC_EV_PT_PT)
-		return (EINVAL);
-
-	if (a->pm_mode != PMC_MODE_ST &&
-	    a->pm_mode != PMC_MODE_TT)
-		return (EINVAL);
+	else
+		if (pt_buf_allocate(pm, cpu))
+			return (EINVAL);
 
 	return (0);
 }
@@ -819,6 +840,7 @@ static int
 pt_release_pmc(int cpu, int ri, struct pmc *pm)
 {
 	struct pmc_md_pt_pmc *pm_pt;
+	enum pmc_mode mode;
 	struct pmc_hw *phw;
 	(void) pm;
 	int i;
@@ -843,8 +865,13 @@ pt_release_pmc(int cpu, int ri, struct pmc *pm)
 	printf("%s: cpu %d, output base ptr %lx\n",
 	    __func__, cpu, rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS));
 
-	for (i = 0; i < 4; i++)
-		pt_buffer_deallocate(&pm_pt->pt_buffers[i]);
+	mode = PMC_TO_MODE(pm);
+	if (mode == PMC_MODE_TT) {
+		for (i = 0; i < pmc_cpu_max(); i++)
+			pt_buffer_deallocate(&pm_pt->pt_buffers[i]);
+	} else {
+		pt_buffer_deallocate(&pm_pt->pt_buffers[cpu]);
+	}
 
 	/*
 	 * Nothing to do.
