@@ -125,7 +125,6 @@ pt_buf_allocate(uint32_t cpu, struct pmc *pm, const struct pmc_op_pmcallocate *a
 	const struct pmc_md_pt_op_pmcallocate *pm_pta;
 	struct pmc_md_pt_pmc *pm_pt;
 	struct pt_buffer *pt_buf;
-	(void) cpu;
 	int error;
 	int i;
 
@@ -419,7 +418,6 @@ pt_get_config(int cpu, int ri, struct pmc **ppm)
 {
 	struct pmc_hw *phw;
 	struct pt_cpu *pt_pc;
-	(void) ri;
 
 	//printf("%s\n", __func__);
 
@@ -441,7 +439,6 @@ pt_get_config(int cpu, int ri, struct pmc **ppm)
 static int
 pt_get_msr(int ri, uint32_t *msr)
 {
-	(void) ri;
 
 	printf("%s\n", __func__);
 
@@ -742,7 +739,6 @@ pt_read_trace(int cpu, int ri, struct pmc *pm,
     pmc_value_t *cycle, pmc_value_t *voffset)
 {
 	struct pmc_md_pt_pmc *pm_pt;
-	//struct pt_cpu *pt_pc;
 	struct pt_buffer *pt_buf;
 	uint64_t offset;
 	uint64_t reg;
@@ -788,7 +784,6 @@ pt_release_pmc(int cpu, int ri, struct pmc *pm)
 	struct pmc_md_pt_pmc *pm_pt;
 	enum pmc_mode mode;
 	struct pmc_hw *phw;
-	(void) pm;
 	int i;
 
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
@@ -834,27 +829,23 @@ pt_start_pmc(int cpu, int ri)
 	struct pmc_hw *phw;
 	struct pmc *pm;
 	uint64_t reg;
-	(void) cpu;
 
 	printf("%s: cpu %d (curcpu %d)\n", __func__, cpu, PCPU_GET(cpuid));
 
 	pt_pc = pt_pcpu[cpu];
-
 	phw = &pt_pc->tc_hw;
 	if (phw == NULL || phw->phw_pmc == NULL)
 		return (-1);
-
-	pm = phw->phw_pmc;
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
 	    ("[pt,%d] illegal CPU value %d", __LINE__, cpu));
 	KASSERT(ri == 0, ("[pt,%d] illegal row-index %d", __LINE__, ri));
 
+	pm = phw->phw_pmc;
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pt_buf = &pm_pt->pt_buffers[cpu];
 
 	wrmsr(MSR_IA32_RTIT_CR3_MATCH, pm_pt->cr3);
-	//wrmsr(MSR_IA32_RTIT_CR3_MATCH, 0x100000);
 
 	/* Enable tracing */
 	reg = rdmsr(MSR_IA32_RTIT_CTL);
@@ -862,8 +853,6 @@ pt_start_pmc(int cpu, int ri)
 	wrmsr(MSR_IA32_RTIT_CTL, reg);
 
 	printf("%s: ctl %lx\n", __func__, reg);
-
-	//lapic_enable_pmc();
 
 	return (0);	/* PTs are always running. */
 }
@@ -877,25 +866,19 @@ pt_stop_pmc(int cpu, int ri)
 	struct pt_buffer *pt_buf;
 	struct pmc *pm;
 	uint64_t reg;
-	(void) cpu;
-	(void) ri;
 
 	pt_pc = pt_pcpu[cpu];
-
 	phw = &pt_pc->tc_hw;
 	if (phw == NULL || phw->phw_pmc == NULL)
 		return (-1);
 
 	pm = phw->phw_pmc;
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
-
 	pt_buf = &pm_pt->pt_buffers[cpu];
-
 	pt_buf->pt_output_base = rdmsr(MSR_IA32_RTIT_OUTPUT_BASE);
 	pt_buf->pt_output_mask_ptrs = rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS);
 
 	printf("%s: cpu %d (curcpu %d)\n", __func__, cpu, PCPU_GET(cpuid));
-
 	printf("%s: cpu %d, output base %lx\n",
 	    __func__, cpu, rdmsr(MSR_IA32_RTIT_OUTPUT_BASE));
 	printf("%s: cpu %d, output base ptr %lx\n",
@@ -987,9 +970,6 @@ pmc_pt_finalize(struct pmc_mdep *md)
 
 	KASSERT(md->pmd_classdep[PMC_MDEP_CLASS_INDEX_PT].pcd_class ==
 	    PMC_CLASS_PT, ("[pt,%d] class mismatch", __LINE__));
-
-#else
-	(void) md;
 #endif
 
 	free(pt_pcpu, M_PMC);
