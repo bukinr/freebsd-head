@@ -357,11 +357,9 @@ pt_config_pmc(int cpu, int ri, struct pmc *pm)
 	pt_pc = pt_pcpu[cpu];
 	phw = &pt_pc->tc_hw;
 
-#if 0
 	KASSERT(pm == NULL || phw->phw_pmc == NULL,
 	    ("[pt,%d] pm=%p phw->pm=%p hwpmc not unconfigured", __LINE__,
 	    pm, phw->phw_pmc));
-#endif
 
 	phw->phw_pmc = pm;
 	if (pm != NULL) {
@@ -623,15 +621,6 @@ pt_pcpu_init(struct pmc_mdep *md, int cpu)
 
 	pt_pcpu[cpu] = pt_pc;
 
-#if 0
-	int error;
-	error = pt_buffer_allocate(pt_pc, 256 * 1024 * 1024);
-	if (error != 0) {
-		printf("%s: can't allocate buffers\n", __func__);
-		return (-1);
-	}
-#endif
-
 	ri = md->pmd_classdep[PMC_MDEP_CLASS_INDEX_PT].pcd_ri;
 
 	KASSERT(pmc_pcpu, ("[pt,%d] null generic pcpu", __LINE__));
@@ -661,10 +650,6 @@ pt_pcpu_fini(struct pmc_mdep *md, int cpu)
 	KASSERT(pt_pcpu[cpu] != NULL, ("[pt,%d] null pcpu", __LINE__));
 
 	pt_pc = pt_pcpu[cpu];
-
-#if 0
-	pt_buffer_deallocate(pt_pc);
-#endif
 
 	free(pt_pcpu[cpu], M_PMC);
 	pt_pcpu[cpu] = NULL;
