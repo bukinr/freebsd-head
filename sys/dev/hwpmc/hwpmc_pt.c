@@ -115,6 +115,7 @@ struct pt_cpu {
 	uint32_t			s0_ecx;
 	uint32_t			s1_eax;
 	uint32_t			s1_ebx;
+	struct pmc			*pm_mmap;
 };
 
 static struct pt_cpu **pt_pcpu;
@@ -543,19 +544,12 @@ pmc_pt_buffer_get_page(int cpu, vm_ooffset_t offset, vm_paddr_t *paddr)
 {
 	struct pmc_md_pt_pmc *pm_pt;
 	struct pt_cpu *pt_pc;
-	struct pmc_hw *phw;
 	struct pmc *pm;
 	struct pt_buffer *pt_buf;
 	int i;
 
 	pt_pc = pt_pcpu[cpu];
-	phw = &pt_pc->tc_hw;
-	if (phw == NULL) {
-		printf("%s: FAIL: phw is null\n", __func__);
-		return (-1);
-	}
-
-	pm = phw->phw_pmc;
+	pm = pt_pc->pm_mmap;
 	if (pm == NULL) {
 		printf("%s: FAIL: pm is null\n", __func__);
 		return (-1);
@@ -740,9 +734,13 @@ pt_read_trace(int cpu, int ri, struct pmc *pm,
 {
 	struct pmc_md_pt_pmc *pm_pt;
 	struct pt_buffer *pt_buf;
+	struct pt_cpu *pt_pc;
 	uint64_t offset;
 	uint64_t reg;
 	uint32_t idx;
+
+	pt_pc = pt_pcpu[cpu];
+	pt_pc->pm_mmap = pm;
 
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pt_buf = &pm_pt->pt_buffers[cpu];

@@ -3972,7 +3972,7 @@ pmc_syscall_handler(struct thread *td, void *syscall_args)
 
 		printf("%s: PMC_OP_TRACE_CONFIG ranges 3\n", __func__);
 
-		/* Can't read a PMC that hasn't been started. */
+		/* Can't proceed with PMC that hasn't been started. */
 		if (pm->pm_state != PMC_STATE_ALLOCATED &&
 		    pm->pm_state != PMC_STATE_STOPPED &&
 		    pm->pm_state != PMC_STATE_RUNNING) {
