@@ -1319,8 +1319,7 @@ pmc_process_csw_in(struct thread *td)
 		 * counting mode PMCs use a per-pmc value that is
 		 * inherited across descendants.
 		 */
-		if (PMC_TO_MODE(pm) == PMC_MODE_TS ||
-		    PMC_TO_MODE(pm) == PMC_MODE_TT) {
+		if (PMC_TO_MODE(pm) == PMC_MODE_TS) {
 			mtx_pool_lock_spin(pmc_mtxpool, pm);
 
 			/*
@@ -1333,6 +1332,8 @@ pmc_process_csw_in(struct thread *td)
 			    pp->pp_pmcs[ri].pp_pmcval;
 			pp->pp_pmcs[ri].pp_pmcval = pm->pm_sc.pm_reloadcount;
 			mtx_pool_unlock_spin(pmc_mtxpool, pm);
+		} else if (PMC_TO_MODE(pm) == PMC_MODE_TT) {
+			/* Nothing */
 		} else {
 			KASSERT(PMC_TO_MODE(pm) == PMC_MODE_TC,
 			    ("[pmc,%d] illegal mode=%d", __LINE__,
@@ -1479,7 +1480,7 @@ pmc_process_csw_out(struct thread *td)
 
 			pcd->pcd_read_pmc(cpu, adjri, &newvalue);
 
-			if (mode == PMC_MODE_TS || mode == PMC_MODE_TT) {
+			if (mode == PMC_MODE_TS) {
 				PMCDBG3(CSW,SWO,1,"cpu=%d ri=%d tmp=%jd (samp)",
 				    cpu, ri, PMC_PCPU_SAVED(cpu,ri) - newvalue);
 
@@ -1501,8 +1502,7 @@ pmc_process_csw_out(struct thread *td)
 				    pm->pm_sc.pm_reloadcount)
 					pp->pp_pmcs[ri].pp_pmcval -=
 					    pm->pm_sc.pm_reloadcount;
-#if 0
-				KASSERT(pp->pp_pmcs[ri].pp_pmcval >= 0 &&
+				KASSERT(pp->pp_pmcs[ri].pp_pmcval > 0 &&
 				    pp->pp_pmcs[ri].pp_pmcval <=
 				    pm->pm_sc.pm_reloadcount,
 				    ("[pmc,%d] pp_pmcval outside of expected "
@@ -1510,9 +1510,9 @@ pmc_process_csw_out(struct thread *td)
 				    "pm_reloadcount=%jx", __LINE__, cpu, ri,
 				    pp->pp_pmcs[ri].pp_pmcval,
 				    pm->pm_sc.pm_reloadcount));
-#endif
 				mtx_pool_unlock_spin(pmc_mtxpool, pm);
-
+			} else if (mode == PMC_MODE_TT) {
+				/* Nothing */
 			} else {
 				tmp = newvalue - PMC_PCPU_SAVED(cpu,ri);
 
@@ -3390,10 +3390,14 @@ pmc_syscall_handler(struct thread *td, void *syscall_args)
 		mode = pa.pm_mode;
 		cpu  = pa.pm_cpu;
 
-		if ((mode != PMC_MODE_SS && mode != PMC_MODE_TS &&
+		if (mode != PMC_MODE_SS && mode != PMC_MODE_TS &&
 		    mode != PMC_MODE_SC && mode != PMC_MODE_TC &&
-		    mode != PMC_MODE_ST && mode != PMC_MODE_TT) ||
-		    (cpu != (u_int) PMC_CPU_ANY && cpu >= pmc_cpu_max())) {
+		    mode != PMC_MODE_ST && mode != PMC_MODE_TT) {
+			error = EINVAL;
+			break;
+		}
+
+		if (cpu != (u_int) PMC_CPU_ANY && cpu >= pmc_cpu_max())) {
 			error = EINVAL;
 			break;
 		}
