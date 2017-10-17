@@ -108,8 +108,6 @@ static struct pt_descr pt_pmcdesc[PT_NPMCS] =
 
 struct pt_cpu {
 	struct pmc_hw			tc_hw;
-	uint8_t				state;
-#define	STATE_ENABLED			(1 << 0)
 	uint32_t			s0_eax;
 	uint32_t			s0_ebx;
 	uint32_t			s0_ecx;
@@ -365,16 +363,13 @@ pt_config_pmc(int cpu, int ri, struct pmc *pm)
 	    pm, phw->phw_pmc));
 #endif
 
+	phw->phw_pmc = pm;
 	if (pm != NULL) {
-		pt_pc->state |= STATE_ENABLED;
-		phw->phw_pmc = pm;
 		error = pt_configure(cpu, pm);
 		if (error != 0) {
 			printf("%s: can't enable PMC\n", __func__);
 			return (error);
 		}
-	} else {
-		pt_pc->state &= ~STATE_ENABLED;
 	}
 
 	return (0);
@@ -429,10 +424,7 @@ pt_get_config(int cpu, int ri, struct pmc **ppm)
 	pt_pc = pt_pcpu[cpu];
 	phw = &pt_pc->tc_hw;
 
-	if (pt_pc->state & STATE_ENABLED)
-		*ppm = phw->phw_pmc;
-	else
-		*ppm = NULL;
+	*ppm = phw->phw_pmc;
 
 	return (0);
 }
