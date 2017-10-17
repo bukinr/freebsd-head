@@ -3397,7 +3397,7 @@ pmc_syscall_handler(struct thread *td, void *syscall_args)
 			break;
 		}
 
-		if (cpu != (u_int) PMC_CPU_ANY && cpu >= pmc_cpu_max())) {
+		if (cpu != (u_int) PMC_CPU_ANY && cpu >= pmc_cpu_max()) {
 			error = EINVAL;
 			break;
 		}

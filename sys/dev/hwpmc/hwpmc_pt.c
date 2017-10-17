@@ -145,6 +145,8 @@ pt_buf_allocate(uint32_t cpu, struct pmc *pm, const struct pmc_op_pmcallocate *a
 	pt_buf->addrn = pm_pta->addrn;
 
 	for (i = 0; i < PT_NADDR; i++) {
+		/* TODO: check caps: how many address ranges supported ? */
+
 		pt_buf->addra[i] = pm_pta->addra[i];
 		pt_buf->addrb[i] = pm_pta->addrb[i];
 	}
@@ -295,24 +297,6 @@ pt_configure(int cpu, struct pmc *pm)
 		reg |= RTIT_CTL_DISRETC;
 
 	//reg |= RTIT_CTL_MTC_FREQ(6);
-
-#if 0
-	if (pm_pt->addrn > 0 && pm_pt->addrn < PT_NADDR) {
-		/* TODO: check caps: how many address ranges supported ? */
-
-		for (i = 0; i < pm_pt->addrn; i++) {
-			reg |= (1UL << RTIT_CTL_ADDR_CFG_S(i));
-
-#if 0
-			printf("i %d, addra %lx, addrb %lx, shift %d\n",
-			    i, pm_pt->addra[i], pm_pt->addrb[i], RTIT_CTL_ADDR_CFG_S(i));
-#endif
-
-			wrmsr(MSR_IA32_RTIT_ADDR_A(i), pm_pt->addra[i]);
-			wrmsr(MSR_IA32_RTIT_ADDR_B(i), pm_pt->addrb[i]);
-		}
-	}
-#endif
 
 	if (pt_buf->addrn == 0)
 		printf("%s: no ranges\n", __func__);
@@ -788,38 +772,12 @@ pt_read_trace(int cpu, int ri, struct pmc *pm,
 static int
 pt_read_pmc(int cpu, int ri, pmc_value_t *v)
 {
-#if 0
-	struct pmc *pm;
-	struct pmc_md_pt_pmc *pm_pt;
-	enum pmc_mode mode;
-	const struct pmc_hw *phw;
-	struct pt_buffer *pt_buf;
-
-	printf("%s: cpu %d\n", __func__, cpu);
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
 	    ("[pt,%d] illegal CPU value %d", __LINE__, cpu));
 	KASSERT(ri == 0, ("[pt,%d] illegal ri %d", __LINE__, ri));
 
-	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
-	pt_buf = &pm_pt->pt_buffers[cpu];
-
-	phw = &pt_pcpu[cpu]->tc_hw;
-	pm = phw->phw_pmc;
-
-	KASSERT(pm != NULL,
-	    ("[pt,%d] no owner for PHW [cpu%d,pmc%d]", __LINE__, cpu, ri));
-
-	mode = PMC_TO_MODE(pm);
-
-	KASSERT(mode == PMC_MODE_ST || mode == PMC_MODE_TT,
-	    ("[pt,%d] illegal pmc mode %d", __LINE__, mode));
-
-	PMCDBG1(MDP,REA,1,"pt-read id=%d", ri);
-
 	*v = 0;
-	//*v = rdpt();
-#endif
 
 	return (0);
 }
@@ -960,19 +918,11 @@ pt_stop_pmc(int cpu, int ri)
 static int
 pt_write_pmc(int cpu, int ri, pmc_value_t v)
 {
-	(void) cpu; (void) ri; (void) v;
-
-	printf("%s: cpu %d val %ld\n", __func__, cpu, v);
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
 	    ("[pt,%d] illegal CPU value %d", __LINE__, cpu));
 	KASSERT(ri == 0, ("[pt,%d] illegal row-index %d", __LINE__, ri));
 
-	/*
-	 * The PTs are used as timecounters by the kernel, so even
-	 * though some i386 CPUs support writeable PTs, we don't
-	 * support writing changing PT values through the HWPMC API.
-	 */
 	return (0);
 }
 
