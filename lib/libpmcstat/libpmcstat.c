@@ -81,46 +81,25 @@ pmcstat_name_to_addr(struct pmcstat_process *pp, const char *pi_name,
 	if (pp == NULL)
 		return (NULL);
 
-	//printf("%s: 1\n", __func__);
-
 	TAILQ_FOREACH(pcm, &pp->pp_map, ppm_next) {
-		//printf("%s: 1 1\n", __func__);
-
 		image = pcm->ppm_image;
-		//printf("%s: 1 2\n", __func__);
-		//printf("IMAGE name %s\n", pmcstat_string_unintern(image->pi_name));
 		if (image->pi_name == NULL)
 			continue;
-		//printf("%s: 1 3\n", __func__);
 		name1 = pmcstat_string_unintern(image->pi_name);
-		//printf("%s: 1 4\n", __func__);
 		if (strcmp(name1, pi_name) == 0) {
-			//printf("IMAGE name %s\n", pmcstat_string_unintern(image->pi_name));
 			found = 1;
 			break;
 		}
 	}
 
-	//printf("%s: 2\n", __func__);
-
-	if (!found) {
-		printf("IMAGE not found\n");
-		return (0);
-	}
-
-	//printf("IMAGE FOUND, symcount %zu\n", image->pi_symcount);
-
-	if (image->pi_symbols == NULL)
+	if (!found || image->pi_symbols == NULL)
 		return (NULL);
 
 	found = 0;
 
-	//printf("%s: 3\n", __func__);
-
 	for (i = 0; i < image->pi_symcount; i++) {
 		sym = &image->pi_symbols[i];
 		name2 = pmcstat_string_unintern(sym->ps_name);
-		//printf("SYM NAME %s\n", pmcstat_string_unintern(sym->ps_name));
 		if (strcmp(name2, name) == 0) {
 			found = 1;
 			break;
@@ -130,14 +109,10 @@ pmcstat_name_to_addr(struct pmcstat_process *pp, const char *pi_name,
 	if (!found)
 		return (0);
 
-	//if (image->pi_vaddr == 0)
-	//	image->pi_vaddr = 0xffffffff82c07000;
-
-	//printf("%s: 4\n", __func__);
-	//printf("%s: IMAGE pi_vaddr %lx, pcm->ppm_lowpc %lx sym->ps_start %lx\n",
-	//   __func__, image->pi_vaddr, pcm->ppm_lowpc, sym->ps_start);
-	*addr_start = (image->pi_vaddr - image->pi_start + pcm->ppm_lowpc + sym->ps_start);
-	*addr_end = (image->pi_vaddr - image->pi_start + pcm->ppm_lowpc + sym->ps_end);
+	*addr_start = (image->pi_vaddr - image->pi_start +
+	    pcm->ppm_lowpc + sym->ps_start);
+	*addr_end = (image->pi_vaddr - image->pi_start +
+	    pcm->ppm_lowpc + sym->ps_end);
 
 	return (sym);
 }
@@ -197,8 +172,6 @@ pmcstat_image_add_symbols(struct pmcstat_image *image, Elf *e,
 	GElf_Sym sym;
 	Elf_Data *data;
 
-	printf("%s: path %s\n", __func__, pmcstat_string_unintern(image->pi_execpath));
-
 	if ((data = elf_getdata(scn, NULL)) == NULL)
 		return;
 
@@ -233,35 +206,21 @@ pmcstat_image_add_symbols(struct pmcstat_image *image, Elf *e,
 	 */
 	symptr += image->pi_symcount;
 
-#if 0
-	printf("nshmsyms %ld\n", nshsyms);
-#endif
-
 	for (n = newsyms = 0; n < nshsyms; n++) {
-		if (gelf_getsym(data, (int) n, &sym) != &sym) {
-			//printf("%s: err 1\n", __func__);
+		if (gelf_getsym(data, (int) n, &sym) != &sym)
 			return;
-		}
-		if (GELF_ST_TYPE(sym.st_info) != STT_FUNC) {
-			//printf("%s: err 2\n", __func__);
+		if (GELF_ST_TYPE(sym.st_info) != STT_FUNC)
 			continue;
-		}
 
-		if (sym.st_shndx == STN_UNDEF) {
-			//printf("%s: err 3\n", __func__);
+		if (sym.st_shndx == STN_UNDEF)
 			continue;
-		}
 
-		if (!firsttime && pmcstat_symbol_search(image, sym.st_value)) {
-			//printf("%s: err 4\n", __func__);
+		if (!firsttime && pmcstat_symbol_search(image, sym.st_value))
 			continue; /* We've seen this symbol already. */
-		}
 
 		if ((fnname = elf_strptr(e, sh->sh_link, sym.st_name))
-		    == NULL) {
-			//printf("%s: err 5\n", __func__);
+		    == NULL)
 			continue;
-		}
 #ifdef __arm__
 		/* Remove spurious ARM function name. */
 		if (fnname[0] == '$' &&
@@ -274,11 +233,6 @@ pmcstat_image_add_symbols(struct pmcstat_image *image, Elf *e,
 		symptr->ps_name  = pmcstat_string_intern(fnname);
 		symptr->ps_start = sym.st_value - image->pi_vaddr;
 		symptr->ps_end   = symptr->ps_start + sym.st_size;
-
-#if 0
-		printf("start %lx end %lx name %s image->pi_vaddr %lx\n",
-		    symptr->ps_start, symptr->ps_end, fnname, image->pi_vaddr);
-#endif
 
 		symptr++;
 		newsyms++;
@@ -404,8 +358,6 @@ pmcstat_image_get_elf_params(struct pmcstat_image *image,
 	GElf_Shdr sh;
 	enum pmcstat_image_type image_type;
 	char buffer[PATH_MAX];
-
-	printf("%s: %d\n", __func__, image->pi_iskernelmodule);
 
 	assert(image->pi_type == PMCSTAT_IMAGE_UNKNOWN);
 
@@ -992,8 +944,6 @@ pmcstat_initialize_logging(struct pmcstat_process **pmcstat_kernproc,
 	struct pmcstat_process *pmcstat_kp;
 	int i;
 
-	printf("%s\n", __func__);
-
 	/* use a convenient format for 'ldd' output */
 	if (setenv("LD_TRACE_LOADED_OBJECTS_FMT1","%o \"%p\" %x\n",1) != 0)
 		err(EX_OSERR, "ERROR: Cannot setenv");
@@ -1046,8 +996,6 @@ pmcstat_shutdown_logging(struct pmcstat_args *args,
 	struct pmcstat_pcmap *ppm, *ppmtmp;
 	FILE *mf;
 	int i;
-
-	printf("%s\n", __func__);
 
 	/* determine where to send the map file */
 	mf = NULL;
@@ -1250,7 +1198,6 @@ pmcstat_attach_pmcs(struct pmcstat_args *args)
 		if (PMC_IS_SYSTEM_MODE(ev->ev_mode))
 			continue;
 		SLIST_FOREACH(pt, &args->pa_targets, pt_next) {
-			printf("%s: attaching pid %d\n", __func__, pt->pt_pid);
 			if (pmc_attach(ev->ev_pmcid, pt->pt_pid) == 0)
 				count++;
 			else if (errno != ESRCH)
@@ -1452,8 +1399,6 @@ pmcstat_analyze_log(struct pmcstat_args *args,
 
 			assert(pp != NULL);
 
-			printf("MMAP: %s\n", ev.pl_u.pl_mi.pl_pathname);
-
 			image_path = pmcstat_string_intern(ev.pl_u.pl_mi.
 			    pl_pathname);
 			image = pmcstat_image_from_path(image_path, pid == -1,
@@ -1580,9 +1525,6 @@ pmcstat_analyze_log(struct pmcstat_args *args,
 			    args, plugins, pmcstat_npmcs);
 			break;
 
-		case PMCLOG_TYPE_PROCCSW:
-			printf("PROCCSW\n");
-			break;
 		case PMCLOG_TYPE_PROCEXEC:
 			/*
 			 * Change the executable image associated with
