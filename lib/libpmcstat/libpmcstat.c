@@ -107,7 +107,7 @@ pmcstat_name_to_addr(struct pmcstat_process *pp, const char *pi_name,
 	}
 
 	if (!found)
-		return (0);
+		return (NULL);
 
 	*addr_start = (image->pi_vaddr - image->pi_start +
 	    pcm->ppm_lowpc + sym->ps_start);
