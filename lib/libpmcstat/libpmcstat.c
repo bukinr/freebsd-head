@@ -1595,8 +1595,6 @@ pmcstat_analyze_log(struct pmcstat_args *args,
 			    pmcstat_image_link(ppnew, ppm->ppm_image,
 				ppm->ppm_lowpc);
 			break;
-		case PMCLOG_TYPE_TRACE:
-			break;
 
 		default:	/* other types of entries are not relevant */
 			break;
