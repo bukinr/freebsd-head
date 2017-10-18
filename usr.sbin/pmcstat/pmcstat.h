@@ -85,10 +85,6 @@ void	pmcstat_display_log(void);
 void	pmcstat_pluginconfigure_log(char *_opt);
 void	pmcstat_topexit(void);
 
-int	ipt_process(struct pmcstat_process *pp, uint32_t cpu, uint32_t cycle, uint64_t offset);
-int	pmcstat_log_pt(struct pmcstat_ev *ev);
-int	pmc_ipt_init(uint32_t cpu);
-
 void pmcstat_log_shutdown_logging(void);
 void pmcstat_log_initialize_logging(void);
 
