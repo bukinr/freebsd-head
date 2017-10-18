@@ -21,8 +21,7 @@ SRCS=	pt_asid.c pt_block_cache.c pt_block_decoder.c pt_config.c pt_cpu.c		\
 	pt_ild.c pt_image_section_cache.c pt_image.c pt_insn_decoder.c			\
 	pt_insn.c pt_last_ip.c pt_packet_decoder.c pt_packet.c pt_query_decoder.c	\
 	pt_retstack.c pt_section_file.c pt_section.c pt_sync.c pt_time.c pt_tnt_cache.c	\
-	pt_version.c
-SRCS+=	init.c pt_cpuid.c pt_section_posix.c
+	pt_version.c init.c pt_cpuid.c pt_section_posix.c
 
 CFLAGS+=-I${LIBIPTSRC}/libipt/internal/include		\
 	-I${LIBIPTSRC}/libipt/internal/include/posix	\
