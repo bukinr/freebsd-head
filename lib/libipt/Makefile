@@ -11,7 +11,6 @@ LIBIPTSRC=	${SRCTOP}/contrib/libipt
 	${LIBIPTSRC}/libipt/src/posix		\
 	${LIBIPTSRC}/libipt/internal/include	\
 	${LIBIPTSRC}/libipt/include		\
-	${LIBIPTSRC}/include/posix		\
 	${LIBIPTSRC}/include
 
 LIB=	ipt
