@@ -560,7 +560,7 @@ main(int argc, char *argv[])
 			}
 
 			printf("%s: name to addr\n", __func__);
-			sym = pmcstat_name_to_addr(pp, func_image, func_name, &addr_start, &addr_end);
+			sym = pmcstat_symbol_search_by_name(pp, func_image, func_name, &addr_start, &addr_end);
 			printf("%s: name to addr done\n", __func__);
 			if (sym) {
 				printf("SYM addr start %lx end %lx\n", addr_start, addr_end);

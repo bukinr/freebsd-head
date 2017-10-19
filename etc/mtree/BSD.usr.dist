@@ -13,6 +13,8 @@
             ..
             event
             ..
+            pmcstat
+            ..
             sqlite3
             ..
             ucl

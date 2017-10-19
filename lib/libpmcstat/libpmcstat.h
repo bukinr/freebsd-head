@@ -348,7 +348,7 @@ void pmcstat_create_process(int *pmcstat_sockpair, struct pmcstat_args *args, in
 void pmcstat_start_process(int *pmcstat_sockpair);
 
 void pmcstat_attach_pmcs(struct pmcstat_args *args);
-struct pmcstat_symbol *pmcstat_name_to_addr(struct pmcstat_process *pp, const char *pi_name, const char *name, uintptr_t *, uintptr_t *);
+struct pmcstat_symbol *pmcstat_symbol_search_by_name(struct pmcstat_process *pp, const char *pi_name, const char *name, uintptr_t *, uintptr_t *);
 
 void pmcstat_string_initialize(void);
 void pmcstat_string_shutdown(void);

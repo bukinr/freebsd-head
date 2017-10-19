@@ -2,7 +2,7 @@
 
 VARS=`make buildenvvars`
 eval $VARS make -C lib/libpmc clean all || exit 1
-eval $VARS make -C lib/libpmcstat clean depend all || exit 1
+eval $VARS make -C lib/libpmcstat clean all || exit 1
 
 cp lib/libpmc/pmc.h /home/br/obj/usr/home/br/dev/freebsd-head/tmp/usr/include/pmc.h
 

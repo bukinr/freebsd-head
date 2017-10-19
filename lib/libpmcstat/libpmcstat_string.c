@@ -171,4 +171,3 @@ pmcstat_string_initialize(void)
 	for (i = 0; i < PMCSTAT_NHASH; i++)
 		LIST_INIT(&pmcstat_string_hash[i]);
 }
-

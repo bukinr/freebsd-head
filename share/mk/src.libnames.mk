@@ -22,6 +22,7 @@ _PRIVATELIBS=	\
 		heimipcs \
 		ifconfig \
 		ldns \
+		pmcstat \
 		sqlite3 \
 		ssh \
 		ucl \
