@@ -620,7 +620,6 @@ pmcstat_string_initialize(void)
 		LIST_INIT(&pmcstat_string_hash[i]);
 }
 
-
 /*
  * Initialize module.
  */
