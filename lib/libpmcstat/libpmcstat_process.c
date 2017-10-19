@@ -79,6 +79,77 @@ pmcstat_process_aout_exec(struct pmcstat_process *pp,
 }
 
 /*
+ * Associate an ELF image with a process.
+ */
+
+void
+pmcstat_process_elf_exec(struct pmcstat_process *pp,
+    struct pmcstat_image *image, uintfptr_t entryaddr,
+    struct pmcstat_args *args, struct pmc_plugins *plugins,
+    struct pmcstat_stats *pmcstat_stats)
+{
+	uintmax_t libstart;
+	struct pmcstat_image *rtldimage;
+
+	assert(image->pi_type == PMCSTAT_IMAGE_ELF32 ||
+	    image->pi_type == PMCSTAT_IMAGE_ELF64);
+
+	/* Create a map entry for the base executable. */
+	pmcstat_image_link(pp, image, image->pi_vaddr);
+
+	/*
+	 * For dynamically linked executables we need to determine
+	 * where the dynamic linker was mapped to for this process,
+	 * Subsequent executable objects that are mapped in by the
+	 * dynamic linker will be tracked by log events of type
+	 * PMCLOG_TYPE_MAP_IN.
+	 */
+
+	if (image->pi_isdynamic) {
+
+		/*
+		 * The runtime loader gets loaded just after the maximum
+		 * possible heap address.  Like so:
+		 *
+		 * [  TEXT DATA BSS HEAP -->*RTLD  SHLIBS   <--STACK]
+		 * ^					            ^
+		 * 0				   VM_MAXUSER_ADDRESS
+
+		 *
+		 * The exact address where the loader gets mapped in
+		 * will vary according to the size of the executable
+		 * and the limits on the size of the process'es data
+		 * segment at the time of exec().  The entry address
+		 * recorded at process exec time corresponds to the
+		 * 'start' address inside the dynamic linker.  From
+		 * this we can figure out the address where the
+		 * runtime loader's file object had been mapped to.
+		 */
+		rtldimage = pmcstat_image_from_path(image->pi_dynlinkerpath,
+		    0, args, plugins);
+		if (rtldimage == NULL) {
+			warnx("WARNING: Cannot find image for \"%s\".",
+			    pmcstat_string_unintern(image->pi_dynlinkerpath));
+			pmcstat_stats->ps_exec_errors++;
+			return;
+		}
+
+		if (rtldimage->pi_type == PMCSTAT_IMAGE_UNKNOWN)
+			pmcstat_image_get_elf_params(rtldimage, args);
+
+		if (rtldimage->pi_type != PMCSTAT_IMAGE_ELF32 &&
+		    rtldimage->pi_type != PMCSTAT_IMAGE_ELF64) {
+			warnx("WARNING: rtld not an ELF object \"%s\".",
+			    pmcstat_string_unintern(image->pi_dynlinkerpath));
+			return;
+		}
+
+		libstart = entryaddr - rtldimage->pi_entry;
+		pmcstat_image_link(pp, rtldimage, libstart);
+	}
+}
+
+/*
  * Associate an image and a process.
  */
 
@@ -197,39 +268,6 @@ pmcstat_process_lookup(pid_t pid, int allocate)
 }
 
 void
-pmcstat_clone_event_descriptor(struct pmcstat_ev *ev, const cpuset_t *cpumask,
-    struct pmcstat_args *args)
-{
-	int cpu;
-	struct pmcstat_ev *ev_clone;
-
-	for (cpu = 0; cpu < CPU_SETSIZE; cpu++) {
-		if (!CPU_ISSET(cpu, cpumask))
-			continue;
-
-		if ((ev_clone = malloc(sizeof(*ev_clone))) == NULL)
-			errx(EX_SOFTWARE, "ERROR: Out of memory");
-		(void) memset(ev_clone, 0, sizeof(*ev_clone));
-
-		ev_clone->ev_count = ev->ev_count;
-		ev_clone->ev_cpu   = cpu;
-		ev_clone->ev_cumulative = ev->ev_cumulative;
-		ev_clone->ev_flags = ev->ev_flags;
-		ev_clone->ev_mode  = ev->ev_mode;
-		ev_clone->ev_name  = strdup(ev->ev_name);
-		if (ev_clone->ev_name == NULL)
-			errx(EX_SOFTWARE, "ERROR: Out of memory");
-		ev_clone->ev_pmcid = ev->ev_pmcid;
-		ev_clone->ev_saved = ev->ev_saved;
-		ev_clone->ev_spec  = strdup(ev->ev_spec);
-		if (ev_clone->ev_spec == NULL)
-			errx(EX_SOFTWARE, "ERROR: Out of memory");
-
-		STAILQ_INSERT_TAIL(&args->pa_events, ev_clone, ev_next);
-	}
-}
-
-void
 pmcstat_create_process(int *pmcstat_sockpair, struct pmcstat_args *args,
     int pmcstat_kq)
 {
@@ -331,75 +369,4 @@ pmcstat_attach_pmcs(struct pmcstat_args *args)
 
 	if (count == 0)
 		errx(EX_DATAERR, "ERROR: No processes were attached to.");
-}
-
-/*
- * Associate an ELF image with a process.
- */
-
-void
-pmcstat_process_elf_exec(struct pmcstat_process *pp,
-    struct pmcstat_image *image, uintfptr_t entryaddr,
-    struct pmcstat_args *args, struct pmc_plugins *plugins,
-    struct pmcstat_stats *pmcstat_stats)
-{
-	uintmax_t libstart;
-	struct pmcstat_image *rtldimage;
-
-	assert(image->pi_type == PMCSTAT_IMAGE_ELF32 ||
-	    image->pi_type == PMCSTAT_IMAGE_ELF64);
-
-	/* Create a map entry for the base executable. */
-	pmcstat_image_link(pp, image, image->pi_vaddr);
-
-	/*
-	 * For dynamically linked executables we need to determine
-	 * where the dynamic linker was mapped to for this process,
-	 * Subsequent executable objects that are mapped in by the
-	 * dynamic linker will be tracked by log events of type
-	 * PMCLOG_TYPE_MAP_IN.
-	 */
-
-	if (image->pi_isdynamic) {
-
-		/*
-		 * The runtime loader gets loaded just after the maximum
-		 * possible heap address.  Like so:
-		 *
-		 * [  TEXT DATA BSS HEAP -->*RTLD  SHLIBS   <--STACK]
-		 * ^					            ^
-		 * 0				   VM_MAXUSER_ADDRESS
-
-		 *
-		 * The exact address where the loader gets mapped in
-		 * will vary according to the size of the executable
-		 * and the limits on the size of the process'es data
-		 * segment at the time of exec().  The entry address
-		 * recorded at process exec time corresponds to the
-		 * 'start' address inside the dynamic linker.  From
-		 * this we can figure out the address where the
-		 * runtime loader's file object had been mapped to.
-		 */
-		rtldimage = pmcstat_image_from_path(image->pi_dynlinkerpath,
-		    0, args, plugins);
-		if (rtldimage == NULL) {
-			warnx("WARNING: Cannot find image for \"%s\".",
-			    pmcstat_string_unintern(image->pi_dynlinkerpath));
-			pmcstat_stats->ps_exec_errors++;
-			return;
-		}
-
-		if (rtldimage->pi_type == PMCSTAT_IMAGE_UNKNOWN)
-			pmcstat_image_get_elf_params(rtldimage, args);
-
-		if (rtldimage->pi_type != PMCSTAT_IMAGE_ELF32 &&
-		    rtldimage->pi_type != PMCSTAT_IMAGE_ELF64) {
-			warnx("WARNING: rtld not an ELF object \"%s\".",
-			    pmcstat_string_unintern(image->pi_dynlinkerpath));
-			return;
-		}
-
-		libstart = entryaddr - rtldimage->pi_entry;
-		pmcstat_image_link(pp, rtldimage, libstart);
-	}
 }

@@ -192,7 +192,6 @@ pmcstat_image_unmap(struct pmcstat_process *pp, uintfptr_t start,
 	}
 }
 
-
 /*
  * Convert a hwpmc(4) log to profile information.  A system-wide
  * callgraph is generated if FLAG_DO_CALLGRAPHS is set.  gmon.out
@@ -586,38 +585,6 @@ pmcstat_close_log(struct pmcstat_args *args)
 
 	return (args->pa_flags & FLAG_HAS_PIPE ? PMCSTAT_EXITING :
 	    PMCSTAT_FINISHED);
-}
-
-/*
- * Destroy the string table, free'ing up space.
- */
-
-static void
-pmcstat_string_shutdown(void)
-{
-	int i;
-	struct pmcstat_string *ps, *pstmp;
-
-	for (i = 0; i < PMCSTAT_NHASH; i++)
-		LIST_FOREACH_SAFE(ps, &pmcstat_string_hash[i], ps_next,
-		    pstmp) {
-			LIST_REMOVE(ps, ps_next);
-			free(ps->ps_string);
-			free(ps);
-		}
-}
-
-/*
- * Initialize the string interning facility.
- */
-
-static void
-pmcstat_string_initialize(void)
-{
-	int i;
-
-	for (i = 0; i < PMCSTAT_NHASH; i++)
-		LIST_INIT(&pmcstat_string_hash[i]);
 }
 
 /*
