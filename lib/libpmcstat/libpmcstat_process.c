@@ -41,11 +41,9 @@ __FBSDID("$FreeBSD$");
 
 #include <assert.h>
 #include <ctype.h>
-#include <curses.h>
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <gelf.h>
 #include <limits.h>
 #include <netdb.h>
 #include <pmc.h>

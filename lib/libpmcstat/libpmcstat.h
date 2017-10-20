@@ -34,6 +34,7 @@
 #define	_LIBPMCSTAT_H_
 
 #include <curses.h>
+#include <gelf.h>
 
 int pmcstat_symbol_compare(const void *a, const void *b);
 

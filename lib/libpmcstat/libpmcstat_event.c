@@ -31,9 +31,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/cpuset.h>
 #include <sys/pmc.h>
 
-#include <curses.h>
 #include <err.h>
-#include <gelf.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sysexits.h>

@@ -38,10 +38,8 @@ __FBSDID("$FreeBSD$");
 #include <netinet/in.h>
 
 #include <assert.h>
-#include <curses.h>
 #include <err.h>
 #include <fcntl.h>
-#include <gelf.h>
 #include <pmc.h>
 #include <pmclog.h>
 #include <stdio.h>
