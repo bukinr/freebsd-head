@@ -38,10 +38,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/pmc.h>
 #include <sys/syscall.h>
 #include <sys/queue.h>
-#include <sys/imgact_aout.h>
-#include <sys/imgact_elf.h>
-
-#include <netinet/in.h>
 
 #include <assert.h>
 #include <ctype.h>

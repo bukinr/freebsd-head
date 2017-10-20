@@ -33,6 +33,8 @@
 #ifndef	_LIBPMCSTAT_H_
 #define	_LIBPMCSTAT_H_
 
+#include <curses.h>
+
 int pmcstat_symbol_compare(const void *a, const void *b);
 
 typedef const void *pmcstat_interned_string;
