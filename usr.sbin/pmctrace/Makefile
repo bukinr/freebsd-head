@@ -4,6 +4,8 @@
 PROG=	pmctrace
 SRCS=	pmctrace.c pmctrace_pt.c pmctrace_pt.h
 
+CFLAGS+=-I${SRCTOP}/lib/libpmcstat
+
 LIBADD=	elf ipt pmc pmcstat
 
 # NO_SHARED=	yes
