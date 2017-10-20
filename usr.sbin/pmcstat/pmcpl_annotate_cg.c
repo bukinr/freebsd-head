@@ -52,7 +52,6 @@ __FBSDID("$FreeBSD$");
 #include <netinet/in.h>
 
 #include <assert.h>
-#include <curses.h>
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
