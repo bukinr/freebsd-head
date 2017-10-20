@@ -31,13 +31,10 @@ __FBSDID("$FreeBSD$");
 #include <sys/cpuset.h>
 #include <sys/event.h>
 #include <sys/param.h>
-#include <sys/endian.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/module.h>
 #include <sys/pmc.h>
-#include <sys/syscall.h>
-#include <sys/queue.h>
 
 #include <assert.h>
 #include <ctype.h>

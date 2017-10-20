@@ -29,32 +29,19 @@ __FBSDID("$FreeBSD$");
 
 #include <sys/types.h>
 #include <sys/cpuset.h>
-#include <sys/event.h>
 #include <sys/param.h>
-#include <sys/endian.h>
-#include <sys/socket.h>
 #include <sys/stat.h>
-#include <sys/module.h>
 #include <sys/pmc.h>
-#include <sys/syscall.h>
-#include <sys/queue.h>
 
 #include <assert.h>
-#include <ctype.h>
 #include <err.h>
 #include <errno.h>
-#include <fcntl.h>
-#include <limits.h>
-#include <netdb.h>
 #include <pmc.h>
 #include <pmclog.h>
-#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 #include <sysexits.h>
-#include <unistd.h>
 
 #include "libpmcstat.h"
 
