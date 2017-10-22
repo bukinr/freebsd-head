@@ -73,6 +73,8 @@ static int p6_allocate_pmc(enum pmc_event _pe, char *_ctrspec,
 #if defined(__amd64__) || defined(__i386__)
 static int tsc_allocate_pmc(enum pmc_event _pe, char *_ctrspec,
     struct pmc_op_pmcallocate *_pmc_config);
+#endif
+#if defined(__amd64__)
 static int pt_allocate_pmc(enum pmc_event _pe, char *_ctrspec,
     struct pmc_op_pmcallocate *_pmc_config);
 #endif
@@ -431,6 +433,8 @@ PMC_CLASS_TABLE_DESC(p6, P6, p6, p6);
 #endif
 #if	defined(__i386__) || defined(__amd64__)
 PMC_CLASS_TABLE_DESC(tsc, TSC, tsc, tsc);
+#endif
+#if	defined(__amd64__)
 PMC_CLASS_TABLE_DESC(pt, PT, pt, pt);
 #endif
 #if	defined(__arm__)
@@ -2514,6 +2518,9 @@ tsc_allocate_pmc(enum pmc_event pe, char *ctrspec,
 
 	return (0);
 }
+#endif
+
+#if	defined(__amd64__)
 
 #define	INTEL_PT_KW_BRANCHES	"branches"
 #define	INTEL_PT_KW_TSC		"tsc"
@@ -3531,7 +3538,9 @@ pmc_init(void)
 		PMC_MDEP_INIT_INTEL_V2(skylake_xeon);
 		break;
 	case PMC_CPU_INTEL_KABYLAKE:
+#if defined(__amd64__)
 		pmc_class_table[n++] = &pt_class_table_descr;
+#endif
 		PMC_MDEP_INIT_INTEL_V2(kabylake);
 		break;
 	case PMC_CPU_INTEL_IVYBRIDGE:
