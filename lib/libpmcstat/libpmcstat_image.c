@@ -177,7 +177,6 @@ pmcstat_image_link(struct pmcstat_process *pp, struct pmcstat_image *image,
 	assert(image->pi_type != PMCSTAT_IMAGE_UNKNOWN &&
 	    image->pi_type != PMCSTAT_IMAGE_INDETERMINABLE);
 
-	warnx("Linking %s: start %lx\n", pmcstat_string_unintern(image->pi_execpath), start);
 	if ((pcmnew = malloc(sizeof(*pcmnew))) == NULL)
 		err(EX_OSERR, "ERROR: Cannot create a map entry");
 
