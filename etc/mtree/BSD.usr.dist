@@ -13,8 +13,6 @@
             ..
             event
             ..
-            pmcstat
-            ..
             sqlite3
             ..
             ucl
@@ -47,8 +45,6 @@
         engines
         ..
         i18n
-        ..
-        libipt
         ..
         libxo
             encoder
