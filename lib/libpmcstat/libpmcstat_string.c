@@ -45,6 +45,8 @@ __FBSDID("$FreeBSD$");
 
 #include "libpmcstat.h"
 
+static LIST_HEAD(,pmcstat_string)	pmcstat_string_hash[PMCSTAT_NHASH];
+
 /*
  * Intern a copy of string 's', and return a pointer to the
  * interned structure.

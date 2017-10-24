@@ -87,6 +87,4 @@ void	pmcstat_topexit(void);
 void pmcstat_log_shutdown_logging(void);
 void pmcstat_log_initialize_logging(void);
 
-void pmcstat_attach_pmcs(struct pmcstat_args *args);
-
 #endif	/* _PMCSTAT_H_ */

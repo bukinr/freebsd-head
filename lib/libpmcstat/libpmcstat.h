@@ -218,8 +218,6 @@ struct pmcstat_string {
 	char		*ps_string;
 };
 
-static LIST_HEAD(,pmcstat_string)	pmcstat_string_hash[PMCSTAT_NHASH];
-
 /*
  * A 'pmcstat_pcmap' structure maps a virtual address range to an
  * underlying 'pmcstat_image' descriptor.
@@ -325,7 +323,6 @@ const char *pmcstat_string_unintern(pmcstat_interned_string _is);
 pmcstat_interned_string pmcstat_string_intern(const char *_s);
 int pmcstat_string_compute_hash(const char *s);
 pmcstat_interned_string pmcstat_string_lookup(const char *_s);
-void pmcstat_image_get_elf_params(struct pmcstat_image *image, struct pmcstat_args *args);
 void pmcstat_image_get_elf_params(struct pmcstat_image *image, struct pmcstat_args *args);
 
 struct pmcstat_image *
