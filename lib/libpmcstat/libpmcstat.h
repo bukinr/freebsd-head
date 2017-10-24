@@ -38,13 +38,29 @@
 #include <curses.h>
 #include <gelf.h>
 
-int pmcstat_symbol_compare(const void *a, const void *b);
+#define	PMCSTAT_ALLOCATE		1
+
+#define	NSOCKPAIRFD			2
+#define	PARENTSOCKET			0
+#define	CHILDSOCKET			1
+
+#define	PMCSTAT_OPEN_FOR_READ		0
+#define	PMCSTAT_OPEN_FOR_WRITE		1
+#define	READPIPEFD			0
+#define	WRITEPIPEFD			1
+#define	NPIPEFD				2
+
+#define	PMCSTAT_NHASH			256
+#define	PMCSTAT_HASH_MASK		0xFF
 
 typedef const void *pmcstat_interned_string;
 struct pmc_plugins;
 
-#define	PMCSTAT_NHASH			256
-#define	PMCSTAT_HASH_MASK		0xFF
+enum pmcstat_state {
+	PMCSTAT_FINISHED = 0,
+	PMCSTAT_EXITING  = 1,
+	PMCSTAT_RUNNING  = 2
+};
 
 struct pmcstat_ev {
 	STAILQ_ENTRY(pmcstat_ev) ev_next;
@@ -187,17 +203,6 @@ struct pmcstat_image {
 
 extern LIST_HEAD(pmcstat_image_hash_list, pmcstat_image) pmcstat_image_hash[PMCSTAT_NHASH];
 
-struct pmcstat_symbol *pmcstat_symbol_search(struct pmcstat_image *image,
-	uintfptr_t addr);
-
-void pmcstat_image_add_symbols(struct pmcstat_image *image, Elf *e,
-    Elf_Scn *scn, GElf_Shdr *sh);
-
-const char *pmcstat_string_unintern(pmcstat_interned_string _is);
-pmcstat_interned_string pmcstat_string_intern(const char *_s);
-int pmcstat_string_compute_hash(const char *s);
-pmcstat_interned_string pmcstat_string_lookup(const char *_s);
-
 /*
  * A simple implementation of interned strings.  Each interned string
  * is assigned a unique address, so that subsequent string compares
@@ -213,20 +218,6 @@ struct pmcstat_string {
 };
 
 static LIST_HEAD(,pmcstat_string)	pmcstat_string_hash[PMCSTAT_NHASH];
-
-void pmcstat_image_get_elf_params(struct pmcstat_image *image, struct pmcstat_args *args);
-
-#define	min(A,B)		((A) < (B) ? (A) : (B))
-#define	max(A,B)		((A) > (B) ? (A) : (B))
-
-void pmcstat_image_get_elf_params(struct pmcstat_image *image, struct pmcstat_args *args);
-
-struct pmcstat_image *
-pmcstat_image_from_path(pmcstat_interned_string internedpath,
-    int iskernelmodule, struct pmcstat_args *args,
-    struct pmc_plugins *plugins);
-
-int pmcstat_string_lookup_hash(pmcstat_interned_string _is);
 
 /*
  * A 'pmcstat_pcmap' structure maps a virtual address range to an
@@ -322,6 +313,26 @@ struct pmcstat_stats {
 	int ps_callchain_dubious_frames;/* #dubious frame pointers seen */
 };
 
+__BEGIN_DECLS
+int pmcstat_symbol_compare(const void *a, const void *b);
+struct pmcstat_symbol *pmcstat_symbol_search(struct pmcstat_image *image,
+    uintfptr_t addr);
+void pmcstat_image_add_symbols(struct pmcstat_image *image, Elf *e,
+    Elf_Scn *scn, GElf_Shdr *sh);
+
+const char *pmcstat_string_unintern(pmcstat_interned_string _is);
+pmcstat_interned_string pmcstat_string_intern(const char *_s);
+int pmcstat_string_compute_hash(const char *s);
+pmcstat_interned_string pmcstat_string_lookup(const char *_s);
+void pmcstat_image_get_elf_params(struct pmcstat_image *image, struct pmcstat_args *args);
+void pmcstat_image_get_elf_params(struct pmcstat_image *image, struct pmcstat_args *args);
+
+struct pmcstat_image *
+    pmcstat_image_from_path(pmcstat_interned_string internedpath,
+    int iskernelmodule, struct pmcstat_args *args,
+    struct pmc_plugins *plugins);
+int pmcstat_string_lookup_hash(pmcstat_interned_string _is);
+
 void pmcstat_process_elf_exec(struct pmcstat_process *_pp,
     struct pmcstat_image *_image, uintfptr_t _entryaddr,
     struct pmcstat_args *args, struct pmc_plugins *plugins,
@@ -358,12 +369,6 @@ struct pmcstat_symbol *pmcstat_symbol_search_by_name(struct pmcstat_process *pp,
 void pmcstat_string_initialize(void);
 void pmcstat_string_shutdown(void);
 
-#define	PMCSTAT_ALLOCATE		1
-
-#define	NSOCKPAIRFD			2
-#define	PARENTSOCKET			0
-#define	CHILDSOCKET			1
-
 int pmcstat_analyze_log(struct pmcstat_args *args,
     struct pmc_plugins *plugins,
     struct pmcstat_stats *pmcstat_stats,
@@ -372,19 +377,8 @@ int pmcstat_analyze_log(struct pmcstat_args *args,
     int *pmcstat_npmcs,
     int *ps_samples_period);
 
-enum pmcstat_state {
-	PMCSTAT_FINISHED = 0,
-	PMCSTAT_EXITING  = 1,
-	PMCSTAT_RUNNING  = 2
-};
-
-#define	PMCSTAT_OPEN_FOR_READ		0
-#define	PMCSTAT_OPEN_FOR_WRITE		1
-#define	READPIPEFD			0
-#define	WRITEPIPEFD			1
-#define	NPIPEFD				2
-
 int pmcstat_open_log(const char *_p, int _mode);
 int pmcstat_close_log(struct pmcstat_args *args);
+__END_DECLS
 
 #endif /* !_LIBPMCSTAT_H_ */

@@ -50,6 +50,9 @@ __FBSDID("$FreeBSD$");
 
 #include "libpmcstat.h"
 
+#define	min(A,B)		((A) < (B) ? (A) : (B))
+#define	max(A,B)		((A) > (B) ? (A) : (B))
+
 /*
  * Add the list of symbols in the given section to the list associated
  * with the object.
