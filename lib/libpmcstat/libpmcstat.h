@@ -351,7 +351,7 @@ void pmcstat_process_exec(struct pmcstat_process *_pp,
 void pmcstat_image_determine_type(struct pmcstat_image *_image, struct pmcstat_args *args);
 void pmcstat_image_get_aout_params(struct pmcstat_image *_image, struct pmcstat_args *args);
 struct pmcstat_pcmap *pmcstat_process_find_map(struct pmcstat_process *_p,
-	uintfptr_t _pc);
+    uintfptr_t _pc);
 void pmcstat_initialize_logging(struct pmcstat_process **pmcstat_kernproc,
     struct pmcstat_args *args, struct pmc_plugins *plugins,
     int *pmcstat_npmcs, int *pmcstat_mergepmc);
