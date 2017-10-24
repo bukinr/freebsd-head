@@ -36,7 +36,7 @@
 #include <sys/_cpuset.h>
 #include <sys/queue.h>
 
-#include <curses.h>
+#include <stdio.h>
 #include <gelf.h>
 
 #define	PMCSTAT_ALLOCATE		1
@@ -295,7 +295,7 @@ struct pmc_plugins {
 	void (*pl_topdisplay)(void);
 
 	/* top keypress */
-	int (*pl_topkeypress)(int c, WINDOW *w);
+	int (*pl_topkeypress)(int c, void *w);
 };
 
 /*

@@ -641,8 +641,11 @@ pmcpl_cg_topdisplay(void)
  */
 
 int
-pmcpl_cg_topkeypress(int c, WINDOW *w)
+pmcpl_cg_topkeypress(int c, void *arg)
 {
+	WINDOW *w;
+
+	w = (WINDOW *)arg;
 
 	(void) c; (void) w;
 

@@ -584,8 +584,11 @@ pmcpl_ct_topdisplay(void)
  */
 
 int
-pmcpl_ct_topkeypress(int c, WINDOW *w)
+pmcpl_ct_topkeypress(int c, void *arg)
 {
+	WINDOW *w;
+
+	w = (WINDOW *)arg;
 
 	switch (c) {
 	case 'f':

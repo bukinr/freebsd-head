@@ -682,7 +682,7 @@ pmcstat_keypress_log(void)
 		break;
 	default:
 		if (plugins[args.pa_plugin].pl_topkeypress != NULL)
-			if (plugins[args.pa_plugin].pl_topkeypress(c, w))
+			if (plugins[args.pa_plugin].pl_topkeypress(c, (void *)w))
 				ret = 1;
 	}
 
