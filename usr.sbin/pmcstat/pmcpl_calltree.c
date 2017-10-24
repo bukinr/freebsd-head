@@ -58,6 +58,9 @@ __FBSDID("$FreeBSD$");
 #include "pmcstat_top.h"
 #include "pmcpl_calltree.h"
 
+#define	min(A,B)		((A) < (B) ? (A) : (B))
+#define	max(A,B)		((A) > (B) ? (A) : (B))
+
 #define	PMCPL_CT_GROWSIZE	4
 
 static int pmcstat_skiplink = 0;

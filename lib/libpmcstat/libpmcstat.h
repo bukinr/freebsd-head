@@ -33,6 +33,7 @@
 #ifndef	_LIBPMCSTAT_H_
 #define	_LIBPMCSTAT_H_
 
+#include <sys/_cpuset.h>
 #include <sys/queue.h>
 
 #include <curses.h>

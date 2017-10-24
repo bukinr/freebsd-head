@@ -33,7 +33,6 @@
 #ifndef	_PMCSTAT_H_
 #define	_PMCSTAT_H_
 
-#include <sys/_cpuset.h>
 #include <libpmcstat.h>
 
 #define	DEFAULT_SAMPLE_COUNT		65536

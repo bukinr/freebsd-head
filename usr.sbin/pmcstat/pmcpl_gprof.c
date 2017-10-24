@@ -76,6 +76,9 @@ __FBSDID("$FreeBSD$");
 
 typedef	uint64_t	WIDEHISTCOUNTER;
 
+#define	min(A,B)		((A) < (B) ? (A) : (B))
+#define	max(A,B)		((A) > (B) ? (A) : (B))
+
 #define	WIDEHISTCOUNTER_MAX		UINT64_MAX
 #define	HISTCOUNTER_MAX			USHRT_MAX
 #define	WIDEHISTCOUNTER_GMONTYPE	((int) 64)

@@ -151,6 +151,10 @@ pt_buf_allocate(uint32_t cpu, struct pmc *pm, const struct pmc_op_pmcallocate *a
 
 	if (pm_pta->flags & INTEL_PT_FLAG_BRANCHES)
 		pt_buf->flags |= INTEL_PT_FLAG_BRANCHES;
+	if (pm_pta->flags & INTEL_PT_FLAG_TSC)
+		pt_buf->flags |= INTEL_PT_FLAG_TSC;
+	if (pm_pta->flags & INTEL_PT_FLAG_MTC)
+		pt_buf->flags |= INTEL_PT_FLAG_MTC;
 
 	return (0);
 }

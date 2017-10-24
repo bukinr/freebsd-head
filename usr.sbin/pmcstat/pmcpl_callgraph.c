@@ -73,6 +73,9 @@ __FBSDID("$FreeBSD$");
 #include "pmcstat_top.h"
 #include "pmcpl_callgraph.h"
 
+#define	min(A,B)		((A) < (B) ? (A) : (B))
+#define	max(A,B)		((A) > (B) ? (A) : (B))
+
 /* Get the sample value in percent related to nsamples. */
 #define PMCPL_CG_COUNTP(a) \
 	((a)->pcg_count * 100.0 / nsamples)
