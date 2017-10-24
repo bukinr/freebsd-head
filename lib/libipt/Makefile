@@ -47,10 +47,11 @@ SRCS=	\
 	pt_version.c
 
 CFLAGS+=	\
-	-I${LIBIPTSRC}/libipt/internal/include		\
 	-I${LIBIPTSRC}/libipt/internal/include/posix	\
+	-I${LIBIPTSRC}/libipt/internal/include		\
+	-I${LIBIPTSRC}/libipt/include			\
 	-I${LIBIPTSRC}/include				\
-	-I${LIBIPTSRC}/libipt/include -I${.CURDIR}
+	-I${.CURDIR}
 
 CFLAGS+=	\
 	-DPT_VERSION_BUILD=0	\
