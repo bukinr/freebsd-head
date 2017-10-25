@@ -73,6 +73,7 @@ __FBSDID("$FreeBSD$");
 
 #include <libpmcstat.h>
 
+#include "pmctrace.h"
 #include "pmctrace_pt.h"
 
 #include <libipt/pt_cpu.h>
@@ -80,21 +81,6 @@ __FBSDID("$FreeBSD$");
 #include <libipt/pt_time.h>
 #include <libipt/pt_compiler.h>
 #include <libipt/intel-pt.h>
-
-struct mtrace_data {
-	uint64_t ip;
-	int cpu;
-	struct pmcstat_process *pp;
-};
-
-static struct trace_cpu {
-	uint32_t cycle;
-	uint64_t offset;
-	struct mtrace_data mdata;
-	uint32_t bufsize;
-	void *base;
-	int fd;
-} trace_cpus[4];
 
 static struct pmcstat_symbol *
 symbol_lookup(struct mtrace_data *mdata)
@@ -326,56 +312,10 @@ init_ipt(struct mtrace_data *mdata, uint64_t base,
 }
 
 int
-pmc_ipt_init(uint32_t cpu)
-{
-	struct trace_cpu *cc;
-	char filename[16];
-	struct mtrace_data *mdata;
-
-	printf("%s: cpu %d\n", __func__, cpu);
-
-	cc = &trace_cpus[cpu];
-	mdata = &cc->mdata;
-	mdata->ip = 0;
-	mdata->cpu = cpu;
-
-	sprintf(filename, "/dev/pmc%d", cpu);
-
-#if 0
-	printf("%s: cpu %d: fd open\n", __func__, cpu);
-#endif
-
-	cc->fd = open(filename, O_RDWR);
-	if (cc->fd < 0) {
-		printf("Can't open %s\n", filename);
-		return (-1);
-	}
-
-	cc->bufsize = 256 * 1024 * 1024;
-	cc->cycle = 0;
-	cc->offset = 0;
-
-#if 0
-	printf("%s: cpu %d: mmap\n", __func__, cpu);
-#endif
-
-	cc->base = mmap(NULL, cc->bufsize, PROT_READ, MAP_SHARED, cc->fd, 0);
-	if (cc->base == MAP_FAILED) {
-		printf("mmap failed: err %d\n", errno);
-		return (-1);
-	}
-
-	return (0);
-}
-
-int
-ipt_process(struct pmcstat_process *pp, uint32_t cpu,
-    uint32_t cycle, uint64_t offset)
+ipt_process(struct trace_cpu *cc, struct pmcstat_process *pp,
+    uint32_t cpu, uint32_t cycle, uint64_t offset)
 {
 	struct mtrace_data *mdata;
-	struct trace_cpu *cc;
-
-	cc = &trace_cpus[cpu];
 
 #if 0
 	printf("pp is %lx\n", (uint64_t)pp);

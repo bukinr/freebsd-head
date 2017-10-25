@@ -34,7 +34,7 @@
 #ifndef _PMCTRACE_PT_H_
 #define _PMCTRACE_PT_H_
 
-int	pmc_ipt_init(uint32_t cpu);
-int	ipt_process(struct pmcstat_process *pp, uint32_t cpu, uint32_t cycle, uint64_t offset);
+int ipt_process(struct trace_cpu *cc, struct pmcstat_process *pp,
+    uint32_t cpu, uint32_t cycle, uint64_t offset);
 
 #endif /* !_PMCTRACE_PT_H_ */
