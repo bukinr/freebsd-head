@@ -119,6 +119,7 @@ sigusr1(int sig __unused)
 }
 #endif
 
+#if 0
 static uint64_t
 sext(uint64_t val, uint8_t sign)
 {
@@ -129,6 +130,7 @@ sext(uint64_t val, uint8_t sign)
 
 	return val & signbit ? val | mask : val & ~mask;
 }
+#endif
 
 struct ptdump_buffer {
 	char offset[17];
@@ -139,13 +141,13 @@ struct ptdump_buffer {
 	} payload;
 };
 
-static void
+static struct pmcstat_symbol *
 symbol_lookup(struct mtrace_data *mdata)
 {
-	struct pmcstat_pcmap *map;
 	struct pmcstat_image *image;
-	uint64_t newpc;
 	struct pmcstat_symbol *sym;
+	struct pmcstat_pcmap *map;
+	uint64_t newpc;
 	uint64_t ip;
 
 	if (mdata->ip & (1UL << 47))
@@ -159,33 +161,21 @@ symbol_lookup(struct mtrace_data *mdata)
 		newpc = ip - (map->ppm_lowpc +
 			(image->pi_vaddr - image->pi_start));
 		sym = pmcstat_symbol_search(image, newpc);
-		if (sym)
-			printf("cpu%d:  IP 0x%lx %s\n", mdata->cpu,
-			    ip,
-			    pmcstat_string_unintern(sym->ps_name));
+		return (sym);
+	} else {
 #if 0
-		else
-			printf("cpu%d: 0x%lx not found, image->pi_vaddr %lx, image->pi_start %lx, map->ppm_lowpc %lx, pc %lx, newpc %lx\n",
-			    mdata->cpu, ip, image->pi_vaddr, image->pi_start, map->ppm_lowpc, mdata->ip, newpc);
-#endif
-	}
-
-#if 0
-	else {
 		printf("cpu%d: 0x%lx .\n", mdata->cpu, ip);
 		//printf("map not found, pp %lx, ip %lx\n", (uint64_t)mdata->pp, >ip);
-		//return (12);
-	}
 #endif
+	}
 
-	//printf("ok\n");
+	return (NULL);
 }
 
 static int
 print_tnt_payload(struct ptdump_buffer *buffer, uint64_t offset __unused,
     const struct pt_packet_tnt *packet)
 {
-
 	uint64_t tnt;
 	uint8_t bits;
 	char *begin, *end;
@@ -207,90 +197,58 @@ print_tnt_payload(struct ptdump_buffer *buffer, uint64_t offset __unused,
 }
 
 static int
-print_ip_payload(struct mtrace_data *mdata, struct ptdump_buffer *buffer,
-    uint64_t offset __unused, const struct pt_packet_ip *packet)
+print_ip_payload(struct mtrace_data *mdata, uint64_t offset __unused,
+    const struct pt_packet_ip *packet)
 {
+	struct pmcstat_symbol *sym;
 
 	switch (packet->ipc) {
 	case pt_ipc_suppressed:
-		print_field(buffer->payload.standard, "%x: ????????????????",
-			    pt_ipc_suppressed);
-		return 0;
-
+		break;
 	case pt_ipc_update_16:
-
 		mdata->ip &= ~0xffff;
 		mdata->ip |= (packet->ip & 0xffff);
-
-		symbol_lookup(mdata);
-		print_field(buffer->payload.standard, "%x: %016"
-			    PRIx64, pt_ipc_update_16, mdata->ip);
-		return (0);
-
-		//printf("%s: %lx\n", __func__, packet->ip);
-		print_field(buffer->payload.standard, "%x: ????????????%04"
-			    PRIx64, pt_ipc_update_16, packet->ip);
-		return 0;
-
+		break;
 	case pt_ipc_update_32:
 		mdata->ip &= ~0xffffffffUL;
 		mdata->ip |= (packet->ip & 0xffffffff);
-
-		symbol_lookup(mdata);
-		print_field(buffer->payload.standard, "%x: %016"
-			    PRIx64, pt_ipc_update_32, mdata->ip);
-		return (0);
-
-		print_field(buffer->payload.standard, "%x: ????????%08"
-			    PRIx64, pt_ipc_update_32, packet->ip);
-		return 0;
-
+		break;
 	case pt_ipc_update_48:
 		mdata->ip &= ~0xffffffffffffUL;
 		mdata->ip |= (packet->ip & 0xffffffffffff);
-		symbol_lookup(mdata);
-		print_field(buffer->payload.standard, "%x: %016"
-			    PRIx64, pt_ipc_update_48, mdata->ip);
-		return (0);
-		print_field(buffer->payload.standard, "%x: ????%012"
-			    PRIx64, pt_ipc_update_48, packet->ip);
-		return 0;
-
+		break;
 	case pt_ipc_sext_48:
 		mdata->ip &= ~0xffffffffffffUL;
 		mdata->ip |= (packet->ip & 0xffffffffffff);
 		symbol_lookup(mdata);
-		print_field(buffer->payload.standard, "%x: %016"
-			    PRIx64, pt_ipc_sext_48, mdata->ip);
-		return (0);
-		print_field(buffer->payload.standard, "%x: %016" PRIx64,
-			    pt_ipc_sext_48, sext(packet->ip, 48));
-		return 0;
-
 	case pt_ipc_full:
 		mdata->ip = packet->ip;
-		symbol_lookup(mdata);
-		print_field(buffer->payload.standard, "%x: %016"
-			    PRIx64, pt_ipc_update_16, mdata->ip);
-		return (0);
-		print_field(buffer->payload.standard, "%x: %016" PRIx64,
-			    pt_ipc_full, packet->ip);
-		return 0;
+		break;
 	default:
-		printf("unknown ipc\n");
+		printf("unknown ipc: %d\n", packet->ipc);
+		return (0);
 	}
 
-	print_field(buffer->payload.standard, "%x: %016" PRIx64,
-	    packet->ipc, packet->ip);
+	sym = symbol_lookup(mdata);
+	if (sym)
+		printf("cpu%d:  IP 0x%lx %s\n", mdata->cpu, mdata->ip, pmcstat_string_unintern(sym->ps_name));
+
+#if 0
+		else
+			printf("cpu%d: 0x%lx not found, image->pi_vaddr %lx, image->pi_start %lx, map->ppm_lowpc %lx, pc %lx, newpc %lx\n",
+			    mdata->cpu, ip, image->pi_vaddr, image->pi_start, map->ppm_lowpc, mdata->ip, newpc);
+#endif
+
+	return (0);
 }
 
 static int
 dump_packets(struct mtrace_data *mdata, struct pt_packet_decoder *decoder,
     const struct pt_config *config __unused)
 {
-	uint64_t offset;
-	struct pt_packet packet;
 	struct ptdump_buffer buffer;
+	struct pt_packet packet;
+	uint64_t offset;
 	const char *sep;
 	int error;
 
@@ -332,19 +290,19 @@ dump_packets(struct mtrace_data *mdata, struct pt_packet_decoder *decoder,
 			break;
 		case ppt_fup:
 			print_field(buffer.opcode, "fup");
-			print_ip_payload(mdata, &buffer, offset, &packet.payload.ip);
+			print_ip_payload(mdata, offset, &packet.payload.ip);
 			break;
 		case ppt_tip:
 			print_field(buffer.opcode, "tip");
-			print_ip_payload(mdata, &buffer, offset, &packet.payload.ip);
+			print_ip_payload(mdata, offset, &packet.payload.ip);
 			break;
 		case ppt_tip_pge:
 			print_field(buffer.opcode, "tip_pge");
-			print_ip_payload(mdata, &buffer, offset, &packet.payload.ip);
+			print_ip_payload(mdata, offset, &packet.payload.ip);
 			break;
 		case ppt_tip_pgd:
 			print_field(buffer.opcode, "tip_pgd");
-			print_ip_payload(mdata, &buffer, offset, &packet.payload.ip);
+			print_ip_payload(mdata, offset, &packet.payload.ip);
 			break;
 		case ppt_mode:
 			continue;
