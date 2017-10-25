@@ -176,7 +176,7 @@ pmcstat_process_cpu(int cpu, struct pmcstat_ev *ev)
 		pp = pmcstat_kernproc;
 
 	if (pp)
-		ipt_process(cc, pp, cpu, cycle, offset);
+		trace_devs[0].process(cc, pp, cpu, cycle, offset);
 #if 0
 	else
 		printf("pp not found\n");
