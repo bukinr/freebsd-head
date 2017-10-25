@@ -77,23 +77,18 @@ static struct pmcstat_args args;
 static struct kevent kev;
 static struct pmcstat_process *pmcstat_kernproc;
 static struct pmcstat_stats pmcstat_stats;
+static struct trace_cpu *trace_cpus[MAX_CPU];
+static struct pmc_plugins plugins[] = {};
 
 static int pmcstat_sockpair[NSOCKPAIRFD];
 static int pmcstat_kq;
 static int pmcstat_npmcs;
 static int pmcstat_mergepmc;
-
 static int ps_samples_period;
-static struct trace_cpu *trace_cpus[MAX_CPU];
 
-/* All image descriptors are kept in a hash table. */
 struct pmcstat_image_hash_list pmcstat_image_hash[PMCSTAT_NHASH];
-/* All process descriptors are kept in a hash table. */
-
 struct pmcstat_process_hash_list pmcstat_process_hash[PMCSTAT_NHASH];
 struct pmcstat_pmcs pmcstat_pmcs = LIST_HEAD_INITIALIZER(pmcstat_pmcs);
-
-static struct pmc_plugins plugins[] = {};
 
 static int
 pmctrace_ncpu(void)
@@ -116,8 +111,6 @@ pmctrace_init_cpu(uint32_t cpu)
 	struct trace_cpu *cc;
 	char filename[16];
 	struct mtrace_data *mdata;
-
-	printf("%s: cpu %d\n", __func__, cpu);
 
 	cc = trace_cpus[cpu];
 	mdata = &cc->mdata;
@@ -197,12 +190,6 @@ pmcstat_log_pt(int user_mode)
 
 	return (0);
 }
-
-/*
- * Convert a hwpmc(4) log to profile information.  A system-wide
- * callgraph is generated if FLAG_DO_CALLGRAPHS is set.  gmon.out
- * files usable by gprof(1) are created if FLAG_DO_GPROF is set.
- */
 
 static void
 pmctrace_start_pmcs(void)
