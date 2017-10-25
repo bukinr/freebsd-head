@@ -173,14 +173,17 @@ print_ip_payload(struct mtrace_data *mdata, uint64_t offset __unused,
 	}
 
 	sym = symbol_lookup(mdata);
-	if (sym)
-		printf("cpu%d:  IP 0x%lx %s\n", mdata->cpu, mdata->ip, pmcstat_string_unintern(sym->ps_name));
-
+	if (sym) {
+		printf("cpu%d:  IP 0x%lx %s\n", mdata->cpu, mdata->ip,
+		    pmcstat_string_unintern(sym->ps_name));
+	} else {
 #if 0
-		else
-			printf("cpu%d: 0x%lx not found, image->pi_vaddr %lx, image->pi_start %lx, map->ppm_lowpc %lx, pc %lx, newpc %lx\n",
-			    mdata->cpu, ip, image->pi_vaddr, image->pi_start, map->ppm_lowpc, mdata->ip, newpc);
+		printf("cpu%d: 0x%lx not found, image->pi_vaddr %lx,
+		    image->pi_start %lx, map->ppm_lowpc %lx, pc %lx, newpc %lx\n",
+		    mdata->cpu, ip, image->pi_vaddr, image->pi_start,
+		    map->ppm_lowpc, mdata->ip, newpc);
 #endif
+	}
 
 	return (0);
 }
@@ -277,7 +280,8 @@ init_ipt(struct mtrace_data *mdata, uint64_t base,
 	config.end = (uint8_t *)(base + end);
 
 #if 0
-	printf("%s: begin %lx end %lx\n", __func__, (uint64_t)config.begin, (uint64_t)config.end);
+	printf("%s: begin %lx end %lx\n", __func__,
+	    (uint64_t)config.begin, (uint64_t)config.end);
 #endif
 
 	decoder = pt_pkt_alloc_decoder(&config);
@@ -288,9 +292,6 @@ init_ipt(struct mtrace_data *mdata, uint64_t base,
 
 	//error = pt_pkt_sync_set(decoder, 0ull);
 	error = pt_pkt_sync_forward(decoder);
-
-	//struct ptdump_tracking tracking;
-	//ptdump_tracking_init(&tracking);
 
 	while (1) {
 		error = dump_packets(mdata, decoder, &config);
@@ -304,8 +305,6 @@ init_ipt(struct mtrace_data *mdata, uint64_t base,
 			if (error == -pte_eos)
 				return (0);
 		}
-
-		//ptdump_tracking_reset(tracking);
 	}
 
 	return (0);
@@ -316,10 +315,6 @@ ipt_process(struct trace_cpu *cc, struct pmcstat_process *pp,
     uint32_t cpu, uint32_t cycle, uint64_t offset)
 {
 	struct mtrace_data *mdata;
-
-#if 0
-	printf("pp is %lx\n", (uint64_t)pp);
-#endif
 
 	mdata = &cc->mdata;
 	mdata->pp = pp;
@@ -342,8 +337,8 @@ ipt_process(struct trace_cpu *cc, struct pmcstat_process *pp,
 		}
 	} else if (cycle > cc->cycle) {
 		if ((cycle - cc->cycle) > 1)
-			err(EXIT_FAILURE, "cpu%d: trace is too fast, machine cycle %d, mtrace cycle %d",
-			    cpu, cycle, cc->cycle);
+			err(EXIT_FAILURE, "cpu%d: trace is too fast, machine cycle %d,"
+			    "mtrace cycle %d", cpu, cycle, cc->cycle);
 		init_ipt(mdata, (uint64_t)cc->base, cc->offset, cc->bufsize);
 		cc->offset = 0;
 		cc->cycle += 1;
