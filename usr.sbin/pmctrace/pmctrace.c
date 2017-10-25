@@ -126,10 +126,6 @@ pmctrace_init_cpu(uint32_t cpu)
 
 	sprintf(filename, "/dev/pmc%d", cpu);
 
-#if 0
-	printf("%s: cpu %d: fd open\n", __func__, cpu);
-#endif
-
 	cc->fd = open(filename, O_RDWR);
 	if (cc->fd < 0) {
 		printf("Can't open %s\n", filename);
@@ -139,10 +135,6 @@ pmctrace_init_cpu(uint32_t cpu)
 	cc->bufsize = 256 * 1024 * 1024;
 	cc->cycle = 0;
 	cc->offset = 0;
-
-#if 0
-	printf("%s: cpu %d: mmap\n", __func__, cpu);
-#endif
 
 	cc->base = mmap(NULL, cc->bufsize, PROT_READ, MAP_SHARED, cc->fd, 0);
 	if (cc->base == MAP_FAILED) {
@@ -533,13 +525,6 @@ main(int argc, char *argv[])
 			ev->ev_spec = strdup(optarg);
 			if (ev->ev_spec == NULL)
 				errx(EX_SOFTWARE, "ERROR: Out of memory.");
-
-#if 0
-			if (stat(optarg, &sb) < 0)
-				err(EX_OSERR, "ERROR: Cannot stat \"%s\"",
-				    optarg);
-			app_filename = optarg;
-#endif
 			break;
 		default:
 			break;
@@ -568,24 +553,13 @@ main(int argc, char *argv[])
 
 	ev->ev_saved = 0LL;
 	ev->ev_pmcid = PMC_ID_INVALID;
-
-#if 0
-	/* extract event name */
-	c = strcspn(optarg, ", \t");
-	ev->ev_name = malloc(c + 1);
-	if (ev->ev_name == NULL)
-		errx(EX_SOFTWARE, "ERROR: Out of memory.");
-	(void) strncpy(ev->ev_name, optarg, c);
-	*(ev->ev_name + c) = '\0';
-#endif
 	ev->ev_name = strdup("pmctrace");
+	ev->ev_flags = 0;
 
 	if (!user_mode)
 		ev->ev_cpu = CPU_FFS(&cpumask) - 1;
 	else
 		ev->ev_cpu = PMC_CPU_ANY;
-
-	ev->ev_flags = 0;
 
 	STAILQ_INSERT_TAIL(&args.pa_events, ev, ev_next);
 
