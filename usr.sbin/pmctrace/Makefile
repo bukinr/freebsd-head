@@ -2,11 +2,14 @@
 # $FreeBSD$
 
 PROG=	pmctrace
-SRCS=	\
-	pmctrace.c	\
-	pmctrace_pt.c	\
-	pmctrace_pt.h
+SRCS=	pmctrace.c
 
-LIBADD=	elf ipt pmc pmcstat
+LIBADD=	elf pmc pmcstat
+
+.if ${MACHINE_CPUARCH} == "amd64"
+SRCS+=	pmctrace_pt.c	\
+	pmctrace_pt.h
+LIBADD+= ipt
+.endif
 
 .include <bsd.prog.mk>
