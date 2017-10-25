@@ -74,32 +74,44 @@ __FBSDID("$FreeBSD$");
 #define	MAX_CPU	4096
 
 static struct pmcstat_args args;
+static struct kevent kev;
+static struct pmcstat_process *pmcstat_kernproc;
+static struct pmcstat_stats pmcstat_stats;
+
 static int pmcstat_sockpair[NSOCKPAIRFD];
 static int pmcstat_kq;
-static struct kevent kev;
-
-static struct pmcstat_process *pmcstat_kernproc;
 static int pmcstat_npmcs;
 static int pmcstat_mergepmc;
-static struct pmcstat_stats pmcstat_stats;
+
 static int ps_samples_period;
-
 static struct trace_cpu *trace_cpus[MAX_CPU];
-/*
- * All image descriptors are kept in a hash table.
- */
+
+/* All image descriptors are kept in a hash table. */
 struct pmcstat_image_hash_list pmcstat_image_hash[PMCSTAT_NHASH];
+/* All process descriptors are kept in a hash table. */
 
-/*
- * All process descriptors are kept in a hash table.
- */
 struct pmcstat_process_hash_list pmcstat_process_hash[PMCSTAT_NHASH];
-
 struct pmcstat_pmcs pmcstat_pmcs = LIST_HEAD_INITIALIZER(pmcstat_pmcs);
+
 static struct pmc_plugins plugins[] = {};
 
 static int
-pmctrace_init(uint32_t cpu)
+pmctrace_ncpu(void)
+{
+	size_t ncpu_size;
+	int error;
+	int ncpu;
+
+	ncpu_size = sizeof(ncpu);
+	error = sysctlbyname("hw.ncpu", &ncpu, &ncpu_size, NULL, 0);
+	if (error)
+		return (-1);
+
+	return (ncpu);
+}
+
+static int
+pmctrace_init_cpu(uint32_t cpu)
 {
 	struct trace_cpu *cc;
 	char filename[16];
@@ -317,21 +329,6 @@ pmctrace_setup_cpumask(cpuset_t *cpumask)
 }
 
 static int
-pmctrace_ncpu(void)
-{
-	size_t ncpu_size;
-	int error;
-	int ncpu;
-
-	ncpu_size = sizeof(ncpu);
-	error = sysctlbyname("hw.ncpu", &ncpu, &ncpu_size, NULL, 0);
-	if (error)
-		return (-1);
-
-	return (ncpu);
-}
-
-static int
 pmctrace_run(bool user_mode, char *func_name, char *func_image)
 {
 	struct pmcstat_process *pp;
@@ -485,10 +482,10 @@ main(int argc, char *argv[])
 	bool user_mode;
 	bool supervisor_mode;
 	int option;
-	int ncpu;
 	cpuset_t cpumask;
 	char *func_name;
 	char *func_image;
+	int ncpu;
 	int i;
 
 	bzero(&args, sizeof(struct pmcstat_args));
@@ -598,16 +595,13 @@ main(int argc, char *argv[])
 		CPU_SET(ev->ev_cpu, &cpumask);
 	}
 
-	struct trace_cpu *cc;
-
 	ncpu = pmctrace_ncpu();
 	if (ncpu < 0)
 		errx(EX_SOFTWARE, "ERROR: Can't get cpus\n");
 
 	for (i = 0; i < ncpu; i++) {
-		cc = malloc(sizeof(struct trace_cpu));
-		trace_cpus[i] = cc;
-		pmctrace_init(i);
+		trace_cpus[i] = malloc(sizeof(struct trace_cpu));
+		pmctrace_init_cpu(i);
 	}
 
 	if (pmc_init() < 0)
