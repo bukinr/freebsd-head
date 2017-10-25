@@ -45,6 +45,8 @@ __FBSDID("$FreeBSD$");
 #include <sys/user.h>
 #include <sys/wait.h>
 
+#include <machine/pt.h>
+
 #include <assert.h>
 #include <curses.h>
 #include <err.h>
@@ -69,30 +71,15 @@ __FBSDID("$FreeBSD$");
 #include <gelf.h>
 #include <inttypes.h>
 
-#include <machine/pt.h>
-
 #include <libpmcstat.h>
-//#include "pmcstat_log.h"
-//#include "pmcstat.h"
-#include "pmctrace_pt.h"
 
-#include <pmc.h>
+#include "pmctrace_pt.h"
 
 #include <libipt/pt_cpu.h>
 #include <libipt/pt_last_ip.h>
 #include <libipt/pt_time.h>
 #include <libipt/pt_compiler.h>
 #include <libipt/intel-pt.h>
-
-#define	round_up(x,y) (((x) + (y) - 1) & ~((y)-1))
-#define	round_down(x,y) ((x) & ~((y)-1))
-
-#define print_field(field, ...)					\
-	do {							\
-		/* Avoid partial overwrites. */			\
-		memset(field, 0, sizeof(field));		\
-		snprintf(field, sizeof(field), __VA_ARGS__);	\
-	} while (0)
 
 struct mtrace_data {
 	uint64_t ip;
@@ -108,38 +95,6 @@ static struct trace_cpu {
 	void *base;
 	int fd;
 } trace_cpus[4];
-
-#if 0
-static int mtrace_kq;
-static void
-sigusr1(int sig __unused)
-{
-
-	printf("signal\n");
-}
-#endif
-
-#if 0
-static uint64_t
-sext(uint64_t val, uint8_t sign)
-{
-	uint64_t signbit, mask;
-
-	signbit = 1ull << (sign - 1);
-	mask = ~0ull << sign;
-
-	return val & signbit ? val | mask : val & ~mask;
-}
-#endif
-
-struct ptdump_buffer {
-	char offset[17];
-	char opcode[10];
-	union {
-		char standard[25];
-		char extended[48];
-	} payload;
-};
 
 static struct pmcstat_symbol *
 symbol_lookup(struct mtrace_data *mdata)
@@ -173,25 +128,27 @@ symbol_lookup(struct mtrace_data *mdata)
 }
 
 static int
-print_tnt_payload(struct ptdump_buffer *buffer, uint64_t offset __unused,
+print_tnt_payload(struct mtrace_data *mdata, uint64_t offset __unused,
     const struct pt_packet_tnt *packet)
 {
+	char payload[48];
 	uint64_t tnt;
 	uint8_t bits;
-	char *begin, *end;
+	char *begin;
+	char *end;
 
 	bits = packet->bit_size;
 	tnt = packet->payload;
-	begin = buffer->payload.extended;
+	begin = &payload[0];
 	end = begin + bits;
 
-	if (sizeof(buffer->payload.extended) < bits) {
-		/* Truncating tnt payload */
-		end = begin + sizeof(buffer->payload.extended);
-	}
+	if (sizeof(payload) < bits)
+		end = begin + sizeof(payload);
 
 	for (; begin < end; ++begin, --bits)
 		*begin = tnt & (1ull << (bits - 1)) ? '!' : '.';
+
+	printf("cpu%d: TNT %s\n", mdata->cpu, payload);
 
 	return (0);
 }
@@ -246,17 +203,9 @@ static int
 dump_packets(struct mtrace_data *mdata, struct pt_packet_decoder *decoder,
     const struct pt_config *config __unused)
 {
-	struct ptdump_buffer buffer;
 	struct pt_packet packet;
 	uint64_t offset;
-	const char *sep;
 	int error;
-
-#if 0
-	printf("%s\n", __func__);
-#endif
-
-	sep = "";
 
 	while (1) {
 		error = pt_pkt_get_offset(decoder, &offset);
@@ -271,88 +220,48 @@ dump_packets(struct mtrace_data *mdata, struct pt_packet_decoder *decoder,
 			break;
 		}
 
-		memset(&buffer, 0, sizeof(buffer));
-
-		//print_field(buffer.offset, "%016" PRIx64, offset);
-
 		switch (packet.type) {
-		case ppt_psb:
-			continue;
-			print_field(buffer.opcode, "psb");
-			break;
-		case ppt_psbend:
-			continue;
-			print_field(buffer.opcode, "psbend");
-			break;
+		case ppt_invalid:
+		case ppt_unknown:
 		case ppt_pad:
-			continue;
-			print_field(buffer.opcode, "pad");
+		case ppt_psb:
+		case ppt_psbend:
 			break;
 		case ppt_fup:
-			print_field(buffer.opcode, "fup");
-			print_ip_payload(mdata, offset, &packet.payload.ip);
-			break;
 		case ppt_tip:
-			print_field(buffer.opcode, "tip");
-			print_ip_payload(mdata, offset, &packet.payload.ip);
-			break;
 		case ppt_tip_pge:
-			print_field(buffer.opcode, "tip_pge");
+		case ppt_tip_pgd:
 			print_ip_payload(mdata, offset, &packet.payload.ip);
 			break;
-		case ppt_tip_pgd:
-			print_field(buffer.opcode, "tip_pgd");
-			print_ip_payload(mdata, offset, &packet.payload.ip);
+		case ppt_tnt_8:
+		case ppt_tnt_64:
+			print_tnt_payload(mdata, offset, &packet.payload.tnt);
 			break;
 		case ppt_mode:
-			continue;
-			print_field(buffer.opcode, "mode");
+		case ppt_pip:
+		case ppt_vmcs:
+		case ppt_cbr:
 			break;
 		case ppt_tsc:
-			//printf("TSC\n");
 			printf("cpu%d: TSC %ld\n", mdata->cpu, packet.payload.tsc.tsc);
-			continue;
-			print_field(buffer.opcode, "tsc");
-			print_field(buffer.payload.standard, "%" PRIx64,
-			    packet.payload.tsc.tsc);
 			break;
 		case ppt_tma:
-			continue;
-			print_field(buffer.opcode, "tma");
 			break;
 		case ppt_mtc:
 			printf("cpu%d: MTC %x\n", mdata->cpu, packet.payload.mtc.ctc);
-			continue;
-			print_field(buffer.opcode, "mtc");
-			print_field(buffer.payload.standard, "%x",
-			    packet.payload.mtc.ctc);
 			break;
-		case ppt_cbr:
-			continue;
-			print_field(buffer.opcode, "cbr");
-			break;
-		case ppt_pip:
-			continue;
-		case ppt_tnt_8:
-			continue;
-			print_field(buffer.opcode, "tnt.8");
-			print_tnt_payload(&buffer, offset, &packet.payload.tnt);
-			break;
-		case ppt_tnt_64:
-			continue;
-			print_field(buffer.opcode, "tnt.64");
-			print_tnt_payload(&buffer, offset, &packet.payload.tnt);
-			break;
+		case ppt_cyc:
+		case ppt_stop:
+		case ppt_ovf:
+		case ppt_mnt:
+		case ppt_exstop:
+		case ppt_mwait:
+		case ppt_pwre:
+		case ppt_pwrx:
+		case ppt_ptw:
 		default:
-			printf("unknown packet %d\n", packet.type);
-			continue;
 			break;
 		}
-#if 0
-		printf("%s%s: ", sep, buffer.opcode);
-		//printf(" %s\n", buffer.payload.extended);
-		printf(" %s\n", buffer.payload.standard);
-#endif
 	}
 
 	return (0);
