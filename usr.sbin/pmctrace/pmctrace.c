@@ -69,7 +69,9 @@ __FBSDID("$FreeBSD$");
 #include <libpmcstat.h>
 
 #include "pmctrace.h"
+#if defined(__amd64__)
 #include "pmctrace_pt.h"
+#endif
 
 #define	MAX_CPU	4096
 
@@ -89,6 +91,19 @@ static int ps_samples_period;
 struct pmcstat_image_hash_list pmcstat_image_hash[PMCSTAT_NHASH];
 struct pmcstat_process_hash_list pmcstat_process_hash[PMCSTAT_NHASH];
 struct pmcstat_pmcs pmcstat_pmcs = LIST_HEAD_INITIALIZER(pmcstat_pmcs);
+
+struct trace_dev {
+	const char *ev_spec;
+	int (*process)(struct trace_cpu *, struct pmcstat_process *,
+	    uint32_t cpu, uint32_t cycle, uint64_t offset);
+};
+
+static struct trace_dev trace_devs[] = {
+#if defined(__amd64__)
+	{ "pt",	ipt_process },
+#endif
+	{ NULL,	NULL }
+};
 
 static int
 pmctrace_ncpu(void)
