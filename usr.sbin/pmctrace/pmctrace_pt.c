@@ -160,7 +160,7 @@ symbol_lookup(struct mtrace_data *mdata)
 			(image->pi_vaddr - image->pi_start));
 		sym = pmcstat_symbol_search(image, newpc);
 		if (sym)
-			printf("cpu%d: 0x%lx %s\n", mdata->cpu,
+			printf("cpu%d:  IP 0x%lx %s\n", mdata->cpu,
 			    ip,
 			    pmcstat_string_unintern(sym->ps_name));
 #if 0
@@ -351,6 +351,8 @@ dump_packets(struct mtrace_data *mdata, struct pt_packet_decoder *decoder,
 			print_field(buffer.opcode, "mode");
 			break;
 		case ppt_tsc:
+			//printf("TSC\n");
+			printf("cpu%d: TSC %ld\n", mdata->cpu, packet.payload.tsc.tsc);
 			continue;
 			print_field(buffer.opcode, "tsc");
 			print_field(buffer.payload.standard, "%" PRIx64,
@@ -361,8 +363,11 @@ dump_packets(struct mtrace_data *mdata, struct pt_packet_decoder *decoder,
 			print_field(buffer.opcode, "tma");
 			break;
 		case ppt_mtc:
+			printf("cpu%d: MTC %x\n", mdata->cpu, packet.payload.mtc.ctc);
 			continue;
 			print_field(buffer.opcode, "mtc");
+			print_field(buffer.payload.standard, "%x",
+			    packet.payload.mtc.ctc);
 			break;
 		case ppt_cbr:
 			continue;
@@ -497,7 +502,8 @@ pmc_ipt_init(uint32_t cpu)
 }
 
 int
-ipt_process(struct pmcstat_process *pp, uint32_t cpu, uint32_t cycle, uint64_t offset)
+ipt_process(struct pmcstat_process *pp, uint32_t cpu,
+    uint32_t cycle, uint64_t offset)
 {
 	struct mtrace_data *mdata;
 	struct trace_cpu *cc;

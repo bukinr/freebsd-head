@@ -1341,6 +1341,8 @@ pmc_process_csw_in(struct thread *td)
 			mtx_pool_lock_spin(pmc_mtxpool, pm);
 			newvalue = PMC_PCPU_SAVED(cpu, ri) =
 			    pm->pm_gv.pm_savedvalue;
+			printf("in:  TEST1 td %lx savedvalue ptr %lx val %ld\n",
+			    (uint64_t)td, (uint64_t)&pm->pm_gv.pm_savedvalue, pm->pm_gv.pm_savedvalue);
 			mtx_pool_unlock_spin(pmc_mtxpool, pm);
 		}
 
@@ -1533,6 +1535,8 @@ pmc_process_csw_out(struct thread *td)
 
 				mtx_pool_lock_spin(pmc_mtxpool, pm);
 				pm->pm_gv.pm_savedvalue += tmp;
+				printf("out: TEST1 td %lx savedvalue ptr %lx val %ld tmp %ld\n",
+				    (uint64_t)td, (uint64_t)&pm->pm_gv.pm_savedvalue, pm->pm_gv.pm_savedvalue, tmp);
 				pp->pp_pmcs[ri].pp_pmcval += tmp;
 				mtx_pool_unlock_spin(pmc_mtxpool, pm);
 
