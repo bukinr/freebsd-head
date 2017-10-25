@@ -482,7 +482,6 @@ int
 main(int argc, char *argv[])
 {
 	struct pmcstat_ev *ev;
-	//char *app_filename;
 	bool user_mode;
 	bool supervisor_mode;
 	int option;
@@ -504,7 +503,7 @@ main(int argc, char *argv[])
 	SLIST_INIT(&args.pa_targets);
 	CPU_ZERO(&cpumask);
 
-	args.pa_fsroot = strdup("/");
+	args.pa_fsroot = strdup("/");	/* TODO */
 
 	pmctrace_find_kernel();
 	pmctrace_setup_cpumask(&cpumask);
@@ -568,22 +567,6 @@ main(int argc, char *argv[])
 
 	printf("%s\n", __func__);
 
-#if 0
-	if ((ev = malloc(sizeof(*ev))) == NULL)
-		errx(EX_SOFTWARE, "ERROR: Out of memory.");
-
-	if (!user_mode)
-		ev->ev_mode = PMC_MODE_ST;
-	else {
-		ev->ev_mode = PMC_MODE_TT;
-		args.pa_flags |= FLAG_HAS_PROCESS_PMCS;
-	}
-#endif
-
-	//ev->ev_spec = strdup("pt");
-	//if (ev->ev_spec == NULL)
-	//	errx(EX_SOFTWARE, "ERROR: Out of memory.");
-
 	args.pa_required |= (FLAG_HAS_PIPE | FLAG_HAS_OUTPUT_LOGFILE);
 
 	ev->ev_saved = 0LL;
@@ -598,7 +581,7 @@ main(int argc, char *argv[])
 	(void) strncpy(ev->ev_name, optarg, c);
 	*(ev->ev_name + c) = '\0';
 #endif
-	ev->ev_name = strdup("testname");
+	ev->ev_name = strdup("pmctrace");
 
 	if (!user_mode)
 		ev->ev_cpu = CPU_FFS(&cpumask) - 1;
@@ -608,8 +591,6 @@ main(int argc, char *argv[])
 	ev->ev_flags = 0;
 
 	STAILQ_INSERT_TAIL(&args.pa_events, ev, ev_next);
-
-	printf("%s\n", __func__);
 
 	if (!user_mode) {
 		CPU_CLR(ev->ev_cpu, &cpumask);
@@ -628,8 +609,6 @@ main(int argc, char *argv[])
 		trace_cpus[i] = cc;
 		pmctrace_init(i);
 	}
-
-	printf("%s\n", __func__);
 
 	if (pmc_init() < 0)
 		err(EX_UNAVAILABLE, "ERROR: Initialization of the pmc(3) library failed");
@@ -650,6 +629,7 @@ main(int argc, char *argv[])
 	}
 
 	EV_SET(&kev, 0, EVFILT_TIMER, EV_ADD, 0, 100, NULL);
+
 	if (kevent(pmcstat_kq, &kev, 1, NULL, 0, NULL) < 0)
 		err(EX_OSERR, "ERROR: Cannot register kevent for timer");
 
