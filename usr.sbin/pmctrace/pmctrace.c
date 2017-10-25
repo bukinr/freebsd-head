@@ -145,22 +145,21 @@ pmcstat_pt_process(int cpu, struct pmcstat_ev *ev)
 	struct pmcstat_target *pt;
 	pmc_value_t offset;
 	pmc_value_t cycle;
+	struct trace_cpu *cc;
+
+	cc = trace_cpus[cpu];
 
 	pmc_read_trace(cpu, ev->ev_pmcid, &cycle, &offset);
 #if 0
 	printf("cpu %d cycle %lx offset %lx\n", cpu, cycle, offset);
 #endif
-	struct trace_cpu *cc;
-
-	cc = trace_cpus[cpu];
 
 	pt = SLIST_FIRST(&args.pa_targets);
-	if (pt != NULL) {
+	if (pt != NULL)
 		pp = pmcstat_process_lookup(pt->pt_pid, 0);
-		//printf("pid %d\n", pt->pt_pid);
-	} else {
+	else
 		pp = pmcstat_kernproc;
-	}
+
 	if (pp)
 		ipt_process(cc, pp, cpu, cycle, offset);
 #if 0
@@ -231,8 +230,6 @@ pmctrace_open_logfile(void)
 
 	args.pa_logfd = pipefd[WRITEPIPEFD];
 	args.pa_flags |= FLAG_HAS_PIPE;
-	//if ((args.pa_flags & FLAG_DO_TOP) == 0)
-	//	args.pa_flags |= FLAG_DO_PRINT;
 	args.pa_logparser = pmclog_open(pipefd[READPIPEFD]);
 
 	if (pmc_configure_logfile(args.pa_logfd) < 0)
@@ -310,19 +307,19 @@ pmctrace_setup_cpumask(cpuset_t *cpumask)
 static int
 pmctrace_run(bool user_mode, char *func_name, char *func_image)
 {
+	struct pmc_trace_filter_ip_range ranges[16];
+	struct pmcstat_target *pt;
 	struct pmcstat_process *pp;
 	struct pmcstat_symbol *sym;
 	struct pmcstat_ev *ev;
 	uintptr_t addr_start;
 	uintptr_t addr_end;
+	int stopping;
+	int running;
+	int started;
 	int ncpu;
 	int i;
 	int c;
-	struct pmcstat_target *pt;
-	struct pmc_trace_filter_ip_range ranges[16];
-	int running;
-	int stopping;
-	int started;
 
 	stopping = 0;
 	running = 10;
