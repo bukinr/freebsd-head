@@ -105,6 +105,10 @@ static struct trace_dev trace_devs[] = {
 	{ NULL,	NULL }
 };
 
+static struct pmctrace_config {
+	struct trace_dev *trace_dev;
+} pmctrace_cfg;
+
 static int
 pmctrace_ncpu(void)
 {
@@ -161,7 +165,9 @@ pmcstat_process_cpu(int cpu, struct pmcstat_ev *ev)
 	pmc_value_t offset;
 	pmc_value_t cycle;
 	struct trace_cpu *cc;
+	struct trace_dev *trace_dev;
 
+	trace_dev = pmctrace_cfg.trace_dev;
 	cc = trace_cpus[cpu];
 
 	pmc_read_trace(cpu, ev->ev_pmcid, &cycle, &offset);
@@ -176,7 +182,7 @@ pmcstat_process_cpu(int cpu, struct pmcstat_ev *ev)
 		pp = pmcstat_kernproc;
 
 	if (pp)
-		trace_devs[0].process(cc, pp, cpu, cycle, offset);
+		trace_dev->process(cc, pp, cpu, cycle, offset);
 #if 0
 	else
 		printf("pp not found\n");
@@ -538,6 +544,16 @@ main(int argc, char *argv[])
 	if ((func_image == NULL && func_name != NULL) ||
 	    (func_image != NULL && func_name == NULL))
 		errx(EX_USAGE, "ERROR: specify both or neither -i and -f");
+
+	for (i = 0; trace_devs[i].ev_spec != NULL; i++) {
+		if (strcmp(trace_devs[i].ev_spec, trace_devs[i].ev_spec) == 0) {
+			/* found */
+			pmctrace_cfg.trace_dev = &trace_devs[i];
+		}
+	}
+
+	if (pmctrace_cfg.trace_dev == NULL)
+		errx(EX_SOFTWARE, "ERROR: trace device not found");
 
 	args.pa_argc = (argc -= optind);
 	args.pa_argv = (argv += optind);
