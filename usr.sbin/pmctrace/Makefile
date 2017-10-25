@@ -4,7 +4,7 @@
 PROG=	pmctrace
 SRCS=	pmctrace.c
 
-LIBADD=	elf pmc pmcstat
+LIBADD= elf pmc pmcstat
 
 .if ${MACHINE_CPUARCH} == "amd64"
 SRCS+=	pmctrace_pt.c	\

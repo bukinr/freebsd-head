@@ -139,7 +139,7 @@ pmctrace_init_cpu(uint32_t cpu)
 }
 
 static int
-pmcstat_pt_process(int cpu, struct pmcstat_ev *ev)
+pmcstat_process_cpu(int cpu, struct pmcstat_ev *ev)
 {
 	struct pmcstat_process *pp;
 	struct pmcstat_target *pt;
@@ -171,21 +171,23 @@ pmcstat_pt_process(int cpu, struct pmcstat_ev *ev)
 }
 
 static int
-pmcstat_log_pt(int user_mode)
+pmcstat_process_all(int user_mode)
 {
 	struct pmcstat_ev *ev;
+	int ncpu;
 	int i;
+
+	ncpu = pmctrace_ncpu();
+	if (ncpu < 0)
+		errx(EX_SOFTWARE, "ERROR: Can't get cpus\n");
 
 	if (user_mode) {
 		ev = STAILQ_FIRST(&args.pa_events);
-		for (i = 0; i < 4; i++) {
-			pmcstat_pt_process(i, ev);
-		}
-	} else {
-		STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
-			pmcstat_pt_process(ev->ev_cpu, ev);
-		}
-	}
+		for (i = 0; i < ncpu; i++)
+			pmcstat_process_cpu(i, ev);
+	} else
+		STAILQ_FOREACH(ev, &args.pa_events, ev_next)
+			pmcstat_process_cpu(ev->ev_cpu, ev);
 
 	return (0);
 }
@@ -440,7 +442,7 @@ pmctrace_run(bool user_mode, char *func_name, char *func_image)
 			if (!user_mode && TAILQ_EMPTY(&pp->pp_map))
 				break;
 
-			pmcstat_log_pt(user_mode);
+			pmcstat_process_all(user_mode);
 
 			if (stopping)
 				running -= 1;
