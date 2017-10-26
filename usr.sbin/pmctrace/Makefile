@@ -3,6 +3,7 @@
 
 PROG=	pmctrace
 SRCS=	pmctrace.c
+MAN=
 
 LIBADD= elf pmc pmcstat
 
