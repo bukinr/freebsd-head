@@ -224,7 +224,8 @@ dump_packets(struct mtrace_data *mdata, struct pt_packet_decoder *decoder,
 			break;
 		case ppt_tnt_8:
 		case ppt_tnt_64:
-			print_tnt_payload(mdata, offset, &packet.payload.tnt);
+			if (mdata->flags & FLAG_BRANCH_TNT)
+				print_tnt_payload(mdata, offset, &packet.payload.tnt);
 			break;
 		case ppt_mode:
 		case ppt_pip:
@@ -312,12 +313,14 @@ init_ipt(struct mtrace_data *mdata, uint64_t base,
 
 int
 ipt_process(struct trace_cpu *cc, struct pmcstat_process *pp,
-    uint32_t cpu, uint32_t cycle, uint64_t offset)
+    uint32_t cpu, uint32_t cycle, uint64_t offset,
+    uint32_t flags)
 {
 	struct mtrace_data *mdata;
 
 	mdata = &cc->mdata;
 	mdata->pp = pp;
+	mdata->flags = flags;
 
 #if 0
 	printf("%s: cpu %d, cycle %d, offset %ld\n",

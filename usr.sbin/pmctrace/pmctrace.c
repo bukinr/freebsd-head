@@ -92,12 +92,6 @@ struct pmcstat_image_hash_list pmcstat_image_hash[PMCSTAT_NHASH];
 struct pmcstat_process_hash_list pmcstat_process_hash[PMCSTAT_NHASH];
 struct pmcstat_pmcs pmcstat_pmcs = LIST_HEAD_INITIALIZER(pmcstat_pmcs);
 
-struct trace_dev {
-	const char *ev_spec;
-	int (*process)(struct trace_cpu *, struct pmcstat_process *,
-	    uint32_t cpu, uint32_t cycle, uint64_t offset);
-};
-
 static struct trace_dev trace_devs[] = {
 #if defined(__amd64__)
 	{ "pt",	ipt_process },
@@ -105,9 +99,7 @@ static struct trace_dev trace_devs[] = {
 	{ NULL,	NULL }
 };
 
-static struct pmctrace_config {
-	struct trace_dev *trace_dev;
-} pmctrace_cfg;
+static struct pmctrace_config pmctrace_cfg;
 
 static int
 pmctrace_ncpu(void)
@@ -182,7 +174,7 @@ pmcstat_process_cpu(int cpu, struct pmcstat_ev *ev)
 		pp = pmcstat_kernproc;
 
 	if (pp)
-		trace_dev->process(cc, pp, cpu, cycle, offset);
+		trace_dev->process(cc, pp, cpu, cycle, offset, pmctrace_cfg.flags);
 #if 0
 	else
 		printf("pp not found\n");
@@ -488,6 +480,7 @@ main(int argc, char *argv[])
 	int i;
 
 	bzero(&args, sizeof(struct pmcstat_args));
+	bzero(&pmctrace_cfg, sizeof(struct pmctrace_config));
 
 	func_name = NULL;
 	func_image = NULL;
@@ -508,7 +501,11 @@ main(int argc, char *argv[])
 	    "tu:s:i:f:")) != -1)
 		switch (option) {
 		case 't':
-			/* toggle taken and not taken branches */
+			/*
+			 * Toggle taken and not taken branches.
+			 * TODO: Intel PT specific ?
+			 */
+			pmctrace_cfg.flags |= FLAG_BRANCH_TNT;
 			break;
 		case 'i':
 			func_image = strdup(optarg);
