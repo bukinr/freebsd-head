@@ -5079,7 +5079,12 @@ pmc_pg_fault(vm_object_t object, vm_ooffset_t offset,
 
 	cc = vmh->cc;
 
+	//printf("%s%d: offset %lx\n", __func__, cc->cpu, offset);
+
 	pidx = OFF_TO_IDX(offset);
+
+	if (md->pmd_get_page == NULL)
+		return (VM_PAGER_FAIL);
 
 	error = (*md->pmd_get_page)(cc->cpu, offset, &paddr);
 	if (error != 0)
