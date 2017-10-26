@@ -258,7 +258,7 @@ dump_packets(struct mtrace_data *mdata, struct pt_packet_decoder *decoder,
 }
 
 static int
-init_ipt(struct mtrace_data *mdata, uint64_t base,
+ipt_process_chunk(struct mtrace_data *mdata, uint64_t base,
     uint64_t start, uint64_t end)
 {
 	struct pt_packet_decoder *decoder;
@@ -332,20 +332,20 @@ ipt_process(struct trace_cpu *cc, struct pmcstat_process *pp,
 
 	if (cycle == cc->cycle) {
 		if (offset > cc->offset) {
-			init_ipt(mdata, (uint64_t)cc->base, cc->offset, offset);
+			ipt_process_chunk(mdata, (uint64_t)cc->base, cc->offset, offset);
 			cc->offset = offset;
 		} else if (offset < cc->offset) {
-			printf("panic: offset %lx cc->offset %lx\n", offset, cc->offset);
-			return (-1);
+			err(EXIT_FAILURE, "cpu%d: offset already processed %lx %lx",
+			    cpu, offset, cc->offset);
 		}
 	} else if (cycle > cc->cycle) {
 		if ((cycle - cc->cycle) > 1)
-			err(EXIT_FAILURE, "cpu%d: trace is too fast, machine cycle %d,"
-			    "mtrace cycle %d", cpu, cycle, cc->cycle);
-		init_ipt(mdata, (uint64_t)cc->base, cc->offset, cc->bufsize);
+			err(EXIT_FAILURE, "cpu%d: trace buffers fills faster than"
+				" we can process it (%d/%d)", cpu, cycle, cc->cycle);
+		ipt_process_chunk(mdata, (uint64_t)cc->base, cc->offset, cc->bufsize);
 		cc->offset = 0;
 		cc->cycle += 1;
-		init_ipt(mdata, (uint64_t)cc->base, cc->offset, offset);
+		ipt_process_chunk(mdata, (uint64_t)cc->base, cc->offset, offset);
 		cc->offset = offset;
 	}
 
