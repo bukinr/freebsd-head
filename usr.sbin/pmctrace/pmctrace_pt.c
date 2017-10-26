@@ -105,7 +105,7 @@ symbol_lookup(struct mtrace_data *mdata)
 		return (sym);
 	} else {
 #if 0
-		printf("cpu%d: 0x%lx .\n", mdata->cpu, ip);
+		printf("cpu%d: 0x%lx map not found\n", mdata->cpu, ip);
 		//printf("map not found, pp %lx, ip %lx\n", (uint64_t)mdata->pp, >ip);
 #endif
 	}
@@ -178,8 +178,9 @@ print_ip_payload(struct mtrace_data *mdata, uint64_t offset __unused,
 		    pmcstat_string_unintern(sym->ps_name));
 	} else {
 #if 0
-		printf("cpu%d: 0x%lx not found, image->pi_vaddr %lx,
-		    image->pi_start %lx, map->ppm_lowpc %lx, pc %lx, newpc %lx\n",
+		printf("cpu%d: 0x%lx not found\n", mdata->cpu, mdata->ip);
+		printf("cpu%d: 0x%lx not found, image->pi_vaddr %lx,"
+		    "image->pi_start %lx, map->ppm_lowpc %lx, pc %lx, newpc %lx\n",
 		    mdata->cpu, ip, image->pi_vaddr, image->pi_start,
 		    map->ppm_lowpc, mdata->ip, newpc);
 #endif
@@ -199,6 +200,7 @@ dump_packets(struct mtrace_data *mdata, struct pt_packet_decoder *decoder,
 	while (1) {
 		error = pt_pkt_get_offset(decoder, &offset);
 		if (error < 0) {
+			errx(EX_SOFTWARE, "ERROR: can't get offset, err %d\n", error);
 			//printf("err %d, offset 0x%lx\n", error, offset);
 			break;
 		}
@@ -284,6 +286,10 @@ ipt_process_chunk(struct mtrace_data *mdata, uint64_t base,
 	printf("%s: begin %lx end %lx\n", __func__,
 	    (uint64_t)config.begin, (uint64_t)config.end);
 #endif
+#if 0
+	printf("%s: begin %ld end %ld, size %ld\n", __func__,
+	    (uint64_t)start, (uint64_t)end, end-start);
+#endif
 
 	decoder = pt_pkt_alloc_decoder(&config);
 	if (decoder == NULL) {
@@ -291,7 +297,7 @@ ipt_process_chunk(struct mtrace_data *mdata, uint64_t base,
 		return (-1);
 	}
 
-	//error = pt_pkt_sync_set(decoder, 0ull);
+	error = pt_pkt_sync_set(decoder, 0ull);
 	error = pt_pkt_sync_forward(decoder);
 
 	while (1) {
