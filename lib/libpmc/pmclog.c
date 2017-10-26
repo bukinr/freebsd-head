@@ -412,11 +412,6 @@ pmclog_get_event(void *cookie, char **data, ssize_t *len,
 	case PMCLOG_TYPE_USERDATA:
 		PMCLOG_READ32(le,ev->pl_u.pl_u.pl_userdata);
 		break;
-	case PMCLOG_TYPE_TRACE:
-		PMCLOG_READ32(le,ev->pl_u.pl_tr.pl_cpu);
-		PMCLOG_READ32(le,ev->pl_u.pl_tr.pl_cycle);
-		PMCLOG_READ64(le,ev->pl_u.pl_tr.pl_offset);
-		break;
 	default:	/* unknown record type */
 		ps->ps_state = PL_STATE_ERROR;
 		ev->pl_state = PMCLOG_ERROR;

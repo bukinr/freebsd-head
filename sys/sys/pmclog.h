@@ -66,8 +66,7 @@ enum pmclog_type {
 	 *
 	 * New variant of PMCLOG_TYPE_PMCALLOCATE for dynamic event.
 	 */
-	PMCLOG_TYPE_PMCALLOCATEDYN,
-	PMCLOG_TYPE_TRACE
+	PMCLOG_TYPE_PMCALLOCATEDYN
 };
 
 /*

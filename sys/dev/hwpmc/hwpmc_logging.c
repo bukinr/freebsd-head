@@ -702,8 +702,6 @@ pmclog_flush(struct pmc_owner *po)
 	int error;
 	struct pmclog_buffer *lb;
 
-	printf("%s\n", __func__);
-
 	PMCDBG1(LOG,FLS,1, "po=%p", po);
 
 	/*
@@ -812,8 +810,6 @@ pmclog_process_map_in(struct pmc_owner *po, pid_t pid, uintfptr_t start,
     const char *path)
 {
 	int pathlen, recordlen;
-
-	printf("%s: pid %d\n", __func__, pid);
 
 	KASSERT(path != NULL, ("[pmclog,%d] map-in, null path", __LINE__));
 
@@ -997,20 +993,6 @@ pmclog_process_sysexit(struct pmc_owner *po, pid_t pid)
 {
 	PMCLOG_RESERVE(po, SYSEXIT, sizeof(struct pmclog_sysexit));
 	PMCLOG_EMIT32(pid);
-	PMCLOG_DESPATCH(po);
-}
-
-/*
- * Log a trace event.
- */
-
-void
-pmclog_process_trace(struct pmc_owner *po, uint32_t cpu, uint32_t cycle, uint64_t offset)
-{
-	PMCLOG_RESERVE(po, TRACE, sizeof(struct pmclog_trace));
-	PMCLOG_EMIT32(cpu);
-	PMCLOG_EMIT32(cycle);
-	PMCLOG_EMIT64(offset);
 	PMCLOG_DESPATCH(po);
 }
 
