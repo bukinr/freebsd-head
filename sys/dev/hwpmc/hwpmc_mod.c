@@ -1583,14 +1583,11 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 			pause_thread = 1;
 	}
 
-	if (pause_thread) {
-		PROC_LOCK(td->td_proc);
-		PROC_SLOCK(td->td_proc);
-	}
-
 	sx_sunlock(&pmc_sx);
 
 	if (pause_thread) {
+		PROC_LOCK(td->td_proc);
+		PROC_SLOCK(td->td_proc);
 		thread_suspend_switch(td, td->td_proc);
 		PROC_SUNLOCK(td->td_proc);
 		PROC_UNLOCK(td->td_proc);
