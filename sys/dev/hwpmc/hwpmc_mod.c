@@ -75,6 +75,7 @@ __FBSDID("$FreeBSD$");
 #include <vm/vm_pager.h>
 
 #include "hwpmc_soft.h"
+#include "hwpmc_vm.h"
 
 /*
  * Types
@@ -307,20 +308,6 @@ SYSCTL_INT(_security_bsd, OID_AUTO, unprivileged_syspmcs, CTLFLAG_RWTUN,
 #endif
 
 #define	PMC_HASH_PTR(P,M)	((((unsigned long) (P) >> 2) * _PMC_HM) & (M))
-
-struct cdev_cpu {
-	int cpu;
-};
-
-struct pmc_vm_handle {
-	vm_object_t		mem;
-	vm_size_t		size;
-	void *			base;
-	struct cdev_cpu		*cc;
-};
-
-struct pmc_vm_handle *vmh;
-struct cdev *pmc_cdev[MAXCPU];
 
 /*
  * Syscall structures
@@ -5041,123 +5028,6 @@ pmc_generic_cpu_finalize(struct pmc_mdep *md)
 	(void) md;
 }
 
-static int
-pmc_pg_ctor(void *handle, vm_ooffset_t size, vm_prot_t prot,
-    vm_ooffset_t foff, struct ucred *cred, u_short *color)
-{
-
-	return (0);
-}
-
-static void
-pmc_pg_dtor(void *handle)
-{
-	struct pmc_vm_handle *vmh;
-
-	vmh = handle;
-
-	free(vmh, M_PMC);
-}
-
-static int
-pmc_pg_fault(vm_object_t object, vm_ooffset_t offset,
-    int prot, vm_page_t *mres)
-{
-	struct pmc_vm_handle *vmh;
-	struct cdev_cpu *cc;
-	vm_paddr_t paddr;
-	vm_pindex_t pidx;
-	vm_page_t page;
-	int error;
-
-	vmh = object->handle;
-	if (vmh == NULL) {
-		printf("%s: offset 0x%lx, VM_PAGER_FAIL: vmh is null\n",
-		    __func__, offset);
-		return (VM_PAGER_FAIL);
-	}
-
-	cc = vmh->cc;
-
-	//printf("%s%d: offset %lx\n", __func__, cc->cpu, offset);
-
-	pidx = OFF_TO_IDX(offset);
-
-	if (md->pmd_get_page == NULL)
-		return (VM_PAGER_FAIL);
-
-	error = (*md->pmd_get_page)(cc->cpu, offset, &paddr);
-	if (error != 0)
-		return (VM_PAGER_FAIL);
-
-	if (((*mres)->flags & PG_FICTITIOUS) != 0) {
-		/*
-		 * If the passed in result page is a fake page, update it with
-		 * the new physical address.
-		 */
-		page = *mres;
-		vm_page_updatefake(page, paddr, object->memattr);
-	} else {
-		/*
-		 * Replace the passed in reqpage page with our own fake page and
-		 * free up the all of the original pages.
-		 */
-
-		VM_OBJECT_WUNLOCK(object);
-		page = vm_page_getfake(paddr, object->memattr);
-		VM_OBJECT_WLOCK(object);
-		vm_page_lock(*mres);
-		vm_page_free(*mres);
-		vm_page_unlock(*mres);
-		*mres = page;
-		vm_page_insert(page, object, pidx);
-	}
-
-	page->valid = VM_PAGE_BITS_ALL;
-
-	return (VM_PAGER_OK);
-}
-
-static struct cdev_pager_ops pmc_pg_ops = {
-	.cdev_pg_ctor = pmc_pg_ctor,
-	.cdev_pg_dtor = pmc_pg_dtor,
-	.cdev_pg_fault = pmc_pg_fault,
-};
-
-static int
-pmc_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
-    struct thread *td)
-{
-
-	return (0);
-}
-
-static int
-pmc_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
-    vm_size_t mapsize, struct vm_object **objp, int nprot)
-{
-
-	vmh = malloc(sizeof(struct pmc_vm_handle),
-	    M_PMC, M_WAITOK | M_ZERO);
-
-	vmh->cc = cdev->si_drv1;
-	vmh->mem = cdev_pager_allocate(vmh, OBJT_DEVICE, &pmc_pg_ops,
-	    mapsize, nprot, *offset, NULL);
-	if (vmh->mem == NULL) {
-		return (ENXIO);
-	}
-
-	*objp = vmh->mem;
-
-	return (0);
-}
-
-static struct cdevsw pmc_cdevsw = {
-	.d_version =		D_VERSION,
-	.d_ioctl =		pmc_ioctl,
-	.d_mmap_single =	pmc_mmap_single,
-	.d_name =		"HWPMC",
-};
 
 static int
 pmc_initialize(void)
@@ -5168,7 +5038,9 @@ pmc_initialize(void)
 	struct pmc_sample *ps;
 	struct pmc_classdep *pcd;
 	struct pmc_samplebuffer *sb;
+#if 0
 	struct cdev_cpu *cc;
+#endif
 
 	md = NULL;
 	error = 0;
@@ -5382,6 +5254,9 @@ pmc_initialize(void)
 		printf("\n");
 	}
 
+	pmc_vm_initialize(md);
+
+#if 0
 	for (cpu = 0; cpu < maxcpu; cpu++) {
 		cc = malloc(sizeof(struct cdev_cpu), M_PMC, M_WAITOK | M_ZERO);
 		cc->cpu = cpu;
@@ -5390,6 +5265,7 @@ pmc_initialize(void)
 		    0600, "pmc%d", cpu);
 		pmc_cdev[cpu]->si_drv1 = cc;
 	}
+#endif
 
 	return (error);
 }
@@ -5406,7 +5282,10 @@ pmc_cleanup(void)
 #ifdef	HWPMC_DEBUG
 	struct pmc_processhash *prh;
 #endif
+
+#if 0
 	struct cdev_cpu *cc;
+#endif
 
 	PMCDBG0(MOD,INI,0, "cleanup");
 
@@ -5545,11 +5424,15 @@ pmc_cleanup(void)
 
 	pmclog_shutdown();
 
+	pmc_vm_finalize();
+
+#if 0
 	for (cpu = 0; cpu < maxcpu; cpu++) {
 		cc = pmc_cdev[cpu]->si_drv1;
 		free(cc, M_PMC);
 		destroy_dev(pmc_cdev[cpu]);
 	}
+#endif
 
 	sx_xunlock(&pmc_sx); 	/* we are done */
 }
