@@ -33,48 +33,18 @@
 __FBSDID("$FreeBSD$");
 
 #include <sys/param.h>
-#include <sys/eventhandler.h>
-#include <sys/jail.h>
-#include <sys/kernel.h>
-#include <sys/kthread.h>
-#include <sys/limits.h>
-#include <sys/lock.h>
+#include <sys/pmckern.h>
 #include <sys/conf.h>
 #include <sys/malloc.h>
-#include <sys/module.h>
-#include <sys/mount.h>
 #include <sys/mutex.h>
-#include <sys/pmc.h>
-#include <sys/pmckern.h>
-#include <sys/pmclog.h>
-#include <sys/priv.h>
-#include <sys/proc.h>
-#include <sys/queue.h>
-#include <sys/resourcevar.h>
 #include <sys/rwlock.h>
-#include <sys/sched.h>
-#include <sys/signalvar.h>
-#include <sys/smp.h>
-#include <sys/sx.h>
-#include <sys/sysctl.h>
-#include <sys/sysent.h>
-#include <sys/systm.h>
-#include <sys/vnode.h>
-
-#include <sys/linker.h>		/* needs to be after <sys/malloc.h> */
-
-#include <machine/atomic.h>
-#include <machine/md_var.h>
 
 #include <vm/vm.h>
-#include <vm/vm_extern.h>
 #include <vm/pmap.h>
-#include <vm/vm_map.h>
 #include <vm/vm_object.h>
 #include <vm/vm_page.h>
 #include <vm/vm_pager.h>
 
-#include "hwpmc_soft.h"
 #include "hwpmc_vm.h"
 
 struct cdev_cpu {
