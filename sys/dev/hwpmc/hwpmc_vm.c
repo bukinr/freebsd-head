@@ -177,16 +177,6 @@ static struct cdev_pager_ops pmc_pg_ops = {
 	.cdev_pg_fault = pmc_pg_fault,
 };
 
-#if 0
-static int
-pmc_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
-    struct thread *td)
-{
-
-	return (0);
-}
-#endif
-
 static int
 pmc_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
     vm_size_t mapsize, struct vm_object **objp, int nprot)
@@ -209,7 +199,6 @@ pmc_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 
 static struct cdevsw pmc_cdevsw = {
 	.d_version =		D_VERSION,
-	//.d_ioctl =		pmc_ioctl,
 	.d_mmap_single =	pmc_mmap_single,
 	.d_name =		"HWPMC",
 };
