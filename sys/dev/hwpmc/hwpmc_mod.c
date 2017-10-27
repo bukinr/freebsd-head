@@ -39,7 +39,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/kthread.h>
 #include <sys/limits.h>
 #include <sys/lock.h>
-#include <sys/conf.h>
 #include <sys/malloc.h>
 #include <sys/module.h>
 #include <sys/mount.h>
@@ -71,8 +70,6 @@ __FBSDID("$FreeBSD$");
 #include <vm/pmap.h>
 #include <vm/vm_map.h>
 #include <vm/vm_object.h>
-#include <vm/vm_page.h>
-#include <vm/vm_pager.h>
 
 #include "hwpmc_soft.h"
 #include "hwpmc_vm.h"
@@ -5038,9 +5035,6 @@ pmc_initialize(void)
 	struct pmc_sample *ps;
 	struct pmc_classdep *pcd;
 	struct pmc_samplebuffer *sb;
-#if 0
-	struct cdev_cpu *cc;
-#endif
 
 	md = NULL;
 	error = 0;
@@ -5256,17 +5250,6 @@ pmc_initialize(void)
 
 	pmc_vm_initialize(md);
 
-#if 0
-	for (cpu = 0; cpu < maxcpu; cpu++) {
-		cc = malloc(sizeof(struct cdev_cpu), M_PMC, M_WAITOK | M_ZERO);
-		cc->cpu = cpu;
-
-		pmc_cdev[cpu] = make_dev(&pmc_cdevsw, 0, UID_ROOT, GID_WHEEL,
-		    0600, "pmc%d", cpu);
-		pmc_cdev[cpu]->si_drv1 = cc;
-	}
-#endif
-
 	return (error);
 }
 
@@ -5281,10 +5264,6 @@ pmc_cleanup(void)
 	struct pmc_binding pb;
 #ifdef	HWPMC_DEBUG
 	struct pmc_processhash *prh;
-#endif
-
-#if 0
-	struct cdev_cpu *cc;
 #endif
 
 	PMCDBG0(MOD,INI,0, "cleanup");
@@ -5423,16 +5402,7 @@ pmc_cleanup(void)
 	}
 
 	pmclog_shutdown();
-
 	pmc_vm_finalize();
-
-#if 0
-	for (cpu = 0; cpu < maxcpu; cpu++) {
-		cc = pmc_cdev[cpu]->si_drv1;
-		free(cc, M_PMC);
-		destroy_dev(pmc_cdev[cpu]);
-	}
-#endif
 
 	sx_xunlock(&pmc_sx); 	/* we are done */
 }
