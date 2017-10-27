@@ -1643,7 +1643,8 @@ pmc_log_kernel_mappings(struct pmc *pm)
 	struct pmckern_map_in *km, *kmbase;
 
 	sx_assert(&pmc_sx, SX_LOCKED);
-	KASSERT(PMC_IS_SAMPLING_MODE(PMC_TO_MODE(pm)) || PMC_TO_MODE(pm) == PMC_MODE_ST,
+	KASSERT(PMC_IS_SAMPLING_MODE(PMC_TO_MODE(pm)) ||
+	    PMC_TO_MODE(pm) == PMC_MODE_ST,
 	    ("[pmc,%d] non-sampling PMC (%p) desires mapping information",
 		__LINE__, (void *) pm));
 
