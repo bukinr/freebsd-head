@@ -114,6 +114,8 @@ struct pt_cpu {
 	uint32_t			s1_eax;
 	uint32_t			s1_ebx;
 	struct pmc			*pm_mmap;
+	uint32_t			flags;
+#define	FLAG_PT_ALLOCATED		(1 << 0)
 };
 
 static struct pt_cpu **pt_pcpu;
@@ -189,6 +191,14 @@ pt_allocate_pmc(int cpu, int ri, struct pmc *pm,
 	    a->pm_mode != PMC_MODE_TT)
 		return (EINVAL);
 
+	struct pt_cpu *pt_pc;
+	pt_pc = pt_pcpu[cpu];
+
+	/* Can't allocate for multiple */
+	if (a->pm_mode == PMC_MODE_ST &&
+	    pt_pc->flags & FLAG_PT_ALLOCATED)
+		return (EINVAL);
+
 	if (a->pm_mode == PMC_MODE_TT)
 		for (i = 0; i < pmc_cpu_max(); i++) {
 			if (pt_buf_allocate(i, pm, a))
@@ -197,6 +207,8 @@ pt_allocate_pmc(int cpu, int ri, struct pmc *pm,
 	else
 		if (pt_buf_allocate(cpu, pm, a))
 			return (EINVAL);
+
+	pt_pc->flags |= FLAG_PT_ALLOCATED;
 
 	return (0);
 }
@@ -570,7 +582,7 @@ pmc_pt_buffer_get_page(int cpu, vm_ooffset_t offset, vm_paddr_t *paddr)
 	if (!found)
 		return (-1);
 
-#if 1
+#if 0
 	printf("%s: paddr %lx\n", __func__, *paddr);
 #endif
 
@@ -802,6 +814,11 @@ pt_release_pmc(int cpu, int ri, struct pmc *pm)
 	} else {
 		pt_buffer_deallocate(&pm_pt->pt_buffers[cpu]);
 	}
+
+	struct pt_cpu *pt_pc;
+	pt_pc = pt_pcpu[cpu];
+
+	pt_pc->flags &= ~FLAG_PT_ALLOCATED;
 
 	/*
 	 * Nothing to do.
