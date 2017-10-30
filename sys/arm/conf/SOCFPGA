@@ -47,18 +47,10 @@ options 	INTRNG
 # ARM MPCore timer
 device		mpcore_timer
 
-# ARM DMA controller
-device		xdma
-device		pl330
-
-device		altera_pio
-
 # MMC/SD/SDIO Card slot support
-# device		mmc			# mmc/sd bus
-# device		mmcsd			# mmc/sd flash cards
-# device		dwmmc
-
-options 		BOOTHOWTO=RB_SINGLE
+device		mmc			# mmc/sd bus
+device		mmcsd			# mmc/sd flash cards
+device		dwmmc
 
 # Pseudo devices
 
@@ -85,15 +77,9 @@ device		uart_snps
 # I2C (TWSI)
 device		iic
 device		iicbus
-device		snps_i2c
-device		max1619
-device		nhd_0216k3z
 
 # SPI
-# device		spibus
-# device		mx25l
-device		cqspi
-device		n25q
+device		spibus
 
 # Ethernet
 device		ether

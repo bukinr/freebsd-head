@@ -41,4 +41,3 @@
 #define	PIO_OUTSET	0x10
 #define	PIO_OUTCLR	0x14
 
-void pio_test(void);

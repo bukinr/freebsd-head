@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012-2017 Ruslan Bukin <br@bsdpad.com>
+ * Copyright (c) 2012-2016 Ruslan Bukin <br@bsdpad.com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -222,9 +222,9 @@ hdspe_map_dmabuf(struct sc_info *sc)
 
 	for (i = 0; i < HDSPE_MAX_SLOTS * 16; i++) {
 		hdspe_write_4(sc, HDSPE_PAGE_ADDR_BUF_OUT + 4 * i,
-		    paddr + i * 4096);
+                    paddr + i * 4096);
 		hdspe_write_4(sc, HDSPE_PAGE_ADDR_BUF_IN + 4 * i,
-		    raddr + i * 4096);
+                    raddr + i * 4096);
 	}
 }
 
@@ -280,16 +280,8 @@ hdspe_init(struct sc_info *sc)
 	period /= sc->speed;
 	hdspe_write_4(sc, HDSPE_FREQ_REG, period);
 
-#define	AD_GAIN0	(1 << 20)
-#define	AD_GAIN1	(1 << 21)
-#define	DA_GAIN0	(1 << 22)
-#define	DA_GAIN1	(1 << 23)
-#define	PH_GAIN0	(1 << 24)
-#define	PH_GAIN1	(1 << 25)
-#define	SYM6DB		(1 << 26)
-
 	/* Other settings. */
-	sc->settings_register = PH_GAIN1;
+	sc->settings_register = 0;
 	hdspe_write_4(sc, HDSPE_SETTINGS_REG, sc->settings_register);
 
 	return (0);

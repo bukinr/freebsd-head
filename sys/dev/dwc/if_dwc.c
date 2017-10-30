@@ -285,9 +285,7 @@ dwc_txstart_locked(struct dwc_softc *sc)
 static void
 dwc_txstart(struct ifnet *ifp)
 {
-	struct dwc_softc *sc;
-
-	sc = ifp->if_softc;
+	struct dwc_softc *sc = ifp->if_softc;
 
 	DWC_LOCK(sc);
 	dwc_txstart_locked(sc);
@@ -530,7 +528,6 @@ dwc_media_status(struct ifnet * ifp, struct ifmediareq *ifmr)
 
 	sc = ifp->if_softc;
 	mii = sc->mii_softc;
-
 	DWC_LOCK(sc);
 	mii_pollstat(mii);
 	ifmr->ifm_active = mii->mii_media_active;
@@ -587,10 +584,10 @@ bitreverse(uint8_t x)
 static void
 dwc_setup_rxfilter(struct dwc_softc *sc)
 {
-	uint32_t crc, ffval, hashbit, hashreg, hi, lo, hash[8];
 	struct ifmultiaddr *ifma;
-	uint8_t *eaddr, val;
 	struct ifnet *ifp;
+	uint8_t *eaddr, val;
+	uint32_t crc, ffval, hashbit, hashreg, hi, lo, hash[8];
 	int nhash, i;
 
 	DWC_ASSERT_LOCKED(sc);
