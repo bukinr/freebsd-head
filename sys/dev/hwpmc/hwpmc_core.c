@@ -2285,7 +2285,6 @@ iap_allocate_pmc(int cpu, int ri, struct pmc *pm,
 		break;
 	case PMC_CPU_INTEL_SKYLAKE:
 	case PMC_CPU_INTEL_SKYLAKE_XEON:
-	case PMC_CPU_INTEL_KABYLAKE:
 	case PMC_CPU_INTEL_BROADWELL:
 	case PMC_CPU_INTEL_BROADWELL_XEON:
 	case PMC_CPU_INTEL_SANDYBRIDGE:
@@ -2324,7 +2323,6 @@ iap_allocate_pmc(int cpu, int ri, struct pmc *pm,
 		cpuflag = IAP_F_SLX;
 		break;
 	case PMC_CPU_INTEL_SKYLAKE:
-	case PMC_CPU_INTEL_KABYLAKE:
 		cpuflag = IAP_F_SL;
 		break;
 	case PMC_CPU_INTEL_BROADWELL_XEON:
@@ -2845,12 +2843,6 @@ core2_intr(int cpu, struct trapframe *tf)
 	struct pmc *pm;
 	struct core_cpu *cc;
 	pmc_value_t v;
-
-	error = pmc_pt_intr(cpu, tf);
-	if (error) {
-		/* Found */
-		return (1);
-	}
 
 	PMCDBG3(MDP,INT, 1, "cpu=%d tf=0x%p um=%d", cpu, (void *) tf,
 	    TRAPF_USERMODE(tf));

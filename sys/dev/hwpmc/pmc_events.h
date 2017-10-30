@@ -4841,13 +4841,6 @@ __PMC_EV_ALIAS("SQ_MISC.SPLIT_LOCK", IAP_EVENT_F4H_10H)
 #define	PMC_EV_TSC_FIRST	PMC_EV_TSC_TSC
 #define	PMC_EV_TSC_LAST		PMC_EV_TSC_TSC
 
-/* Intel PT */
-#define	__PMC_EV_PT()							\
-	__PMC_EV(PT, PT)
-
-#define	PMC_EV_PT_FIRST	PMC_EV_PT_PT
-#define	PMC_EV_PT_LAST	PMC_EV_PT_PT
-
 /*
  * Software events are dynamically defined.
  */
@@ -7146,7 +7139,6 @@ __PMC_EV_ALIAS("IMPC_C0H_TRK_REQUEST.ALL", UCP_EVENT_84H_01H)
  * START	#EVENTS		DESCRIPTION
  * 0		0x1000		Reserved
  * 0x1000	0x0001		TSC
- * 0x1100	0x0001		PT
  * 0x2000	0x0080		AMD K7 events
  * 0x2080	0x0100		AMD K8 events
  * 0x10000	0x0080		INTEL architectural fixed-function events
@@ -7168,8 +7160,6 @@ __PMC_EV_ALIAS("IMPC_C0H_TRK_REQUEST.ALL", UCP_EVENT_84H_01H)
 #define	__PMC_EVENTS()				\
 	__PMC_EV_BLOCK(TSC,	0x01000)	\
 	__PMC_EV_TSC()				\
-	__PMC_EV_BLOCK(PT,	0x1100)		\
-	__PMC_EV_PT()				\
 	__PMC_EV_BLOCK(K7,	0x2000)		\
 	__PMC_EV_K7()				\
 	__PMC_EV_BLOCK(K8,	0x2080)		\

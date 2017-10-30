@@ -111,7 +111,6 @@ _LIBRARIES=	\
 		heimsqlite \
 		hx509 \
 		ipsec \
-		ipt \
 		jail \
 		kadm5clnt \
 		kadm5srv \
