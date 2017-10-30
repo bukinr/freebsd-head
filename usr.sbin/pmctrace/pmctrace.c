@@ -159,7 +159,7 @@ pmctrace_init_cpu(uint32_t cpu)
 }
 
 static int
-pmcstat_process_cpu(int cpu, struct pmcstat_ev *ev)
+pmctrace_process_cpu(int cpu, struct pmcstat_ev *ev)
 {
 	struct pmcstat_process *pp;
 	struct pmcstat_target *pt;
@@ -190,7 +190,7 @@ pmcstat_process_cpu(int cpu, struct pmcstat_ev *ev)
 }
 
 static int
-pmcstat_process_all(int user_mode)
+pmctrace_process_all(int user_mode)
 {
 	struct pmcstat_ev *ev;
 	int ncpu;
@@ -203,12 +203,42 @@ pmcstat_process_all(int user_mode)
 	if (user_mode) {
 		ev = STAILQ_FIRST(&args.pa_events);
 		for (i = 0; i < ncpu; i++)
-			pmcstat_process_cpu(i, ev);
+			pmctrace_process_cpu(i, ev);
 	} else
 		STAILQ_FOREACH(ev, &args.pa_events, ev_next)
-			pmcstat_process_cpu(ev->ev_cpu, ev);
+			pmctrace_process_cpu(ev->ev_cpu, ev);
 
 	return (0);
+}
+
+static void
+pmctrace_cleanup(void)
+{
+	struct pmcstat_ev *ev;
+
+	/* release allocated PMCs. */
+	STAILQ_FOREACH(ev, &args.pa_events, ev_next)
+		if (ev->ev_pmcid != PMC_ID_INVALID) {
+			if (pmc_stop(ev->ev_pmcid) < 0)
+				err(EX_OSERR,
+				    "ERROR: cannot stop pmc 0x%x \"%s\"",
+				    ev->ev_pmcid, ev->ev_name);
+			if (pmc_release(ev->ev_pmcid) < 0)
+				err(EX_OSERR,
+				    "ERROR: cannot release pmc 0x%x \"%s\"",
+				    ev->ev_pmcid, ev->ev_name);
+		}
+
+	/* de-configure the log file if present. */
+	if (args.pa_flags & (FLAG_HAS_PIPE | FLAG_HAS_OUTPUT_LOGFILE))
+		(void) pmc_configure_logfile(-1);
+
+	if (args.pa_logparser) {
+		pmclog_close(args.pa_logparser);
+		args.pa_logparser = NULL;
+	}
+
+	pmcstat_shutdown_logging(&args, plugins, &pmcstat_stats);
 }
 
 static void
@@ -222,7 +252,7 @@ pmctrace_start_pmcs(void)
 		if (pmc_start(ev->ev_pmcid) < 0) {
 			warn("ERROR: Cannot start pmc 0x%x \"%s\"",
 			    ev->ev_pmcid, ev->ev_name);
-			//pmcstat_cleanup();
+			pmctrace_cleanup();
 			exit(EX_OSERR);
 		}
 	}
@@ -447,7 +477,7 @@ pmctrace_run(bool user_mode, char *func_name, char *func_image)
 			if (!user_mode && TAILQ_EMPTY(&pp->pp_map))
 				break;
 
-			pmcstat_process_all(user_mode);
+			pmctrace_process_all(user_mode);
 
 			if (stopping)
 				running -= 1;
