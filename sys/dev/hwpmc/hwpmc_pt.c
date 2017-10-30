@@ -268,6 +268,7 @@ pt_configure(int cpu, struct pmc *pm)
 	enum pmc_mode mode;
 	struct pt_buffer *pt_buf;
 	uint64_t reg;
+	int ret;
 	int i;
 
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
@@ -282,11 +283,23 @@ pt_configure(int cpu, struct pmc *pm)
 
 	pt_pc = pt_pcpu[cpu];
 
-	wrmsr(MSR_IA32_RTIT_CTL, 0);
-	wrmsr(MSR_IA32_RTIT_STATUS, 0);
+	ret = wrmsr_safe(MSR_IA32_RTIT_CTL, 0);
+	if (ret)
+		return (ret);
 
-	wrmsr(MSR_IA32_RTIT_OUTPUT_BASE, pt_buf->pt_output_base);
-	wrmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS, pt_buf->pt_output_mask_ptrs);
+	ret = wrmsr_safe(MSR_IA32_RTIT_STATUS, 0);
+	if (ret)
+		return (ret);
+
+	ret = wrmsr_safe(MSR_IA32_RTIT_OUTPUT_BASE,
+	    pt_buf->pt_output_base);
+	if (ret)
+		return (ret);
+
+	ret = wrmsr_safe(MSR_IA32_RTIT_OUTPUT_MASK_PTRS,
+	    pt_buf->pt_output_mask_ptrs);
+	if (ret)
+		return (ret);
 
 	/* Configure tracing */
 	reg = RTIT_CTL_TOPA;
@@ -328,13 +341,17 @@ pt_configure(int cpu, struct pmc *pm)
 		dprintf("%s: range %lx -> %lx\n", __func__,
 		    pt_buf->addra[i], pt_buf->addrb[i]);
 		reg |= (1UL << RTIT_CTL_ADDR_CFG_S(i));
-		wrmsr(MSR_IA32_RTIT_ADDR_A(i), pt_buf->addra[i]);
-		wrmsr(MSR_IA32_RTIT_ADDR_B(i), pt_buf->addrb[i]);
+		ret = wrmsr_safe(MSR_IA32_RTIT_ADDR_A(i), pt_buf->addra[i]);
+		if (ret)
+			return (ret);
+		ret = wrmsr_safe(MSR_IA32_RTIT_ADDR_B(i), pt_buf->addrb[i]);
+		if (ret)
+			return (ret);
 	}
 
-	wrmsr(MSR_IA32_RTIT_CTL, reg);
+	ret = wrmsr_safe(MSR_IA32_RTIT_CTL, reg);
 
-	return (0);
+	return (ret);
 }
 
 static int
@@ -692,6 +709,7 @@ pt_trace_config(int cpu, int ri, struct pmc *pm,
 	struct pt_buffer *pt_buf;
 	struct pmc_md_pt_pmc *pm_pt;
 	uint64_t reg;
+	int ret;
 	int i;
 
 	KASSERT(cpu == PCPU_GET(cpuid), ("Configuring wrong CPU\n"));
@@ -703,8 +721,11 @@ pt_trace_config(int cpu, int ri, struct pmc *pm,
 
 	/* Turn off tracing */
 	reg = rdmsr(MSR_IA32_RTIT_CTL);
-	if (reg & RTIT_CTL_TRACEEN)
-		wrmsr(MSR_IA32_RTIT_CTL, reg & ~RTIT_CTL_TRACEEN);
+	if (reg & RTIT_CTL_TRACEEN) {
+		ret = wrmsr_safe(MSR_IA32_RTIT_CTL, reg & ~RTIT_CTL_TRACEEN);
+		if (ret)
+			return (ret);
+	}
 
 	pt_buf->addrn = nranges;
 
@@ -715,13 +736,17 @@ pt_trace_config(int cpu, int ri, struct pmc *pm,
 		pt_buf->addrb[i] = ranges[i].addrb;
 
 		reg |= (1UL << RTIT_CTL_ADDR_CFG_S(i));
-		wrmsr(MSR_IA32_RTIT_ADDR_A(i), ranges[i].addra);
-		wrmsr(MSR_IA32_RTIT_ADDR_B(i), ranges[i].addrb);
+		ret = wrmsr_safe(MSR_IA32_RTIT_ADDR_A(i), ranges[i].addra);
+		if (ret)
+			return (ret);
+		ret = wrmsr_safe(MSR_IA32_RTIT_ADDR_B(i), ranges[i].addrb);
+		if (ret)
+			return (ret);
 	}
 
-	wrmsr(MSR_IA32_RTIT_CTL, reg);
+	ret = wrmsr_safe(MSR_IA32_RTIT_CTL, reg);
 
-	return (0);
+	return (ret);
 }
 
 static int
@@ -829,6 +854,7 @@ pt_start_pmc(int cpu, int ri)
 	struct pmc_hw *phw;
 	struct pmc *pm;
 	uint64_t reg;
+	int ret;
 
 	dprintf("%s: cpu %d (curcpu %d)\n", __func__, cpu, PCPU_GET(cpuid));
 
@@ -845,14 +871,16 @@ pt_start_pmc(int cpu, int ri)
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pt_buf = &pm_pt->pt_buffers[cpu];
 
-	wrmsr(MSR_IA32_RTIT_CR3_MATCH, pm_pt->cr3);
+	ret = wrmsr_safe(MSR_IA32_RTIT_CR3_MATCH, pm_pt->cr3);
+	if (ret)
+		return (ret);
 
 	/* Enable tracing */
 	reg = rdmsr(MSR_IA32_RTIT_CTL);
 	reg |= RTIT_CTL_TRACEEN;
-	wrmsr(MSR_IA32_RTIT_CTL, reg);
+	ret = wrmsr_safe(MSR_IA32_RTIT_CTL, reg);
 
-	return (0);
+	return (ret);
 }
 
 static int
@@ -864,6 +892,7 @@ pt_stop_pmc(int cpu, int ri)
 	struct pt_buffer *pt_buf;
 	struct pmc *pm;
 	uint64_t reg;
+	int ret;
 
 	pt_pc = pt_pcpu[cpu];
 	phw = &pt_pc->tc_hw;
@@ -887,11 +916,11 @@ pt_stop_pmc(int cpu, int ri)
 	/* Disable tracing */
 	reg = rdmsr(MSR_IA32_RTIT_CTL);
 	reg &= ~RTIT_CTL_TRACEEN;
-	wrmsr(MSR_IA32_RTIT_CTL, reg);
+	ret = wrmsr_safe(MSR_IA32_RTIT_CTL, reg);
 
 	pt_buf->pt_output_mask_ptrs = rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS);
 
-	return (0);
+	return (ret);
 }
 
 static int
