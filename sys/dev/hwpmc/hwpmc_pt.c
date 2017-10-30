@@ -204,8 +204,10 @@ pt_allocate_pmc(int cpu, int ri, struct pmc *pm,
 
 	/* Can't allocate multiple ST */
 	if (a->pm_mode == PMC_MODE_ST &&
-	    pt_pc->flags & FLAG_PT_ALLOCATED)
+	    pt_pc->flags & FLAG_PT_ALLOCATED) {
+		dprintf("error: pt is already allocated for CPU %d\n", cpu);
 		return (EUSERS);
+	}
 
 	if (a->pm_mode == PMC_MODE_TT)
 		for (i = 0; i < pmc_cpu_max(); i++) {
@@ -216,7 +218,8 @@ pt_allocate_pmc(int cpu, int ri, struct pmc *pm,
 		if (pt_buf_allocate(cpu, pm, a))
 			return (EINVAL);
 
-	pt_pc->flags |= FLAG_PT_ALLOCATED;
+	if (a->pm_mode == PMC_MODE_ST)
+		pt_pc->flags |= FLAG_PT_ALLOCATED;
 
 	return (0);
 }
@@ -807,7 +810,8 @@ pt_release_pmc(int cpu, int ri, struct pmc *pm)
 	struct pt_cpu *pt_pc;
 	pt_pc = pt_pcpu[cpu];
 
-	pt_pc->flags &= ~FLAG_PT_ALLOCATED;
+	if (mode == PMC_MODE_ST)
+		pt_pc->flags &= ~FLAG_PT_ALLOCATED;
 
 	/*
 	 * Nothing to do.
