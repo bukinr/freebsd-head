@@ -319,13 +319,14 @@ pt_configure(int cpu, struct pmc *pm)
 	if (pt_buf->flags & INTEL_PT_FLAG_DISRETC)
 		reg |= RTIT_CTL_DISRETC;
 
-	//reg |= RTIT_CTL_MTC_FREQ(6);
-
-	//if (pt_buf->addrn == 0)
-	//	printf("%s: no ranges\n", __func__);
+	/*
+	 * TODO: specify MTC frequency
+	 * reg |= RTIT_CTL_MTC_FREQ(6);
+	 */
 
 	for (i = 0; i < pt_buf->addrn; i++) {
-		dprintf("%s: range %lx -> %lx\n", __func__, pt_buf->addra[i], pt_buf->addrb[i]);
+		dprintf("%s: range %lx -> %lx\n", __func__,
+		    pt_buf->addra[i], pt_buf->addrb[i]);
 		reg |= (1UL << RTIT_CTL_ADDR_CFG_S(i));
 		wrmsr(MSR_IA32_RTIT_ADDR_A(i), pt_buf->addra[i]);
 		wrmsr(MSR_IA32_RTIT_ADDR_B(i), pt_buf->addrb[i]);
@@ -875,11 +876,9 @@ pt_stop_pmc(int cpu, int ri)
 	pt_buf->pt_output_base = rdmsr(MSR_IA32_RTIT_OUTPUT_BASE);
 	pt_buf->pt_output_mask_ptrs = rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS);
 
-	//printf("%s: cpu %d (curcpu %d)\n", __func__, cpu, PCPU_GET(cpuid));
-	//printf("%s: cpu %d, output base %lx\n",
-	//    __func__, cpu, rdmsr(MSR_IA32_RTIT_OUTPUT_BASE));
-	//printf("%s: cpu %d, output base ptr %lx\n",
-	//    __func__, cpu, rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS));
+	dprintf("%s: cpu %d, output base %lx, ptr %lx\n", __func__, cpu,
+	    rdmsr(MSR_IA32_RTIT_OUTPUT_BASE),
+	    rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS));
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
 	    ("[pt,%d] illegal CPU value %d", __LINE__, cpu));

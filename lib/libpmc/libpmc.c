@@ -2545,8 +2545,6 @@ pt_allocate_pmc(enum pmc_event pe, char *ctrspec,
 
 	pm_pt = (struct pmc_md_pt_op_pmcallocate *)&pmc_config->pm_md.pm_pt;
 
-	//printf("ctrspec %s\n", ctrspec);
-
 	addrn = 0;
 	while ((p = strsep(&ctrspec, ",")) != NULL) {
 		if (KWMATCH(p, INTEL_PT_KW_BRANCHES)) {
@@ -2565,10 +2563,6 @@ pt_allocate_pmc(enum pmc_event pe, char *ctrspec,
 			pm_pt->flags |= INTEL_PT_FLAG_DISRETC;
 		}
 
-		//if (KWMATCH(p, INTEL_PT_KW_ADDRA)) {
-		//	pm_pt->addra[addrn] = 
-		//}
-
 		if (KWPREFIXMATCH(p, INTEL_PT_KW_ADDRA "=")) {
 			q = strchr(p, '=');
 			if (*++q == '\0') /* skip '=' */
@@ -2577,7 +2571,6 @@ pt_allocate_pmc(enum pmc_event pe, char *ctrspec,
 			addr = strtoul(q, &e, 0);
 			if (e == q || *e != '\0')
 				return (-1);
-			//printf("Addr %lx\n", addr);
 			pm_pt->addra[addrn] = addr;
 		}
 
@@ -2593,7 +2586,6 @@ pt_allocate_pmc(enum pmc_event pe, char *ctrspec,
 
 			if (pm_pt->addrb[addrn] < pm_pt->addra[addrn])
 				return (-1);
-			//printf("Addr %lx %lx\n", pm_pt->addra[addrn], pm_pt->addrb[addrn]);
 			addrn += 1;
 			if (addrn > PT_NADDR)
 				return (-1);
@@ -2602,11 +2594,6 @@ pt_allocate_pmc(enum pmc_event pe, char *ctrspec,
 
 	pm_pt->addrn = addrn;
 
-	/* PT events must be unqualified. */
-	//if (ctrspec && *ctrspec != '\0')
-	//	return (-1);
-
-	//pmc_config->pm_md.pm_pt.pm_amd_config = 0;
 	pmc_config->pm_caps |= PMC_CAP_READ;
 
 	return (0);
@@ -2893,8 +2880,6 @@ pmc_allocate(const char *ctrspec, enum pmc_mode mode,
 	const struct pmc_event_alias *alias;
 	struct pmc_op_pmcallocate pmc_config;
 	const struct pmc_class_descr *pcd;
-
-	//printf("%s\n", __func__);
 
 	spec_copy = NULL;
 	retval    = -1;
