@@ -346,8 +346,9 @@ ipt_process(struct trace_cpu *cc, struct pmcstat_process *pp,
 		}
 	} else if (cycle > cc->cycle) {
 		if ((cycle - cc->cycle) > 1)
-			err(EXIT_FAILURE, "cpu%d: trace buffers fills faster than"
-				" we can process it (%d/%d)", cpu, cycle, cc->cycle);
+			err(EXIT_FAILURE, "cpu%d: trace buffers fills up faster than"
+			    " we can process it (%d/%d). Consider setting trace filters",
+			    cpu, cycle, cc->cycle);
 		ipt_process_chunk(mdata, (uint64_t)cc->base, cc->offset, cc->bufsize);
 		cc->offset = 0;
 		cc->cycle += 1;
