@@ -47,7 +47,6 @@ __FBSDID("$FreeBSD$");
 #include <vm/vm_kern.h>
 
 #include <machine/clock.h>
-#include <machine/cpuinfo.h>
 #include <machine/smp.h>
 #include <machine/hwfunc.h>
 #include <machine/intr_machdep.h>
@@ -277,12 +276,6 @@ void
 smp_init_secondary(u_int32_t cpuid)
 {
 
-	/*
-	 * If the UserLocal register (ULRI) is implemented then enable it.
-	 */
-	if (cpuinfo.userlocal_reg)
-		mips_wr_hwrena(mips_rd_hwrena() | MIPS_HWRENA_UL);
-
 	/* TLB */
 	mips_wr_wired(0);
 	tlb_invalidate_all();
@@ -308,10 +301,6 @@ smp_init_secondary(u_int32_t cpuid)
 	/* Spin until the BSP is ready to release the APs */
 	while (!aps_ready)
 		;
-
-#ifdef PLATFORM_INIT_SECONDARY
-	platform_init_secondary(cpuid);
-#endif
 
 	/* Initialize curthread. */
 	KASSERT(PCPU_GET(idlethread) != NULL, ("no idle thread"));
@@ -352,10 +341,6 @@ release_aps(void *dummy __unused)
 
 	if (mp_ncpus == 1)
 		return;
-
-#ifdef PLATFORM_INIT_SECONDARY
-	platform_init_secondary(0);
-#endif
 
 	/*
 	 * IPI handler

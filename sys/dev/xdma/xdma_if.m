@@ -59,33 +59,6 @@ METHOD int channel_prep_memcpy {
 };
 
 #
-# Prepare xDMA channel for a scatter-gather transfer.
-#
-METHOD int channel_prep_sg {
-	device_t		dev;
-	struct xdma_channel	*xchan;
-};
-
-#
-# Check the amount of free entries for requests.
-#
-METHOD int channel_capacity {
-	device_t			dev;
-	struct xdma_channel		*xchan;
-	uint32_t			*capacity;
-};
-
-#
-# Submit scatter-gather list to DMA.
-#
-METHOD int channel_submit_sg {
-	device_t			dev;
-	struct xdma_channel		*xchan;
-	struct xdma_sglist		*sg;
-	uint32_t			sg_n;
-};
-
-#
 # Notify driver we have machine-dependend data.
 #
 METHOD int ofw_md_data {
@@ -104,7 +77,7 @@ METHOD int channel_alloc {
 };
 
 #
-# Free the channel.
+# Free the channel, including descriptors.
 #
 METHOD int channel_free {
 	device_t dev;

@@ -297,12 +297,7 @@ xdmatest_worker(void *arg)
 
 		mtx_lock(&sc->mtx);
 
-		if (xdmatest_test(sc) != 0) {
-			mtx_unlock(&sc->mtx);
-			device_printf(sc->dev,
-			    "%s: Test failed.\n", __func__);
-			break;
-		}
+		xdmatest_test(sc);
 
 		timeout = 100;
 

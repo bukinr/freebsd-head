@@ -288,7 +288,7 @@ aicchan_setblocksize(kobj_t obj, void *data, uint32_t blocksize)
 }
 
 static int
-aic_intr(void *arg, xdma_transfer_status_t *status)
+aic_intr(void *arg)
 {
 	struct sc_pcminfo *scp;
 	xdma_channel_t *xchan;

@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2016-2017 Ruslan Bukin <br@bsdpad.com>
+ * Copyright (c) 2016 Ruslan Bukin <br@bsdpad.com>
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -30,10 +30,8 @@
  * $FreeBSD$
  */
 
-#ifndef _DEV_XDMA_H_
-#define _DEV_XDMA_H_
-
-#include <sys/proc.h>
+#ifndef _DEV_EXTRES_XDMA_H_
+#define _DEV_EXTRES_XDMA_H_
 
 enum xdma_direction {
 	XDMA_MEM_TO_MEM,
@@ -48,12 +46,6 @@ enum xdma_operation_type {
 	XDMA_CYCLIC,
 };
 
-enum xdma_request_type {
-	XR_TYPE_ADDR,
-	XR_TYPE_MBUF,
-	XR_TYPE_BIO,
-};
-
 enum xdma_command {
 	XDMA_CMD_BEGIN,
 	XDMA_CMD_PAUSE,
@@ -61,19 +53,10 @@ enum xdma_command {
 	XDMA_CMD_TERMINATE_ALL,
 };
 
-struct xdma_transfer_status {
-	uint32_t	transferred;
-	int		error;
-};
-
-typedef struct xdma_transfer_status xdma_transfer_status_t;
-
 struct xdma_controller {
 	device_t dev;		/* DMA consumer device_t. */
 	device_t dma_dev;	/* A real DMA device_t. */
 	void *data;		/* OFW MD part. */
-	struct proc *xdma_proc;
-	struct mtx proc_mtx;
 
 	/* List of virtual channels allocated. */
 	TAILQ_HEAD(xdma_channel_list, xdma_channel)	channels;
@@ -81,35 +64,6 @@ struct xdma_controller {
 
 typedef struct xdma_controller xdma_controller_t;
 
-struct xchan_buf {
-	bus_dmamap_t			map;
-	uint32_t			nsegs;
-	uint32_t			nsegs_left;
-	void				*cbuf;
-};
-
-/* SG type of transfer. */
-struct xdma_request {
-	struct mbuf			*m;
-	struct bio			*bp;
-	enum xdma_request_type		type;
-	enum xdma_direction		direction;
-	bus_addr_t			src_addr;	/* Physical address. */
-	bus_addr_t			dst_addr;	/* Physical address. */
-	uint8_t				src_width;
-	uint8_t				dst_width;
-	bus_size_t			len;
-	xdma_transfer_status_t		status;
-	void				*user;
-	TAILQ_ENTRY(xdma_request)	xr_next;
-	struct xchan_buf		buf;
-};
-
-/*
- * Cyclic/memcpy type of transfer.
- * Legacy configuration struct
- * TODO: replace with xdma_request.
- */
 struct xdma_channel_config {
 	enum xdma_direction	direction;
 	uintptr_t		src_addr;	/* Physical address. */
@@ -122,98 +76,55 @@ struct xdma_channel_config {
 
 typedef struct xdma_channel_config xdma_config_t;
 
-struct xdma_sglist {
-	bus_addr_t			src_addr;
-	bus_addr_t			dst_addr;
-	size_t				len;
-	uint8_t				src_width;
-	uint8_t				dst_width;
-	enum xdma_direction		direction;
-	bool				first;
-	bool				last;
+struct xdma_descriptor {
+	bus_addr_t	ds_addr;
+	bus_size_t	ds_len;
 };
+
+typedef struct xdma_descriptor xdma_descriptor_t;
 
 struct xdma_channel {
 	xdma_controller_t		*xdma;
 	xdma_config_t			conf;
 
-	uint32_t			flags;
-#define	XCHAN_BUFS_ALLOCATED		(1 << 0)
-#define	XCHAN_SGLIST_ALLOCATED		(1 << 1)
-#define	XCHAN_CONFIGURED		(1 << 2)
-#define	XCHAN_TYPE_CYCLIC		(1 << 3)
-#define	XCHAN_TYPE_MEMCPY		(1 << 4)
-#define	XCHAN_TYPE_FIFO			(1 << 5)
-#define	XCHAN_TYPE_SG			(1 << 6)
-
-	uint32_t			caps;
-#define	XCHAN_CAP_BUSDMA		(1 << 0)
-#define	XCHAN_CAP_BUSDMA_NOSEG		(1 << 1)
+	uint8_t				flags;
+#define	XCHAN_DESC_ALLOCATED		(1 << 0)
+#define	XCHAN_CONFIGURED		(1 << 1)
+#define	XCHAN_TYPE_CYCLIC		(1 << 2)
+#define	XCHAN_TYPE_MEMCPY		(1 << 3)
 
 	/* A real hardware driver channel. */
 	void				*chan;
 
 	/* Interrupt handlers. */
 	TAILQ_HEAD(, xdma_intr_handler)	ie_handlers;
-	TAILQ_ENTRY(xdma_channel)	xchan_next;
+
+	/* Descriptors. */
+	bus_dma_tag_t			dma_tag;
+	bus_dmamap_t			dma_map;
+	void				*descs;
+	xdma_descriptor_t		*descs_phys;
+	uint8_t				map_err;
 
 	struct mtx			mtx_lock;
-	struct mtx			mtx_qin_lock;
-	struct mtx			mtx_qout_lock;
-	struct mtx			mtx_bank_lock;
-	struct mtx			mtx_proc_lock;
 
-	/* Request queue. */
-	bus_dma_tag_t			dma_tag_bufs;
-	struct xdma_request		*xr_mem;
-	uint32_t			xr_num;
-
-	/* Bus dma tag options. */
-	uint32_t			maxsegsize;
-	uint32_t			maxnsegs;
-	uint32_t			alignment;
-
-	struct xdma_sglist		*sg;
-
-	TAILQ_HEAD(, xdma_request)	bank;
-	TAILQ_HEAD(, xdma_request)	queue_in;
-	TAILQ_HEAD(, xdma_request)	queue_out;
-	TAILQ_HEAD(, xdma_request)	processing;
-	struct mtx			mtx_queue;
+	TAILQ_ENTRY(xdma_channel)	xchan_next;
 };
 
 typedef struct xdma_channel xdma_channel_t;
 
-/* xDMA controller ops */
+/* xDMA controller alloc/free */
 xdma_controller_t *xdma_ofw_get(device_t dev, const char *prop);
 int xdma_put(xdma_controller_t *xdma);
 
-/* xDMA channel ops */
-xdma_channel_t * xdma_channel_alloc(xdma_controller_t *, uint32_t caps);
+xdma_channel_t * xdma_channel_alloc(xdma_controller_t *);
 int xdma_channel_free(xdma_channel_t *);
 
 int xdma_prep_cyclic(xdma_channel_t *, enum xdma_direction,
     uintptr_t, uintptr_t, int, int, int, int);
 int xdma_prep_memcpy(xdma_channel_t *, uintptr_t, uintptr_t, size_t len);
-int xdma_prep_sg(xdma_channel_t *xchan, uint32_t, uint32_t, uint32_t, uint32_t);
-
-int xchan_seg_done(xdma_channel_t *xchan, xdma_transfer_status_t *);
-
-/* xchan queues operations */
-int xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **m, xdma_transfer_status_t *);
-int xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **m, uintptr_t addr,
-    uint8_t, uint8_t, enum xdma_direction dir);
-int xdma_dequeue_bio(xdma_channel_t *xchan, struct bio **bp, xdma_transfer_status_t *status);
-int xdma_enqueue_bio(xdma_channel_t *xchan, struct bio **bp, bus_addr_t addr,
-    uint8_t, uint8_t, enum xdma_direction dir);
-int xdma_dequeue(xdma_channel_t *xchan, void **user, xdma_transfer_status_t *status);
-int xdma_enqueue(xdma_channel_t *xchan, uintptr_t src, uintptr_t dst,
-    uint8_t, uint8_t, bus_size_t, enum xdma_direction dir, void *);
-
-int xdma_queue_submit(xdma_channel_t *xchan);
-
-uint32_t xdma_mbuf_defrag(xdma_channel_t *xchan, struct xdma_request *xr);
-uint32_t xdma_mbuf_chain_count(struct mbuf *m0);
+int xdma_desc_alloc(xdma_channel_t *, uint32_t, uint32_t);
+int xdma_desc_free(xdma_channel_t *xchan);
 
 /* Channel Control */
 int xdma_begin(xdma_channel_t *xchan);
@@ -221,45 +132,17 @@ int xdma_pause(xdma_channel_t *xchan);
 int xdma_terminate(xdma_channel_t *xchan);
 
 /* Interrupt callback */
-int xdma_setup_intr(xdma_channel_t *xchan, int (*cb)(void *, xdma_transfer_status_t *), void *arg, void **);
+int xdma_setup_intr(xdma_channel_t *xchan, int (*cb)(void *), void *arg, void **);
 int xdma_teardown_intr(xdma_channel_t *xchan, struct xdma_intr_handler *ih);
 int xdma_teardown_all_intr(xdma_channel_t *xchan);
-int xdma_callback(struct xdma_channel *xchan, xdma_transfer_status_t *status);
-
-int xchan_sglist_init(xdma_channel_t *xchan);
-int xchan_sglist_free(xdma_channel_t *xchan);
-int xdma_sglist_add(struct xdma_sglist *sg, struct bus_dma_segment *seg,
-    uint32_t nsegs, struct xdma_request *xr);
+int xdma_callback(struct xdma_channel *xchan);
+void xdma_assert_locked(void);
 
 struct xdma_intr_handler {
-	int				(*cb)(void *cb_user, xdma_transfer_status_t *status);
+	int				(*cb)(void *);
 	void				*cb_user;
 	struct mtx			ih_lock;
 	TAILQ_ENTRY(xdma_intr_handler)	ih_next;
 };
 
-static MALLOC_DEFINE(M_XDMA, "xdma", "xDMA framework");
-
-struct xdma_request * xchan_bank_get(xdma_channel_t *xchan);
-int xchan_bank_put(xdma_channel_t *xchan, struct xdma_request *xr);
-
-#define	QUEUE_IN_LOCK(xchan)		mtx_lock(&(xchan)->mtx_qin_lock)
-#define	QUEUE_IN_UNLOCK(xchan)		mtx_unlock(&(xchan)->mtx_qin_lock)
-#define	QUEUE_IN_ASSERT_LOCKED(xchan)	mtx_assert(&(xchan)->mtx_qin_lock, MA_OWNED)
-
-#define	QUEUE_OUT_LOCK(xchan)		mtx_lock(&(xchan)->mtx_qout_lock)
-#define	QUEUE_OUT_UNLOCK(xchan)		mtx_unlock(&(xchan)->mtx_qout_lock)
-#define	QUEUE_OUT_ASSERT_LOCKED(xchan)	mtx_assert(&(xchan)->mtx_qout_lock, MA_OWNED)
-
-#define	QUEUE_BANK_LOCK(xchan)		mtx_lock(&(xchan)->mtx_bank_lock)
-#define	QUEUE_BANK_UNLOCK(xchan)	mtx_unlock(&(xchan)->mtx_bank_lock)
-#define	QUEUE_BANK_ASSERT_LOCKED(xchan)	mtx_assert(&(xchan)->mtx_bank_lock, MA_OWNED)
-
-#define	QUEUE_PROC_LOCK(xchan)		mtx_lock(&(xchan)->mtx_proc_lock)
-#define	QUEUE_PROC_UNLOCK(xchan)	mtx_unlock(&(xchan)->mtx_proc_lock)
-#define	QUEUE_PROC_ASSERT_LOCKED(xchan)	mtx_assert(&(xchan)->mtx_proc_lock, MA_OWNED)
-
-#define	XDMA_SGLIST_MAXLEN	2048
-#define	XDMA_MAX_SEG		128
-
-#endif /* !_DEV_XDMA_H_ */
+#endif /* !_DEV_EXTRES_XDMA_H_ */

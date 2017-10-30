@@ -798,13 +798,11 @@ dev/alpm/alpm.c			optional alpm pci
 dev/altera/avgen/altera_avgen.c		optional altera_avgen
 dev/altera/avgen/altera_avgen_fdt.c	optional altera_avgen fdt
 dev/altera/avgen/altera_avgen_nexus.c	optional altera_avgen
-dev/altera/msgdma/msgdma.c		optional altera_msgdma xdma
 dev/altera/sdcard/altera_sdcard.c	optional altera_sdcard
 dev/altera/sdcard/altera_sdcard_disk.c	optional altera_sdcard
 dev/altera/sdcard/altera_sdcard_io.c	optional altera_sdcard
 dev/altera/sdcard/altera_sdcard_fdt.c	optional altera_sdcard fdt
 dev/altera/sdcard/altera_sdcard_nexus.c	optional altera_sdcard
-dev/altera/softdma/softdma.c	optional altera_softdma xdma fdt
 dev/altera/pio/pio.c		optional altera_pio
 dev/altera/pio/pio_if.m		optional altera_pio
 dev/amdpm/amdpm.c		optional amdpm pci | nfpm pci
@@ -1320,7 +1318,6 @@ dev/bwn/if_bwn_phy_lp.c		optional bwn siba_bwn \
 dev/bwn/if_bwn_phy_n.c		optional bwn siba_bwn
 dev/bwn/if_bwn_util.c		optional bwn siba_bwn
 dev/bwn/bwn_mac.c		optional bwn bhnd
-# dev/cadence/cqspi.c		optional cqspi
 dev/cardbus/cardbus.c		optional cardbus
 dev/cardbus/cardbus_cis.c	optional cardbus
 dev/cardbus/cardbus_device.c	optional cardbus
@@ -1728,7 +1725,7 @@ dev/fdt/fdt_clock_if.m		optional fdt fdt_clock
 dev/fdt/fdt_common.c		optional fdt
 dev/fdt/fdt_pinctrl.c		optional fdt fdt_pinctrl
 dev/fdt/fdt_pinctrl_if.m	optional fdt fdt_pinctrl
-dev/fdt/fdt_slicer.c		optional fdt cfi | fdt nand | fdt mx25l | fdt cqspi
+dev/fdt/fdt_slicer.c		optional fdt cfi | fdt nand | fdt mx25l
 dev/fdt/fdt_static_dtb.S	optional fdt fdt_dtb_static \
 	dependency	"fdt_dtb_file"
 dev/fdt/simplebus.c		optional fdt
@@ -1747,9 +1744,6 @@ dev/firewire/if_fwip.c		optional fwip
 dev/firewire/sbp.c		optional sbp
 dev/firewire/sbp_targ.c		optional sbp_targ
 dev/flash/at45d.c		optional at45d
-dev/flash/cqspi.c		optional cqspi
-dev/flash/qspi_if.m		optional cqspi
-dev/flash/n25q.c		optional n25q
 dev/flash/mx25l.c		optional mx25l
 dev/fxp/if_fxp.c		optional fxp
 dev/fxp/inphy.c			optional fxp
@@ -1791,7 +1785,6 @@ dev/ichsmb/ichsmb_pci.c		optional ichsmb pci
 dev/ida/ida.c			optional ida
 dev/ida/ida_disk.c		optional ida
 dev/ida/ida_pci.c		optional ida pci
-dev/iicbus/controller/snps_i2c.c	optional snps_i2c
 dev/iicbus/ad7418.c		optional ad7418
 dev/iicbus/ds1307.c		optional ds1307
 dev/iicbus/ds13rtc.c		optional ds13rtc | ds133x | ds1374
@@ -1811,8 +1804,6 @@ dev/iicbus/iicsmb.c		optional iicsmb				\
 dev/iicbus/iicoc.c		optional iicoc
 dev/iicbus/isl12xx.c		optional isl12xx
 dev/iicbus/lm75.c		optional lm75
-dev/iicbus/max1619.c		optional max1619
-dev/iicbus/nhd_0216k3z.c	optional nhd_0216k3z
 dev/iicbus/nxprtc.c		optional nxprtc | pcf8563
 dev/iicbus/ofw_iicbus.c		optional fdt iicbus
 dev/iicbus/s35390a.c		optional s35390a
@@ -3438,13 +3429,9 @@ wpi.fw			optional wpifw					\
 	compile-with	"${NORMAL_FW}"					\
 	no-obj no-implicit-rule						\
 	clean		"wpi.fw"
-dev/xdma/controller/pl330.c	optional xdma pl330
 dev/xdma/xdma.c			optional xdma
-dev/xdma/xdma_bio.c		optional xdma
-dev/xdma/xdma_fdt_test.c	optional xdma xdma_test fdt
 dev/xdma/xdma_if.m		optional xdma
-dev/xdma/xdma_mbuf.c		optional xdma
-dev/xdma/xdma_sglist.c		optional xdma
+dev/xdma/xdma_fdt_test.c	optional xdma xdma_test fdt
 dev/xe/if_xe.c			optional xe
 dev/xe/if_xe_pccard.c		optional xe pccard
 dev/xen/balloon/balloon.c	optional xenhvm
@@ -3598,7 +3585,7 @@ geom/geom_disk.c		standard
 geom/geom_dump.c		standard
 geom/geom_event.c		standard
 geom/geom_fox.c			optional geom_fox
-geom/geom_flashmap.c		optional fdt cfi | fdt nand | fdt mx25l | mmcsd | fdt cqspi
+geom/geom_flashmap.c		optional fdt cfi | fdt nand | fdt mx25l | mmcsd
 geom/geom_io.c			standard
 geom/geom_kern.c		standard
 geom/geom_map.c			optional geom_map

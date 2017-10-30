@@ -198,8 +198,6 @@ _parse_bootargs(char *cmdline)
 				kern_setenv(n, v);
 		}
 	}
-
-	boothowto |= RB_SINGLE;
 }
 #endif
 
@@ -285,7 +283,6 @@ platform_start(__register_t a0, __register_t a1,  __register_t a2,
 	if (OF_getprop(chosen, "bootargs", buf, sizeof(buf)) != -1)
 		_parse_bootargs(buf);
 #endif
-	boothowto |= RB_SINGLE;
 
 	/*
 	 * XXXRW: We have no way to compare wallclock time to cycle rate on

@@ -68,11 +68,7 @@
 #define	TRAPF_PC(framep)	((framep)->pc)
 #define	cpu_getstack(td)	((td)->td_frame->sp)
 #define	cpu_setstack(td, nsp)	((td)->td_frame->sp = (nsp))
-#define	cpu_spinwait()		__asm __volatile (".set noreorder\n"	\
-			"\tsync\n"					\
-			__MIPS_PLATFORM_SYNC_NOPS			\
-			".set reorder\n"				\
-			: : : "memory");
+#define	cpu_spinwait()		/* nothing */
 
 /*
  * A machine-independent interface to the CPU's counter.
