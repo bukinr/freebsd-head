@@ -537,8 +537,8 @@ main(int argc, char *argv[])
 		switch (option) {
 		case 't':
 			/*
-			 * Toggle taken and not taken branches.
-			 * TODO: Intel PT specific ?
+			 * Decode 'Taken/Not_Taken branch' packet.
+			 * TODO: Intel PT only?
 			 */
 			pmctrace_cfg.flags |= FLAG_BRANCH_TNT;
 			break;
