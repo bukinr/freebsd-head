@@ -29,8 +29,8 @@
  * SUCH DAMAGE.
  */
 
-#ifndef	_DEV_HWPMC_PT_H_
-#define	_DEV_HWPMC_PT_H_
+#ifndef _DEV_HWPMC_PT_H_
+#define _DEV_HWPMC_PT_H_
 
 #include <sys/types.h>
 #include <sys/malloc.h>
@@ -39,9 +39,7 @@
 
 #define	PT_CPUID	0x14
 #define	PT_NADDR	4
-
-#ifndef LOCORE
-#endif
+#define	PT_NPMCS	1
 
 struct pmc_md_pt_op_pmcallocate {
 	uint32_t flags;
@@ -55,9 +53,6 @@ struct pmc_md_pt_op_pmcallocate {
 };
 
 #ifdef	_KERNEL
-
-#define	PT_NPMCS	1
-
 struct topa_entry {
 	uint64_t base;
 	uint64_t size;
@@ -93,5 +88,5 @@ int	pmc_pt_initialize(struct pmc_mdep *_md, int _maxcpu);
 void	pmc_pt_finalize(struct pmc_mdep *_md);
 int	pmc_pt_intr(int cpu, struct trapframe *tf);
 
-#endif	/* _KERNEL */
-#endif	/* _DEV_HWPMC_PT_H */
+#endif /* !_KERNEL */
+#endif /* !_DEV_HWPMC_PT_H */
