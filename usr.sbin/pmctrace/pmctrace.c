@@ -211,7 +211,7 @@ pmctrace_start_pmcs(void)
 	struct pmcstat_ev *ev;
 
 	STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
-		printf("starting ev->ev_cpu %d\n", ev->ev_cpu);
+		//printf("starting ev->ev_cpu %d\n", ev->ev_cpu);
 		assert(ev->ev_pmcid != PMC_ID_INVALID);
 		if (pmc_start(ev->ev_pmcid) < 0) {
 			warn("ERROR: Cannot start pmc 0x%x \"%s\"",
@@ -385,11 +385,11 @@ pmctrace_run(bool user_mode, char *func_name, char *func_image)
 			stopping = 1;
 			break;
 		case EVFILT_READ:
-			printf("%s: read data available\n", __func__);
+			//printf("%s: read data available\n", __func__);
 			args.pa_flags |= FLAG_DO_ANALYSIS;
 			pmcstat_analyze_log(&args, plugins, &pmcstat_stats, pmcstat_kernproc,
 			    pmcstat_mergepmc, &pmcstat_npmcs, &ps_samples_period);
-			printf("%s: log analyzed\n", __func__);
+			//printf("%s: log analyzed\n", __func__);
 
 			if (!user_mode)
 				pp = pmcstat_kernproc;
@@ -415,11 +415,11 @@ pmctrace_run(bool user_mode, char *func_name, char *func_image)
 				break;
 			}
 
-			printf("%s: name to addr\n", __func__);
+			//printf("%s: name to addr\n", __func__);
 			sym = pmcstat_symbol_search_by_name(pp, func_image, func_name, &addr_start, &addr_end);
-			printf("%s: name to addr done\n", __func__);
+			//printf("%s: name to addr done\n", __func__);
 			if (sym) {
-				printf("SYM addr start %lx end %lx\n", addr_start, addr_end);
+				//printf("SYM addr start %lx end %lx\n", addr_start, addr_end);
 
 				ranges[0].addra = addr_start;
 				ranges[0].addrb = addr_end;
@@ -430,7 +430,7 @@ pmctrace_run(bool user_mode, char *func_name, char *func_image)
 						pmc_trace_config(i, ev->ev_pmcid, &ranges[0], 1);
 				} else {
 					STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
-						printf("cpu%d: trace config\n", ev->ev_cpu);
+						//printf("cpu%d: trace config\n", ev->ev_cpu);
 						pmc_trace_config(ev->ev_cpu, ev->ev_pmcid, &ranges[0], 1);
 					}
 				}
@@ -438,7 +438,7 @@ pmctrace_run(bool user_mode, char *func_name, char *func_image)
 				if (started == 0) {
 					started = 1;
 					pmctrace_start_pmcs();
-					printf("pmc started\n");
+					//printf("pmc started\n");
 				}
 			}
 
@@ -561,7 +561,7 @@ main(int argc, char *argv[])
 	if (supervisor_mode && argc)
 		errx(EX_USAGE, "ERROR: supervisor mode does not require command");
 
-	printf("%s\n", __func__);
+	//printf("%s\n", __func__);
 
 	args.pa_required |= (FLAG_HAS_PIPE | FLAG_HAS_OUTPUT_LOGFILE);
 
@@ -601,7 +601,7 @@ main(int argc, char *argv[])
 	pmctrace_open_logfile();
 
 	STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
-		printf("pmc_allocate ev is %lx, ev->cpu %d\n", (uint64_t)ev, ev->ev_cpu);
+		//printf("pmc_allocate ev is %lx, ev->cpu %d\n", (uint64_t)ev, ev->ev_cpu);
 		if (pmc_allocate(ev->ev_spec, ev->ev_mode,
 			ev->ev_flags, ev->ev_cpu, &ev->ev_pmcid) < 0)
 			err(EX_OSERR,

@@ -81,6 +81,15 @@ static MALLOC_DEFINE(M_PT, "pt", "PT driver");
 
 #define	PT_CAPS	(PMC_CAP_READ | PMC_CAP_WRITE | PMC_CAP_INTERRUPT | PMC_CAP_SYSTEM | PMC_CAP_USER)
 
+#define	PMC_PT_DEBUG
+#undef	PMC_PT_DEBUG
+
+#ifdef	PMC_PT_DEBUG
+#define	dprintf(fmt, ...)	printf(fmt, ##__VA_ARGS__)
+#else
+#define	dprintf(fmt, ...)
+#endif
+
 struct pt_descr {
 	struct pmc_descr pm_descr;  /* "base class" */
 };
@@ -135,7 +144,7 @@ pt_buf_allocate(uint32_t cpu, struct pmc *pm, const struct pmc_op_pmcallocate *a
 
 	error = pt_buffer_allocate(pt_buf, 256 * 1024 * 1024);
 	if (error != 0) {
-		//printf("%s: can't allocate buffers\n", __func__);
+		dprintf("%s: can't allocate buffers\n", __func__);
 		return (EINVAL);
 	}
 
@@ -165,10 +174,12 @@ static int
 pt_allocate_pmc(int cpu, int ri, struct pmc *pm,
     const struct pmc_op_pmcallocate *a)
 {
+	struct pt_cpu *pt_pc;
 	int i;
 
-	//printf("%s: cpu %d (curcpu %d)\n", __func__, cpu, PCPU_GET(cpuid));
-	//printf("pm_mode %d\n", a->pm_mode);
+	pt_pc = pt_pcpu[cpu];
+
+	dprintf("%s: cpu %d (curcpu %d)\n", __func__, cpu, PCPU_GET(cpuid));
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
 	    ("[pt,%d] illegal CPU value %d", __LINE__, cpu));
@@ -191,13 +202,10 @@ pt_allocate_pmc(int cpu, int ri, struct pmc *pm,
 	    a->pm_mode != PMC_MODE_TT)
 		return (EINVAL);
 
-	struct pt_cpu *pt_pc;
-	pt_pc = pt_pcpu[cpu];
-
-	/* Can't allocate for multiple */
+	/* Can't allocate multiple ST */
 	if (a->pm_mode == PMC_MODE_ST &&
 	    pt_pc->flags & FLAG_PT_ALLOCATED)
-		return (EINVAL);
+		return (EUSERS);
 
 	if (a->pm_mode == PMC_MODE_TT)
 		for (i = 0; i < pmc_cpu_max(); i++) {
@@ -259,13 +267,11 @@ pt_configure(int cpu, struct pmc *pm)
 	uint64_t reg;
 	int i;
 
-	//printf("%s\n", __func__);
-
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pt_buf = &pm_pt->pt_buffers[cpu];
 
-	//printf("%s: cpu %d (curcpu %d), pt_buf->pt_output_base %lx\n",
-	//    __func__, cpu, PCPU_GET(cpuid), pt_buf->pt_output_base);
+	dprintf("%s: cpu %d (curcpu %d), pt_buf->pt_output_base %lx\n",
+	    __func__, cpu, PCPU_GET(cpuid), pt_buf->pt_output_base);
 
 	KASSERT(cpu == PCPU_GET(cpuid), ("Configuring wrong CPU\n"));
 
@@ -293,7 +299,7 @@ pt_configure(int cpu, struct pmc *pm)
 		reg |= RTIT_CTL_USER;
 		reg |= RTIT_CTL_CR3FILTER;
 	} else {
-		//printf("%s: unknown mode %d\n", __func__, mode);
+		dprintf("%s: unsupported mode %d\n", __func__, mode);
 		return (-1);
 	}
 
@@ -316,7 +322,7 @@ pt_configure(int cpu, struct pmc *pm)
 	//	printf("%s: no ranges\n", __func__);
 
 	for (i = 0; i < pt_buf->addrn; i++) {
-		//printf("%s: range %lx -> %lx\n", __func__, pt_buf->addra[i], pt_buf->addrb[i]);
+		dprintf("%s: range %lx -> %lx\n", __func__, pt_buf->addra[i], pt_buf->addrb[i]);
 		reg |= (1UL << RTIT_CTL_ADDR_CFG_S(i));
 		wrmsr(MSR_IA32_RTIT_ADDR_A(i), pt_buf->addra[i]);
 		wrmsr(MSR_IA32_RTIT_ADDR_B(i), pt_buf->addrb[i]);
@@ -331,26 +337,21 @@ static int
 pt_attach_proc(int ri, struct pmc *pm, struct proc *p)
 {
 	struct pmc_md_pt_pmc *pm_pt;
-	//struct pt_buffer *pt_buf;
 	enum pmc_mode mode;
 	pmap_t pmap;  
 	uint64_t cr3;
 
-	//printf("%s\n", __func__);
+	dprintf("%s\n", __func__);
 
 	mode = PMC_TO_MODE(pm);
 	if (mode != PMC_MODE_ST && mode != PMC_MODE_TT)
 		return (0);
 
-	//pmap = vmspace_pmap(td->td_proc->p_vmspace);
 	pmap = vmspace_pmap(p->p_vmspace);
 	cr3 = pmap->pm_cr3;
 
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pm_pt->cr3 = cr3;
-
-	//pt_buf = &pm_pt->pt_buffers[cpu];
-	//pt_buf->cr3 = cr3;
 
 	return (0);
 }
@@ -362,7 +363,7 @@ pt_config_pmc(int cpu, int ri, struct pmc *pm)
 	struct pt_cpu *pt_pc;
 	int error;
 
-	//printf("%s: cpu %d (pm %lx)\n", __func__, cpu, (uint64_t)pm);
+	dprintf("%s: cpu %d (pm %lx)\n", __func__, cpu, (uint64_t)pm);
 
 	PMCDBG3(MDP,CFG,1, "cpu=%d ri=%d pm=%p", cpu, ri, pm);
 
@@ -381,7 +382,7 @@ pt_config_pmc(int cpu, int ri, struct pmc *pm)
 	if (pm != NULL) {
 		error = pt_configure(cpu, pm);
 		if (error != 0) {
-			//printf("%s: can't enable PMC\n", __func__);
+			dprintf("%s: can't enable PMC\n", __func__);
 			return (error);
 		}
 	}
@@ -397,7 +398,7 @@ pt_describe(int cpu, int ri, struct pmc_info *pi, struct pmc **ppmc)
 	const struct pt_descr *pd;
 	struct pmc_hw *phw;
 
-	//printf("%s\n", __func__);
+	dprintf("%s\n", __func__);
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
 	    ("[pt,%d] illegal CPU %d", __LINE__, cpu));
@@ -429,7 +430,7 @@ pt_get_config(int cpu, int ri, struct pmc **ppm)
 	struct pmc_hw *phw;
 	struct pt_cpu *pt_pc;
 
-	//printf("%s\n", __func__);
+	dprintf("%s\n", __func__);
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
 	    ("[pt,%d] illegal CPU %d", __LINE__, cpu));
@@ -447,16 +448,10 @@ static int
 pt_get_msr(int ri, uint32_t *msr)
 {
 
-	//printf("%s\n", __func__);
-
 	KASSERT(ri >= 0 && ri < PT_NPMCS,
 	    ("[pt,%d] ri %d out of range", __LINE__, ri));
 
 	return (-1);
-
-	//*msr = MSR_PT;
-
-	return (0);
 }
 
 static int
@@ -480,8 +475,8 @@ pt_buffer_allocate(struct pt_buffer *pt_buf, uint64_t bufsize)
 
 	segsize = 2 << (11 + (topa_size >> TOPA_SIZE_S));
 
-	//printf("%s: bufsize %lx, segsize %lx\n",
-	//    __func__, bufsize, segsize);
+	dprintf("%s: bufsize %lx, segsize %lx\n",
+	    __func__, bufsize, segsize);
 
 	if (bufsize % segsize)
 		return (-1);
@@ -499,7 +494,7 @@ pt_buffer_allocate(struct pt_buffer *pt_buf, uint64_t bufsize)
 		    PAGE_SIZE,	/* alignment */
 		    0);		/* boundary */
 		if (buf == NULL) {
-			//printf("Can't allocate topa\n");
+			dprintf("Can't allocate topa\n");
 			/* TODO: deallocate */
 			return (1);
 		}
@@ -533,7 +528,7 @@ pt_buffer_deallocate(struct pt_buffer *pt_buf)
 {
 	int i;
 
-	//printf("%s\n", __func__);
+	dprintf("%s\n", __func__);
 
 	for (i = 0; i < pt_buf->topa_n; i++) {
 		contigfree((void *)pt_buf->topa_sw[i].base, pt_buf->topa_sw[i].size, M_PT);
@@ -558,7 +553,7 @@ pmc_pt_buffer_get_page(int cpu, vm_ooffset_t offset, vm_paddr_t *paddr)
 	pt_pc = pt_pcpu[cpu];
 	pm = pt_pc->pm_mmap;
 	if (pm == NULL) {
-		//printf("%s: FAIL: pm is null\n", __func__);
+		dprintf("%s: FAIL: pm is null\n", __func__);
 		return (-1);
 	}
 
@@ -582,9 +577,7 @@ pmc_pt_buffer_get_page(int cpu, vm_ooffset_t offset, vm_paddr_t *paddr)
 	if (!found)
 		return (-1);
 
-#if 0
-	printf("%s: paddr %lx\n", __func__, *paddr);
-#endif
+	dprintf("%s: paddr %lx\n", __func__, *paddr);
 
 	return (0);
 }
@@ -601,22 +594,22 @@ pt_enumerate(struct pt_cpu *pt_pc)
 	ebx = &cp[1];
 	ecx = &cp[2];
 
-	//printf("Enumerating part 1\n");
+	dprintf("Enumerating part 1\n");
 
 	cpuid_count(PT_CPUID, 0, cp);
-	//printf("%s: Maximum valid sub-leaf Index: %x\n", __func__, cp[0]);
-	//printf("%s: ebx %x\n", __func__, cp[1]);
-	//printf("%s: ecx %x\n", __func__, cp[2]);
+	dprintf("%s: Maximum valid sub-leaf Index: %x\n", __func__, cp[0]);
+	dprintf("%s: ebx %x\n", __func__, cp[1]);
+	dprintf("%s: ecx %x\n", __func__, cp[2]);
 
 	pt_pc->s0_eax = cp[0];
 	pt_pc->s0_ebx = cp[1];
 	pt_pc->s0_ecx = cp[2];
 
-	//printf("Enumerating part 2\n");
+	dprintf("Enumerating part 2\n");
 
 	cpuid_count(PT_CPUID, 1, cp);
-	//printf("%s: eax %x\n", __func__, cp[0]);
-	//printf("%s: ebx %x\n", __func__, cp[1]);
+	dprintf("%s: eax %x\n", __func__, cp[0]);
+	dprintf("%s: ebx %x\n", __func__, cp[1]);
 
 	pt_pc->s1_eax = cp[0];
 	pt_pc->s1_ebx = cp[1];
@@ -629,7 +622,7 @@ pt_pcpu_init(struct pmc_mdep *md, int cpu)
 	struct pt_cpu *pt_pc;
 	int ri;
 
-	//printf("%s: cpu %d\n", __func__, cpu);
+	dprintf("%s: cpu %d\n", __func__, cpu);
 
 	KASSERT(cpu == PCPU_GET(cpuid), ("Init on wrong CPU\n"));
 
@@ -669,7 +662,7 @@ pt_pcpu_fini(struct pmc_mdep *md, int cpu)
 	struct pmc_cpu *pc;
 	struct pt_cpu *pt_pc;
 
-	//printf("%s: cpu %d\n", __func__, cpu);
+	dprintf("%s: cpu %d\n", __func__, cpu);
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
 	    ("[pt,%d] illegal cpu %d", __LINE__, cpu));
@@ -699,7 +692,7 @@ pt_trace_config(int cpu, int ri, struct pmc *pm,
 
 	KASSERT(cpu == PCPU_GET(cpuid), ("Configuring wrong CPU\n"));
 
-	//printf("%s\n", __func__);
+	dprintf("%s\n", __func__);
 	
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pt_buf = &pm_pt->pt_buffers[cpu];
@@ -712,7 +705,7 @@ pt_trace_config(int cpu, int ri, struct pmc *pm,
 	pt_buf->addrn = nranges;
 
 	for (i = 0; i < nranges; i++) {
-		//printf("%s: range %lx -> %lx\n", __func__, ranges[0].addra, ranges[0].addrb);
+		dprintf("%s: range %lx -> %lx\n", __func__, ranges[0].addra, ranges[0].addrb);
  
 		pt_buf->addra[i] = ranges[i].addra;
 		pt_buf->addrb[i] = ranges[i].addrb;
@@ -722,11 +715,7 @@ pt_trace_config(int cpu, int ri, struct pmc *pm,
 		wrmsr(MSR_IA32_RTIT_ADDR_B(i), ranges[i].addrb);
 	}
 
-	//if (reg & RTIT_CTL_TRACEEN)
-
 	wrmsr(MSR_IA32_RTIT_CTL, reg);
-
-	//printf("%s: range CTL %lx\n", __func__, reg);
 
 	return (0);
 }
@@ -761,7 +750,7 @@ pt_read_trace(int cpu, int ri, struct pmc *pm,
 	offset = reg >> 32;
 	*voffset = pt_buf->topa_sw[idx].offset + offset;
 
-	//printf("%s: %lx\n", __func__, rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS));
+	dprintf("%s: %lx\n", __func__, rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS));
 
 	return (0);
 }
@@ -789,7 +778,7 @@ pt_release_pmc(int cpu, int ri, struct pmc *pm)
 
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 
-	//printf("%s: cpu %d (curcpu %d)\n", __func__, cpu, PCPU_GET(cpuid));
+	dprintf("%s: cpu %d (curcpu %d)\n", __func__, cpu, PCPU_GET(cpuid));
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
 	    ("[pt,%d] illegal CPU value %d", __LINE__, cpu));
@@ -802,10 +791,10 @@ pt_release_pmc(int cpu, int ri, struct pmc *pm)
 	KASSERT(phw->phw_pmc == NULL,
 	    ("[pt,%d] PHW pmc %p non-NULL", __LINE__, phw->phw_pmc));
 
-	//printf("%s: cpu %d, output base %lx\n",
-	//    __func__, cpu, rdmsr(MSR_IA32_RTIT_OUTPUT_BASE));
-	//printf("%s: cpu %d, output base ptr %lx\n",
-	//    __func__, cpu, rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS));
+	printf("%s: cpu %d, output base %lx\n",
+	    __func__, cpu, rdmsr(MSR_IA32_RTIT_OUTPUT_BASE));
+	printf("%s: cpu %d, output base ptr %lx\n",
+	    __func__, cpu, rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS));
 
 	mode = PMC_TO_MODE(pm);
 	if (mode == PMC_MODE_TT) {
@@ -836,7 +825,7 @@ pt_start_pmc(int cpu, int ri)
 	struct pmc *pm;
 	uint64_t reg;
 
-	//printf("%s: cpu %d (curcpu %d)\n", __func__, cpu, PCPU_GET(cpuid));
+	dprintf("%s: cpu %d (curcpu %d)\n", __func__, cpu, PCPU_GET(cpuid));
 
 	pt_pc = pt_pcpu[cpu];
 	phw = &pt_pc->tc_hw;
@@ -858,9 +847,7 @@ pt_start_pmc(int cpu, int ri)
 	reg |= RTIT_CTL_TRACEEN;
 	wrmsr(MSR_IA32_RTIT_CTL, reg);
 
-	//printf("%s: ctl %lx\n", __func__, reg);
-
-	return (0);	/* PTs are always running. */
+	return (0);
 }
 
 static int
@@ -920,7 +907,7 @@ pmc_pt_initialize(struct pmc_mdep *md, int maxcpu)
 {
 	struct pmc_classdep *pcd;
 
-	//printf("%s\n", __func__);
+	dprintf("%s\n", __func__);
 
 	KASSERT(md != NULL, ("[pt,%d] md is NULL", __LINE__));
 	KASSERT(md->pmd_nclass >= 1, ("[pt,%d] dubious md->nclass %d",
@@ -936,8 +923,6 @@ pmc_pt_initialize(struct pmc_mdep *md, int maxcpu)
 	pcd->pcd_num	= PT_NPMCS;
 	pcd->pcd_ri	= md->pmd_npmc;
 	pcd->pcd_width	= 64;
-
-	//printf("PT ri %d\n", pcd->pcd_ri);
 
 	pcd->pcd_allocate_pmc = pt_allocate_pmc;
 	pcd->pcd_config_pmc   = pt_config_pmc;
@@ -964,7 +949,7 @@ void
 pmc_pt_finalize(struct pmc_mdep *md)
 {
 
-	//printf("%s\n", __func__);
+	dprintf("%s\n", __func__);
 
 #ifdef	INVARIANTS
 	int i, ncpus;

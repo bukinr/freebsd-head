@@ -2545,7 +2545,7 @@ pt_allocate_pmc(enum pmc_event pe, char *ctrspec,
 
 	pm_pt = (struct pmc_md_pt_op_pmcallocate *)&pmc_config->pm_md.pm_pt;
 
-	printf("ctrspec %s\n", ctrspec);
+	//printf("ctrspec %s\n", ctrspec);
 
 	addrn = 0;
 	while ((p = strsep(&ctrspec, ",")) != NULL) {
@@ -2577,7 +2577,7 @@ pt_allocate_pmc(enum pmc_event pe, char *ctrspec,
 			addr = strtoul(q, &e, 0);
 			if (e == q || *e != '\0')
 				return (-1);
-			printf("Addr %lx\n", addr);
+			//printf("Addr %lx\n", addr);
 			pm_pt->addra[addrn] = addr;
 		}
 
@@ -2593,7 +2593,7 @@ pt_allocate_pmc(enum pmc_event pe, char *ctrspec,
 
 			if (pm_pt->addrb[addrn] < pm_pt->addra[addrn])
 				return (-1);
-			printf("Addr %lx %lx\n", pm_pt->addra[addrn], pm_pt->addrb[addrn]);
+			//printf("Addr %lx %lx\n", pm_pt->addra[addrn], pm_pt->addrb[addrn]);
 			addrn += 1;
 			if (addrn > PT_NADDR)
 				return (-1);
@@ -2894,7 +2894,7 @@ pmc_allocate(const char *ctrspec, enum pmc_mode mode,
 	struct pmc_op_pmcallocate pmc_config;
 	const struct pmc_class_descr *pcd;
 
-	printf("%s\n", __func__);
+	//printf("%s\n", __func__);
 
 	spec_copy = NULL;
 	retval    = -1;

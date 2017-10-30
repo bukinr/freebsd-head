@@ -45,6 +45,15 @@ __FBSDID("$FreeBSD$");
 #include <vm/vm_page.h>
 #include <vm/vm_pager.h>
 
+#define	PMC_VM_DEBUG
+#undef	PMC_VM_DEBUG
+
+#ifdef	PMC_VM_DEBUG
+#define	dprintf(fmt, ...)	printf(fmt, ##__VA_ARGS__)
+#else
+#define	dprintf(fmt, ...)
+#endif
+
 #include "hwpmc_vm.h"
 
 struct cdev_cpu {
@@ -94,7 +103,7 @@ pmc_pg_fault(vm_object_t object, vm_ooffset_t offset,
 
 	vmh = object->handle;
 	if (vmh == NULL) {
-		printf("%s: offset 0x%lx, VM_PAGER_FAIL: vmh is null\n",
+		dprintf("%s: offset 0x%lx, VM_PAGER_FAIL: vmh is null\n",
 		    __func__, offset);
 		return (VM_PAGER_FAIL);
 	}
@@ -102,7 +111,7 @@ pmc_pg_fault(vm_object_t object, vm_ooffset_t offset,
 	cc = vmh->cc;
 	md = cc->md;
 
-	//printf("%s%d: offset %lx\n", __func__, cc->cpu, offset);
+	dprintf("%s%d: offset %lx\n", __func__, cc->cpu, offset);
 
 	pidx = OFF_TO_IDX(offset);
 
