@@ -75,6 +75,15 @@ __FBSDID("$FreeBSD$");
 
 #define	MAX_CPU	4096
 
+#define	PMCTRACE_DEBUG
+#undef	PMCTRACE_DEBUG
+
+#ifdef	PMCTRACE_DEBUG
+#define	dprintf(fmt, ...)	printf(fmt, ##__VA_ARGS__)
+#else
+#define	dprintf(fmt, ...)
+#endif
+
 static struct pmcstat_args args;
 static struct kevent kev;
 static struct pmcstat_process *pmcstat_kernproc;
@@ -163,9 +172,8 @@ pmcstat_process_cpu(int cpu, struct pmcstat_ev *ev)
 	cc = trace_cpus[cpu];
 
 	pmc_read_trace(cpu, ev->ev_pmcid, &cycle, &offset);
-#if 0
-	printf("cpu %d cycle %lx offset %lx\n", cpu, cycle, offset);
-#endif
+
+	dprintf("cpu %d cycle %lx offset %lx\n", cpu, cycle, offset);
 
 	pt = SLIST_FIRST(&args.pa_targets);
 	if (pt != NULL)
@@ -175,10 +183,8 @@ pmcstat_process_cpu(int cpu, struct pmcstat_ev *ev)
 
 	if (pp)
 		trace_dev->process(cc, pp, cpu, cycle, offset, pmctrace_cfg.flags);
-#if 0
 	else
-		printf("pp not found\n");
-#endif
+		dprintf("pp not found\n");
 
 	return (0);
 }
@@ -211,7 +217,7 @@ pmctrace_start_pmcs(void)
 	struct pmcstat_ev *ev;
 
 	STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
-		//printf("starting ev->ev_cpu %d\n", ev->ev_cpu);
+		dprintf("starting ev->ev_cpu %d\n", ev->ev_cpu);
 		assert(ev->ev_pmcid != PMC_ID_INVALID);
 		if (pmc_start(ev->ev_pmcid) < 0) {
 			warn("ERROR: Cannot start pmc 0x%x \"%s\"",
@@ -385,64 +391,50 @@ pmctrace_run(bool user_mode, char *func_name, char *func_image)
 			stopping = 1;
 			break;
 		case EVFILT_READ:
-			//printf("%s: read data available\n", __func__);
 			args.pa_flags |= FLAG_DO_ANALYSIS;
 			pmcstat_analyze_log(&args, plugins, &pmcstat_stats, pmcstat_kernproc,
 			    pmcstat_mergepmc, &pmcstat_npmcs, &ps_samples_period);
-			//printf("%s: log analyzed\n", __func__);
 
-			if (!user_mode)
-				pp = pmcstat_kernproc;
-			else {
+			if (user_mode) {
 				pt = SLIST_FIRST(&args.pa_targets);
 				if (pt != NULL) {
 					pp = pmcstat_process_lookup(pt->pt_pid, 0);
 					if (pp == NULL) {
 						printf("pp is NULL, pid %d\n", (uint32_t)pt->pt_pid);
-						continue;
-						exit(3);
+						break;
 					}
 				} else
 					exit(2);
-			}
+			} else
+				pp = pmcstat_kernproc;
 
-			pt = SLIST_FIRST(&args.pa_targets);
-			if (func_name == NULL || func_image == NULL) {
-				if (user_mode) {
-					ev = STAILQ_FIRST(&args.pa_events);
-					pmc_proc_unsuspend(ev->ev_pmcid, pt->pt_pid);
-				}
-				break;
-			}
+			if (func_name != NULL && func_image != NULL && started == 0) {
+				sym = pmcstat_symbol_search_by_name(pp, func_image, func_name,
+				    &addr_start, &addr_end);
+				if (sym) {
+					dprintf("SYM addr start %lx end %lx\n", addr_start, addr_end);
 
-			//printf("%s: name to addr\n", __func__);
-			sym = pmcstat_symbol_search_by_name(pp, func_image, func_name, &addr_start, &addr_end);
-			//printf("%s: name to addr done\n", __func__);
-			if (sym) {
-				//printf("SYM addr start %lx end %lx\n", addr_start, addr_end);
+					ranges[0].addra = addr_start;
+					ranges[0].addrb = addr_end;
 
-				ranges[0].addra = addr_start;
-				ranges[0].addrb = addr_end;
-
-				if (user_mode) {
-					ev = STAILQ_FIRST(&args.pa_events);
-					for (i = 0; i < ncpu; i++)
-						pmc_trace_config(i, ev->ev_pmcid, &ranges[0], 1);
-				} else {
-					STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
-						//printf("cpu%d: trace config\n", ev->ev_cpu);
-						pmc_trace_config(ev->ev_cpu, ev->ev_pmcid, &ranges[0], 1);
+					if (user_mode) {
+						ev = STAILQ_FIRST(&args.pa_events);
+						for (i = 0; i < ncpu; i++)
+							pmc_trace_config(i, ev->ev_pmcid, &ranges[0], 1);
+					} else {
+						STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
+							//printf("cpu%d: trace config\n", ev->ev_cpu);
+							pmc_trace_config(ev->ev_cpu, ev->ev_pmcid, &ranges[0], 1);
+						}
 					}
-				}
 
-				if (started == 0) {
 					started = 1;
 					pmctrace_start_pmcs();
-					//printf("pmc started\n");
 				}
 			}
 
 			if (user_mode) {
+				pt = SLIST_FIRST(&args.pa_targets);
 				ev = STAILQ_FIRST(&args.pa_events);
 				pmc_proc_unsuspend(ev->ev_pmcid, pt->pt_pid);
 			}
