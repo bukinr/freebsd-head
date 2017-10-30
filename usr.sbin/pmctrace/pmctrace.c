@@ -356,29 +356,77 @@ pmctrace_setup_cpumask(cpuset_t *cpumask)
 }
 
 static int
-pmctrace_run(bool user_mode, char *func_name, char *func_image)
+pmctrace_delayed_start(bool user_mode, char *func_name, char *func_image)
 {
 	struct pmc_trace_filter_ip_range ranges[16];
+	struct pmcstat_symbol *sym;
 	struct pmcstat_target *pt;
 	struct pmcstat_process *pp;
-	struct pmcstat_symbol *sym;
 	struct pmcstat_ev *ev;
 	uintptr_t addr_start;
 	uintptr_t addr_end;
+	int ncpu;
+	int i;
+
+	if (func_name == NULL || func_image == NULL)
+		return (0);
+
+	ncpu = pmctrace_ncpu();
+	if (ncpu < 0)
+		errx(EX_SOFTWARE, "ERROR: Can't get cpus\n");
+
+	if (user_mode) {
+		pt = SLIST_FIRST(&args.pa_targets);
+		if (pt == NULL)
+			errx(EX_SOFTWARE, "ERROR: can't get target.");
+		pp = pmcstat_process_lookup(pt->pt_pid, 0);
+		if (pp == NULL)
+			errx(EX_SOFTWARE, "ERROR: pp is NULL, pid %d\n",
+			    (uint32_t)pt->pt_pid);
+	} else
+		pp = pmcstat_kernproc;
+
+	sym = pmcstat_symbol_search_by_name(pp, func_image, func_name,
+	    &addr_start, &addr_end);
+	if (!sym)
+		return (0);
+
+	dprintf("%s: SYM addr start %lx end %lx\n",
+	    __func__, addr_start, addr_end);
+
+	ranges[0].addra = addr_start;
+	ranges[0].addrb = addr_end;
+
+	if (user_mode) {
+		ev = STAILQ_FIRST(&args.pa_events);
+		for (i = 0; i < ncpu; i++)
+			pmc_trace_config(i, ev->ev_pmcid, &ranges[0], 1);
+	} else {
+		STAILQ_FOREACH(ev, &args.pa_events, ev_next)
+			pmc_trace_config(ev->ev_cpu,
+			    ev->ev_pmcid, &ranges[0], 1);
+	}
+
+	pmctrace_start_pmcs();
+
+	return (1);
+}
+
+
+static int
+pmctrace_run(bool user_mode, char *func_name, char *func_image)
+{
+	struct pmcstat_target *pt;
+	struct pmcstat_process *pp;
+	struct pmcstat_ev *ev;
 	int stopping;
 	int running;
 	int started;
-	int ncpu;
-	int i;
 	int c;
 
 	stopping = 0;
 	running = 10;
 	started = 0;
-
-	ncpu = pmctrace_ncpu();
-	if (ncpu < 0)
-		errx(EX_SOFTWARE, "ERROR: Can't get cpus\n");
 
 	if (user_mode) {
 		pmcstat_create_process(pmcstat_sockpair, &args, pmcstat_kq);
@@ -408,10 +456,8 @@ pmctrace_run(bool user_mode, char *func_name, char *func_image)
 				continue;
 		}
 
-#if 0
-		printf("%s: pmcstat event: filter %d, ident %ld\n",
+		dprintf("%s: pmcstat event: filter %d, ident %ld\n",
 		    __func__, kev.filter, kev.ident);
-#endif
 
 		if (kev.flags & EV_ERROR)
 			errc(EX_OSERR, kev.data, "ERROR: kevent failed");
@@ -422,46 +468,13 @@ pmctrace_run(bool user_mode, char *func_name, char *func_image)
 			break;
 		case EVFILT_READ:
 			args.pa_flags |= FLAG_DO_ANALYSIS;
-			pmcstat_analyze_log(&args, plugins, &pmcstat_stats, pmcstat_kernproc,
-			    pmcstat_mergepmc, &pmcstat_npmcs, &ps_samples_period);
+			pmcstat_analyze_log(&args, plugins, &pmcstat_stats,
+			    pmcstat_kernproc, pmcstat_mergepmc, &pmcstat_npmcs,
+			    &ps_samples_period);
 
-			if (user_mode) {
-				pt = SLIST_FIRST(&args.pa_targets);
-				if (pt != NULL) {
-					pp = pmcstat_process_lookup(pt->pt_pid, 0);
-					if (pp == NULL) {
-						printf("pp is NULL, pid %d\n", (uint32_t)pt->pt_pid);
-						break;
-					}
-				} else
-					exit(2);
-			} else
-				pp = pmcstat_kernproc;
-
-			if (func_name != NULL && func_image != NULL && started == 0) {
-				sym = pmcstat_symbol_search_by_name(pp, func_image, func_name,
-				    &addr_start, &addr_end);
-				if (sym) {
-					dprintf("SYM addr start %lx end %lx\n", addr_start, addr_end);
-
-					ranges[0].addra = addr_start;
-					ranges[0].addrb = addr_end;
-
-					if (user_mode) {
-						ev = STAILQ_FIRST(&args.pa_events);
-						for (i = 0; i < ncpu; i++)
-							pmc_trace_config(i, ev->ev_pmcid, &ranges[0], 1);
-					} else {
-						STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
-							//printf("cpu%d: trace config\n", ev->ev_cpu);
-							pmc_trace_config(ev->ev_cpu, ev->ev_pmcid, &ranges[0], 1);
-						}
-					}
-
-					started = 1;
-					pmctrace_start_pmcs();
-				}
-			}
+			if (started == 0 &&
+			    pmctrace_delayed_start(user_mode, func_name, func_image) == 1)
+				started = 1;
 
 			if (user_mode) {
 				pt = SLIST_FIRST(&args.pa_targets);
