@@ -596,8 +596,6 @@ main(int argc, char *argv[])
 	if (supervisor_mode && argc)
 		errx(EX_USAGE, "ERROR: supervisor mode does not require command");
 
-	//printf("%s\n", __func__);
-
 	args.pa_required |= (FLAG_HAS_PIPE | FLAG_HAS_OUTPUT_LOGFILE);
 
 	ev->ev_saved = 0LL;
@@ -636,7 +634,6 @@ main(int argc, char *argv[])
 	pmctrace_open_logfile();
 
 	STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
-		//printf("pmc_allocate ev is %lx, ev->cpu %d\n", (uint64_t)ev, ev->ev_cpu);
 		if (pmc_allocate(ev->ev_spec, ev->ev_mode,
 			ev->ev_flags, ev->ev_cpu, &ev->ev_pmcid) < 0)
 			err(EX_OSERR,
