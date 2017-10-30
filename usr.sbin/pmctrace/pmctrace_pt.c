@@ -106,7 +106,6 @@ symbol_lookup(struct mtrace_data *mdata)
 	} else {
 #if 0
 		printf("cpu%d: 0x%lx map not found\n", mdata->cpu, ip);
-		//printf("map not found, pp %lx, ip %lx\n", (uint64_t)mdata->pp, >ip);
 #endif
 	}
 
@@ -318,13 +317,13 @@ ipt_process_chunk(struct mtrace_data *mdata, uint64_t base,
 }
 
 int
-ipt_process(struct trace_cpu *cc, struct pmcstat_process *pp,
+ipt_process(struct trace_cpu *tc, struct pmcstat_process *pp,
     uint32_t cpu, uint32_t cycle, uint64_t offset,
     uint32_t flags)
 {
 	struct mtrace_data *mdata;
 
-	mdata = &cc->mdata;
+	mdata = &tc->mdata;
 	mdata->pp = pp;
 	mdata->flags = flags;
 
@@ -333,27 +332,27 @@ ipt_process(struct trace_cpu *cc, struct pmcstat_process *pp,
 	    __func__, cpu, cycle, offset);
 #endif
 
-	if (offset == cc->offset)
+	if (offset == tc->offset)
 		return (0);
 
-	if (cycle == cc->cycle) {
-		if (offset > cc->offset) {
-			ipt_process_chunk(mdata, (uint64_t)cc->base, cc->offset, offset);
-			cc->offset = offset;
-		} else if (offset < cc->offset) {
+	if (cycle == tc->cycle) {
+		if (offset > tc->offset) {
+			ipt_process_chunk(mdata, (uint64_t)tc->base, tc->offset, offset);
+			tc->offset = offset;
+		} else if (offset < tc->offset) {
 			err(EXIT_FAILURE, "cpu%d: offset already processed %lx %lx",
-			    cpu, offset, cc->offset);
+			    cpu, offset, tc->offset);
 		}
-	} else if (cycle > cc->cycle) {
-		if ((cycle - cc->cycle) > 1)
+	} else if (cycle > tc->cycle) {
+		if ((cycle - tc->cycle) > 1)
 			err(EXIT_FAILURE, "cpu%d: trace buffers fills up faster than"
 			    " we can process it (%d/%d). Consider setting trace filters",
-			    cpu, cycle, cc->cycle);
-		ipt_process_chunk(mdata, (uint64_t)cc->base, cc->offset, cc->bufsize);
-		cc->offset = 0;
-		cc->cycle += 1;
-		ipt_process_chunk(mdata, (uint64_t)cc->base, cc->offset, offset);
-		cc->offset = offset;
+			    cpu, cycle, tc->cycle);
+		ipt_process_chunk(mdata, (uint64_t)tc->base, tc->offset, tc->bufsize);
+		tc->offset = 0;
+		tc->cycle += 1;
+		ipt_process_chunk(mdata, (uint64_t)tc->base, tc->offset, offset);
+		tc->offset = offset;
 	}
 
 	return (0);
