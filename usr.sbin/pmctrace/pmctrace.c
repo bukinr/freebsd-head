@@ -128,29 +128,29 @@ pmctrace_ncpu(void)
 static int
 pmctrace_init_cpu(uint32_t cpu)
 {
-	struct trace_cpu *cc;
+	struct trace_cpu *tc;
 	char filename[16];
 	struct mtrace_data *mdata;
 
-	cc = trace_cpus[cpu];
-	mdata = &cc->mdata;
+	tc = trace_cpus[cpu];
+	mdata = &tc->mdata;
 	mdata->ip = 0;
 	mdata->cpu = cpu;
 
 	sprintf(filename, "/dev/pmc%d", cpu);
 
-	cc->fd = open(filename, O_RDWR);
-	if (cc->fd < 0) {
+	tc->fd = open(filename, O_RDWR);
+	if (tc->fd < 0) {
 		printf("Can't open %s\n", filename);
 		return (-1);
 	}
 
-	cc->bufsize = 256 * 1024 * 1024;
-	cc->cycle = 0;
-	cc->offset = 0;
+	tc->bufsize = 256 * 1024 * 1024;
+	tc->cycle = 0;
+	tc->offset = 0;
 
-	cc->base = mmap(NULL, cc->bufsize, PROT_READ, MAP_SHARED, cc->fd, 0);
-	if (cc->base == MAP_FAILED) {
+	tc->base = mmap(NULL, tc->bufsize, PROT_READ, MAP_SHARED, tc->fd, 0);
+	if (tc->base == MAP_FAILED) {
 		printf("mmap failed: err %d\n", errno);
 		return (-1);
 	}
@@ -165,11 +165,11 @@ pmctrace_process_cpu(int cpu, struct pmcstat_ev *ev)
 	struct pmcstat_target *pt;
 	pmc_value_t offset;
 	pmc_value_t cycle;
-	struct trace_cpu *cc;
+	struct trace_cpu *tc;
 	struct trace_dev *trace_dev;
 
 	trace_dev = pmctrace_cfg.trace_dev;
-	cc = trace_cpus[cpu];
+	tc = trace_cpus[cpu];
 
 	pmc_read_trace(cpu, ev->ev_pmcid, &cycle, &offset);
 
@@ -182,7 +182,8 @@ pmctrace_process_cpu(int cpu, struct pmcstat_ev *ev)
 		pp = pmcstat_kernproc;
 
 	if (pp)
-		trace_dev->process(cc, pp, cpu, cycle, offset, pmctrace_cfg.flags);
+		trace_dev->process(tc, pp, cpu, cycle,
+		    offset, pmctrace_cfg.flags);
 	else
 		dprintf("pp not found\n");
 
