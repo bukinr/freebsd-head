@@ -82,6 +82,15 @@ __FBSDID("$FreeBSD$");
 #include <libipt/pt_compiler.h>
 #include <libipt/intel-pt.h>
 
+#define	PMCTRACE_PT_DEBUG
+#undef	PMCTRACE_PT_DEBUG
+
+#ifdef	PMCTRACE_PT_DEBUG
+#define	dprintf(fmt, ...)	printf(fmt, ##__VA_ARGS__)
+#else
+#define	dprintf(fmt, ...)
+#endif
+
 static struct pmcstat_symbol *
 symbol_lookup(struct mtrace_data *mdata)
 {
@@ -103,11 +112,8 @@ symbol_lookup(struct mtrace_data *mdata)
 			(image->pi_vaddr - image->pi_start));
 		sym = pmcstat_symbol_search(image, newpc);
 		return (sym);
-	} else {
-#if 0
-		printf("cpu%d: 0x%lx map not found\n", mdata->cpu, ip);
-#endif
-	}
+	} else
+		dprintf("cpu%d: 0x%lx map not found\n", mdata->cpu, ip);
 
 	return (NULL);
 }
@@ -175,15 +181,8 @@ print_ip_payload(struct mtrace_data *mdata, uint64_t offset __unused,
 	if (sym) {
 		printf("cpu%d:  IP 0x%lx %s\n", mdata->cpu, mdata->ip,
 		    pmcstat_string_unintern(sym->ps_name));
-	} else {
-#if 0
-		printf("cpu%d: 0x%lx not found\n", mdata->cpu, mdata->ip);
-		printf("cpu%d: 0x%lx not found, image->pi_vaddr %lx,"
-		    "image->pi_start %lx, map->ppm_lowpc %lx, pc %lx, newpc %lx\n",
-		    mdata->cpu, ip, image->pi_vaddr, image->pi_start,
-		    map->ppm_lowpc, mdata->ip, newpc);
-#endif
-	}
+	} else
+		dprintf("cpu%d: 0x%lx not found\n", mdata->cpu, mdata->ip);
 
 	return (0);
 }
@@ -261,9 +260,7 @@ ipt_process_chunk(struct mtrace_data *mdata, uint64_t base,
 	struct pt_config config;
 	int error;
 
-#if 0
-	printf("%s\n", __func__);
-#endif
+	dprintf("%s\n", __func__);
 
 	memset(&config, 0, sizeof(config));
 	pt_config_init(&config);
@@ -278,14 +275,8 @@ ipt_process_chunk(struct mtrace_data *mdata, uint64_t base,
 	config.begin = (uint8_t *)(base + start);
 	config.end = (uint8_t *)(base + end);
 
-#if 0
-	printf("%s: begin %lx end %lx\n", __func__,
+	dprintf("%s: begin %lx end %lx\n", __func__,
 	    (uint64_t)config.begin, (uint64_t)config.end);
-#endif
-#if 0
-	printf("%s: begin %ld end %ld, size %ld\n", __func__,
-	    (uint64_t)start, (uint64_t)end, end-start);
-#endif
 
 	decoder = pt_pkt_alloc_decoder(&config);
 	if (decoder == NULL) {
@@ -324,10 +315,8 @@ ipt_process(struct trace_cpu *tc, struct pmcstat_process *pp,
 	mdata->pp = pp;
 	mdata->flags = flags;
 
-#if 0
-	printf("%s: cpu %d, cycle %d, offset %ld\n",
+	dprintf("%s: cpu %d, cycle %d, offset %ld\n",
 	    __func__, cpu, cycle, offset);
-#endif
 
 	if (offset == tc->offset)
 		return (0);
