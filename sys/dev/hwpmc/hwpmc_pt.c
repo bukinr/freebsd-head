@@ -393,8 +393,8 @@ pt_attach_proc(int ri, struct pmc *pm, struct proc *p)
 static int
 pt_config_pmc(int cpu, int ri, struct pmc *pm)
 {
-	struct pmc_hw *phw;
 	struct pt_cpu *pt_pc;
+	struct pmc_hw *phw;
 	int error;
 
 	dprintf("%s: cpu %d (pm %lx)\n", __func__, cpu, (uint64_t)pm);
@@ -427,10 +427,10 @@ pt_config_pmc(int cpu, int ri, struct pmc *pm)
 static int
 pt_describe(int cpu, int ri, struct pmc_info *pi, struct pmc **ppmc)
 {
-	int error;
-	size_t copied;
 	const struct pt_descr *pd;
 	struct pmc_hw *phw;
+	size_t copied;
+	int error;
 
 	dprintf("%s\n", __func__);
 
