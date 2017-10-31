@@ -198,17 +198,12 @@ dump_packets(struct mtrace_data *mdata, struct pt_packet_decoder *decoder,
 
 	while (1) {
 		error = pt_pkt_get_offset(decoder, &offset);
-		if (error < 0) {
+		if (error < 0)
 			errx(EX_SOFTWARE, "ERROR: can't get offset, err %d\n", error);
-			//printf("err %d, offset 0x%lx\n", error, offset);
-			break;
-		}
 
 		error = pt_pkt_next(decoder, &packet, sizeof(packet));
-		if (error < 0) {
-			//printf("err %d, packet.type %d\n", error, packet.type);
+		if (error < 0)
 			break;
-		}
 
 		switch (packet.type) {
 		case ppt_invalid:
@@ -274,9 +269,11 @@ ipt_process_chunk(struct mtrace_data *mdata, uint64_t base,
 	pt_config_init(&config);
 
 	error = pt_cpu_read(&config.cpu);
-	//printf("err %d\n", error);
+	if (error < 0)
+		errx(EX_SOFTWARE, "ERROR: pt_cpu_read failed, err %d\n", error);
 	error = pt_cpu_errata(&config.errata, &config.cpu);
-	//printf("err %d\n", error);
+	if (error < 0)
+		errx(EX_SOFTWARE, "ERROR: can't get errata, err %d\n", error);
 
 	config.begin = (uint8_t *)(base + start);
 	config.end = (uint8_t *)(base + end);
