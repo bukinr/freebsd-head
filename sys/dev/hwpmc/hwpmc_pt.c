@@ -267,6 +267,7 @@ pt_configure(int cpu, struct pmc *pm)
 	struct pt_cpu *pt_pc;
 	enum pmc_mode mode;
 	struct pt_buffer *pt_buf;
+	int nranges;
 	uint64_t reg;
 	int ret;
 	int i;
@@ -304,10 +305,13 @@ pt_configure(int cpu, struct pmc *pm)
 	/* Configure tracing */
 	reg = RTIT_CTL_TOPA;
 
-	//if (sc->s0_ebx & S0_EBX_PRW) {
-	//	reg |= RTIT_CTL_FUPONPTW;
-	//	reg |= RTIT_CTL_PTWEN;
-	//}
+	/*
+	 * TODO
+	 * if (sc->s0_ebx & S0_EBX_PRW) {
+	 *     reg |= RTIT_CTL_FUPONPTW;
+	 *     reg |= RTIT_CTL_PTWEN;
+	 * }
+	 */
 
 	if (mode == PMC_MODE_ST)
 		reg |= RTIT_CTL_OS;
@@ -336,6 +340,12 @@ pt_configure(int cpu, struct pmc *pm)
 	 * TODO: specify MTC frequency
 	 * reg |= RTIT_CTL_MTC_FREQ(6);
 	 */
+
+	nranges = (pt_pc->s1_eax & S1_EAX_NADDR_M) >> S1_EAX_NADDR_S;
+
+	/* Limit the number of ranges. */
+	if (pt_buf->addrn > nranges)
+		pt_buf->addrn = nranges;
 
 	for (i = 0; i < pt_buf->addrn; i++) {
 		dprintf("%s: range %lx -> %lx\n", __func__,
