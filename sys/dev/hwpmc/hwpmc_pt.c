@@ -79,7 +79,7 @@ static MALLOC_DEFINE(M_PT, "pt", "PT driver");
  * Intel PT support.
  */
 
-#define	PT_CAPS	(PMC_CAP_READ | PMC_CAP_WRITE | PMC_CAP_INTERRUPT | PMC_CAP_SYSTEM | PMC_CAP_USER)
+#define	PT_CAPS	(PMC_CAP_READ | PMC_CAP_INTERRUPT | PMC_CAP_SYSTEM | PMC_CAP_USER)
 
 #define	PMC_PT_DEBUG
 #undef	PMC_PT_DEBUG
@@ -154,7 +154,10 @@ pt_buf_allocate(uint32_t cpu, struct pmc *pm, const struct pmc_op_pmcallocate *a
 	pt_buf->addrn = pm_pta->addrn;
 
 	for (i = 0; i < PT_NADDR; i++) {
-		/* TODO: check caps: how many address ranges supported ? */
+		/*
+		 * Note: we will verify the amount of address ranges
+		 * supported by this CPU later in pt_configure().
+		 */
 
 		pt_buf->addra[i] = pm_pta->addra[i];
 		pt_buf->addrb[i] = pm_pta->addrb[i];
