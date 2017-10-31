@@ -289,10 +289,8 @@ ipt_process_chunk(struct mtrace_data *mdata, uint64_t base,
 
 	while (1) {
 		error = dump_packets(mdata, decoder, &config);
-		if (error == 0) {
-			//printf(",");
+		if (error == 0)
 			break;
-		}
 
 		error = pt_pkt_sync_forward(decoder);
 		if (error < 0) {
