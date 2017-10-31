@@ -285,7 +285,11 @@ ipt_process_chunk(struct mtrace_data *mdata, uint64_t base,
 	}
 
 	error = pt_pkt_sync_set(decoder, 0ull);
+	if (error < 0)
+		errx(EX_SOFTWARE, "ERROR: sync_set failed, err %d\n", error);
 	error = pt_pkt_sync_forward(decoder);
+	if (error < 0 && error != -pte_eos)
+		errx(EX_SOFTWARE, "ERROR: sync_forward failed, err %d\n", error);
 
 	while (1) {
 		error = dump_packets(mdata, decoder, &config);
