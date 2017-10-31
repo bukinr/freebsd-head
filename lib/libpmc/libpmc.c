@@ -1069,12 +1069,8 @@ iap_allocate_pmc(enum pmc_event pe, char *ctrspec,
 				return (-1);
 
 		} else if (cpu_info.pm_cputype == PMC_CPU_INTEL_SKYLAKE ||
-		    cpu_info.pm_cputype == PMC_CPU_INTEL_SKYLAKE_XEON) {
-			if (KWPREFIXMATCH(p, IAP_KW_RSP "=")) {
-				n = pmc_parse_mask(iap_rsp_mask_skylake, p, &rsp);
-			} else
-				return (-1);
-		} else if (cpu_info.pm_cputype == PMC_CPU_INTEL_KABYLAKE) {
+		    cpu_info.pm_cputype == PMC_CPU_INTEL_SKYLAKE_XEON ||
+		    cpu_info.pm_cputype == PMC_CPU_INTEL_KABYLAKE) {
 			if (KWPREFIXMATCH(p, IAP_KW_RSP "=")) {
 				n = pmc_parse_mask(iap_rsp_mask_skylake, p, &rsp);
 			} else
@@ -2533,12 +2529,10 @@ static int
 pt_allocate_pmc(enum pmc_event pe, char *ctrspec,
     struct pmc_op_pmcallocate *pmc_config)
 {
-	char *p;
-	char *q;
-	char *e;
 	struct pmc_md_pt_op_pmcallocate *pm_pt;
 	uint64_t addr;
 	uint32_t addrn;
+	char *p, *q, *e;
 
 	if (pe != PMC_EV_PT_PT)
 		return (-1);
@@ -4042,6 +4036,7 @@ pmc_log_kmap(pmc_id_t pmc)
 	struct pmc_op_simple pmc_log_km;
 
 	pmc_log_km.pm_pmcid = pmc;
+
 	return (PMC_CALL(LOG_KERNEL_MAP, &pmc_log_km));
 }
 
