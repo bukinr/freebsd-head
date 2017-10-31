@@ -833,9 +833,9 @@ pt_release_pmc(int cpu, int ri, struct pmc *pm)
 	KASSERT(phw->phw_pmc == NULL,
 	    ("[pt,%d] PHW pmc %p non-NULL", __LINE__, phw->phw_pmc));
 
-	printf("%s: cpu %d, output base %lx\n",
+	dprintf("%s: cpu %d, output base %lx\n",
 	    __func__, cpu, rdmsr(MSR_IA32_RTIT_OUTPUT_BASE));
-	printf("%s: cpu %d, output base ptr %lx\n",
+	dprintf("%s: cpu %d, output base ptr %lx\n",
 	    __func__, cpu, rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS));
 
 	mode = PMC_TO_MODE(pm);
