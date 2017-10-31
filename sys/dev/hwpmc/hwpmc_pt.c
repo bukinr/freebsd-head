@@ -142,7 +142,7 @@ pt_buf_allocate(uint32_t cpu, struct pmc *pm, const struct pmc_op_pmcallocate *a
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pt_buf = &pm_pt->pt_buffers[cpu];
 
-	error = pt_buffer_allocate(pt_buf, 256 * 1024 * 1024);
+	error = pt_buffer_allocate(pt_buf, DEFAULT_BUF_SIZE);
 	if (error != 0) {
 		dprintf("%s: can't allocate buffers\n", __func__);
 		return (EINVAL);

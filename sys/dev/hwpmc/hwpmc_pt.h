@@ -41,6 +41,8 @@
 #define	PT_NADDR	4
 #define	PT_NPMCS	1
 
+#define	DEFAULT_BUF_SIZE	(256 * 1024 * 1024)
+
 struct pmc_md_pt_op_pmcallocate {
 	uint32_t flags;
 #define	INTEL_PT_FLAG_BRANCHES	(1 << 0)
