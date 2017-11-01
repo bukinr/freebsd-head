@@ -167,9 +167,8 @@ pmc_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 	vmh->cc = cdev->si_drv1;
 	vmh->mem = cdev_pager_allocate(vmh, OBJT_DEVICE, &pmc_pg_ops,
 	    mapsize, nprot, *offset, NULL);
-	if (vmh->mem == NULL) {
+	if (vmh->mem == NULL)
 		return (ENXIO);
-	}
 
 	*objp = vmh->mem;
 
