@@ -152,20 +152,20 @@ print_ip_payload(struct mtrace_data *mdata, uint64_t offset __unused,
 	case pt_ipc_suppressed:
 		break;
 	case pt_ipc_update_16:
-		mdata->ip &= ~0xffff;
-		mdata->ip |= (packet->ip & 0xffff);
+		mdata->ip &= ~0xffffUL;
+		mdata->ip |= (packet->ip & 0xffffUL);
 		break;
 	case pt_ipc_update_32:
 		mdata->ip &= ~0xffffffffUL;
-		mdata->ip |= (packet->ip & 0xffffffff);
+		mdata->ip |= (packet->ip & 0xffffffffUL);
 		break;
 	case pt_ipc_update_48:
 		mdata->ip &= ~0xffffffffffffUL;
-		mdata->ip |= (packet->ip & 0xffffffffffff);
+		mdata->ip |= (packet->ip & 0xffffffffffffUL);
 		break;
 	case pt_ipc_sext_48:
 		mdata->ip &= ~0xffffffffffffUL;
-		mdata->ip |= (packet->ip & 0xffffffffffff);
+		mdata->ip |= (packet->ip & 0xffffffffffffUL);
 		symbol_lookup(mdata);
 	case pt_ipc_full:
 		mdata->ip = packet->ip;
