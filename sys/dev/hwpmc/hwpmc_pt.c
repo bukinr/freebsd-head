@@ -514,6 +514,7 @@ pt_buffer_allocate(struct pt_buffer *pt_buf, uint64_t bufsize)
 	void *buf;
 	int i;
 	int n;
+	int z;
 
 	if (bufsize > (1 * 1024 * 1024 * 1024)) {
 		topa_size = TOPA_SIZE_8M;
@@ -545,7 +546,10 @@ pt_buffer_allocate(struct pt_buffer *pt_buf, uint64_t bufsize)
 		    0);		/* boundary */
 		if (buf == NULL) {
 			dprintf("Can't allocate topa\n");
-			/* TODO: deallocate */
+			for (z = 0; z < i; z++)
+				contigfree((void *)entry[i].base,
+				    entry[i].size, M_PT);
+
 			return (1);
 		}
 
@@ -580,9 +584,8 @@ pt_buffer_deallocate(struct pt_buffer *pt_buf)
 
 	dprintf("%s\n", __func__);
 
-	for (i = 0; i < pt_buf->topa_n; i++) {
+	for (i = 0; i < pt_buf->topa_n; i++)
 		contigfree((void *)pt_buf->topa_sw[i].base, pt_buf->topa_sw[i].size, M_PT);
-	}
 
 	free(pt_buf->topa_sw, M_PT);
 	free(pt_buf->topa_hw, M_PT);
