@@ -888,9 +888,11 @@ pt_start_pmc(int cpu, int ri)
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pt_buf = &pm_pt->pt_buffers[cpu];
 
-	ret = wrmsr_safe(MSR_IA32_RTIT_CR3_MATCH, pm_pt->cr3);
-	if (ret)
-		return (ret);
+	if (pt_pc->s0_ebx & S0_EBX_CR3) {
+		ret = wrmsr_safe(MSR_IA32_RTIT_CR3_MATCH, pm_pt->cr3);
+		if (ret)
+			return (ret);
+	}
 
 	/* Enable tracing */
 	reg = rdmsr(MSR_IA32_RTIT_CTL);
