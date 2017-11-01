@@ -2904,8 +2904,6 @@ pmc_syscall_handler(struct thread *td, void *syscall_args)
 
 	PMC_GET_SX_XLOCK(ENOSYS);
 
-	DROP_GIANT();
-
 	is_sx_downgraded = 0;
 	is_sx_locked = 1;
 
@@ -2920,8 +2918,7 @@ pmc_syscall_handler(struct thread *td, void *syscall_args)
 	error = 0;
 	atomic_add_int(&pmc_stats.pm_syscalls, 1);
 
-	switch(op)
-	{
+	switch (op) {
 
 
 	/*
@@ -4253,9 +4250,7 @@ pmc_syscall_handler(struct thread *td, void *syscall_args)
 	if (error)
 		atomic_add_int(&pmc_stats.pm_syscall_errors, 1);
 
-	PICKUP_GIANT();
-
-	return error;
+	return (error);
 }
 
 /*
