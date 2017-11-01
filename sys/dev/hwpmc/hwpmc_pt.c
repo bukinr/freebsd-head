@@ -759,7 +759,8 @@ pt_trace_config(int cpu, int ri, struct pmc *pm,
 	pt_buf->addrn = nranges;
 
 	for (i = 0; i < nranges; i++) {
-		dprintf("%s: range %lx -> %lx\n", __func__, ranges[0].addra, ranges[0].addrb);
+		dprintf("%s: range %lx -> %lx\n", __func__,
+		    ranges[0].addra, ranges[0].addrb);
  
 		pt_buf->addra[i] = ranges[i].addra;
 		pt_buf->addrb[i] = ranges[i].addrb;
