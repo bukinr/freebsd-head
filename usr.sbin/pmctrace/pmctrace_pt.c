@@ -45,8 +45,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/user.h>
 #include <sys/wait.h>
 
-#include <machine/pt.h>
-
 #include <assert.h>
 #include <curses.h>
 #include <err.h>
