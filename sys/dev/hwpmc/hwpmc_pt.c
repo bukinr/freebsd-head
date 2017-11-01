@@ -517,13 +517,12 @@ pt_buffer_allocate(struct pt_buffer *pt_buf, uint64_t bufsize)
 	int n;
 	int z;
 
-	if (bufsize > (1 * 1024 * 1024 * 1024)) {
+	if (bufsize > (1 * 1024 * 1024 * 1024))
 		topa_size = TOPA_SIZE_8M;
-	} else if (bufsize > (128 * 1024 * 1024)) {
+	else if (bufsize > (128 * 1024 * 1024))
 		topa_size = TOPA_SIZE_4M;
-	} else {
+	else
 		topa_size = TOPA_SIZE_1M;
-	}
 
 	segsize = 2 << (11 + (topa_size >> TOPA_SIZE_S));
 
@@ -801,11 +800,10 @@ pt_read_trace(int cpu, int ri, struct pmc *pm,
 	pt_buf = &pm_pt->pt_buffers[cpu];
 
 	reg = rdmsr(MSR_IA32_RTIT_CTL);
-	if (reg & RTIT_CTL_TRACEEN) {
+	if (reg & RTIT_CTL_TRACEEN)
 		reg = rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS);
-	} else {
+	else
 		reg = pt_buf->pt_output_mask_ptrs;
-	}
 
 	idx = (reg & 0xffffffff) >> 7;
 	*cycle = pt_buf->cycle;
@@ -860,12 +858,11 @@ pt_release_pmc(int cpu, int ri, struct pmc *pm)
 	    __func__, cpu, rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS));
 
 	mode = PMC_TO_MODE(pm);
-	if (mode == PMC_MODE_TT) {
+	if (mode == PMC_MODE_TT)
 		for (i = 0; i < pmc_cpu_max(); i++)
 			pt_buffer_deallocate(&pm_pt->pt_buffers[i]);
-	} else {
+	else
 		pt_buffer_deallocate(&pm_pt->pt_buffers[cpu]);
-	}
 
 	struct pt_cpu *pt_pc;
 	pt_pc = pt_pcpu[cpu];
