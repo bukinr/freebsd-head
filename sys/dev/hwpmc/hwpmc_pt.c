@@ -70,6 +70,7 @@ __FBSDID("$FreeBSD$");
 #include <machine/apicvar.h>
 #endif
 
+#include <x86/x86_var.h>
 #include <machine/ptreg.h>
 #include <machine/specialreg.h>
 
@@ -181,6 +182,9 @@ pt_allocate_pmc(int cpu, int ri, struct pmc *pm,
 	int i;
 
 	pt_pc = pt_pcpu[cpu];
+
+	if ((cpu_stdext_feature & CPUID_STDEXT_PROCTRACE) == 0)
+		return (ENXIO);
 
 	dprintf("%s: cpu %d (curcpu %d)\n", __func__, cpu, PCPU_GET(cpuid));
 
