@@ -310,10 +310,10 @@ pt_configure(int cpu, struct pmc *pm)
 		return (ret);
 
 	/* Configure tracing */
-	if (pt_pc->s0_ecx & S0_ECX_TOPA)
-		reg = RTIT_CTL_TOPA;
-	else
+	if ((pt_pc->s0_ecx & S0_ECX_TOPA) == 0 ||
+	    (pt_pc->s0_ecx & S0_ECX_TOPA_MULTI) == 0)
 		return (-1);	/* We rely on TOPA support */
+	reg = RTIT_CTL_TOPA;
 
 	/*
 	 * TODO
@@ -349,6 +349,7 @@ pt_configure(int cpu, struct pmc *pm)
 
 	/*
 	 * TODO: specify MTC frequency
+	 * Note: Check Bitmap of supported MTC Period Encodings
 	 * reg |= RTIT_CTL_MTC_FREQ(6);
 	 */
 
