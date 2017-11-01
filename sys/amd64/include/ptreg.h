@@ -41,7 +41,7 @@
 #define	S0_EBX_CR3		(1 << 0)	/* CR3 Filtering Support */
 #define	S0_EBX_PSB		(1 << 1)	/* Configurable PSB and Cycle-Accurate Mode Supported */
 #define	S0_EBX_IPF		(1 << 2)	/* IP Filtering and TraceStop supported */
-#define	S0_EBX_MTX		(1 << 3)	/* MTC Supported */
+#define	S0_EBX_MTC		(1 << 3)	/* MTC Supported */
 #define	S0_EBX_PRW		(1 << 4)	/* PTWRITE Supported */
 #define	S0_EBX_PWR		(1 << 5)	/* Power Event Trace Supported */
 #define	S0_ECX_TOPA		(1 << 0)	/* ToPA Output Supported */

@@ -310,7 +310,10 @@ pt_configure(int cpu, struct pmc *pm)
 		return (ret);
 
 	/* Configure tracing */
-	reg = RTIT_CTL_TOPA;
+	if (pt_pc->s0_ecx & S0_ECX_TOPA)
+		reg = RTIT_CTL_TOPA;
+	else
+		return (-1);	/* We rely on TOPA support */
 
 	/*
 	 * TODO
@@ -337,7 +340,8 @@ pt_configure(int cpu, struct pmc *pm)
 	if (pt_buf->flags & INTEL_PT_FLAG_TSC)
 		reg |= RTIT_CTL_TSCEN;
 
-	if (pt_buf->flags & INTEL_PT_FLAG_MTC)
+	if ((pt_pc->s0_ebx & S0_EBX_MTC) &&
+	    (pt_buf->flags & INTEL_PT_FLAG_MTC))
 		reg |= RTIT_CTL_MTCEN;
 
 	if (pt_buf->flags & INTEL_PT_FLAG_DISRETC)
@@ -348,22 +352,30 @@ pt_configure(int cpu, struct pmc *pm)
 	 * reg |= RTIT_CTL_MTC_FREQ(6);
 	 */
 
-	nranges = (pt_pc->s1_eax & S1_EAX_NADDR_M) >> S1_EAX_NADDR_S;
+	if (pt_pc->s0_ebx & S0_EBX_IPF) {
+		nranges = (pt_pc->s1_eax & S1_EAX_NADDR_M) >> S1_EAX_NADDR_S;
 
-	/* Limit the number of ranges. */
-	if (pt_buf->addrn > nranges)
-		pt_buf->addrn = nranges;
+		/* Limit the number of ranges. */
+		if (pt_buf->addrn > nranges)
+			pt_buf->addrn = nranges;
 
-	for (i = 0; i < pt_buf->addrn; i++) {
-		dprintf("%s: range %lx -> %lx\n", __func__,
-		    pt_buf->addra[i], pt_buf->addrb[i]);
-		reg |= (1UL << RTIT_CTL_ADDR_CFG_S(i));
-		ret = wrmsr_safe(MSR_IA32_RTIT_ADDR_A(i), pt_buf->addra[i]);
-		if (ret)
-			return (ret);
-		ret = wrmsr_safe(MSR_IA32_RTIT_ADDR_B(i), pt_buf->addrb[i]);
-		if (ret)
-			return (ret);
+		for (i = 0; i < pt_buf->addrn; i++) {
+			dprintf("%s: range %lx -> %lx\n", __func__,
+			    pt_buf->addra[i], pt_buf->addrb[i]);
+			reg |= (1UL << RTIT_CTL_ADDR_CFG_S(i));
+
+			/* Configure addr A */
+			ret = wrmsr_safe(MSR_IA32_RTIT_ADDR_A(i),
+			    pt_buf->addra[i]);
+			if (ret)
+				return (ret);
+
+			/* Configure addr B */
+			ret = wrmsr_safe(MSR_IA32_RTIT_ADDR_B(i),
+			    pt_buf->addrb[i]);
+			if (ret)
+				return (ret);
+		}
 	}
 
 	ret = wrmsr_safe(MSR_IA32_RTIT_CTL, reg);
