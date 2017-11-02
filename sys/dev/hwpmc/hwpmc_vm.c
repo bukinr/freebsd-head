@@ -196,7 +196,7 @@ pmc_vm_initialize(struct pmc_mdep *md)
 		cc->md = md;
 
 		pmc_cdev[cpu] = make_dev(&pmc_cdevsw, 0, UID_ROOT, GID_WHEEL,
-		    0600, "pmc%d", cpu);
+		    0666, "pmc%d", cpu);
 		pmc_cdev[cpu]->si_drv1 = cc;
 	}
 
