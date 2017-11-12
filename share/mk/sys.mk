@@ -20,6 +20,12 @@ MACHINE_CPUARCH=${MACHINE_ARCH:${__TO_CPUARCH}}
 __DEFAULT_YES_OPTIONS+= \
 	UNIFIED_OBJDIR
 
+# src.sys.obj.mk enables AUTO_OBJ by default if possible but it is otherwise
+# disabled.  Ensure src.conf.5 shows it as default on.
+.if make(showconfig)
+__DEFAULT_YES_OPTIONS+= AUTO_OBJ
+.endif
+
 # Some options we need now
 __DEFAULT_NO_OPTIONS= \
 	DIRDEPS_BUILD \
@@ -112,10 +118,10 @@ NO_META_IGNORE_HOST_HEADERS=	1
 # This needs to be done early - before .PATH is computed
 # Don't do this for 'make showconfig' as it enables all options where meta mode
 # is not expected.
-.if !make(showconfig) && !make(print-dir)
+.if !make(showconfig) && !make(print-dir) && empty(.MAKEFLAGS:M-[nN])
 .sinclude <auto.obj.mk>
 .endif
-.endif
+.endif	# ${MK_AUTO_OBJ} == "yes"
 .else # bmake
 .include <bsd.mkopt.mk>
 .endif

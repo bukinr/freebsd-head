@@ -1,5 +1,8 @@
 # $FreeBSD$
 
+HAVE_GPT=		yes
+HAVE_GELI=		yes
+
 .include <bsd.init.mk>
 
 LIB=			i386
@@ -25,12 +28,6 @@ CFLAGS+=	-DCOMSPEED=${BOOT_COMCONSOLE_SPEED}
 CFLAGS+= -DDISK_DEBUG
 .endif
 
-.if ${LOADER_GELI_SUPPORT:Uyes} == "yes"
-# Decrypt encrypted drives
-CFLAGS+= -DLOADER_GELI_SUPPORT
-CFLAGS+= -I${BOOTSRC}/geli
-.endif
-
 .if !defined(BOOT_HIDE_SERIAL_NUMBERS)
 # Export serial numbers, UUID, and asset tag from loader.
 CFLAGS+= -DSMBIOS_SERIAL_NUMBERS
@@ -52,24 +49,13 @@ CFLAGS+= -Dalloca=__builtin_alloca
 CFLAGS+=	-I${BOOTSRC}/ficl -I${BOOTSRC}/ficl/i386 \
 		-I${LDRSRC} -I${BOOTSRC}/i386/common \
 		-I${BTXLIB} \
-		-I${SYSDIR}/contrib/dev/acpica/include \
-		-I${SYSDIR} -I.
+		-I${SYSDIR}/contrib/dev/acpica/include
 
 # Handle FreeBSD specific %b and %D printf format specifiers
 CFLAGS+= ${FORMAT_EXTENSIONS}
-
-.if ${MACHINE_CPUARCH} == "amd64"
-CLEANFILES+=	machine
-machine: .NOMETA
-	ln -sf ${SYSDIR}/i386/include machine
-.endif
 
 .include <bsd.lib.mk>
 
 # XXX: clang integrated-as doesn't grok .codeNN directives yet
 CFLAGS.amd64_tramp.S=	${CLANG_NO_IAS}
 CFLAGS.multiboot_tramp.S=	${CLANG_NO_IAS}
-
-.if ${MACHINE_CPUARCH} == "amd64"
-beforedepend ${OBJS}: machine
-.endif

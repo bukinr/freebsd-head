@@ -3,9 +3,8 @@
 
 MAN=
 
-.include <src.opts.mk>
-MK_SSP=		no
 .include <bsd.init.mk>
+MK_SSP=		no
 
 LIB=		geliboot
 INTERNALLIB=
@@ -15,7 +14,7 @@ NO_PIC=
 .if ${MACHINE_CPUARCH} == "i386" || ${MACHINE_CPUARCH} == "amd64"
 CFLAGS+=        -march=i386
 .endif
-.if ${MACHINE_ARCH} == "amd64" || ${MACHINE_ARCH} == "powerpc64"
+.if ${MACHINE_ARCH} == "amd64"
 CFLAGS+=        -m32
 .endif
 
@@ -39,7 +38,6 @@ SRCS+=		md5c.c
 
 # AES implementation from sys/crypto
 .PATH: ${SYSDIR}/crypto/rijndael
-CFLAGS+=	-I${SYSDIR}
 CFLAGS+=	-I${LDRSRC}
 # Remove asserts
 CFLAGS+=	-DNDEBUG
@@ -49,6 +47,10 @@ SRCS+=		rijndael-alg-fst.c rijndael-api-fst.c rijndael-api.c
 .PATH: ${SYSDIR}/geom/eli
 CFLAGS+=	-D_STAND
 SRCS+=		geliboot_crypto.c g_eli_hmac.c g_eli_key.c g_eli_key_cache.c pkcs5v2.c
+
+# aes
+.PATH:		${SYSDIR}/opencrypto
+SRCS+=		xform_aes_xts.c
 
 .include <bsd.stand.mk>
 .include <bsd.lib.mk>

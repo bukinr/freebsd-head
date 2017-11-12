@@ -31,7 +31,7 @@ CFLAGS+=-fomit-frame-pointer \
 	-DSIOFMT=${B2SIOFMT} \
 	-DSIOSPD=${BOOT_COMCONSOLE_SPEED} \
 	-I${LDRSRC} \
-	-I${BTXLIB} -I. \
+	-I${BTXLIB} \
 	-Wall -Waggregate-return -Wbad-function-cast -Wno-cast-align \
 	-Wmissing-declarations -Wmissing-prototypes -Wnested-externs \
 	-Wpointer-arith -Wshadow -Wstrict-prototypes -Wwrite-strings \
@@ -48,7 +48,7 @@ CFLAGS.clang+=	-Oz ${CLANG_OPT_SMALL}
 
 LD_FLAGS+=${LD_FLAGS_BIN}
 
-CLEANFILES=	boot
+CLEANFILES+=	boot
 
 boot: boot1 boot2
 	cat boot1 boot2 > boot
@@ -92,13 +92,6 @@ boot2.h: boot1.out
 	    printf("#define XREADORG %#x\n", REL1 + x) }' \
 	    ORG1=`printf "%d" ${ORG1}` \
 	    REL1=`printf "%d" ${REL1}` > ${.TARGET}
-
-.if ${MACHINE_CPUARCH} == "amd64"
-beforedepend boot2.s: machine
-CLEANFILES+=	machine
-machine: ${SYSDIR}/i386/include .NOMETA
-	ln -sf ${.ALLSRC} ${.TARGET}
-.endif
 
 .include <bsd.prog.mk>
 

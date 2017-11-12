@@ -842,12 +842,12 @@ __rw_wlock_hard(volatile uintptr_t *c, uintptr_t v, uintptr_t tid,
 	struct lock_delay_arg lda;
 #endif
 #ifdef KDTRACE_HOOKS
-	uintptr_t state;
 	u_int sleep_cnt = 0;
 	int64_t sleep_time = 0;
 	int64_t all_time = 0;
 #endif
 #if defined(KDTRACE_HOOKS) || defined(LOCK_PROFILING)
+	uintptr_t state;
 	int doing_lockprof;
 #endif
 
@@ -929,9 +929,8 @@ __rw_wlock_hard(volatile uintptr_t *c, uintptr_t v, uintptr_t tid,
 		if ((v & RW_LOCK_READ) && RW_READERS(v) &&
 		    spintries < rowner_retries) {
 			if (!(v & RW_LOCK_WRITE_SPINNER)) {
-				if (!atomic_cmpset_ptr(&rw->rw_lock, v,
+				if (!atomic_fcmpset_ptr(&rw->rw_lock, &v,
 				    v | RW_LOCK_WRITE_SPINNER)) {
-					v = RW_READ_VALUE(rw);
 					continue;
 				}
 			}
