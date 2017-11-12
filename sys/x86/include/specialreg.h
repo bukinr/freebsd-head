@@ -547,7 +547,7 @@
 #define	MSR_IA32_XSS		0xda0
 
 /*
- * Intel Processor Trace (PT) MSRs
+ * Intel Processor Trace (PT) MSRs.
  */
 #define	MSR_IA32_RTIT_OUTPUT_BASE	0x560	/* Trace Output Base Register (R/W) */
 #define	MSR_IA32_RTIT_OUTPUT_MASK_PTRS	0x561	/* Trace Output Mask Pointers Register (R/W) */
