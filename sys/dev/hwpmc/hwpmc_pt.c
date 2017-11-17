@@ -306,14 +306,9 @@ pt_configure(int cpu, struct pmc *pm)
 
 	if (mode == PMC_MODE_ST)
 		reg |= RTIT_CTL_OS;
-	else if (mode == PMC_MODE_TT) {
+	else if (mode == PMC_MODE_TT)
 		reg |= RTIT_CTL_USER;
-		reg |= RTIT_CTL_CR3FILTER;
-
-		if (pt_pc->l0_ebx & CPUPT_CR3)
-			wrmsr(MSR_IA32_RTIT_CR3_MATCH, pm_pt->cr3);
-
-	} else {
+	else {
 		dprintf("%s: unsupported mode %d\n", __func__, mode);
 		return (-1);
 	}
@@ -359,29 +354,6 @@ pt_configure(int cpu, struct pmc *pm)
 	}
 
 	wrmsr(MSR_IA32_RTIT_CTL, reg);
-
-	return (0);
-}
-
-static int
-pt_attach_proc(int ri, struct pmc *pm, struct proc *p)
-{
-	struct pmc_md_pt_pmc *pm_pt;
-	enum pmc_mode mode;
-	pmap_t pmap;  
-	uint64_t cr3;
-
-	dprintf("%s\n", __func__);
-
-	mode = PMC_TO_MODE(pm);
-	if (mode != PMC_MODE_ST && mode != PMC_MODE_TT)
-		return (0);
-
-	pmap = vmspace_pmap(p->p_vmspace);
-	cr3 = DMAP_TO_PHYS((uint64_t)pmap->pm_pml4);
-
-	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
-	pm_pt->cr3 = cr3;
 
 	return (0);
 }
@@ -962,7 +934,6 @@ pmc_pt_initialize(struct pmc_mdep *md, int maxcpu)
 	pcd->pcd_read_pmc     = pt_read_pmc;
 	pcd->pcd_read_trace   = pt_read_trace;
 	pcd->pcd_trace_config = pt_trace_config;
-	pcd->pcd_attach_proc  = pt_attach_proc;
 	pcd->pcd_release_pmc  = pt_release_pmc;
 	pcd->pcd_start_pmc    = pt_start_pmc;
 	pcd->pcd_stop_pmc     = pt_stop_pmc;
