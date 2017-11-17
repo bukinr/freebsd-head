@@ -213,9 +213,9 @@
 
 /* Leaf 1 ebx. */
 #define	CPUPT_CT_BITMAP_S	0	/* Bitmap of supported Cycle Threshold values */
-#define	CPUPT_CT_BITMAP_M	(0xffff << CPUPT_EBX_CT_BITMAP_S)
+#define	CPUPT_CT_BITMAP_M	(0xffff << CPUPT_CT_BITMAP_S)
 #define	CPUPT_PFE_BITMAP_S	16	/* Bitmap of supported Configurable PSB Frequency encoding */
-#define	CPUPT_PFE_BITMAP_M	(0xffff << CPUPT_EBX_PFE_BITMAP_S)
+#define	CPUPT_PFE_BITMAP_M	(0xffff << CPUPT_PFE_BITMAP_S)
 
 /*
  * Important bits in the AMD extended cpuid flags
