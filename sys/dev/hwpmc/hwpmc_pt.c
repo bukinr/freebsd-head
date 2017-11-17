@@ -378,7 +378,7 @@ pt_attach_proc(int ri, struct pmc *pm, struct proc *p)
 		return (0);
 
 	pmap = vmspace_pmap(p->p_vmspace);
-	cr3 = pmap->pm_cr3;
+	cr3 = DMAP_TO_PHYS((uint64_t)pmap->pm_pml4);
 
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pm_pt->cr3 = cr3;
