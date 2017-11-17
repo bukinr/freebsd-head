@@ -602,6 +602,50 @@
 #define	MSR_IA32_RTIT_ADDR3_A		0x586	/* Region 3 Start Address (R/W) */
 #define	MSR_IA32_RTIT_ADDR3_B		0x587	/* Region 3 End Address (R/W) */
 
+/* Intel Processor Trace CPUID. */
+#define	S0_EBX_CR3		(1 << 0)	/* CR3 Filtering Support */
+#define	S0_EBX_PSB		(1 << 1)	/* Configurable PSB and Cycle-Accurate Mode Supported */
+#define	S0_EBX_IPF		(1 << 2)	/* IP Filtering and TraceStop supported */
+#define	S0_EBX_MTC		(1 << 3)	/* MTC Supported */
+#define	S0_EBX_PRW		(1 << 4)	/* PTWRITE Supported */
+#define	S0_EBX_PWR		(1 << 5)	/* Power Event Trace Supported */
+#define	S0_ECX_TOPA		(1 << 0)	/* ToPA Output Supported */
+#define	S0_ECX_TOPA_MULTI	(1 << 1)	/* ToPA Tables Allow Multiple Output Entries */
+#define	S0_ECX_SINGLE		(1 << 2)	/* Single-Range Output Supported */
+#define	S0_ECX_TT_OUT		(1 << 3)	/* Output to Trace Transport Subsystem Supported */
+#define	S0_ECX_LINEAR_IP	(1 << 31)	/* IP Payloads are Linear IP, otherwise IP is effective */
+#define	S1_EAX_NADDR_S		0	/* Number of Address Ranges */
+#define	S1_EAX_NADDR_M		(0x7 << S1_EAX_NADDR_S)
+#define	S1_EAX_MTC_BITMAP_S	16	/* Bitmap of supported MTC Period Encodings */
+#define	S1_EAX_MTC_BITMAP_M	(0xffff << S1_EAX_MTC_BITMAP_S)
+#define	S1_EBX_CT_BITMAP_S	0	/* Bitmap of supported Cycle Threshold values */
+#define	S1_EBX_CT_BITMAP_M	(0xffff << S1_EBX_CT_BITMAP_S)
+#define	S1_EBX_PFE_BITMAP_S	16	/* Bitmap of supported Configurable PSB Frequency encoding */
+#define	S1_EBX_PFE_BITMAP_M	(0xffff << S1_EBX_PFE_BITMAP_S)
+
+/* Intel Processor Trace Table of Physical Addresses (ToPA). */
+#define	TOPA_SIZE_S	6
+#define	TOPA_SIZE_M	(0xf << TOPA_SIZE_S)
+#define	TOPA_SIZE_4K	(0 << TOPA_SIZE_S)
+#define	TOPA_SIZE_8K	(1 << TOPA_SIZE_S)
+#define	TOPA_SIZE_16K	(2 << TOPA_SIZE_S)
+#define	TOPA_SIZE_32K	(3 << TOPA_SIZE_S)
+#define	TOPA_SIZE_64K	(4 << TOPA_SIZE_S)
+#define	TOPA_SIZE_128K	(5 << TOPA_SIZE_S)
+#define	TOPA_SIZE_256K	(6 << TOPA_SIZE_S)
+#define	TOPA_SIZE_512K	(7 << TOPA_SIZE_S)
+#define	TOPA_SIZE_1M	(8 << TOPA_SIZE_S)
+#define	TOPA_SIZE_2M	(9 << TOPA_SIZE_S)
+#define	TOPA_SIZE_4M	(10 << TOPA_SIZE_S)
+#define	TOPA_SIZE_8M	(11 << TOPA_SIZE_S)
+#define	TOPA_SIZE_16M	(12 << TOPA_SIZE_S)
+#define	TOPA_SIZE_32M	(13 << TOPA_SIZE_S)
+#define	TOPA_SIZE_64M	(14 << TOPA_SIZE_S)
+#define	TOPA_SIZE_128M	(15 << TOPA_SIZE_S)
+#define	TOPA_STOP	(1 << 4)
+#define	TOPA_INT	(1 << 2)
+#define	TOPA_END	(1 << 0)
+
 /*
  * Constants related to MSR's.
  */
