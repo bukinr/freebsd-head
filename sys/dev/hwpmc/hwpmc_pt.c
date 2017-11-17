@@ -64,15 +64,11 @@ __FBSDID("$FreeBSD$");
 #include <vm/pmap.h>
 
 #include <machine/intr_machdep.h>
-#if (__FreeBSD_version >= 1100000)
-#include <x86/apicvar.h>
-#else
-#include <machine/apicvar.h>
-#endif
-
-#include <x86/x86_var.h>
 #include <machine/ptreg.h>
 #include <machine/specialreg.h>
+
+#include <x86/apicvar.h>
+#include <x86/x86_var.h>
 
 static MALLOC_DEFINE(M_PT, "pt", "PT driver");
 
