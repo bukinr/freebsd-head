@@ -524,7 +524,7 @@ pt_buffer_allocate(struct pt_buffer *pt_buf, uint64_t bufsize)
 	else
 		topa_size = TOPA_SIZE_1M;
 
-	segsize = 2 << (11 + (topa_size >> TOPA_SIZE_S));
+	segsize = 4096 << (topa_size >> TOPA_SIZE_S);
 
 	dprintf("%s: bufsize %lx, segsize %lx\n",
 	    __func__, bufsize, segsize);
