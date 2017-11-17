@@ -309,6 +309,10 @@ pt_configure(int cpu, struct pmc *pm)
 	else if (mode == PMC_MODE_TT) {
 		reg |= RTIT_CTL_USER;
 		reg |= RTIT_CTL_CR3FILTER;
+
+		if (pt_pc->s0_ebx & S0_EBX_CR3)
+			wrmsr(MSR_IA32_RTIT_CR3_MATCH, pm_pt->cr3);
+
 	} else {
 		dprintf("%s: unsupported mode %d\n", __func__, mode);
 		return (-1);
@@ -867,9 +871,6 @@ pt_start_pmc(int cpu, int ri)
 	pm = phw->phw_pmc;
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pt_buf = &pm_pt->pt_buffers[cpu];
-
-	if (pt_pc->s0_ebx & S0_EBX_CR3)
-		wrmsr(MSR_IA32_RTIT_CR3_MATCH, pm_pt->cr3);
 
 	/* Enable tracing */
 	reg = rdmsr(MSR_IA32_RTIT_CTL);
