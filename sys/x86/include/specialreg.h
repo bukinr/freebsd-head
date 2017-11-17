@@ -188,6 +188,35 @@
 #define	CPUTPM1_ARAT	0x00000004
 #define	CPUTPM2_EFFREQ	0x00000001
 
+/* Intel Processor Trace CPUID. */
+
+/* Leaf 0 ebx. */
+#define	CPUPT_CR3		(1 << 0)	/* CR3 Filtering Support */
+#define	CPUPT_PSB		(1 << 1)	/* Configurable PSB and Cycle-Accurate Mode Supported */
+#define	CPUPT_IPF		(1 << 2)	/* IP Filtering and TraceStop supported */
+#define	CPUPT_MTC		(1 << 3)	/* MTC Supported */
+#define	CPUPT_PRW		(1 << 4)	/* PTWRITE Supported */
+#define	CPUPT_PWR		(1 << 5)	/* Power Event Trace Supported */
+
+/* Leaf 0 ecx. */
+#define	CPUPT_TOPA		(1 << 0)	/* ToPA Output Supported */
+#define	CPUPT_TOPA_MULTI	(1 << 1)	/* ToPA Tables Allow Multiple Output Entries */
+#define	CPUPT_SINGLE		(1 << 2)	/* Single-Range Output Supported */
+#define	CPUPT_TT_OUT		(1 << 3)	/* Output to Trace Transport Subsystem Supported */
+#define	CPUPT_LINEAR_IP		(1 << 31)	/* IP Payloads are Linear IP, otherwise IP is effective */
+
+/* Leaf 1 eax. */
+#define	CPUPT_NADDR_S		0	/* Number of Address Ranges */
+#define	CPUPT_NADDR_M		(0x7 << CPUPT_NADDR_S)
+#define	CPUPT_MTC_BITMAP_S	16	/* Bitmap of supported MTC Period Encodings */
+#define	CPUPT_MTC_BITMAP_M	(0xffff << CPUPT_MTC_BITMAP_S)
+
+/* Leaf 1 ebx. */
+#define	CPUPT_CT_BITMAP_S	0	/* Bitmap of supported Cycle Threshold values */
+#define	CPUPT_CT_BITMAP_M	(0xffff << CPUPT_EBX_CT_BITMAP_S)
+#define	CPUPT_PFE_BITMAP_S	16	/* Bitmap of supported Configurable PSB Frequency encoding */
+#define	CPUPT_PFE_BITMAP_M	(0xffff << CPUPT_EBX_PFE_BITMAP_S)
+
 /*
  * Important bits in the AMD extended cpuid flags
  */
@@ -601,27 +630,6 @@
 #define	MSR_IA32_RTIT_ADDR2_B		0x585	/* Region 2 End Address (R/W) */
 #define	MSR_IA32_RTIT_ADDR3_A		0x586	/* Region 3 Start Address (R/W) */
 #define	MSR_IA32_RTIT_ADDR3_B		0x587	/* Region 3 End Address (R/W) */
-
-/* Intel Processor Trace CPUID. */
-#define	S0_EBX_CR3		(1 << 0)	/* CR3 Filtering Support */
-#define	S0_EBX_PSB		(1 << 1)	/* Configurable PSB and Cycle-Accurate Mode Supported */
-#define	S0_EBX_IPF		(1 << 2)	/* IP Filtering and TraceStop supported */
-#define	S0_EBX_MTC		(1 << 3)	/* MTC Supported */
-#define	S0_EBX_PRW		(1 << 4)	/* PTWRITE Supported */
-#define	S0_EBX_PWR		(1 << 5)	/* Power Event Trace Supported */
-#define	S0_ECX_TOPA		(1 << 0)	/* ToPA Output Supported */
-#define	S0_ECX_TOPA_MULTI	(1 << 1)	/* ToPA Tables Allow Multiple Output Entries */
-#define	S0_ECX_SINGLE		(1 << 2)	/* Single-Range Output Supported */
-#define	S0_ECX_TT_OUT		(1 << 3)	/* Output to Trace Transport Subsystem Supported */
-#define	S0_ECX_LINEAR_IP	(1 << 31)	/* IP Payloads are Linear IP, otherwise IP is effective */
-#define	S1_EAX_NADDR_S		0	/* Number of Address Ranges */
-#define	S1_EAX_NADDR_M		(0x7 << S1_EAX_NADDR_S)
-#define	S1_EAX_MTC_BITMAP_S	16	/* Bitmap of supported MTC Period Encodings */
-#define	S1_EAX_MTC_BITMAP_M	(0xffff << S1_EAX_MTC_BITMAP_S)
-#define	S1_EBX_CT_BITMAP_S	0	/* Bitmap of supported Cycle Threshold values */
-#define	S1_EBX_CT_BITMAP_M	(0xffff << S1_EBX_CT_BITMAP_S)
-#define	S1_EBX_PFE_BITMAP_S	16	/* Bitmap of supported Configurable PSB Frequency encoding */
-#define	S1_EBX_PFE_BITMAP_M	(0xffff << S1_EBX_PFE_BITMAP_S)
 
 /* Intel Processor Trace Table of Physical Addresses (ToPA). */
 #define	TOPA_SIZE_S	6

@@ -113,11 +113,11 @@ static struct pt_descr pt_pmcdesc[PT_NPMCS] =
 
 struct pt_cpu {
 	struct pmc_hw			tc_hw;
-	uint32_t			s0_eax;
-	uint32_t			s0_ebx;
-	uint32_t			s0_ecx;
-	uint32_t			s1_eax;
-	uint32_t			s1_ebx;
+	uint32_t			l0_eax;
+	uint32_t			l0_ebx;
+	uint32_t			l0_ecx;
+	uint32_t			l1_eax;
+	uint32_t			l1_ebx;
 	struct pmc			*pm_mmap;
 	uint32_t			flags;
 #define	FLAG_PT_ALLOCATED		(1 << 0)
@@ -291,14 +291,14 @@ pt_configure(int cpu, struct pmc *pm)
 	wrmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS, pt_buf->pt_output_mask_ptrs);
 
 	/* Configure tracing */
-	if ((pt_pc->s0_ecx & S0_ECX_TOPA) == 0 ||
-	    (pt_pc->s0_ecx & S0_ECX_TOPA_MULTI) == 0)
+	if ((pt_pc->l0_ecx & CPUPT_TOPA) == 0 ||
+	    (pt_pc->l0_ecx & CPUPT_TOPA_MULTI) == 0)
 		return (-1);	/* We rely on TOPA support */
 	reg = RTIT_CTL_TOPA;
 
 	/*
 	 * TODO
-	 * if (sc->s0_ebx & S0_EBX_PRW) {
+	 * if (sc->l0_ebx & CPUPT_PRW) {
 	 *     reg |= RTIT_CTL_FUPONPTW;
 	 *     reg |= RTIT_CTL_PTWEN;
 	 * }
@@ -310,7 +310,7 @@ pt_configure(int cpu, struct pmc *pm)
 		reg |= RTIT_CTL_USER;
 		reg |= RTIT_CTL_CR3FILTER;
 
-		if (pt_pc->s0_ebx & S0_EBX_CR3)
+		if (pt_pc->l0_ebx & CPUPT_CR3)
 			wrmsr(MSR_IA32_RTIT_CR3_MATCH, pm_pt->cr3);
 
 	} else {
@@ -325,7 +325,7 @@ pt_configure(int cpu, struct pmc *pm)
 	if (pt_buf->flags & INTEL_PT_FLAG_TSC)
 		reg |= RTIT_CTL_TSCEN;
 
-	if ((pt_pc->s0_ebx & S0_EBX_MTC) &&
+	if ((pt_pc->l0_ebx & CPUPT_MTC) &&
 	    (pt_buf->flags & INTEL_PT_FLAG_MTC))
 		reg |= RTIT_CTL_MTCEN;
 
@@ -338,8 +338,8 @@ pt_configure(int cpu, struct pmc *pm)
 	 * reg |= RTIT_CTL_MTC_FREQ(6);
 	 */
 
-	if (pt_pc->s0_ebx & S0_EBX_IPF) {
-		nranges = (pt_pc->s1_eax & S1_EAX_NADDR_M) >> S1_EAX_NADDR_S;
+	if (pt_pc->l0_ebx & CPUPT_IPF) {
+		nranges = (pt_pc->l1_eax & CPUPT_NADDR_M) >> CPUPT_NADDR_S;
 
 		/* Limit the number of ranges. */
 		if (pt_buf->addrn > nranges)
@@ -633,9 +633,9 @@ pt_enumerate(struct pt_cpu *pt_pc)
 	dprintf("%s: ebx %x\n", __func__, cp[1]);
 	dprintf("%s: ecx %x\n", __func__, cp[2]);
 
-	pt_pc->s0_eax = cp[0];
-	pt_pc->s0_ebx = cp[1];
-	pt_pc->s0_ecx = cp[2];
+	pt_pc->l0_eax = cp[0];
+	pt_pc->l0_ebx = cp[1];
+	pt_pc->l0_ecx = cp[2];
 
 	dprintf("Enumerating part 2\n");
 
@@ -643,8 +643,8 @@ pt_enumerate(struct pt_cpu *pt_pc)
 	dprintf("%s: eax %x\n", __func__, cp[0]);
 	dprintf("%s: ebx %x\n", __func__, cp[1]);
 
-	pt_pc->s1_eax = cp[0];
-	pt_pc->s1_ebx = cp[1];
+	pt_pc->l1_eax = cp[0];
+	pt_pc->l1_ebx = cp[1];
 }
 
 static int
