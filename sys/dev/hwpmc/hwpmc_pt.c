@@ -447,16 +447,6 @@ pt_get_config(int cpu, int ri, struct pmc **ppm)
 }
 
 static int
-pt_get_msr(int ri, uint32_t *msr)
-{
-
-	KASSERT(ri >= 0 && ri < PT_NPMCS,
-	    ("[pt,%d] ri %d out of range", __LINE__, ri));
-
-	return (-1);
-}
-
-static int
 pt_buffer_allocate(struct pt_buffer *pt_buf, uint64_t bufsize)
 {
 	struct topa_entry *entry;
@@ -928,7 +918,6 @@ pmc_pt_initialize(struct pmc_mdep *md, int maxcpu)
 	pcd->pcd_config_pmc   = pt_config_pmc;
 	pcd->pcd_describe     = pt_describe;
 	pcd->pcd_get_config   = pt_get_config;
-	pcd->pcd_get_msr      = pt_get_msr;
 	pcd->pcd_pcpu_init    = pt_pcpu_init;
 	pcd->pcd_pcpu_fini    = pt_pcpu_fini;
 	pcd->pcd_read_pmc     = pt_read_pmc;
