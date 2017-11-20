@@ -766,11 +766,13 @@ static int
 pt_release_pmc(int cpu, int ri, struct pmc *pm)
 {
 	struct pmc_md_pt_pmc *pm_pt;
+	struct pt_cpu *pt_pc;
 	enum pmc_mode mode;
 	struct pmc_hw *phw;
 	int i;
 
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
+	pt_pc = pt_pcpu[cpu];
 
 	dprintf("%s: cpu %d (curcpu %d)\n", __func__, cpu, PCPU_GET(cpuid));
 
@@ -797,15 +799,9 @@ pt_release_pmc(int cpu, int ri, struct pmc *pm)
 	else
 		pt_buffer_deallocate(&pm_pt->pt_buffers[cpu]);
 
-	struct pt_cpu *pt_pc;
-	pt_pc = pt_pcpu[cpu];
-
 	if (mode == PMC_MODE_ST)
 		pt_pc->flags &= ~FLAG_PT_ALLOCATED;
 
-	/*
-	 * Nothing to do.
-	 */
 	return (0);
 }
 
