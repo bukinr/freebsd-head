@@ -132,39 +132,63 @@ pt_buffer_allocate(uint32_t cpu, struct pt_buffer *pt_buf, uint64_t bufsize)
 {
 	struct topa_entry *entry;
 	struct pmc_vm_map *map;
+	struct pt_cpu *pt_pc;
 	uint64_t topa_size;
 	uint64_t segsize;
 	uint64_t offset;
+	uint32_t size;
 	vm_object_t obj;
 	vm_page_t m;
-	int i;
-	int n;
+	int npages;
+	int ntopa;
+	int i, j;
+
+	pt_pc = pt_pcpu[cpu];
 
 	dprintf("%s\n", __func__);
+
+	if (pt_pc->l0_ecx & CPUPT_TOPA_MULTI) {
+		topa_size = TOPA_SIZE_4K;
+	} else {
+		topa_size = TOPA_SIZE_128M;
+		if (bufsize != (128 * 1024 * 1024)) {
+			printf("Unsupported PT buf size: %ld\n", bufsize);
+			return (-1);
+		}
+	}
+
+	segsize = PAGE_SIZE << (topa_size >> TOPA_SIZE_S);
+	ntopa = bufsize / segsize;
+	npages = segsize / PAGE_SIZE;
+
+	dprintf("bufsize %ld, segsize %ld, ntopa %d, npages %d\n",
+	    bufsize, segsize, ntopa, npages);
 
 	obj = vm_pager_allocate(OBJT_PHYS, 0, bufsize, PROT_READ, 0,
 	    curthread->td_ucred);
 	pt_buf->obj = obj;
 
-	segsize = PAGE_SIZE;
-	n = bufsize / segsize;
-
-	topa_size = TOPA_SIZE_4K;
-	entry = malloc(n * sizeof(struct topa_entry), M_PT, M_WAITOK | M_ZERO);
+	entry = malloc(ntopa * sizeof(struct topa_entry), M_PT, M_WAITOK | M_ZERO);
 
 	offset = 0;
 
-	dprintf("%s: n %d\n", __func__, n);
-
 	VM_OBJECT_WLOCK(obj);
 	vm_object_reference_locked(obj);
-	for (i = 0; i < n; i++) {
-		m = vm_page_alloc(obj, i, VM_ALLOC_NOBUSY | VM_ALLOC_ZERO);
+	for (i = 0; i < ntopa; i++) {
+		if (npages == 1)
+			m = vm_page_alloc(obj, i, VM_ALLOC_NOBUSY | VM_ALLOC_ZERO);
+		else
+			m = vm_page_alloc_contig(obj, i, VM_ALLOC_NOBUSY | VM_ALLOC_ZERO,
+			    npages, 0, ~0, bufsize, 0, VM_MEMATTR_DEFAULT);
 		if (m == NULL) {
 			printf("can't alloc page %d\n", i);
 			VM_OBJECT_WUNLOCK(obj);
 			vm_object_deallocate(obj);
 			return (-1);
+		}
+		for (j = 0; j < npages; j++) {
+			//pmap_zero_page(&m[j]);
+			m[j].valid = VM_PAGE_BITS_ALL;
 		}
 		m->valid = VM_PAGE_BITS_ALL;
 		entry[i].base = (uint64_t)VM_PAGE_TO_PHYS(m);
@@ -175,19 +199,20 @@ pt_buffer_allocate(uint32_t cpu, struct pt_buffer *pt_buf, uint64_t bufsize)
 	VM_OBJECT_WUNLOCK(obj);
 
 	/* Now build hardware topa table. */
+	size = roundup2((ntopa + 1) * 8, PAGE_SIZE);
+	pt_buf->topa_hw = malloc(size, M_PT, M_WAITOK | M_ZERO);
 
-	pt_buf->topa_hw = malloc((n + 1) * 8, M_PT, M_WAITOK | M_ZERO);
-	for (i = 0; i < n; i++) {
+	for (i = 0; i < ntopa; i++) {
 		pt_buf->topa_hw[i] = entry[i].base | topa_size;
-		dprintf("topa_hw[%d/%d] == %lx\n", i, n, pt_buf->topa_hw[i]);
-		if (i == (n - 1))
+		dprintf("topa_hw[%d/%d] == %lx\n", i, ntopa, pt_buf->topa_hw[i]);
+		if (i == (ntopa - 1))
 			pt_buf->topa_hw[i] |= TOPA_INT;
 	}
 
-	/* The last entry is pointer to table. */
-	pt_buf->topa_hw[n] = vtophys(pt_buf->topa_hw) | TOPA_END;
+	/* The last entry is a pointer to table. */
+	pt_buf->topa_hw[ntopa] = vtophys(pt_buf->topa_hw) | TOPA_END;
 	pt_buf->topa_sw = entry;
-	pt_buf->topa_n = n;
+	pt_buf->topa_ntopa = ntopa;
 	pt_buf->cycle = 0;
 
 	map = malloc(sizeof(struct pmc_vm_map), M_PT, M_WAITOK | M_ZERO);
@@ -391,8 +416,7 @@ pt_configure(int cpu, struct pmc *pm)
 	wrmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS, pt_buf->pt_output_mask_ptrs);
 
 	/* Configure tracing */
-	if ((pt_pc->l0_ecx & CPUPT_TOPA) == 0 ||
-	    (pt_pc->l0_ecx & CPUPT_TOPA_MULTI) == 0)
+	if ((pt_pc->l0_ecx & CPUPT_TOPA) == 0)
 		return (-1);	/* We rely on TOPA support */
 	reg = RTIT_CTL_TOPA;
 
@@ -572,7 +596,7 @@ pmc_pt_buffer_get_page(int cpu, vm_ooffset_t offset, vm_paddr_t *paddr)
 		return (-1);
 
 	found = 0;
-	for (i = 0; i < pt_buf->topa_n; i++) {
+	for (i = 0; i < pt_buf->topa_ntopa; i++) {
 		if (offset < pt_buf->topa_sw[i].size) {
 			*paddr = vtophys(pt_buf->topa_sw[i].base) + offset;
 			found = 1;

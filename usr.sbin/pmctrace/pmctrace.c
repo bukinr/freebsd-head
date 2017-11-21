@@ -145,7 +145,7 @@ pmctrace_init_cpu(uint32_t cpu)
 		return (-1);
 	}
 
-	tc->bufsize = 256 * 1024 * 1024;
+	tc->bufsize = 128 * 1024 * 1024;
 	tc->cycle = 0;
 	tc->offset = 0;
 

@@ -42,7 +42,7 @@
 #define	PT_NADDR	4
 #define	PT_NPMCS	1
 
-#define	DEFAULT_BUF_SIZE	(256 * 1024 * 1024)
+#define	DEFAULT_BUF_SIZE	(128 * 1024 * 1024)
 
 struct pmc_md_pt_op_pmcallocate {
 	uint32_t flags;
@@ -65,7 +65,7 @@ struct topa_entry {
 struct pt_buffer {
 	uint64_t		*topa_hw;
 	struct topa_entry	*topa_sw;
-	int			topa_n;
+	int			topa_ntopa;
 	uint64_t		pt_output_base;
 	uint64_t		pt_output_mask_ptrs;
 	uint64_t		cycle;
