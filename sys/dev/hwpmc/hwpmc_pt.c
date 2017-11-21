@@ -74,6 +74,8 @@ __FBSDID("$FreeBSD$");
 
 static MALLOC_DEFINE(M_PT, "pt", "PT driver");
 
+extern struct cdev *pmc_cdev[MAXCPU];
+
 /*
  * Intel PT support.
  */
@@ -88,9 +90,6 @@ static MALLOC_DEFINE(M_PT, "pt", "PT driver");
 #else
 #define	dprintf(fmt, ...)
 #endif
-
-TAILQ_HEAD(, pmc_vm_map) pmc_maplist =
-    TAILQ_HEAD_INITIALIZER(pmc_maplist);
 
 struct pt_descr {
 	struct pmc_descr pm_descr;  /* "base class" */
@@ -199,10 +198,14 @@ pt_buffer_allocate(uint32_t cpu, struct pt_buffer *pt_buf)
 	map = malloc(sizeof(struct pmc_vm_map), M_PT, M_WAITOK | M_ZERO);
 	map->t = curthread;
 	map->obj = obj;
-	map->cpu = cpu;
 	map->pt_buf = pt_buf;
 
-	TAILQ_INSERT_HEAD(&pmc_maplist, map, map_next);
+	struct cdev_cpu *cc;
+	cc = pmc_cdev[cpu]->si_drv1;
+
+	mtx_lock(&cc->vm_mtx);
+	TAILQ_INSERT_HEAD(&cc->pmc_maplist, map, map_next);
+	mtx_unlock(&cc->vm_mtx);
 
 	return (0);
 
@@ -215,13 +218,16 @@ error:
 }
 
 static int
-pt_buffer_deallocate(struct pt_buffer *pt_buf)
+pt_buffer_deallocate(uint32_t cpu, struct pt_buffer *pt_buf)
 {
 	struct pmc_vm_map *map, *map_tmp;
+	struct cdev_cpu *cc;
 
-	TAILQ_FOREACH_SAFE(map, &pmc_maplist, map_next, map_tmp) {
+	cc = pmc_cdev[cpu]->si_drv1;
+
+	TAILQ_FOREACH_SAFE(map, &cc->pmc_maplist, map_next, map_tmp) {
 		if (map->pt_buf == pt_buf) {
-			TAILQ_REMOVE(&pmc_maplist, map, map_next);
+			TAILQ_REMOVE(&cc->pmc_maplist, map, map_next);
 			free(map, M_PT);
 			break;
 		}
@@ -778,9 +784,9 @@ pt_release_pmc(int cpu, int ri, struct pmc *pm)
 	mode = PMC_TO_MODE(pm);
 	if (mode == PMC_MODE_TT)
 		for (i = 0; i < pmc_cpu_max(); i++)
-			pt_buffer_deallocate(&pm_pt->pt_buffers[i]);
+			pt_buffer_deallocate(i, &pm_pt->pt_buffers[i]);
 	else
-		pt_buffer_deallocate(&pm_pt->pt_buffers[cpu]);
+		pt_buffer_deallocate(cpu, &pm_pt->pt_buffers[cpu]);
 
 	if (mode == PMC_MODE_ST)
 		pt_pc->flags &= ~FLAG_PT_ALLOCATED;

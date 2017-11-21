@@ -59,8 +59,6 @@ __FBSDID("$FreeBSD$");
 
 struct cdev *pmc_cdev[MAXCPU];
 
-extern TAILQ_HEAD(, pmc_vm_map) pmc_maplist;
-
 static int
 pmc_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
     vm_size_t mapsize, struct vm_object **objp, int nprot)
@@ -73,13 +71,16 @@ pmc_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 	if (nprot != PROT_READ || *offset != 0)
 		return (ENXIO);
 
-	TAILQ_FOREACH_SAFE(map, &pmc_maplist, map_next, map_tmp) {
-		if (map->cpu == cc->cpu && map->t == curthread) {
+	mtx_lock(&cc->vm_mtx);
+	TAILQ_FOREACH_SAFE(map, &cc->pmc_maplist, map_next, map_tmp) {
+		if (map->t == curthread) {
+			mtx_unlock(&cc->vm_mtx);
 			*objp = map->obj;
 			return (0);
 		}
 	}
 
+	mtx_unlock(&cc->vm_mtx);
 	return (ENXIO);
 }
 
@@ -102,6 +103,8 @@ pmc_vm_initialize(struct pmc_mdep *md)
 		cc = malloc(sizeof(struct cdev_cpu), M_PMC, M_WAITOK | M_ZERO);
 		cc->cpu = cpu;
 		cc->md = md;
+		mtx_init(&cc->vm_mtx, "PMC VM", NULL, MTX_DEF);
+		TAILQ_INIT(&cc->pmc_maplist);
 
 		pmc_cdev[cpu] = make_dev(&pmc_cdevsw, 0, UID_ROOT, GID_WHEEL,
 		    0666, "pmc%d", cpu);
@@ -122,6 +125,7 @@ pmc_vm_finalize(void)
 
 	for (cpu = 0; cpu < maxcpu; cpu++) {
 		cc = pmc_cdev[cpu]->si_drv1;
+		mtx_destroy(&cc->vm_mtx);
 		free(cc, M_PMC);
 		destroy_dev(pmc_cdev[cpu]);
 	}
