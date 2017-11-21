@@ -65,7 +65,6 @@ struct topa_entry {
 struct pt_buffer {
 	uint64_t		*topa_hw;
 	struct topa_entry	*topa_sw;
-	int			topa_ntopa;
 	uint64_t		pt_output_base;
 	uint64_t		pt_output_mask_ptrs;
 	uint64_t		cycle;

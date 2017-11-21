@@ -128,89 +128,72 @@ struct pt_cpu {
 static struct pt_cpu **pt_pcpu;
 
 static int
-pt_buffer_allocate(uint32_t cpu, struct pt_buffer *pt_buf, uint64_t bufsize)
+pt_buffer_allocate(uint32_t cpu, struct pt_buffer *pt_buf)
 {
-	struct topa_entry *entry;
 	struct pmc_vm_map *map;
 	struct pt_cpu *pt_pc;
 	uint64_t topa_size;
 	uint64_t segsize;
 	uint64_t offset;
 	uint32_t size;
+	uint32_t bufsize;
 	vm_object_t obj;
 	vm_page_t m;
 	int npages;
 	int ntopa;
+	int req;
 	int i, j;
 
 	pt_pc = pt_pcpu[cpu];
 
-	dprintf("%s\n", __func__);
+	bufsize = 128 * 1024 * 1024;
 
-	if (pt_pc->l0_ecx & CPUPT_TOPA_MULTI) {
+	if (pt_pc->l0_ecx & CPUPT_TOPA_MULTI)
 		topa_size = TOPA_SIZE_4K;
-	} else {
+	else
 		topa_size = TOPA_SIZE_128M;
-		if (bufsize != (128 * 1024 * 1024)) {
-			printf("Unsupported PT buf size: %ld\n", bufsize);
-			return (-1);
-		}
-	}
 
 	segsize = PAGE_SIZE << (topa_size >> TOPA_SIZE_S);
 	ntopa = bufsize / segsize;
 	npages = segsize / PAGE_SIZE;
 
-	dprintf("bufsize %ld, segsize %ld, ntopa %d, npages %d\n",
-	    bufsize, segsize, ntopa, npages);
+	pt_buf->obj = obj = vm_pager_allocate(OBJT_PHYS, 0, bufsize,
+	    PROT_READ, 0, curthread->td_ucred);
 
-	obj = vm_pager_allocate(OBJT_PHYS, 0, bufsize, PROT_READ, 0,
-	    curthread->td_ucred);
-	pt_buf->obj = obj;
-
-	entry = malloc(ntopa * sizeof(struct topa_entry), M_PT, M_WAITOK | M_ZERO);
-
-	offset = 0;
+	size = roundup2((ntopa + 1) * 8, PAGE_SIZE);
+	pt_buf->topa_hw = malloc(size, M_PT, M_WAITOK | M_ZERO);
+	pt_buf->topa_sw = malloc(ntopa * sizeof(struct topa_entry), M_PT,
+	    M_WAITOK | M_ZERO);
 
 	VM_OBJECT_WLOCK(obj);
 	vm_object_reference_locked(obj);
+	offset = 0;
 	for (i = 0; i < ntopa; i++) {
+		req = VM_ALLOC_NOBUSY | VM_ALLOC_ZERO;
 		if (npages == 1)
-			m = vm_page_alloc(obj, i, VM_ALLOC_NOBUSY | VM_ALLOC_ZERO);
+			m = vm_page_alloc(obj, i, req);
 		else
-			m = vm_page_alloc_contig(obj, i, VM_ALLOC_NOBUSY | VM_ALLOC_ZERO,
-			    npages, 0, ~0, bufsize, 0, VM_MEMATTR_DEFAULT);
+			m = vm_page_alloc_contig(obj, i, req, npages, 0, ~0,
+			    bufsize, 0, VM_MEMATTR_DEFAULT);
 		if (m == NULL) {
-			printf("can't alloc page %d\n", i);
 			VM_OBJECT_WUNLOCK(obj);
-			vm_object_deallocate(obj);
-			return (-1);
+			printf("%s: Can't alloc page %d\n", __func__, i);
+			goto error;
 		}
 		for (j = 0; j < npages; j++)
 			m[j].valid = VM_PAGE_BITS_ALL;
-		m->valid = VM_PAGE_BITS_ALL;
-		entry[i].base = (uint64_t)VM_PAGE_TO_PHYS(m);
-		entry[i].size = segsize;
-		entry[i].offset = offset;
+		pt_buf->topa_sw[i].size = segsize;
+		pt_buf->topa_sw[i].offset = offset;
+		pt_buf->topa_hw[i] = VM_PAGE_TO_PHYS(m) | topa_size;
+		if (i == (ntopa - 1))
+			pt_buf->topa_hw[i] |= TOPA_INT;
+
 		offset += segsize;
 	}
 	VM_OBJECT_WUNLOCK(obj);
 
-	/* Now build hardware topa table. */
-	size = roundup2((ntopa + 1) * 8, PAGE_SIZE);
-	pt_buf->topa_hw = malloc(size, M_PT, M_WAITOK | M_ZERO);
-
-	for (i = 0; i < ntopa; i++) {
-		pt_buf->topa_hw[i] = entry[i].base | topa_size;
-		dprintf("topa_hw[%d/%d] == %lx\n", i, ntopa, pt_buf->topa_hw[i]);
-		if (i == (ntopa - 1))
-			pt_buf->topa_hw[i] |= TOPA_INT;
-	}
-
-	/* The last entry is a pointer to table. */
+	/* The last entry is a pointer to base table. */
 	pt_buf->topa_hw[ntopa] = vtophys(pt_buf->topa_hw) | TOPA_END;
-	pt_buf->topa_sw = entry;
-	pt_buf->topa_ntopa = ntopa;
 	pt_buf->cycle = 0;
 
 	map = malloc(sizeof(struct pmc_vm_map), M_PT, M_WAITOK | M_ZERO);
@@ -222,6 +205,13 @@ pt_buffer_allocate(uint32_t cpu, struct pt_buffer *pt_buf, uint64_t bufsize)
 	TAILQ_INSERT_HEAD(&pmc_maplist, map, map_next);
 
 	return (0);
+
+error:
+	free(pt_buf->topa_hw, M_PT);
+	free(pt_buf->topa_sw, M_PT);
+	vm_object_deallocate(obj);
+
+	return (-1);
 }
 
 static int
@@ -260,7 +250,7 @@ pt_buf_allocate(uint32_t cpu, struct pmc *pm, const struct pmc_op_pmcallocate *a
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pt_buf = &pm_pt->pt_buffers[cpu];
 
-	error = pt_buffer_allocate(cpu, pt_buf, DEFAULT_BUF_SIZE);
+	error = pt_buffer_allocate(cpu, pt_buf);
 	if (error != 0) {
 		dprintf("%s: can't allocate buffers\n", __func__);
 		return (EINVAL);
