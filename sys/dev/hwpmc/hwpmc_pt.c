@@ -136,6 +136,7 @@ pt_buffer_allocate(uint32_t cpu, struct pt_buffer *pt_buf)
 	uint64_t offset;
 	uint32_t size;
 	uint32_t bufsize;
+	struct cdev_cpu *cc;
 	vm_object_t obj;
 	vm_page_t m;
 	int npages;
@@ -200,7 +201,6 @@ pt_buffer_allocate(uint32_t cpu, struct pt_buffer *pt_buf)
 	map->obj = obj;
 	map->pt_buf = pt_buf;
 
-	struct cdev_cpu *cc;
 	cc = pmc_cdev[cpu]->si_drv1;
 
 	mtx_lock(&cc->vm_mtx);
