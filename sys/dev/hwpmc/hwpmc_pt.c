@@ -140,7 +140,7 @@ pt_buffer_allocate(uint32_t cpu, struct pt_buffer *pt_buf, uint64_t bufsize)
 	int i;
 	int n;
 
-	printf("%s\n", __func__);
+	dprintf("%s\n", __func__);
 
 	obj = vm_pager_allocate(OBJT_PHYS, 0, bufsize, PROT_READ, 0,
 	    curthread->td_ucred);
@@ -154,7 +154,7 @@ pt_buffer_allocate(uint32_t cpu, struct pt_buffer *pt_buf, uint64_t bufsize)
 
 	offset = 0;
 
-	printf("%s: n %d\n", __func__, n);
+	dprintf("%s: n %d\n", __func__, n);
 
 	VM_OBJECT_WLOCK(obj);
 	vm_object_reference_locked(obj);
@@ -190,7 +190,7 @@ pt_buffer_allocate(uint32_t cpu, struct pt_buffer *pt_buf, uint64_t bufsize)
 	pt_buf->topa_n = n;
 	pt_buf->cycle = 0;
 
-	map = malloc(sizeof(struct pmc_vm_map), M_PMC, M_WAITOK | M_ZERO);
+	map = malloc(sizeof(struct pmc_vm_map), M_PT, M_WAITOK | M_ZERO);
 	map->t = curthread;
 	map->obj = obj;
 	map->cpu = cpu;
@@ -206,13 +206,12 @@ pt_buffer_deallocate(struct pt_buffer *pt_buf)
 {
 	struct pmc_vm_map *map, *map_tmp;
 
-	printf("%s\n", __func__);
+	dprintf("%s\n", __func__);
 
 	vm_object_deallocate(pt_buf->obj);
 
 	TAILQ_FOREACH_SAFE(map, &pmc_maplist, map_next, map_tmp) {
 		if (map->pt_buf == pt_buf) {
-			printf("%s: found\n", __func__);
 			TAILQ_REMOVE(&pmc_maplist, map, map_next);
 			free(map, M_PT);
 			break;
@@ -281,7 +280,7 @@ pt_allocate_pmc(int cpu, int ri, struct pmc *pm,
 	if ((cpu_stdext_feature & CPUID_STDEXT_PROCTRACE) == 0)
 		return (ENXIO);
 
-	printf("%s: curthread %lx, cpu %d (curcpu %d)\n", __func__, (uint64_t)curthread, cpu, PCPU_GET(cpuid));
+	dprintf("%s: curthread %lx, cpu %d (curcpu %d)\n", __func__, (uint64_t)curthread, cpu, PCPU_GET(cpuid));
 	dprintf("%s: cpu %d (curcpu %d)\n", __func__, cpu, PCPU_GET(cpuid));
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
@@ -639,7 +638,7 @@ pt_pcpu_init(struct pmc_mdep *md, int cpu)
 	KASSERT(pt_pcpu[cpu] == NULL, ("[pt,%d] non-null per-cpu",
 	    __LINE__));
 
-	pt_pc = malloc(sizeof(struct pt_cpu), M_PMC, M_WAITOK | M_ZERO);
+	pt_pc = malloc(sizeof(struct pt_cpu), M_PT, M_WAITOK | M_ZERO);
 
 	pt_pc->tc_hw.phw_state = PMC_PHW_FLAG_IS_ENABLED |
 	    PMC_PHW_CPU_TO_STATE(cpu) | PMC_PHW_INDEX_TO_STATE(0) |
@@ -677,7 +676,7 @@ pt_pcpu_fini(struct pmc_mdep *md, int cpu)
 
 	pt_pc = pt_pcpu[cpu];
 
-	free(pt_pcpu[cpu], M_PMC);
+	free(pt_pcpu[cpu], M_PT);
 	pt_pcpu[cpu] = NULL;
 
 	ri = md->pmd_classdep[PMC_MDEP_CLASS_INDEX_PT].pcd_ri;
@@ -913,7 +912,7 @@ pmc_pt_initialize(struct pmc_mdep *md, int maxcpu)
 	KASSERT(md->pmd_nclass >= 1, ("[pt,%d] dubious md->nclass %d",
 	    __LINE__, md->pmd_nclass));
 
-	pt_pcpu = malloc(sizeof(struct pt_cpu *) * maxcpu, M_PMC,
+	pt_pcpu = malloc(sizeof(struct pt_cpu *) * maxcpu, M_PT,
 	    M_WAITOK | M_ZERO);
 
 	pcd = &md->pmd_classdep[PMC_MDEP_CLASS_INDEX_PT];
@@ -961,6 +960,6 @@ pmc_pt_finalize(struct pmc_mdep *md)
 	    PMC_CLASS_PT, ("[pt,%d] class mismatch", __LINE__));
 #endif
 
-	free(pt_pcpu, M_PMC);
+	free(pt_pcpu, M_PT);
 	pt_pcpu = NULL;
 }
