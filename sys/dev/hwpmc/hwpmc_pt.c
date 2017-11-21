@@ -192,7 +192,7 @@ pt_buffer_allocate(uint32_t cpu, struct pt_buffer *pt_buf)
 	}
 	VM_OBJECT_WUNLOCK(obj);
 
-	/* The last entry is a pointer to base table. */
+	/* The last entry is a pointer to the base table. */
 	pt_buf->topa_hw[ntopa] = vtophys(pt_buf->topa_hw) | TOPA_END;
 	pt_buf->cycle = 0;
 
@@ -219,10 +219,6 @@ pt_buffer_deallocate(struct pt_buffer *pt_buf)
 {
 	struct pmc_vm_map *map, *map_tmp;
 
-	dprintf("%s\n", __func__);
-
-	vm_object_deallocate(pt_buf->obj);
-
 	TAILQ_FOREACH_SAFE(map, &pmc_maplist, map_next, map_tmp) {
 		if (map->pt_buf == pt_buf) {
 			TAILQ_REMOVE(&pmc_maplist, map, map_next);
@@ -231,14 +227,16 @@ pt_buffer_deallocate(struct pt_buffer *pt_buf)
 		}
 	}
 
-	free(pt_buf->topa_sw, M_PT);
 	free(pt_buf->topa_hw, M_PT);
+	free(pt_buf->topa_sw, M_PT);
+	vm_object_deallocate(pt_buf->obj);
 
 	return (0);
 }
 
 static int
-pt_buf_allocate(uint32_t cpu, struct pmc *pm, const struct pmc_op_pmcallocate *a)
+pt_buffer_prepare(uint32_t cpu, struct pmc *pm,
+    const struct pmc_op_pmcallocate *a)
 {
 	const struct pmc_md_pt_op_pmcallocate *pm_pta;
 	struct pmc_md_pt_pmc *pm_pt;
@@ -293,8 +291,10 @@ pt_allocate_pmc(int cpu, int ri, struct pmc *pm,
 	if ((cpu_stdext_feature & CPUID_STDEXT_PROCTRACE) == 0)
 		return (ENXIO);
 
-	dprintf("%s: curthread %lx, cpu %d (curcpu %d)\n", __func__, (uint64_t)curthread, cpu, PCPU_GET(cpuid));
-	dprintf("%s: cpu %d (curcpu %d)\n", __func__, cpu, PCPU_GET(cpuid));
+	dprintf("%s: curthread %lx, cpu %d (curcpu %d)\n", __func__,
+	    (uint64_t)curthread, cpu, PCPU_GET(cpuid));
+	dprintf("%s: cpu %d (curcpu %d)\n", __func__,
+	    cpu, PCPU_GET(cpuid));
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
 	    ("[pt,%d] illegal CPU value %d", __LINE__, cpu));
@@ -326,11 +326,11 @@ pt_allocate_pmc(int cpu, int ri, struct pmc *pm,
 
 	if (a->pm_mode == PMC_MODE_TT)
 		for (i = 0; i < pmc_cpu_max(); i++) {
-			if (pt_buf_allocate(i, pm, a))
+			if (pt_buffer_prepare(i, pm, a))
 				return (EINVAL);
 		}
 	else
-		if (pt_buf_allocate(cpu, pm, a))
+		if (pt_buffer_prepare(cpu, pm, a))
 			return (EINVAL);
 
 	if (a->pm_mode == PMC_MODE_ST)

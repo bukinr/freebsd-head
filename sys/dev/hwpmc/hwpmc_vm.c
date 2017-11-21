@@ -70,6 +70,9 @@ pmc_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 
 	cc = cdev->si_drv1;
 
+	if (nprot != PROT_READ || *offset != 0)
+		return (ENXIO);
+
 	TAILQ_FOREACH_SAFE(map, &pmc_maplist, map_next, map_tmp) {
 		if (map->cpu == cc->cpu && map->t == curthread) {
 			*objp = map->obj;
