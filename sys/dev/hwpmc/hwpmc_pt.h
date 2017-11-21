@@ -78,7 +78,6 @@ struct pt_buffer {
 /* MD extension for 'struct pmc' */
 struct pmc_md_pt_pmc {
 	struct pt_buffer	pt_buffers[MAXCPU];
-	uint64_t		cr3;
 };
 
 /*
