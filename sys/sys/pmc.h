@@ -1046,9 +1046,6 @@ struct pmc_mdep {
 	/* handle a PMC interrupt */
 	int (*pmd_intr)(int _cpu, struct trapframe *_tf);
 
-	/* trace buffer */
-	int (*pmd_get_page)(int _cpu, vm_ooffset_t offset, vm_paddr_t *paddr);
-
 	/*
 	 * PMC class dependent information.
 	 */

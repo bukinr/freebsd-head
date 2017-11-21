@@ -239,7 +239,6 @@ pmc_intel_initialize(void)
 	pmc_mdep->pmd_cputype    = cputype;
 	pmc_mdep->pmd_switch_in	 = intel_switch_in;
 	pmc_mdep->pmd_switch_out = intel_switch_out;
-	pmc_mdep->pmd_get_page   = pmc_pt_buffer_get_page;
 
 	ncpus = pmc_cpu_max();
 	error = pmc_tsc_initialize(pmc_mdep, ncpus);

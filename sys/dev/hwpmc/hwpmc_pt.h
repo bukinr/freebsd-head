@@ -88,7 +88,6 @@ struct pmc_md_pt_pmc {
  * Prototypes.
  */
 
-int	pmc_pt_buffer_get_page(int _cpu, vm_ooffset_t offset, vm_paddr_t *paddr);
 int	pmc_pt_initialize(struct pmc_mdep *_md, int _maxcpu);
 void	pmc_pt_finalize(struct pmc_mdep *_md);
 int	pmc_pt_intr(int cpu, struct trapframe *tf);

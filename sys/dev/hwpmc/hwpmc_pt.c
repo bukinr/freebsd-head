@@ -186,10 +186,8 @@ pt_buffer_allocate(uint32_t cpu, struct pt_buffer *pt_buf, uint64_t bufsize)
 			vm_object_deallocate(obj);
 			return (-1);
 		}
-		for (j = 0; j < npages; j++) {
-			//pmap_zero_page(&m[j]);
+		for (j = 0; j < npages; j++)
 			m[j].valid = VM_PAGE_BITS_ALL;
-		}
 		m->valid = VM_PAGE_BITS_ALL;
 		entry[i].base = (uint64_t)VM_PAGE_TO_PHYS(m);
 		entry[i].size = segsize;
@@ -566,48 +564,6 @@ pt_get_config(int cpu, int ri, struct pmc **ppm)
 	phw = &pt_pc->tc_hw;
 
 	*ppm = phw->phw_pmc;
-
-	return (0);
-}
-
-int
-pmc_pt_buffer_get_page(int cpu, vm_ooffset_t offset, vm_paddr_t *paddr)
-{
-	struct pmc_md_pt_pmc *pm_pt;
-	struct pt_cpu *pt_pc;
-	struct pmc *pm;
-	struct pt_buffer *pt_buf;
-	bool found;
-	int i;
-
-	pt_pc = pt_pcpu[cpu];
-	pm = pt_pc->pm_mmap;
-	if (pm == NULL) {
-		dprintf("%s: FAIL: pm is null\n", __func__);
-		return (-1);
-	}
-
-	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
-	if (pm_pt == NULL)
-		return (-1);
-	pt_buf = &pm_pt->pt_buffers[cpu];
-
-	if (pt_buf->topa_sw == NULL || pt_buf->topa_hw == NULL)
-		return (-1);
-
-	found = 0;
-	for (i = 0; i < pt_buf->topa_ntopa; i++) {
-		if (offset < pt_buf->topa_sw[i].size) {
-			*paddr = vtophys(pt_buf->topa_sw[i].base) + offset;
-			found = 1;
-			break;
-		}
-		offset -= pt_buf->topa_sw[i].size;
-	}
-	if (!found)
-		return (-1);
-
-	dprintf("%s: paddr %lx\n", __func__, *paddr);
 
 	return (0);
 }
