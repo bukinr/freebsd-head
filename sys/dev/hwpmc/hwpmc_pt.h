@@ -34,6 +34,7 @@
 
 #include <sys/types.h>
 #include <sys/malloc.h>
+#include <vm/vm.h>
 
 #include <machine/frame.h>
 
@@ -73,6 +74,8 @@ struct pt_buffer {
 	uint64_t		addra[PT_NADDR];
 	uint64_t		addrb[PT_NADDR];
 	uint32_t		addrn;
+
+	vm_object_t		obj;
 };
 
 /* MD extension for 'struct pmc' */

@@ -621,11 +621,6 @@ main(int argc, char *argv[])
 	if (ncpu < 0)
 		errx(EX_SOFTWARE, "ERROR: Can't get cpus\n");
 
-	for (i = 0; i < ncpu; i++) {
-		trace_cpus[i] = malloc(sizeof(struct trace_cpu));
-		pmctrace_init_cpu(i);
-	}
-
 	if (pmc_init() < 0)
 		err(EX_UNAVAILABLE, "ERROR: Initialization of the pmc(3) library failed");
 
@@ -641,6 +636,11 @@ main(int argc, char *argv[])
 			    "ERROR: Cannot allocate %s-mode pmc with specification \"%s\"",
 			    PMC_IS_SYSTEM_MODE(ev->ev_mode) ?
 			    "system" : "process", ev->ev_spec);
+	}
+
+	for (i = 0; i < ncpu; i++) {
+		trace_cpus[i] = malloc(sizeof(struct trace_cpu));
+		pmctrace_init_cpu(i);
 	}
 
 	EV_SET(&kev, 0, EVFILT_TIMER, EV_ADD, 0, 100, NULL);

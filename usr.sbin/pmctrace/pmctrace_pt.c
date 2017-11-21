@@ -193,14 +193,18 @@ dump_packets(struct mtrace_data *mdata, struct pt_packet_decoder *decoder,
 	uint64_t offset;
 	int error;
 
+	dprintf("%s\n", __func__);
+
 	while (1) {
 		error = pt_pkt_get_offset(decoder, &offset);
 		if (error < 0)
 			errx(EX_SOFTWARE, "ERROR: can't get offset, err %d\n", error);
 
 		error = pt_pkt_next(decoder, &packet, sizeof(packet));
-		if (error < 0)
+		if (error < 0) {
+			dprintf("%s: error %d\n", __func__, error);
 			break;
+		}
 
 		switch (packet.type) {
 		case ppt_invalid:
