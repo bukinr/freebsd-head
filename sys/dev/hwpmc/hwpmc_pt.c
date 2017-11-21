@@ -225,6 +225,7 @@ pt_buffer_deallocate(uint32_t cpu, struct pt_buffer *pt_buf)
 
 	cc = pmc_cdev[cpu]->si_drv1;
 
+	mtx_lock(&cc->vm_mtx);
 	TAILQ_FOREACH_SAFE(map, &cc->pmc_maplist, map_next, map_tmp) {
 		if (map->pt_buf == pt_buf) {
 			TAILQ_REMOVE(&cc->pmc_maplist, map, map_next);
@@ -232,6 +233,7 @@ pt_buffer_deallocate(uint32_t cpu, struct pt_buffer *pt_buf)
 			break;
 		}
 	}
+	mtx_unlock(&cc->vm_mtx);
 
 	free(pt_buf->topa_hw, M_PT);
 	free(pt_buf->topa_sw, M_PT);
