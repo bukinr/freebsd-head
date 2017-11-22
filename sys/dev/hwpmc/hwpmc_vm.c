@@ -79,8 +79,8 @@ pmc_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 			return (0);
 		}
 	}
-
 	mtx_unlock(&cc->vm_mtx);
+
 	return (ENXIO);
 }
 
