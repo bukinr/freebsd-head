@@ -74,6 +74,9 @@ __FBSDID("$FreeBSD$");
 
 static MALLOC_DEFINE(M_PT, "pt", "PT driver");
 
+//uint64_t test_area[512] __aligned(PAGE_SIZE);
+uint64_t *test_area;
+
 extern struct cdev *pmc_cdev[MAXCPU];
 
 /*
@@ -665,6 +668,17 @@ pt_pcpu_fini(struct pmc_mdep *md, int cpu)
 	return (0);
 }
 
+static __inline void
+xsave(char *addr, uint64_t mask)
+{
+	uint32_t low, hi;
+
+	low = mask;
+	hi = mask >> 32;
+	__asm __volatile("xsave %0" : "=m" (*addr) : "a" (low), "d" (hi) :
+	    "memory");
+}
+
 static int
 pt_trace_config(int cpu, int ri, struct pmc *pm,
     struct pmc_trace_filter_ip_range *ranges, uint32_t nranges)
@@ -858,8 +872,42 @@ pt_stop_pmc(int cpu, int ri)
 	    ("[pt,%d] illegal CPU value %d", __LINE__, cpu));
 	KASSERT(ri == 0, ("[pt,%d] illegal row-index %d", __LINE__, ri));
 
+#if 1
+	uint64_t xsave_mask;
+	uint64_t val;
+	u_int cp[4];
+	int i;
+
+	cpuid_count(0xd, 0x0, cp);
+	xsave_mask = XFEATURE_ENABLED_X87 | XFEATURE_ENABLED_SSE;
+	if ((cp[0] & xsave_mask) != xsave_mask)
+		panic("PT: CPU0 does not support X87 or SSE: %x", cp[0]);
+	//bzero(&test_area[0], 4096);
+
+	load_cr4(rcr4() | CR4_XSAVE);
+	wrmsr(MSR_IA32_XSS, (1 << 8));
+
+	//stop emul
+	clts();
+
+	val = rxcr(XCR0);
+	load_xcr(XCR0, xsave_mask);
+	pt_save((uint64_t)test_area, 0x100);
+	//xsave((char *)&test_area[0], 0x100);
+	load_xcr(XCR0, val);
+
+	for (i = 0; i < 512; i+=1)
+		if (test_area[i] != 0)
+			printf("test_area[%x] == %lx\n", i, test_area[i]);
+
+	//start emul
+	load_cr0(rcr0() | CR0_TS);
+#endif
+
 	/* Disable tracing */
 	reg = rdmsr(MSR_IA32_RTIT_CTL);
+	if (reg & RTIT_CTL_TRACEEN)
+		printf("Trace is turned on after xsave\n");
 	reg &= ~RTIT_CTL_TRACEEN;
 	wrmsr(MSR_IA32_RTIT_CTL, reg);
 
@@ -885,6 +933,9 @@ pmc_pt_initialize(struct pmc_mdep *md, int maxcpu)
 	struct pmc_classdep *pcd;
 
 	dprintf("%s\n", __func__);
+
+	test_area = (void *)kmem_alloc_contig(kernel_arena,
+	    4096, M_ZERO, 0, ~0, PAGE_SIZE, 0, VM_MEMATTR_UNCACHEABLE);
 
 	KASSERT(md != NULL, ("[pt,%d] md is NULL", __LINE__));
 	KASSERT(md->pmd_nclass >= 1, ("[pt,%d] dubious md->nclass %d",
@@ -925,6 +976,8 @@ pmc_pt_finalize(struct pmc_mdep *md)
 {
 
 	dprintf("%s\n", __func__);
+
+	kmem_free(kernel_arena, (uintptr_t)test_area, PAGE_SIZE);
 
 #ifdef	INVARIANTS
 	int i, ncpus;

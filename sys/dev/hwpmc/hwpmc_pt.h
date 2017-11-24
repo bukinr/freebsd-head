@@ -42,6 +42,8 @@
 #define	PT_NADDR	4
 #define	PT_NPMCS	1
 
+int pt_save(uint64_t area, uint64_t mask);
+
 struct pmc_md_pt_op_pmcallocate {
 	uint32_t flags;
 #define	INTEL_PT_FLAG_BRANCHES	(1 << 0)
