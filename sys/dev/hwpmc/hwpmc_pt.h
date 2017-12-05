@@ -42,7 +42,25 @@
 #define	PT_NADDR	4
 #define	PT_NPMCS	1
 
-int pt_save(uint64_t area, uint64_t mask);
+struct pt_ext_area {
+	uint64_t	rtit_ctl;
+	uint64_t	rtit_output_base;
+	uint64_t	rtit_output_mask_ptrs;
+	uint64_t	rtit_status;
+	uint64_t	rtit_cr3_match;
+	uint64_t	rtit_addr0_a;
+	uint64_t	rtit_addr0_b;
+	uint64_t	rtit_addr1_a;
+	uint64_t	rtit_addr1_b;
+};
+
+struct pt_save_area {
+	uint64_t		legacy_state[64];
+	uint64_t		header[8];
+	struct pt_ext_area	pt_ext_area;
+};
+
+int pt_save(struct pt_save_area *, uint64_t mask);
 
 struct pmc_md_pt_op_pmcallocate {
 	uint32_t flags;

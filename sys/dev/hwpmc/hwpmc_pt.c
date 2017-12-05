@@ -74,8 +74,8 @@ __FBSDID("$FreeBSD$");
 
 static MALLOC_DEFINE(M_PT, "pt", "PT driver");
 
-//uint64_t test_area[512] __aligned(PAGE_SIZE);
-uint64_t *test_area;
+//static uint64_t test_area[512] __aligned(PAGE_SIZE);
+static struct pt_save_area *test_area;
 
 extern struct cdev *pmc_cdev[MAXCPU];
 
@@ -695,7 +695,7 @@ pt_trace_config(int cpu, int ri, struct pmc *pm,
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pt_buf = &pm_pt->pt_buffers[cpu];
 
-	/* Turn off tracing */
+	/* Ensure tracing is turned off */
 	reg = rdmsr(MSR_IA32_RTIT_CTL);
 	if (reg & RTIT_CTL_TRACEEN)
 		wrmsr(MSR_IA32_RTIT_CTL, reg & ~RTIT_CTL_TRACEEN);
@@ -876,7 +876,7 @@ pt_stop_pmc(int cpu, int ri)
 	uint64_t xsave_mask;
 	uint64_t val;
 	u_int cp[4];
-	int i;
+	//int i;
 
 	cpuid_count(0xd, 0x0, cp);
 	xsave_mask = XFEATURE_ENABLED_X87 | XFEATURE_ENABLED_SSE;
@@ -892,13 +892,28 @@ pt_stop_pmc(int cpu, int ri)
 
 	val = rxcr(XCR0);
 	load_xcr(XCR0, xsave_mask);
-	pt_save((uint64_t)test_area, 0x100);
+	//pt_save((struct pt_save_area *)&test_area[0], 0x100);
+	pt_save(test_area, 0x100);
 	//xsave((char *)&test_area[0], 0x100);
+	//xsave((char *)test_area, 0x100);
 	load_xcr(XCR0, val);
 
+	struct pt_ext_area *pt_ext;
+	pt_ext = &test_area->pt_ext_area;
+#if 1
+	printf("        ctl %lx\n", pt_ext->rtit_ctl);
+	printf("output base %lx\n", pt_ext->rtit_output_base);
+	printf("output mask %lx\n", pt_ext->rtit_output_mask_ptrs);
+	printf("     status %lx\n", pt_ext->rtit_status);
+	printf("     addr0a %lx\n", pt_ext->rtit_addr0_a);
+	printf("     addr0b %lx\n", pt_ext->rtit_addr0_b);
+#endif
+
+#if 0
 	for (i = 0; i < 512; i+=1)
 		if (test_area[i] != 0)
-			printf("test_area[%x] == %lx\n", i, test_area[i]);
+			printf("test_area[%d] == %lx\n", i, test_area[i]);
+#endif
 
 	//start emul
 	load_cr0(rcr0() | CR0_TS);
@@ -934,8 +949,10 @@ pmc_pt_initialize(struct pmc_mdep *md, int maxcpu)
 
 	dprintf("%s\n", __func__);
 
+#if 1
 	test_area = (void *)kmem_alloc_contig(kernel_arena,
-	    4096, M_ZERO, 0, ~0, PAGE_SIZE, 0, VM_MEMATTR_UNCACHEABLE);
+	    sizeof(struct pt_save_area), M_ZERO, 0, ~0, PAGE_SIZE, 0, VM_MEMATTR_UNCACHEABLE);
+#endif
 
 	KASSERT(md != NULL, ("[pt,%d] md is NULL", __LINE__));
 	KASSERT(md->pmd_nclass >= 1, ("[pt,%d] dubious md->nclass %d",
@@ -977,7 +994,9 @@ pmc_pt_finalize(struct pmc_mdep *md)
 
 	dprintf("%s\n", __func__);
 
-	kmem_free(kernel_arena, (uintptr_t)test_area, PAGE_SIZE);
+#if 1
+	kmem_free(kernel_arena, (uintptr_t)test_area, sizeof(struct pt_save_area));
+#endif
 
 #ifdef	INVARIANTS
 	int i, ncpus;
