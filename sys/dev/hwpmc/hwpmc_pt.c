@@ -75,7 +75,6 @@ __FBSDID("$FreeBSD$");
 static MALLOC_DEFINE(M_PT, "pt", "PT driver");
 
 //static uint64_t test_area[512] __aligned(PAGE_SIZE);
-static struct pt_save_area *test_area;
 
 extern struct cdev *pmc_cdev[MAXCPU];
 
@@ -116,6 +115,7 @@ static struct pt_descr pt_pmcdesc[PT_NPMCS] =
  */
 
 struct pt_cpu {
+	struct pt_save_area		test_area;
 	struct pmc_hw			tc_hw;
 	uint32_t			l0_eax;
 	uint32_t			l0_ebx;
@@ -125,9 +125,77 @@ struct pt_cpu {
 	struct pmc			*pm_mmap;
 	uint32_t			flags;
 #define	FLAG_PT_ALLOCATED		(1 << 0)
-};
+#define	FLAG_PT_SAVED			(1 << 1)
+} __aligned(PAGE_SIZE);
 
 static struct pt_cpu **pt_pcpu;
+
+static int
+pt_save_restore(struct pt_cpu *pt_pc, int save)
+{
+	uint64_t xsave_mask;
+	uint64_t val;
+	u_int cp[4];
+	uint64_t reg;
+	struct pt_ext_area *pt_ext;
+	struct pt_save_area *test_area;
+	struct xsave_header *hdr;
+
+	test_area = &pt_pc->test_area;
+	pt_ext = &test_area->pt_ext_area;
+	//pt_ext->rtit_ctl &= ~RTIT_CTL_TRACEEN;
+	hdr = &test_area->header;
+
+	cpuid_count(0xd, 0x1, cp);
+	printf("enumerate 0xD, 1: %x\n", cp[0]);
+
+	cpuid_count(0xd, 0x0, cp);
+	xsave_mask = XFEATURE_ENABLED_X87 | XFEATURE_ENABLED_SSE;
+	if ((cp[0] & xsave_mask) != xsave_mask)
+		panic("PT: CPU0 does not support X87 or SSE: %x", cp[0]);
+
+	load_cr4(rcr4() | CR4_XSAVE);
+	wrmsr(MSR_IA32_XSS, 0x100);
+
+	//stop emul
+	clts();
+
+	val = rxcr(XCR0);
+	load_xcr(XCR0, xsave_mask);
+	if (save) {
+		printf("save addr %lx\n", (uint64_t)&pt_pc->test_area);
+		pt_save(&pt_pc->test_area, 0x100);
+		pt_pc->flags |= FLAG_PT_SAVED;
+
+		printf("hdr->xsave_bv %lx\n", hdr->xsave_bv);
+		printf("hdr->xcomp_bv %lx\n", hdr->xcomp_bv);
+	} else {
+		reg = rdmsr(MSR_IA32_RTIT_CTL);
+		if (reg & RTIT_CTL_TRACEEN)
+			panic("pt is enabled ?\n");
+
+		printf("restore addr %lx\n", (uint64_t)&pt_pc->test_area);
+		printf("hdr->xsave_bv %lx\n", hdr->xsave_bv);
+		printf("hdr->xcomp_bv %lx\n", hdr->xcomp_bv);
+		pt_restore(&pt_pc->test_area, 0x100);
+	}
+	load_xcr(XCR0, val);
+
+	//start emul
+	load_cr0(rcr0() | CR0_TS);
+
+#if 1
+	printf("        ctl %lx\n", pt_ext->rtit_ctl);
+	printf("output base %lx\n", pt_ext->rtit_output_base);
+	printf("output mask %lx\n", pt_ext->rtit_output_mask_ptrs);
+	printf("     status %lx\n", pt_ext->rtit_status);
+	printf("     addr0a %lx\n", pt_ext->rtit_addr0_a);
+	printf("     addr0b %lx\n", pt_ext->rtit_addr0_b);
+#endif
+
+	return (0);
+}
+
 
 static int
 pt_buffer_allocate(uint32_t cpu, struct pt_buffer *pt_buf)
@@ -835,10 +903,15 @@ pt_start_pmc(int cpu, int ri)
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pt_buf = &pm_pt->pt_buffers[cpu];
 
-	/* Enable tracing */
-	reg = rdmsr(MSR_IA32_RTIT_CTL);
-	reg |= RTIT_CTL_TRACEEN;
-	wrmsr(MSR_IA32_RTIT_CTL, reg);
+	if (pt_pc->flags & FLAG_PT_SAVED) {
+		printf("rstoring state\n");
+		pt_save_restore(pt_pc, 0);
+	} else {
+		/* Enable tracing */
+		reg = rdmsr(MSR_IA32_RTIT_CTL);
+		reg |= RTIT_CTL_TRACEEN;
+		wrmsr(MSR_IA32_RTIT_CTL, reg);
+	}
 
 	return (0);
 }
@@ -872,52 +945,7 @@ pt_stop_pmc(int cpu, int ri)
 	    ("[pt,%d] illegal CPU value %d", __LINE__, cpu));
 	KASSERT(ri == 0, ("[pt,%d] illegal row-index %d", __LINE__, ri));
 
-#if 1
-	uint64_t xsave_mask;
-	uint64_t val;
-	u_int cp[4];
-	//int i;
-
-	cpuid_count(0xd, 0x0, cp);
-	xsave_mask = XFEATURE_ENABLED_X87 | XFEATURE_ENABLED_SSE;
-	if ((cp[0] & xsave_mask) != xsave_mask)
-		panic("PT: CPU0 does not support X87 or SSE: %x", cp[0]);
-	//bzero(&test_area[0], 4096);
-
-	load_cr4(rcr4() | CR4_XSAVE);
-	wrmsr(MSR_IA32_XSS, (1 << 8));
-
-	//stop emul
-	clts();
-
-	val = rxcr(XCR0);
-	load_xcr(XCR0, xsave_mask);
-	//pt_save((struct pt_save_area *)&test_area[0], 0x100);
-	pt_save(test_area, 0x100);
-	//xsave((char *)&test_area[0], 0x100);
-	//xsave((char *)test_area, 0x100);
-	load_xcr(XCR0, val);
-
-	struct pt_ext_area *pt_ext;
-	pt_ext = &test_area->pt_ext_area;
-#if 1
-	printf("        ctl %lx\n", pt_ext->rtit_ctl);
-	printf("output base %lx\n", pt_ext->rtit_output_base);
-	printf("output mask %lx\n", pt_ext->rtit_output_mask_ptrs);
-	printf("     status %lx\n", pt_ext->rtit_status);
-	printf("     addr0a %lx\n", pt_ext->rtit_addr0_a);
-	printf("     addr0b %lx\n", pt_ext->rtit_addr0_b);
-#endif
-
-#if 0
-	for (i = 0; i < 512; i+=1)
-		if (test_area[i] != 0)
-			printf("test_area[%d] == %lx\n", i, test_area[i]);
-#endif
-
-	//start emul
-	load_cr0(rcr0() | CR0_TS);
-#endif
+	pt_save_restore(pt_pc, 1);
 
 	/* Disable tracing */
 	reg = rdmsr(MSR_IA32_RTIT_CTL);
@@ -949,7 +977,7 @@ pmc_pt_initialize(struct pmc_mdep *md, int maxcpu)
 
 	dprintf("%s\n", __func__);
 
-#if 1
+#if 0
 	test_area = (void *)kmem_alloc_contig(kernel_arena,
 	    sizeof(struct pt_save_area), M_ZERO, 0, ~0, PAGE_SIZE, 0, VM_MEMATTR_UNCACHEABLE);
 #endif
@@ -994,7 +1022,7 @@ pmc_pt_finalize(struct pmc_mdep *md)
 
 	dprintf("%s\n", __func__);
 
-#if 1
+#if 0
 	kmem_free(kernel_arena, (uintptr_t)test_area, sizeof(struct pt_save_area));
 #endif
 

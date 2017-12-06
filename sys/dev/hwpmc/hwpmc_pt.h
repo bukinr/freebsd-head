@@ -42,6 +42,12 @@
 #define	PT_NADDR	4
 #define	PT_NPMCS	1
 
+struct xsave_header {
+	uint64_t	xsave_bv;
+	uint64_t	xcomp_bv;
+	uint64_t	reserved[6];
+};
+
 struct pt_ext_area {
 	uint64_t	rtit_ctl;
 	uint64_t	rtit_output_base;
@@ -56,11 +62,12 @@ struct pt_ext_area {
 
 struct pt_save_area {
 	uint64_t		legacy_state[64];
-	uint64_t		header[8];
+	struct xsave_header	header;
 	struct pt_ext_area	pt_ext_area;
 };
 
 int pt_save(struct pt_save_area *, uint64_t mask);
+int pt_restore(struct pt_save_area *, uint64_t mask);
 
 struct pmc_md_pt_op_pmcallocate {
 	uint32_t flags;
