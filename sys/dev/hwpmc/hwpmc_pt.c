@@ -139,13 +139,6 @@ pt_save_restore(struct pt_cpu *pt_pc, int save)
 	uint64_t val;
 	u_int cp[4];
 	uint64_t reg;
-	struct pt_ext_area *pt_ext;
-	struct pt_save_area *test_area;
-	struct xsave_header *hdr;
-
-	test_area = &pt_pc->test_area;
-	pt_ext = &test_area->pt_ext_area;
-	hdr = &test_area->header;
 
 	cpuid_count(0xd, 0x1, cp);
 	printf("enumerate 0xD, 1: %x\n", cp[0]);
@@ -158,33 +151,20 @@ pt_save_restore(struct pt_cpu *pt_pc, int save)
 	load_cr4(rcr4() | CR4_XSAVE);
 	wrmsr(MSR_IA32_XSS, 0x100);
 
-	//stop emulating
 	clts();
 
 	val = rxcr(XCR0);
 	load_xcr(XCR0, xsave_mask);
-	if (save) {
-		bzero(&pt_pc->test_area, sizeof(struct pt_save_area));
+	if (save)
 		pt_save(&pt_pc->test_area, 0x100);
-	} else {
+	else {
 		reg = rdmsr(MSR_IA32_RTIT_CTL);
 		if (reg & RTIT_CTL_TRACEEN)
 			panic("pt is enabled ?\n");
 		pt_restore(&pt_pc->test_area, 0x100);
 	}
 	load_xcr(XCR0, val);
-
-	//start emul
 	load_cr0(rcr0() | CR0_TS);
-
-#if 0
-	printf("        ctl %lx\n", pt_ext->rtit_ctl);
-	printf("output base %lx\n", pt_ext->rtit_output_base);
-	printf("output mask %lx\n", pt_ext->rtit_output_mask_ptrs);
-	printf("     status %lx\n", pt_ext->rtit_status);
-	printf("     addr0a %lx\n", pt_ext->rtit_addr0_a);
-	printf("     addr0b %lx\n", pt_ext->rtit_addr0_b);
-#endif
 
 	return (0);
 }
@@ -796,15 +776,14 @@ static int
 pt_read_trace(int cpu, int ri, struct pmc *pm,
     pmc_value_t *cycle, pmc_value_t *voffset)
 {
+	struct pt_ext_area *pt_ext;
+	struct pt_save_area *test_area;
 	struct pmc_md_pt_pmc *pm_pt;
 	struct pt_buffer *pt_buf;
 	struct pt_cpu *pt_pc;
 	uint64_t offset;
 	uint64_t reg;
 	uint32_t idx;
-	struct pt_ext_area *pt_ext;
-	struct pt_save_area *test_area;
-	//struct xsave_header *hdr;
 
 	pt_pc = pt_pcpu[cpu];
 	pt_pc->pm_mmap = pm;
@@ -820,7 +799,6 @@ pt_read_trace(int cpu, int ri, struct pmc *pm,
 		reg = rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS);
 	else
 		reg = pt_ext->rtit_output_mask_ptrs;
-		//reg = pt_buf->pt_output_mask_ptrs;
 
 	idx = (reg & 0xffffffff) >> 7;
 	*cycle = pt_buf->cycle;
