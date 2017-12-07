@@ -2567,7 +2567,7 @@ pt_allocate_pmc(enum pmc_event pe, char *ctrspec,
 			addr = strtoul(q, &e, 0);
 			if (e == q || *e != '\0')
 				return (-1);
-			pm_pt->addra[addrn] = addr;
+			pm_pt->ranges[addrn * 2] = addr;
 		}
 
 		if (KWPREFIXMATCH(p, INTEL_PT_KW_ADDRB "=")) {
@@ -2578,9 +2578,9 @@ pt_allocate_pmc(enum pmc_event pe, char *ctrspec,
 			addr = strtoul(q, &e, 0);
 			if (e == q || *e != '\0')
 				return (-1);
-			pm_pt->addrb[addrn] = addr;
+			pm_pt->ranges[addrn * 2 + 1] = addr;
 
-			if (pm_pt->addrb[addrn] < pm_pt->addra[addrn])
+			if (pm_pt->ranges[addrn * 2 + 1] < pm_pt->ranges[addrn * 2])
 				return (-1);
 			addrn += 1;
 			if (addrn > PT_NADDR)
@@ -2588,7 +2588,7 @@ pt_allocate_pmc(enum pmc_event pe, char *ctrspec,
 		}
 	};
 
-	pm_pt->addrn = addrn;
+	pm_pt->nranges = addrn;
 
 	pmc_config->pm_caps |= PMC_CAP_READ;
 
@@ -4011,8 +4011,7 @@ pmc_read_trace(uint32_t cpu, pmc_id_t pmc,
 
 int
 pmc_trace_config(uint32_t cpu, pmc_id_t pmc,
-    struct pmc_trace_filter_ip_range *ranges,
-    uint32_t nranges)
+    uint64_t *ranges, uint32_t nranges)
 {
 	struct pmc_op_trace_config trc;
 
@@ -4023,8 +4022,7 @@ pmc_trace_config(uint32_t cpu, pmc_id_t pmc,
 	if (nranges > PMC_FILTER_MAX_IP_RANGES)
 		return (-1);
 
-	memcpy(&trc.ip_ranges, ranges,
-	    sizeof(struct pmc_trace_filter_ip_range) * nranges);
+	memcpy(&trc.ranges, ranges, sizeof(uint64_t) * 2 * nranges);
 
 	if (PMC_CALL(TRACE_CONFIG, &trc) < 0)
 		return (-1);

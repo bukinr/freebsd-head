@@ -43,14 +43,13 @@
 #define	PT_NPMCS	1
 
 struct pmc_md_pt_op_pmcallocate {
-	uint32_t flags;
+	uint32_t		flags;
 #define	INTEL_PT_FLAG_BRANCHES	(1 << 0)
 #define	INTEL_PT_FLAG_TSC	(1 << 1)
 #define	INTEL_PT_FLAG_MTC	(1 << 2)
 #define	INTEL_PT_FLAG_DISRETC	(1 << 3)
-	uint64_t addra[PT_NADDR];
-	uint64_t addrb[PT_NADDR];
-	uint32_t addrn;
+	uint64_t		ranges[2 * PT_NADDR];
+	int			nranges;
 };
 
 #ifdef	_KERNEL

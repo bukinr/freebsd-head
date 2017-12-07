@@ -537,15 +537,10 @@ struct pmc_op_proc_unsuspend {
 
 #define	PMC_FILTER_MAX_IP_RANGES	16
 
-struct pmc_trace_filter_ip_range {
-	uintptr_t	addra;
-	uintptr_t	addrb;
-};
-
 struct pmc_op_trace_config {
 	pmc_id_t	pm_pmcid;
 	uint32_t	pm_cpu;		/* CPU number or PMC_CPU_ANY */
-	struct pmc_trace_filter_ip_range	ip_ranges[PMC_FILTER_MAX_IP_RANGES];
+	uint64_t	ranges[2 * PMC_FILTER_MAX_IP_RANGES];
 	uint32_t	nranges;
 };
 
@@ -997,9 +992,10 @@ struct pmc_classdep {
 	int (*pcd_write_pmc)(int _cpu, int _ri, pmc_value_t _value);
 
 	/* trace */
-	int (*pcd_read_trace)(int _cpu, int _ri, struct pmc *_pm, pmc_value_t *_cycle, pmc_value_t *_offset);
+	int (*pcd_read_trace)(int _cpu, int _ri, struct pmc *_pm,
+	    pmc_value_t *_cycle, pmc_value_t *_offset);
 	int (*pcd_trace_config)(int _cpu, int _ri, struct pmc *_pm,
-	    struct pmc_trace_filter_ip_range *ranges, uint32_t nranges);
+	    uint64_t *ranges, uint32_t nranges);
 
 	/* pmc allocation/release */
 	int (*pcd_allocate_pmc)(int _cpu, int _ri, struct pmc *_t,

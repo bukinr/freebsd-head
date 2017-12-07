@@ -3857,7 +3857,7 @@ pmc_syscall_handler(struct thread *td, void *syscall_args)
 	case PMC_OP_TRACE_CONFIG:
 	{
 		struct pmc_op_trace_config trc;
-		struct pmc_trace_filter_ip_range *ranges;
+		uint64_t *ranges;
 		struct pmc *pm;
 		struct pmc_binding pb;
 		struct pmc_classdep *pcd;
@@ -3896,7 +3896,7 @@ pmc_syscall_handler(struct thread *td, void *syscall_args)
 		pmc_save_cpu_binding(&pb);
 		pmc_select_cpu(cpu);
 
-		ranges = trc.ip_ranges;
+		ranges = trc.ranges;
 		nranges = trc.nranges;
 
 		mtx_pool_lock_spin(pmc_mtxpool, pm);

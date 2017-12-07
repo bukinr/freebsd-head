@@ -173,6 +173,44 @@ pt_save_restore(struct pt_cpu *pt_pc, bool save)
 	return (0);
 }
 
+static int
+pt_configure_ranges(struct pt_cpu *pt_pc, const uint64_t *ranges,
+    uint32_t nranges)
+{
+	int nranges_supp;
+	int n;
+	struct pt_ext_area *pt_ext;
+	struct pt_save_area *save_area;
+
+	save_area = &pt_pc->save_area;
+	pt_ext = &save_area->pt_ext_area;
+
+	if (pt_pc->l0_ebx & CPUPT_IPF) {
+		/* How many ranges CPU does support ? */
+		nranges_supp = (pt_pc->l1_eax & CPUPT_NADDR_M) >> CPUPT_NADDR_S;
+
+		/* xsave/xrstor supports two ranges only */
+		if (nranges_supp > 2)
+			nranges_supp = 2;
+
+		n = nranges > nranges_supp ? nranges_supp : nranges;
+
+		switch (n) {
+		case 2:
+			pt_ext->rtit_ctl |= (1UL << RTIT_CTL_ADDR_CFG_S(1));
+			pt_ext->rtit_addr1_a = ranges[2];
+			pt_ext->rtit_addr1_b = ranges[3];
+		case 1:
+			pt_ext->rtit_ctl |= (1UL << RTIT_CTL_ADDR_CFG_S(0));
+			pt_ext->rtit_addr0_a = ranges[0];
+			pt_ext->rtit_addr0_b = ranges[1];
+		default:
+			break;
+		};
+	}
+
+	return (0);
+}
 
 static int
 pt_buffer_allocate(uint32_t cpu, struct pt_buffer *pt_buf)
@@ -294,17 +332,15 @@ static int
 pt_buffer_prepare(uint32_t cpu, struct pmc *pm,
     const struct pmc_op_pmcallocate *a)
 {
-	struct pt_cpu *pt_pc;
 	const struct pmc_md_pt_op_pmcallocate *pm_pta;
+	struct pt_cpu *pt_pc;
 	struct pmc_md_pt_pmc *pm_pt;
 	struct pt_buffer *pt_buf;
-	int nranges;
-	int error;
-	int n;
-	enum pmc_mode mode;
 	struct xsave_header *hdr;
 	struct pt_ext_area *pt_ext;
 	struct pt_save_area *save_area;
+	enum pmc_mode mode;
+	int error;
 
 	pt_pc = pt_pcpu[cpu];
 	if ((pt_pc->l0_ecx & CPUPT_TOPA) == 0)
@@ -333,29 +369,7 @@ pt_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	pt_ext->rtit_output_base = (uint64_t)vtophys(pt_buf->topa_hw);
 	pt_ext->rtit_output_mask_ptrs = 0x7f;
 
-	if (pt_pc->l0_ebx & CPUPT_IPF) {
-		/* How many ranges CPU does support ? */
-		nranges = (pt_pc->l1_eax & CPUPT_NADDR_M) >> CPUPT_NADDR_S;
-
-		/* xsave/xrstor supports two ranges only */
-		if (nranges > 2)
-			nranges = 2;
-
-		n = pm_pta->addrn > nranges ? nranges : pm_pta->addrn;
-
-		switch (n) {
-		case 2:
-			pt_ext->rtit_ctl |= (1UL << RTIT_CTL_ADDR_CFG_S(1));
-			pt_ext->rtit_addr1_a = pm_pta->addra[1];
-			pt_ext->rtit_addr1_b = pm_pta->addrb[1];
-		case 1:
-			pt_ext->rtit_ctl |= (1UL << RTIT_CTL_ADDR_CFG_S(0));
-			pt_ext->rtit_addr0_a = pm_pta->addra[0];
-			pt_ext->rtit_addr0_b = pm_pta->addrb[0];
-		default:
-			break;
-		};
-	}
+	pt_configure_ranges(pt_pc, pm_pta->ranges, pm_pta->nranges);
 
 	/*
 	 * TODO
@@ -701,27 +715,15 @@ pt_pcpu_fini(struct pmc_mdep *md, int cpu)
 }
 
 static int
-pt_configure_ranges(struct pt_cpu *pt_pc,
-    struct pmc_trace_filter_ip_range *ranges, uint32_t nranges)
-{
-
-	return (0);
-}
-
-static int
 pt_trace_config(int cpu, int ri, struct pmc *pm,
-    struct pmc_trace_filter_ip_range *ranges, uint32_t nranges)
+    uint64_t *ranges, uint32_t nranges)
 {
-	struct pt_ext_area *pt_ext;
-	struct pt_save_area *save_area;
 	struct pt_cpu *pt_pc;
 	uint64_t reg;
 
 	dprintf("%s\n", __func__);
 
 	pt_pc = pt_pcpu[cpu];
-	save_area = &pt_pc->save_area;
-	pt_ext = &save_area->pt_ext_area;
 
 	KASSERT(cpu == PCPU_GET(cpuid), ("Configuring wrong CPU\n"));
 	
@@ -731,33 +733,6 @@ pt_trace_config(int cpu, int ri, struct pmc *pm,
 		pt_save_restore(pt_pc, true);
 
 	pt_configure_ranges(pt_pc, ranges, nranges);
-
-	int nranges_supp;
-	int n;
-
-	if (pt_pc->l0_ebx & CPUPT_IPF) {
-		/* How many ranges CPU does support ? */
-		nranges_supp = (pt_pc->l1_eax & CPUPT_NADDR_M) >> CPUPT_NADDR_S;
-
-		/* xsave/xrstor supports two ranges only */
-		if (nranges_supp > 2)
-			nranges_supp = 2;
-
-		n = nranges > nranges_supp ? nranges_supp : nranges;
-
-		switch (n) {
-		case 2:
-			pt_ext->rtit_ctl |= (1UL << RTIT_CTL_ADDR_CFG_S(1));
-			pt_ext->rtit_addr1_a = ranges[1].addra;
-			pt_ext->rtit_addr1_b = ranges[1].addrb;
-		case 1:
-			pt_ext->rtit_ctl |= (1UL << RTIT_CTL_ADDR_CFG_S(0));
-			pt_ext->rtit_addr0_a = ranges[0].addra;
-			pt_ext->rtit_addr0_b = ranges[0].addrb;
-		default:
-			break;
-		};
-	}
 
 	return (0);
 }

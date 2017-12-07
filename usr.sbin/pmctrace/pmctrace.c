@@ -359,7 +359,7 @@ pmctrace_setup_cpumask(cpuset_t *cpumask)
 static int
 pmctrace_delayed_start(bool user_mode, char *func_name, char *func_image)
 {
-	struct pmc_trace_filter_ip_range ranges[16];
+	uint64_t ranges[2];
 	struct pmcstat_symbol *sym;
 	struct pmcstat_target *pt;
 	struct pmcstat_process *pp;
@@ -395,8 +395,8 @@ pmctrace_delayed_start(bool user_mode, char *func_name, char *func_image)
 	dprintf("%s: SYM addr start %lx end %lx\n",
 	    __func__, addr_start, addr_end);
 
-	ranges[0].addra = addr_start;
-	ranges[0].addrb = addr_end;
+	ranges[0] = addr_start;
+	ranges[1] = addr_end;
 
 	if (user_mode) {
 		ev = STAILQ_FIRST(&args.pa_events);
