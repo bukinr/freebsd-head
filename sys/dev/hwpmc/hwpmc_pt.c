@@ -914,11 +914,6 @@ pmc_pt_initialize(struct pmc_mdep *md, int maxcpu)
 
 	dprintf("%s\n", __func__);
 
-#if 0
-	test_area = (void *)kmem_alloc_contig(kernel_arena,
-	    sizeof(struct pt_save_area), M_ZERO, 0, ~0, PAGE_SIZE, 0, VM_MEMATTR_UNCACHEABLE);
-#endif
-
 	KASSERT(md != NULL, ("[pt,%d] md is NULL", __LINE__));
 	KASSERT(md->pmd_nclass >= 1, ("[pt,%d] dubious md->nclass %d",
 	    __LINE__, md->pmd_nclass));
@@ -958,10 +953,6 @@ pmc_pt_finalize(struct pmc_mdep *md)
 {
 
 	dprintf("%s\n", __func__);
-
-#if 0
-	kmem_free(kernel_arena, (uintptr_t)test_area, sizeof(struct pt_save_area));
-#endif
 
 #ifdef	INVARIANTS
 	int i, ncpus;
