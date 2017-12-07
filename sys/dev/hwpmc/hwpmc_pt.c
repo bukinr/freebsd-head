@@ -116,6 +116,9 @@ static struct pt_descr pt_pmcdesc[PT_NPMCS] =
 
 struct pt_cpu {
 	struct pt_save_area		test_area;
+
+	uint64_t			reserved[512];
+
 	struct pmc_hw			tc_hw;
 	uint32_t			l0_eax;
 	uint32_t			l0_ebx;
@@ -125,7 +128,6 @@ struct pt_cpu {
 	struct pmc			*pm_mmap;
 	uint32_t			flags;
 #define	FLAG_PT_ALLOCATED		(1 << 0)
-#define	FLAG_PT_SAVED			(1 << 1)
 } __aligned(PAGE_SIZE);
 
 static struct pt_cpu **pt_pcpu;
@@ -157,15 +159,15 @@ pt_save_restore(struct pt_cpu *pt_pc, int save)
 	load_cr4(rcr4() | CR4_XSAVE);
 	wrmsr(MSR_IA32_XSS, 0x100);
 
-	//stop emul
+	//stop emulating
 	clts();
 
 	val = rxcr(XCR0);
 	load_xcr(XCR0, xsave_mask);
 	if (save) {
 		printf("save addr %lx\n", (uint64_t)&pt_pc->test_area);
+		bzero(&pt_pc->test_area, sizeof(struct pt_save_area));
 		pt_save(&pt_pc->test_area, 0x100);
-		pt_pc->flags |= FLAG_PT_SAVED;
 
 		printf("hdr->xsave_bv %lx\n", hdr->xsave_bv);
 		printf("hdr->xcomp_bv %lx\n", hdr->xcomp_bv);
@@ -317,15 +319,36 @@ static int
 pt_buffer_prepare(uint32_t cpu, struct pmc *pm,
     const struct pmc_op_pmcallocate *a)
 {
+	struct pt_cpu *pt_pc;
 	const struct pmc_md_pt_op_pmcallocate *pm_pta;
 	struct pmc_md_pt_pmc *pm_pt;
 	struct pt_buffer *pt_buf;
+	int nranges;
 	int error;
-	int i;
+	int n;
+	enum pmc_mode mode;
+	struct xsave_header *hdr;
+	struct pt_ext_area *pt_ext;
+	struct pt_save_area *test_area;
+
+	pt_pc = pt_pcpu[cpu];
+	if ((pt_pc->l0_ecx & CPUPT_TOPA) == 0)
+		return (ENXIO);	/* We rely on TOPA support */
+
+	mode = PMC_TO_MODE(pm);
 
 	pm_pta = (const struct pmc_md_pt_op_pmcallocate *)&a->pm_md.pm_pt;
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pt_buf = &pm_pt->pt_buffers[cpu];
+
+	test_area = &pt_pc->test_area;
+	bzero(test_area, sizeof(struct pt_save_area));
+
+	hdr = &test_area->header;
+	hdr->xsave_bv = 0x100;
+	hdr->xcomp_bv = 0x100 | (1ULL << 63);
+
+	pt_ext = &test_area->pt_ext_area;
 
 	error = pt_buffer_allocate(cpu, pt_buf);
 	if (error != 0) {
@@ -333,8 +356,76 @@ pt_buffer_prepare(uint32_t cpu, struct pmc *pm,
 		return (EINVAL);
 	}
 
-	pt_buf->pt_output_base = (uint64_t)vtophys(pt_buf->topa_hw);
-	pt_buf->pt_output_mask_ptrs = 0x7f;
+	//pt_buf->pt_output_base = (uint64_t)vtophys(pt_buf->topa_hw);
+	//pt_buf->pt_output_mask_ptrs = 0x7f;
+
+	pt_ext->rtit_ctl = RTIT_CTL_TOPA | RTIT_CTL_TRACEEN;
+	pt_ext->rtit_output_base = (uint64_t)vtophys(pt_buf->topa_hw);
+	pt_ext->rtit_output_mask_ptrs = 0x7f;
+
+	if (pt_pc->l0_ebx & CPUPT_IPF) {
+		/* How many ranges CPU does support ? */
+		nranges = (pt_pc->l1_eax & CPUPT_NADDR_M) >> CPUPT_NADDR_S;
+
+		/* xsave/xrstor supports two ranges only */
+		if (nranges > 2)
+			nranges = 2;
+
+		n = pm_pta->addrn > nranges ? nranges : pm_pta->addrn;
+
+		switch (n) {
+		case 2:
+			pt_ext->rtit_ctl |= (1UL << RTIT_CTL_ADDR_CFG_S(1));
+			pt_ext->rtit_addr1_a = pm_pta->addra[1];
+			pt_ext->rtit_addr1_b = pm_pta->addrb[1];
+		case 1:
+			pt_ext->rtit_ctl |= (1UL << RTIT_CTL_ADDR_CFG_S(0));
+			pt_ext->rtit_addr0_a = pm_pta->addra[0];
+			pt_ext->rtit_addr0_b = pm_pta->addrb[0];
+		default:
+			break;
+		};
+	}
+
+	/*
+	 * TODO
+	 * if (sc->l0_ebx & CPUPT_PRW) {
+	 *     reg |= RTIT_CTL_FUPONPTW;
+	 *     reg |= RTIT_CTL_PTWEN;
+	 * }
+	 */
+
+	if (mode == PMC_MODE_ST)
+		pt_ext->rtit_ctl |= RTIT_CTL_OS;
+	else if (mode == PMC_MODE_TT)
+		pt_ext->rtit_ctl |= RTIT_CTL_USER;
+	else {
+		dprintf("%s: unsupported mode %d\n", __func__, mode);
+		return (-1);
+	}
+
+	/* Enable FUP, TIP, TIP.PGE, TIP.PGD, TNT, MODE.Exec and MODE.TSX packets */
+	if (pm_pta->flags & INTEL_PT_FLAG_BRANCHES)
+		pt_ext->rtit_ctl |= RTIT_CTL_BRANCHEN;
+
+	if (pm_pta->flags & INTEL_PT_FLAG_TSC)
+		pt_ext->rtit_ctl |= RTIT_CTL_TSCEN;
+
+	if ((pt_pc->l0_ebx & CPUPT_MTC) &&
+	    (pm_pta->flags & INTEL_PT_FLAG_MTC))
+		pt_ext->rtit_ctl |= RTIT_CTL_MTCEN;
+
+	if (pm_pta->flags & INTEL_PT_FLAG_DISRETC)
+		pt_ext->rtit_ctl |= RTIT_CTL_DISRETC;
+
+	/*
+	 * TODO: specify MTC frequency
+	 * Note: Check Bitmap of supported MTC Period Encodings
+	 * pt_ext->rtit_ctl |= RTIT_CTL_MTC_FREQ(6);
+	 */
+
+
+#if 0
 	pt_buf->flags = pm_pta->flags;
 	pt_buf->addrn = pm_pta->addrn;
 
@@ -354,6 +445,7 @@ pt_buffer_prepare(uint32_t cpu, struct pmc *pm,
 		pt_buf->flags |= INTEL_PT_FLAG_TSC;
 	if (pm_pta->flags & INTEL_PT_FLAG_MTC)
 		pt_buf->flags |= INTEL_PT_FLAG_MTC;
+#endif
 
 	return (0);
 }
@@ -365,10 +457,10 @@ pt_allocate_pmc(int cpu, int ri, struct pmc *pm,
 	struct pt_cpu *pt_pc;
 	int i;
 
-	pt_pc = pt_pcpu[cpu];
-
 	if ((cpu_stdext_feature & CPUID_STDEXT_PROCTRACE) == 0)
 		return (ENXIO);
+
+	pt_pc = pt_pcpu[cpu];
 
 	dprintf("%s: curthread %lx, cpu %d (curcpu %d)\n", __func__,
 	    (uint64_t)curthread, cpu, PCPU_GET(cpuid));
@@ -461,9 +553,10 @@ pt_configure(int cpu, struct pmc *pm)
 	struct pt_cpu *pt_pc;
 	enum pmc_mode mode;
 	struct pt_buffer *pt_buf;
-	int nranges;
-	uint64_t reg;
-	int i;
+	//uint64_t reg;
+
+	struct pt_ext_area *pt_ext;
+	struct pt_save_area *test_area;
 
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pt_buf = &pm_pt->pt_buffers[cpu];
@@ -477,74 +570,15 @@ pt_configure(int cpu, struct pmc *pm)
 
 	pt_pc = pt_pcpu[cpu];
 
-	wrmsr(MSR_IA32_RTIT_CTL, 0);
-	wrmsr(MSR_IA32_RTIT_STATUS, 0);
-	wrmsr(MSR_IA32_RTIT_OUTPUT_BASE, pt_buf->pt_output_base);
-	wrmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS, pt_buf->pt_output_mask_ptrs);
+	test_area = &pt_pc->test_area;
 
-	/* Configure tracing */
-	if ((pt_pc->l0_ecx & CPUPT_TOPA) == 0)
-		return (-1);	/* We rely on TOPA support */
-	reg = RTIT_CTL_TOPA;
+	pt_ext = &test_area->pt_ext_area;
+	//pt_ext->rtit_output_base = pt_buf->pt_output_base;
+	//pt_ext->rtit_output_mask_ptrs = pt_buf->pt_output_mask_ptrs;
 
-	/*
-	 * TODO
-	 * if (sc->l0_ebx & CPUPT_PRW) {
-	 *     reg |= RTIT_CTL_FUPONPTW;
-	 *     reg |= RTIT_CTL_PTWEN;
-	 * }
-	 */
-
-	if (mode == PMC_MODE_ST)
-		reg |= RTIT_CTL_OS;
-	else if (mode == PMC_MODE_TT)
-		reg |= RTIT_CTL_USER;
-	else {
-		dprintf("%s: unsupported mode %d\n", __func__, mode);
-		return (-1);
-	}
-
-	/* Enable FUP, TIP, TIP.PGE, TIP.PGD, TNT, MODE.Exec and MODE.TSX packets */
-	if (pt_buf->flags & INTEL_PT_FLAG_BRANCHES)
-		reg |= RTIT_CTL_BRANCHEN;
-
-	if (pt_buf->flags & INTEL_PT_FLAG_TSC)
-		reg |= RTIT_CTL_TSCEN;
-
-	if ((pt_pc->l0_ebx & CPUPT_MTC) &&
-	    (pt_buf->flags & INTEL_PT_FLAG_MTC))
-		reg |= RTIT_CTL_MTCEN;
-
-	if (pt_buf->flags & INTEL_PT_FLAG_DISRETC)
-		reg |= RTIT_CTL_DISRETC;
-
-	/*
-	 * TODO: specify MTC frequency
-	 * Note: Check Bitmap of supported MTC Period Encodings
-	 * reg |= RTIT_CTL_MTC_FREQ(6);
-	 */
-
-	if (pt_pc->l0_ebx & CPUPT_IPF) {
-		nranges = (pt_pc->l1_eax & CPUPT_NADDR_M) >> CPUPT_NADDR_S;
-
-		/* Limit the number of ranges. */
-		if (pt_buf->addrn > nranges)
-			pt_buf->addrn = nranges;
-
-		for (i = 0; i < pt_buf->addrn; i++) {
-			dprintf("%s: range %lx -> %lx\n", __func__,
-			    pt_buf->addra[i], pt_buf->addrb[i]);
-			reg |= (1UL << RTIT_CTL_ADDR_CFG_S(i));
-
-			/* Configure addr A */
-			wrmsr(MSR_IA32_RTIT_ADDR_A(i), pt_buf->addra[i]);
-
-			/* Configure addr B */
-			wrmsr(MSR_IA32_RTIT_ADDR_B(i), pt_buf->addrb[i]);
-		}
-	}
-
-	wrmsr(MSR_IA32_RTIT_CTL, reg);
+	//reg = pt_ext->rtit_ctl;
+	//reg |= RTIT_CTL_TOPA;
+	//pt_ext->rtit_ctl = reg | RTIT_CTL_TRACEEN;
 
 	return (0);
 }
@@ -748,13 +782,29 @@ xsave(char *addr, uint64_t mask)
 }
 
 static int
+pt_configure_ranges(struct pt_cpu *pt_pc,
+    struct pmc_trace_filter_ip_range *ranges, uint32_t nranges)
+{
+
+	return (0);
+}
+
+static int
 pt_trace_config(int cpu, int ri, struct pmc *pm,
     struct pmc_trace_filter_ip_range *ranges, uint32_t nranges)
 {
 	struct pt_buffer *pt_buf;
 	struct pmc_md_pt_pmc *pm_pt;
+	struct pt_cpu *pt_pc;
 	uint64_t reg;
-	int i;
+	//int i;
+
+	struct pt_ext_area *pt_ext;
+	struct pt_save_area *test_area;
+
+	pt_pc = pt_pcpu[cpu];
+	test_area = &pt_pc->test_area;
+	pt_ext = &test_area->pt_ext_area;
 
 	KASSERT(cpu == PCPU_GET(cpuid), ("Configuring wrong CPU\n"));
 
@@ -765,9 +815,42 @@ pt_trace_config(int cpu, int ri, struct pmc *pm,
 
 	/* Ensure tracing is turned off */
 	reg = rdmsr(MSR_IA32_RTIT_CTL);
-	if (reg & RTIT_CTL_TRACEEN)
-		wrmsr(MSR_IA32_RTIT_CTL, reg & ~RTIT_CTL_TRACEEN);
+	if (reg & RTIT_CTL_TRACEEN) {
+		//wrmsr(MSR_IA32_RTIT_CTL, reg & ~RTIT_CTL_TRACEEN);
+		pt_save_restore(pt_pc, 1);
+	}
 
+	pt_configure_ranges(pt_pc, ranges, nranges);
+
+	int nranges_supp;
+	int n;
+
+	if (pt_pc->l0_ebx & CPUPT_IPF) {
+		/* How many ranges CPU does support ? */
+		nranges_supp = (pt_pc->l1_eax & CPUPT_NADDR_M) >> CPUPT_NADDR_S;
+
+		/* xsave/xrstor supports two ranges only */
+		if (nranges_supp > 2)
+			nranges_supp = 2;
+
+		n = nranges > nranges_supp ? nranges_supp : nranges;
+
+		switch (n) {
+		case 2:
+			pt_ext->rtit_ctl |= (1UL << RTIT_CTL_ADDR_CFG_S(1));
+			pt_ext->rtit_addr1_a = ranges[1].addra;
+			pt_ext->rtit_addr1_b = ranges[1].addrb;
+		case 1:
+			printf("configure range 0\n");
+			pt_ext->rtit_ctl |= (1UL << RTIT_CTL_ADDR_CFG_S(0));
+			pt_ext->rtit_addr0_a = ranges[0].addra;
+			pt_ext->rtit_addr0_b = ranges[0].addrb;
+		default:
+			break;
+		};
+	}
+
+#if 0
 	pt_buf->addrn = nranges;
 
 	for (i = 0; i < nranges; i++) {
@@ -781,8 +864,10 @@ pt_trace_config(int cpu, int ri, struct pmc *pm,
 		wrmsr(MSR_IA32_RTIT_ADDR_A(i), ranges[i].addra);
 		wrmsr(MSR_IA32_RTIT_ADDR_B(i), ranges[i].addrb);
 	}
+#endif
 
-	wrmsr(MSR_IA32_RTIT_CTL, reg);
+	//pt_save_restore(pt_pc, 0);
+	//wrmsr(MSR_IA32_RTIT_CTL, reg);
 
 	return (0);
 }
@@ -797,6 +882,9 @@ pt_read_trace(int cpu, int ri, struct pmc *pm,
 	uint64_t offset;
 	uint64_t reg;
 	uint32_t idx;
+	struct pt_ext_area *pt_ext;
+	struct pt_save_area *test_area;
+	//struct xsave_header *hdr;
 
 	pt_pc = pt_pcpu[cpu];
 	pt_pc->pm_mmap = pm;
@@ -804,11 +892,15 @@ pt_read_trace(int cpu, int ri, struct pmc *pm,
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pt_buf = &pm_pt->pt_buffers[cpu];
 
+	test_area = &pt_pc->test_area;
+	pt_ext = &test_area->pt_ext_area;
+
 	reg = rdmsr(MSR_IA32_RTIT_CTL);
 	if (reg & RTIT_CTL_TRACEEN)
 		reg = rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS);
 	else
-		reg = pt_buf->pt_output_mask_ptrs;
+		reg = pt_ext->rtit_output_mask_ptrs;
+		//reg = pt_buf->pt_output_mask_ptrs;
 
 	idx = (reg & 0xffffffff) >> 7;
 	*cycle = pt_buf->cycle;
@@ -886,7 +978,6 @@ pt_start_pmc(int cpu, int ri)
 	struct pt_buffer *pt_buf;
 	struct pmc_hw *phw;
 	struct pmc *pm;
-	uint64_t reg;
 
 	dprintf("%s: cpu %d (curcpu %d)\n", __func__, cpu, PCPU_GET(cpuid));
 
@@ -903,15 +994,7 @@ pt_start_pmc(int cpu, int ri)
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pt_buf = &pm_pt->pt_buffers[cpu];
 
-	if (pt_pc->flags & FLAG_PT_SAVED) {
-		printf("rstoring state\n");
-		pt_save_restore(pt_pc, 0);
-	} else {
-		/* Enable tracing */
-		reg = rdmsr(MSR_IA32_RTIT_CTL);
-		reg |= RTIT_CTL_TRACEEN;
-		wrmsr(MSR_IA32_RTIT_CTL, reg);
-	}
+	pt_save_restore(pt_pc, 0);
 
 	return (0);
 }
@@ -924,7 +1007,6 @@ pt_stop_pmc(int cpu, int ri)
 	struct pmc_hw *phw;
 	struct pt_buffer *pt_buf;
 	struct pmc *pm;
-	uint64_t reg;
 
 	pt_pc = pt_pcpu[cpu];
 	phw = &pt_pc->tc_hw;
@@ -934,8 +1016,8 @@ pt_stop_pmc(int cpu, int ri)
 	pm = phw->phw_pmc;
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pt_buf = &pm_pt->pt_buffers[cpu];
-	pt_buf->pt_output_base = rdmsr(MSR_IA32_RTIT_OUTPUT_BASE);
-	pt_buf->pt_output_mask_ptrs = rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS);
+	//pt_buf->pt_output_base = rdmsr(MSR_IA32_RTIT_OUTPUT_BASE);
+	//pt_buf->pt_output_mask_ptrs = rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS);
 
 	dprintf("%s: cpu %d, output base %lx, ptr %lx\n", __func__, cpu,
 	    rdmsr(MSR_IA32_RTIT_OUTPUT_BASE),
@@ -945,16 +1027,10 @@ pt_stop_pmc(int cpu, int ri)
 	    ("[pt,%d] illegal CPU value %d", __LINE__, cpu));
 	KASSERT(ri == 0, ("[pt,%d] illegal row-index %d", __LINE__, ri));
 
+	/* Save the PT state to memory. This operation will disable tracing. */
 	pt_save_restore(pt_pc, 1);
 
-	/* Disable tracing */
-	reg = rdmsr(MSR_IA32_RTIT_CTL);
-	if (reg & RTIT_CTL_TRACEEN)
-		printf("Trace is turned on after xsave\n");
-	reg &= ~RTIT_CTL_TRACEEN;
-	wrmsr(MSR_IA32_RTIT_CTL, reg);
-
-	pt_buf->pt_output_mask_ptrs = rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS);
+	//pt_buf->pt_output_mask_ptrs = rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS);
 
 	return (0);
 }
