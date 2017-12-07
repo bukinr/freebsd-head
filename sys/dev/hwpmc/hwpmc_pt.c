@@ -74,8 +74,6 @@ __FBSDID("$FreeBSD$");
 
 static MALLOC_DEFINE(M_PT, "pt", "PT driver");
 
-//static uint64_t test_area[512] __aligned(PAGE_SIZE);
-
 extern struct cdev *pmc_cdev[MAXCPU];
 
 /*
@@ -697,7 +695,6 @@ pt_trace_config(int cpu, int ri, struct pmc *pm,
 	struct pmc_md_pt_pmc *pm_pt;
 	struct pt_cpu *pt_pc;
 	uint64_t reg;
-	//int i;
 
 	struct pt_ext_area *pt_ext;
 	struct pt_save_area *test_area;
@@ -715,10 +712,8 @@ pt_trace_config(int cpu, int ri, struct pmc *pm,
 
 	/* Ensure tracing is turned off */
 	reg = rdmsr(MSR_IA32_RTIT_CTL);
-	if (reg & RTIT_CTL_TRACEEN) {
-		//wrmsr(MSR_IA32_RTIT_CTL, reg & ~RTIT_CTL_TRACEEN);
+	if (reg & RTIT_CTL_TRACEEN)
 		pt_save_restore(pt_pc, 1);
-	}
 
 	pt_configure_ranges(pt_pc, ranges, nranges);
 
@@ -741,7 +736,6 @@ pt_trace_config(int cpu, int ri, struct pmc *pm,
 			pt_ext->rtit_addr1_a = ranges[1].addra;
 			pt_ext->rtit_addr1_b = ranges[1].addrb;
 		case 1:
-			printf("configure range 0\n");
 			pt_ext->rtit_ctl |= (1UL << RTIT_CTL_ADDR_CFG_S(0));
 			pt_ext->rtit_addr0_a = ranges[0].addra;
 			pt_ext->rtit_addr0_b = ranges[0].addrb;
@@ -749,25 +743,6 @@ pt_trace_config(int cpu, int ri, struct pmc *pm,
 			break;
 		};
 	}
-
-#if 0
-	pt_buf->addrn = nranges;
-
-	for (i = 0; i < nranges; i++) {
-		dprintf("%s: range %lx -> %lx\n", __func__,
-		    ranges[0].addra, ranges[0].addrb);
- 
-		pt_buf->addra[i] = ranges[i].addra;
-		pt_buf->addrb[i] = ranges[i].addrb;
-
-		reg |= (1UL << RTIT_CTL_ADDR_CFG_S(i));
-		wrmsr(MSR_IA32_RTIT_ADDR_A(i), ranges[i].addra);
-		wrmsr(MSR_IA32_RTIT_ADDR_B(i), ranges[i].addrb);
-	}
-#endif
-
-	//pt_save_restore(pt_pc, 0);
-	//wrmsr(MSR_IA32_RTIT_CTL, reg);
 
 	return (0);
 }
