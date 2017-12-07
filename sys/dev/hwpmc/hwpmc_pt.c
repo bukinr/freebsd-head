@@ -156,19 +156,19 @@ pt_save_restore(struct pt_cpu *pt_pc, int save)
 	uint64_t reg;
 
 	load_cr4(rcr4() | CR4_XSAVE);
-	wrmsr(MSR_IA32_XSS, 0x100);
+	wrmsr(MSR_IA32_XSS, XFEATURE_ENABLED_PT);
 
 	clts();
 
 	val = rxcr(XCR0);
 	load_xcr(XCR0, pt_xsave_mask);
 	if (save)
-		xsaves((char *)&pt_pc->test_area, 0x100);
+		xsaves((char *)&pt_pc->test_area, XFEATURE_ENABLED_PT);
 	else {
 		reg = rdmsr(MSR_IA32_RTIT_CTL);
 		if (reg & RTIT_CTL_TRACEEN)
 			panic("pt is enabled ?\n");
-		xrstors((char *)&pt_pc->test_area, 0x100);
+		xrstors((char *)&pt_pc->test_area, XFEATURE_ENABLED_PT);
 	}
 	load_xcr(XCR0, val);
 	load_cr0(rcr0() | CR0_TS);
@@ -323,8 +323,8 @@ pt_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	bzero(test_area, sizeof(struct pt_save_area));
 
 	hdr = &test_area->header;
-	hdr->xsave_bv = 0x100;
-	hdr->xcomp_bv = 0x100 | (1ULL << 63);
+	hdr->xsave_bv = XFEATURE_ENABLED_PT;
+	hdr->xcomp_bv = XFEATURE_ENABLED_PT | (1ULL << 63) /* compaction */;
 
 	pt_ext = &test_area->pt_ext_area;
 
