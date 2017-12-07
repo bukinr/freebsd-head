@@ -535,7 +535,7 @@ struct pmc_op_proc_unsuspend {
  * OP TRACE_CONFIG
  */
 
-#define	PMC_FILTER_MAX_IP_RANGES	16
+#define	PMC_FILTER_MAX_IP_RANGES	4
 
 struct pmc_op_trace_config {
 	pmc_id_t	pm_pmcid;
