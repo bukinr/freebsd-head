@@ -113,10 +113,6 @@ static struct pt_descr pt_pmcdesc[PT_NPMCS] =
  */
 
 struct pt_cpu {
-	struct pt_save_area		test_area;
-
-	uint64_t			reserved[512];
-
 	struct pmc_hw			tc_hw;
 	uint32_t			l0_eax;
 	uint32_t			l0_ebx;
@@ -126,7 +122,8 @@ struct pt_cpu {
 	struct pmc			*pm_mmap;
 	uint32_t			flags;
 #define	FLAG_PT_ALLOCATED		(1 << 0)
-} __aligned(PAGE_SIZE);
+	struct pt_save_area		test_area;
+};
 
 static struct pt_cpu **pt_pcpu;
 
