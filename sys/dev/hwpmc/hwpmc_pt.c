@@ -309,11 +309,15 @@ pt_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	if ((pt_pc->l0_ecx & CPUPT_TOPA) == 0)
 		return (ENXIO);	/* We rely on TOPA support */
 
-	mode = PMC_TO_MODE(pm);
-
 	pm_pta = (const struct pmc_md_pt_op_pmcallocate *)&a->pm_md.pm_pt;
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pt_buf = &pm_pt->pt_buffers[cpu];
+
+	error = pt_buffer_allocate(cpu, pt_buf);
+	if (error != 0) {
+		dprintf("%s: can't allocate buffers\n", __func__);
+		return (EINVAL);
+	}
 
 	test_area = &pt_pc->test_area;
 	bzero(test_area, sizeof(struct pt_save_area));
@@ -323,12 +327,6 @@ pt_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	hdr->xcomp_bv = XFEATURE_ENABLED_PT | (1ULL << 63) /* compaction */;
 
 	pt_ext = &test_area->pt_ext_area;
-
-	error = pt_buffer_allocate(cpu, pt_buf);
-	if (error != 0) {
-		dprintf("%s: can't allocate buffers\n", __func__);
-		return (EINVAL);
-	}
 
 	pt_ext->rtit_ctl = RTIT_CTL_TOPA | RTIT_CTL_TRACEEN;
 	pt_ext->rtit_output_base = (uint64_t)vtophys(pt_buf->topa_hw);
@@ -366,6 +364,7 @@ pt_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	 * }
 	 */
 
+	mode = PMC_TO_MODE(pm);
 	if (mode == PMC_MODE_ST)
 		pt_ext->rtit_ctl |= RTIT_CTL_OS;
 	else if (mode == PMC_MODE_TT)
@@ -713,25 +712,19 @@ static int
 pt_trace_config(int cpu, int ri, struct pmc *pm,
     struct pmc_trace_filter_ip_range *ranges, uint32_t nranges)
 {
-	struct pt_buffer *pt_buf;
-	struct pmc_md_pt_pmc *pm_pt;
+	struct pt_ext_area *pt_ext;
+	struct pt_save_area *test_area;
 	struct pt_cpu *pt_pc;
 	uint64_t reg;
 
-	struct pt_ext_area *pt_ext;
-	struct pt_save_area *test_area;
+	dprintf("%s\n", __func__);
 
 	pt_pc = pt_pcpu[cpu];
 	test_area = &pt_pc->test_area;
 	pt_ext = &test_area->pt_ext_area;
 
 	KASSERT(cpu == PCPU_GET(cpuid), ("Configuring wrong CPU\n"));
-
-	dprintf("%s\n", __func__);
 	
-	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
-	pt_buf = &pm_pt->pt_buffers[cpu];
-
 	/* Ensure tracing is turned off */
 	reg = rdmsr(MSR_IA32_RTIT_CTL);
 	if (reg & RTIT_CTL_TRACEEN)
@@ -868,11 +861,8 @@ pt_release_pmc(int cpu, int ri, struct pmc *pm)
 static int
 pt_start_pmc(int cpu, int ri)
 {
-	struct pmc_md_pt_pmc *pm_pt;
 	struct pt_cpu *pt_pc;
-	struct pt_buffer *pt_buf;
 	struct pmc_hw *phw;
-	struct pmc *pm;
 
 	dprintf("%s: cpu %d (curcpu %d)\n", __func__, cpu, PCPU_GET(cpuid));
 
@@ -884,10 +874,6 @@ pt_start_pmc(int cpu, int ri)
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
 	    ("[pt,%d] illegal CPU value %d", __LINE__, cpu));
 	KASSERT(ri == 0, ("[pt,%d] illegal row-index %d", __LINE__, ri));
-
-	pm = phw->phw_pmc;
-	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
-	pt_buf = &pm_pt->pt_buffers[cpu];
 
 	pt_save_restore(pt_pc, false);
 
@@ -978,7 +964,7 @@ pmc_pt_finalize(struct pmc_mdep *md)
 
 	dprintf("%s\n", __func__);
 
-#ifdef	INVARIANTS
+#ifdef INVARIANTS
 	int i, ncpus;
 
 	ncpus = pmc_cpu_max();
