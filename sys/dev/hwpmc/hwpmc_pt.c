@@ -157,6 +157,7 @@ pt_save_restore(struct pt_cpu *pt_pc, bool save)
 	clts();
 	val = rxcr(XCR0);
 	load_xcr(XCR0, pt_xsave_mask);
+	wrmsr(MSR_IA32_XSS, XFEATURE_ENABLED_PT);
 	if (save) {
 		KASSERT((rdmsr(MSR_IA32_RTIT_CTL) & RTIT_CTL_TRACEEN) != 0,
 		    ("%s: PT is disabled", __func__));
@@ -641,7 +642,6 @@ pt_pcpu_init(struct pmc_mdep *md, int cpu)
 
 	/* Enable XSAVE */
 	load_cr4(rcr4() | CR4_XSAVE);
-	wrmsr(MSR_IA32_XSS, XFEATURE_ENABLED_PT);
 
 	KASSERT(cpu == PCPU_GET(cpuid), ("Init on wrong CPU\n"));
 
