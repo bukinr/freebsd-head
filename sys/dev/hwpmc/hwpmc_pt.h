@@ -42,6 +42,18 @@
 #define	PT_NADDR	4
 #define	PT_NPMCS	1
 
+struct pmc_md_pt_op_pmcallocate {
+	uint32_t flags;
+#define	INTEL_PT_FLAG_BRANCHES	(1 << 0)
+#define	INTEL_PT_FLAG_TSC	(1 << 1)
+#define	INTEL_PT_FLAG_MTC	(1 << 2)
+#define	INTEL_PT_FLAG_DISRETC	(1 << 3)
+	uint64_t addra[PT_NADDR];
+	uint64_t addrb[PT_NADDR];
+	uint32_t addrn;
+};
+
+#ifdef	_KERNEL
 struct xsave_header {
 	uint64_t	xsave_bv;
 	uint64_t	xcomp_bv;
@@ -66,21 +78,6 @@ struct pt_save_area {
 	struct pt_ext_area	pt_ext_area;
 } __aligned(64);
 
-int pt_save(struct pt_save_area *, uint64_t mask);
-int pt_restore(struct pt_save_area *, uint64_t mask);
-
-struct pmc_md_pt_op_pmcallocate {
-	uint32_t flags;
-#define	INTEL_PT_FLAG_BRANCHES	(1 << 0)
-#define	INTEL_PT_FLAG_TSC	(1 << 1)
-#define	INTEL_PT_FLAG_MTC	(1 << 2)
-#define	INTEL_PT_FLAG_DISRETC	(1 << 3)
-	uint64_t addra[PT_NADDR];
-	uint64_t addrb[PT_NADDR];
-	uint32_t addrn;
-};
-
-#ifdef	_KERNEL
 struct topa_entry {
 	uint64_t base;
 	uint64_t size;
@@ -106,6 +103,9 @@ struct pmc_md_pt_pmc {
 int	pmc_pt_initialize(struct pmc_mdep *_md, int _maxcpu);
 void	pmc_pt_finalize(struct pmc_mdep *_md);
 int	pmc_pt_intr(int cpu, struct trapframe *tf);
+
+int	pt_save(struct pt_save_area *, uint64_t mask);
+int	pt_restore(struct pt_save_area *, uint64_t mask);
 
 #endif /* !_KERNEL */
 #endif /* !_DEV_HWPMC_PT_H */
