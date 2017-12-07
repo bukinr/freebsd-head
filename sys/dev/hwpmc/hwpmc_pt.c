@@ -127,6 +127,27 @@ struct pt_cpu {
 
 static struct pt_cpu **pt_pcpu;
 
+static __inline void
+xrstors(char *addr, uint64_t mask)
+{
+	uint32_t low, hi;
+
+	low = mask;
+	hi = mask >> 32;
+	__asm __volatile("xrstors %0" : : "m" (*addr), "a" (low), "d" (hi));
+}
+
+static __inline void
+xsaves(char *addr, uint64_t mask)
+{
+	uint32_t low, hi;
+
+	low = mask;
+	hi = mask >> 32;
+	__asm __volatile("xsaves %0" : "=m" (*addr) : "a" (low), "d" (hi) :
+	    "memory");
+}
+
 static int
 pt_save_restore(struct pt_cpu *pt_pc, int save)
 {
@@ -151,12 +172,12 @@ pt_save_restore(struct pt_cpu *pt_pc, int save)
 	val = rxcr(XCR0);
 	load_xcr(XCR0, xsave_mask);
 	if (save)
-		pt_save(&pt_pc->test_area, 0x100);
+		xsaves((char *)&pt_pc->test_area, 0x100);
 	else {
 		reg = rdmsr(MSR_IA32_RTIT_CTL);
 		if (reg & RTIT_CTL_TRACEEN)
 			panic("pt is enabled ?\n");
-		pt_restore(&pt_pc->test_area, 0x100);
+		xrstors((char *)&pt_pc->test_area, 0x100);
 	}
 	load_xcr(XCR0, val);
 	load_cr0(rcr0() | CR0_TS);
@@ -663,17 +684,6 @@ pt_pcpu_fini(struct pmc_mdep *md, int cpu)
 	pc->pc_hwpmcs[ri] = NULL;
 
 	return (0);
-}
-
-static __inline void
-xsave(char *addr, uint64_t mask)
-{
-	uint32_t low, hi;
-
-	low = mask;
-	hi = mask >> 32;
-	__asm __volatile("xsave %0" : "=m" (*addr) : "a" (low), "d" (hi) :
-	    "memory");
 }
 
 static int
