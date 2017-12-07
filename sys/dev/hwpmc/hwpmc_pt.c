@@ -123,7 +123,7 @@ struct pt_cpu {
 	struct pmc			*pm_mmap;
 	uint32_t			flags;
 #define	FLAG_PT_ALLOCATED		(1 << 0)
-	struct pt_save_area		test_area;
+	struct pt_save_area		save_area;
 };
 
 static struct pt_cpu **pt_pcpu;
@@ -160,11 +160,11 @@ pt_save_restore(struct pt_cpu *pt_pc, bool save)
 	if (save) {
 		KASSERT((rdmsr(MSR_IA32_RTIT_CTL) & RTIT_CTL_TRACEEN) != 0,
 		    ("%s: PT is disabled", __func__));
-		xsaves((char *)&pt_pc->test_area, XFEATURE_ENABLED_PT);
+		xsaves((char *)&pt_pc->save_area, XFEATURE_ENABLED_PT);
 	} else {
 		KASSERT((rdmsr(MSR_IA32_RTIT_CTL) & RTIT_CTL_TRACEEN) == 0,
 		    ("%s: PT is enabled", __func__));
-		xrstors((char *)&pt_pc->test_area, XFEATURE_ENABLED_PT);
+		xrstors((char *)&pt_pc->save_area, XFEATURE_ENABLED_PT);
 	}
 	load_xcr(XCR0, val);
 	load_cr0(rcr0() | CR0_TS);
@@ -303,7 +303,7 @@ pt_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	enum pmc_mode mode;
 	struct xsave_header *hdr;
 	struct pt_ext_area *pt_ext;
-	struct pt_save_area *test_area;
+	struct pt_save_area *save_area;
 
 	pt_pc = pt_pcpu[cpu];
 	if ((pt_pc->l0_ecx & CPUPT_TOPA) == 0)
@@ -319,14 +319,14 @@ pt_buffer_prepare(uint32_t cpu, struct pmc *pm,
 		return (EINVAL);
 	}
 
-	test_area = &pt_pc->test_area;
-	bzero(test_area, sizeof(struct pt_save_area));
+	save_area = &pt_pc->save_area;
+	bzero(save_area, sizeof(struct pt_save_area));
 
-	hdr = &test_area->header;
+	hdr = &save_area->header;
 	hdr->xsave_bv = XFEATURE_ENABLED_PT;
 	hdr->xcomp_bv = XFEATURE_ENABLED_PT | (1ULL << 63) /* compaction */;
 
-	pt_ext = &test_area->pt_ext_area;
+	pt_ext = &save_area->pt_ext_area;
 
 	pt_ext->rtit_ctl = RTIT_CTL_TOPA | RTIT_CTL_TRACEEN;
 	pt_ext->rtit_output_base = (uint64_t)vtophys(pt_buf->topa_hw);
@@ -713,15 +713,15 @@ pt_trace_config(int cpu, int ri, struct pmc *pm,
     struct pmc_trace_filter_ip_range *ranges, uint32_t nranges)
 {
 	struct pt_ext_area *pt_ext;
-	struct pt_save_area *test_area;
+	struct pt_save_area *save_area;
 	struct pt_cpu *pt_pc;
 	uint64_t reg;
 
 	dprintf("%s\n", __func__);
 
 	pt_pc = pt_pcpu[cpu];
-	test_area = &pt_pc->test_area;
-	pt_ext = &test_area->pt_ext_area;
+	save_area = &pt_pc->save_area;
+	pt_ext = &save_area->pt_ext_area;
 
 	KASSERT(cpu == PCPU_GET(cpuid), ("Configuring wrong CPU\n"));
 	
@@ -767,7 +767,7 @@ pt_read_trace(int cpu, int ri, struct pmc *pm,
     pmc_value_t *cycle, pmc_value_t *voffset)
 {
 	struct pt_ext_area *pt_ext;
-	struct pt_save_area *test_area;
+	struct pt_save_area *save_area;
 	struct pmc_md_pt_pmc *pm_pt;
 	struct pt_buffer *pt_buf;
 	struct pt_cpu *pt_pc;
@@ -781,8 +781,8 @@ pt_read_trace(int cpu, int ri, struct pmc *pm,
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pt_buf = &pm_pt->pt_buffers[cpu];
 
-	test_area = &pt_pc->test_area;
-	pt_ext = &test_area->pt_ext_area;
+	save_area = &pt_pc->save_area;
+	pt_ext = &save_area->pt_ext_area;
 
 	reg = rdmsr(MSR_IA32_RTIT_CTL);
 	if (reg & RTIT_CTL_TRACEEN)
