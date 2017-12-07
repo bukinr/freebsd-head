@@ -150,24 +150,20 @@ xsaves(char *addr, uint64_t mask)
 }
 
 static int
-pt_save_restore(struct pt_cpu *pt_pc, int save)
+pt_save_restore(struct pt_cpu *pt_pc, bool save)
 {
 	uint64_t val;
-	uint64_t reg;
-
-	load_cr4(rcr4() | CR4_XSAVE);
-	wrmsr(MSR_IA32_XSS, XFEATURE_ENABLED_PT);
 
 	clts();
-
 	val = rxcr(XCR0);
 	load_xcr(XCR0, pt_xsave_mask);
-	if (save)
+	if (save) {
+		KASSERT((rdmsr(MSR_IA32_RTIT_CTL) & RTIT_CTL_TRACEEN) != 0,
+		    ("%s: PT is disabled", __func__));
 		xsaves((char *)&pt_pc->test_area, XFEATURE_ENABLED_PT);
-	else {
-		reg = rdmsr(MSR_IA32_RTIT_CTL);
-		if (reg & RTIT_CTL_TRACEEN)
-			panic("pt is enabled ?\n");
+	} else {
+		KASSERT((rdmsr(MSR_IA32_RTIT_CTL) & RTIT_CTL_TRACEEN) == 0,
+		    ("%s: PT is enabled", __func__));
 		xrstors((char *)&pt_pc->test_area, XFEATURE_ENABLED_PT);
 	}
 	load_xcr(XCR0, val);
@@ -644,6 +640,10 @@ pt_pcpu_init(struct pmc_mdep *md, int cpu)
 		return (ENXIO);
 	}
 
+	/* Enable XSAVE */
+	load_cr4(rcr4() | CR4_XSAVE);
+	wrmsr(MSR_IA32_XSS, XFEATURE_ENABLED_PT);
+
 	KASSERT(cpu == PCPU_GET(cpuid), ("Init on wrong CPU\n"));
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
@@ -735,7 +735,7 @@ pt_trace_config(int cpu, int ri, struct pmc *pm,
 	/* Ensure tracing is turned off */
 	reg = rdmsr(MSR_IA32_RTIT_CTL);
 	if (reg & RTIT_CTL_TRACEEN)
-		pt_save_restore(pt_pc, 1);
+		pt_save_restore(pt_pc, true);
 
 	pt_configure_ranges(pt_pc, ranges, nranges);
 
@@ -889,7 +889,7 @@ pt_start_pmc(int cpu, int ri)
 	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
 	pt_buf = &pm_pt->pt_buffers[cpu];
 
-	pt_save_restore(pt_pc, 0);
+	pt_save_restore(pt_pc, false);
 
 	return (0);
 }
@@ -913,7 +913,7 @@ pt_stop_pmc(int cpu, int ri)
 	 * Save the PT state to memory.
 	 * This operation will disable tracing.
 	 */
-	pt_save_restore(pt_pc, 1);
+	pt_save_restore(pt_pc, true);
 
 	return (0);
 }
