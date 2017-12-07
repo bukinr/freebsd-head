@@ -145,7 +145,6 @@ pt_save_restore(struct pt_cpu *pt_pc, int save)
 
 	test_area = &pt_pc->test_area;
 	pt_ext = &test_area->pt_ext_area;
-	//pt_ext->rtit_ctl &= ~RTIT_CTL_TRACEEN;
 	hdr = &test_area->header;
 
 	cpuid_count(0xd, 0x1, cp);
@@ -165,20 +164,12 @@ pt_save_restore(struct pt_cpu *pt_pc, int save)
 	val = rxcr(XCR0);
 	load_xcr(XCR0, xsave_mask);
 	if (save) {
-		printf("save addr %lx\n", (uint64_t)&pt_pc->test_area);
 		bzero(&pt_pc->test_area, sizeof(struct pt_save_area));
 		pt_save(&pt_pc->test_area, 0x100);
-
-		printf("hdr->xsave_bv %lx\n", hdr->xsave_bv);
-		printf("hdr->xcomp_bv %lx\n", hdr->xcomp_bv);
 	} else {
 		reg = rdmsr(MSR_IA32_RTIT_CTL);
 		if (reg & RTIT_CTL_TRACEEN)
 			panic("pt is enabled ?\n");
-
-		printf("restore addr %lx\n", (uint64_t)&pt_pc->test_area);
-		printf("hdr->xsave_bv %lx\n", hdr->xsave_bv);
-		printf("hdr->xcomp_bv %lx\n", hdr->xcomp_bv);
 		pt_restore(&pt_pc->test_area, 0x100);
 	}
 	load_xcr(XCR0, val);
@@ -186,7 +177,7 @@ pt_save_restore(struct pt_cpu *pt_pc, int save)
 	//start emul
 	load_cr0(rcr0() | CR0_TS);
 
-#if 1
+#if 0
 	printf("        ctl %lx\n", pt_ext->rtit_ctl);
 	printf("output base %lx\n", pt_ext->rtit_output_base);
 	printf("output mask %lx\n", pt_ext->rtit_output_mask_ptrs);
@@ -356,9 +347,6 @@ pt_buffer_prepare(uint32_t cpu, struct pmc *pm,
 		return (EINVAL);
 	}
 
-	//pt_buf->pt_output_base = (uint64_t)vtophys(pt_buf->topa_hw);
-	//pt_buf->pt_output_mask_ptrs = 0x7f;
-
 	pt_ext->rtit_ctl = RTIT_CTL_TOPA | RTIT_CTL_TRACEEN;
 	pt_ext->rtit_output_base = (uint64_t)vtophys(pt_buf->topa_hw);
 	pt_ext->rtit_output_mask_ptrs = 0x7f;
@@ -423,29 +411,6 @@ pt_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	 * Note: Check Bitmap of supported MTC Period Encodings
 	 * pt_ext->rtit_ctl |= RTIT_CTL_MTC_FREQ(6);
 	 */
-
-
-#if 0
-	pt_buf->flags = pm_pta->flags;
-	pt_buf->addrn = pm_pta->addrn;
-
-	for (i = 0; i < PT_NADDR; i++) {
-		/*
-		 * Note: we will verify the amount of address ranges
-		 * supported by this CPU later in pt_configure().
-		 */
-
-		pt_buf->addra[i] = pm_pta->addra[i];
-		pt_buf->addrb[i] = pm_pta->addrb[i];
-	}
-
-	if (pm_pta->flags & INTEL_PT_FLAG_BRANCHES)
-		pt_buf->flags |= INTEL_PT_FLAG_BRANCHES;
-	if (pm_pta->flags & INTEL_PT_FLAG_TSC)
-		pt_buf->flags |= INTEL_PT_FLAG_TSC;
-	if (pm_pta->flags & INTEL_PT_FLAG_MTC)
-		pt_buf->flags |= INTEL_PT_FLAG_MTC;
-#endif
 
 	return (0);
 }
@@ -547,48 +512,10 @@ pmc_pt_intr(int cpu, struct trapframe *tf)
 }
 
 static int
-pt_configure(int cpu, struct pmc *pm)
-{
-	struct pmc_md_pt_pmc *pm_pt;
-	struct pt_cpu *pt_pc;
-	enum pmc_mode mode;
-	struct pt_buffer *pt_buf;
-	//uint64_t reg;
-
-	struct pt_ext_area *pt_ext;
-	struct pt_save_area *test_area;
-
-	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
-	pt_buf = &pm_pt->pt_buffers[cpu];
-
-	dprintf("%s: cpu %d (curcpu %d), pt_buf->pt_output_base %lx\n",
-	    __func__, cpu, PCPU_GET(cpuid), pt_buf->pt_output_base);
-
-	KASSERT(cpu == PCPU_GET(cpuid), ("Configuring wrong CPU\n"));
-
-	mode = PMC_TO_MODE(pm);
-
-	pt_pc = pt_pcpu[cpu];
-
-	test_area = &pt_pc->test_area;
-
-	pt_ext = &test_area->pt_ext_area;
-	//pt_ext->rtit_output_base = pt_buf->pt_output_base;
-	//pt_ext->rtit_output_mask_ptrs = pt_buf->pt_output_mask_ptrs;
-
-	//reg = pt_ext->rtit_ctl;
-	//reg |= RTIT_CTL_TOPA;
-	//pt_ext->rtit_ctl = reg | RTIT_CTL_TRACEEN;
-
-	return (0);
-}
-
-static int
 pt_config_pmc(int cpu, int ri, struct pmc *pm)
 {
 	struct pt_cpu *pt_pc;
 	struct pmc_hw *phw;
-	int error;
 
 	dprintf("%s: cpu %d (pm %lx)\n", __func__, cpu, (uint64_t)pm);
 
@@ -606,13 +533,6 @@ pt_config_pmc(int cpu, int ri, struct pmc *pm)
 	    pm, phw->phw_pmc));
 
 	phw->phw_pmc = pm;
-	if (pm != NULL) {
-		error = pt_configure(cpu, pm);
-		if (error != 0) {
-			dprintf("%s: can't enable PMC\n", __func__);
-			return (error);
-		}
-	}
 
 	return (0);
 }
@@ -1002,22 +922,9 @@ pt_start_pmc(int cpu, int ri)
 static int
 pt_stop_pmc(int cpu, int ri)
 {
-	struct pmc_md_pt_pmc *pm_pt;
 	struct pt_cpu *pt_pc;
-	struct pmc_hw *phw;
-	struct pt_buffer *pt_buf;
-	struct pmc *pm;
 
 	pt_pc = pt_pcpu[cpu];
-	phw = &pt_pc->tc_hw;
-	if (phw == NULL || phw->phw_pmc == NULL)
-		return (-1);
-
-	pm = phw->phw_pmc;
-	pm_pt = (struct pmc_md_pt_pmc *)&pm->pm_md;
-	pt_buf = &pm_pt->pt_buffers[cpu];
-	//pt_buf->pt_output_base = rdmsr(MSR_IA32_RTIT_OUTPUT_BASE);
-	//pt_buf->pt_output_mask_ptrs = rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS);
 
 	dprintf("%s: cpu %d, output base %lx, ptr %lx\n", __func__, cpu,
 	    rdmsr(MSR_IA32_RTIT_OUTPUT_BASE),
@@ -1027,10 +934,11 @@ pt_stop_pmc(int cpu, int ri)
 	    ("[pt,%d] illegal CPU value %d", __LINE__, cpu));
 	KASSERT(ri == 0, ("[pt,%d] illegal row-index %d", __LINE__, ri));
 
-	/* Save the PT state to memory. This operation will disable tracing. */
+	/*
+	 * Save the PT state to memory.
+	 * This operation will disable tracing.
+	 */
 	pt_save_restore(pt_pc, 1);
-
-	//pt_buf->pt_output_mask_ptrs = rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_PTRS);
 
 	return (0);
 }

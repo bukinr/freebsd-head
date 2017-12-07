@@ -90,15 +90,7 @@ struct topa_entry {
 struct pt_buffer {
 	uint64_t		*topa_hw;
 	struct topa_entry	*topa_sw;
-	//uint64_t		pt_output_base;
-	//uint64_t		pt_output_mask_ptrs;
 	uint64_t		cycle;
-
-	uint32_t		flags;
-	uint64_t		addra[PT_NADDR];
-	uint64_t		addrb[PT_NADDR];
-	uint32_t		addrn;
-
 	vm_object_t		obj;
 };
 
