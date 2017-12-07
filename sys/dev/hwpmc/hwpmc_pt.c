@@ -73,6 +73,7 @@ __FBSDID("$FreeBSD$");
 #include <x86/x86_var.h>
 
 static MALLOC_DEFINE(M_PT, "pt", "PT driver");
+static uint64_t pt_xsave_mask;
 
 extern struct cdev *pmc_cdev[MAXCPU];
 
@@ -151,18 +152,8 @@ xsaves(char *addr, uint64_t mask)
 static int
 pt_save_restore(struct pt_cpu *pt_pc, int save)
 {
-	uint64_t xsave_mask;
 	uint64_t val;
-	u_int cp[4];
 	uint64_t reg;
-
-	cpuid_count(0xd, 0x1, cp);
-	printf("enumerate 0xD, 1: %x\n", cp[0]);
-
-	cpuid_count(0xd, 0x0, cp);
-	xsave_mask = XFEATURE_ENABLED_X87 | XFEATURE_ENABLED_SSE;
-	if ((cp[0] & xsave_mask) != xsave_mask)
-		panic("PT: CPU0 does not support X87 or SSE: %x", cp[0]);
 
 	load_cr4(rcr4() | CR4_XSAVE);
 	wrmsr(MSR_IA32_XSS, 0x100);
@@ -170,7 +161,7 @@ pt_save_restore(struct pt_cpu *pt_pc, int save)
 	clts();
 
 	val = rxcr(XCR0);
-	load_xcr(XCR0, xsave_mask);
+	load_xcr(XCR0, pt_xsave_mask);
 	if (save)
 		xsaves((char *)&pt_pc->test_area, 0x100);
 	else {
@@ -625,9 +616,33 @@ pt_pcpu_init(struct pmc_mdep *md, int cpu)
 {
 	struct pmc_cpu *pc;
 	struct pt_cpu *pt_pc;
+	u_int cp[4];
 	int ri;
 
 	dprintf("%s: cpu %d\n", __func__, cpu);
+
+	/* We rely on XSAVE support */
+	if ((cpu_feature2 & CPUID2_XSAVE) == 0) {
+		printf("Intel PT: XSAVE is not supported\n");
+		return (ENXIO);
+	}
+
+	cpuid_count(0xd, 0x0, cp);
+	if ((cp[0] & pt_xsave_mask) != pt_xsave_mask) {
+		printf("Intel PT: CPU0 does not support X87 or SSE: %x", cp[0]);
+		return (ENXIO);
+	}
+
+	cpuid_count(0xd, 0x1, cp);
+	if ((cp[0] & (1 << 0)) == 0) {
+		printf("Intel PT: XSAVE compaction is not supported\n");
+		return (ENXIO);
+	}
+
+	if ((cp[0] & (1 << 3)) == 0) {
+		printf("Intel PT: XSAVES/XRSTORS are not supported\n");
+		return (ENXIO);
+	}
 
 	KASSERT(cpu == PCPU_GET(cpuid), ("Init on wrong CPU\n"));
 
@@ -920,6 +935,8 @@ pmc_pt_initialize(struct pmc_mdep *md, int maxcpu)
 	struct pmc_classdep *pcd;
 
 	dprintf("%s\n", __func__);
+
+	pt_xsave_mask = XFEATURE_ENABLED_X87 | XFEATURE_ENABLED_SSE;
 
 	KASSERT(md != NULL, ("[pt,%d] md is NULL", __LINE__));
 	KASSERT(md->pmd_nclass >= 1, ("[pt,%d] dubious md->nclass %d",
