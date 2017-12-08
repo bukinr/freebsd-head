@@ -149,7 +149,7 @@ xsaves(char *addr, uint64_t mask)
 	    "memory");
 }
 
-static int
+static void
 pt_save_restore(struct pt_cpu *pt_pc, bool save)
 {
 	uint64_t val;
@@ -169,18 +169,16 @@ pt_save_restore(struct pt_cpu *pt_pc, bool save)
 	}
 	load_xcr(XCR0, val);
 	load_cr0(rcr0() | CR0_TS);
-
-	return (0);
 }
 
-static int
+static void
 pt_configure_ranges(struct pt_cpu *pt_pc, const uint64_t *ranges,
     uint32_t nranges)
 {
-	int nranges_supp;
-	int n;
 	struct pt_ext_area *pt_ext;
 	struct pt_save_area *save_area;
+	int nranges_supp;
+	int n;
 
 	save_area = &pt_pc->save_area;
 	pt_ext = &save_area->pt_ext_area;
@@ -208,8 +206,6 @@ pt_configure_ranges(struct pt_cpu *pt_pc, const uint64_t *ranges,
 			break;
 		};
 	}
-
-	return (0);
 }
 
 static int
