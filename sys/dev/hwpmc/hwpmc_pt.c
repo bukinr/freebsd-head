@@ -259,7 +259,7 @@ pt_buffer_allocate(uint32_t cpu, struct pt_buffer *pt_buf)
 			    bufsize, 0, VM_MEMATTR_DEFAULT);
 		if (m == NULL) {
 			VM_OBJECT_WUNLOCK(obj);
-			printf("%s: Can't alloc page %d\n", __func__, i);
+			printf("%s: Can't allocate memory.\n", __func__);
 			goto error;
 		}
 		for (j = 0; j < npages; j++)
