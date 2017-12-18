@@ -1110,6 +1110,10 @@ initarm(struct arm64_bootparams *abp)
 		    kern_getenv("kern.cfg.order"));
 
 	init_proc0(abp->kern_stack);
+
+	/* Set the base address of translation table 0 for thread0 */
+	thread0.td_proc->p_md.md_l0addr = abp->kern_l0pt - abp->kern_delta;
+
 	msgbufinit(msgbufp, msgbufsize);
 	mutex_init();
 	init_param2(physmem);
