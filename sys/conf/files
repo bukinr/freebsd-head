@@ -3164,6 +3164,7 @@ dev/uart/uart_bus_puc.c		optional uart puc
 dev/uart/uart_bus_scc.c		optional uart scc
 dev/uart/uart_core.c		optional uart
 dev/uart/uart_dbg.c		optional uart gdb
+dev/uart/uart_dev_msm.c		optional uart uart_ns8250 | uart uart_msm
 dev/uart/uart_dev_mvebu.c	optional uart uart_mvebu
 dev/uart/uart_dev_ns8250.c	optional uart uart_ns8250 | uart uart_snps
 dev/uart/uart_dev_pl011.c	optional uart pl011
@@ -3194,6 +3195,8 @@ dev/usb/controller/uhci.c		optional uhci
 dev/usb/controller/uhci_pci.c		optional uhci pci
 dev/usb/controller/xhci.c		optional xhci
 dev/usb/controller/xhci_pci.c		optional xhci pci
+#dev/usb/controller/qcom_ehci.c		optional qcom_ehci
+#dev/usb/controller/apq8064_ehci.c	optional qcom_ehci
 dev/usb/controller/saf1761_otg.c	optional saf1761otg
 dev/usb/controller/saf1761_otg_fdt.c	optional saf1761otg fdt
 dev/usb/controller/uss820dci.c		optional uss820dci
