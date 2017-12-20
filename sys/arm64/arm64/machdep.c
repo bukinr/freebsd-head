@@ -715,6 +715,10 @@ init_proc0(vm_offset_t kstack)
 	thread0.td_pcb->pcb_vfpcpu = UINT_MAX;
 	thread0.td_frame = &proc0_tf;
 	pcpup->pc_curpcb = thread0.td_pcb;
+
+	/* Set the base address of translation table 0. */
+	__asm __volatile("mrs %0, ttbr0_el1"
+	    : "=r" (thread0.td_proc->p_md.md_l0addr));
 }
 
 typedef struct {
@@ -1110,10 +1114,6 @@ initarm(struct arm64_bootparams *abp)
 		    kern_getenv("kern.cfg.order"));
 
 	init_proc0(abp->kern_stack);
-
-	/* Set the base address of translation table 0 for proc0 */
-	thread0.td_proc->p_md.md_l0addr = abp->kern_l0pt - abp->kern_delta;
-
 	msgbufinit(msgbufp, msgbufsize);
 	mutex_init();
 	init_param2(physmem);
