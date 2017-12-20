@@ -206,6 +206,7 @@ sdhci_fdt_probe(device_t dev)
 	case SDHCI_FDT_QUALCOMM:
 		sc->quirks = SDHCI_QUIRK_ALL_SLOTS_NON_REMOVABLE;
 		device_set_desc(dev, "Qualcomm FDT SDHCI controller");
+		break;
 	case SDHCI_FDT_XLNX_ZY7:
 		sc->quirks = SDHCI_QUIRK_DATA_TIMEOUT_USES_SDCLK;
 		device_set_desc(dev, "Zynq-7000 generic fdt SDHCI controller");
