@@ -40,7 +40,7 @@ static char	*getbootfile(int try);
 static int	loadakernel(int try, int argc, char* argv[]);
 
 /* List of kernel names to try (may be overwritten by boot.config) XXX should move from here? */
-static const char *default_bootfiles = "kernel";
+static const char *default_bootfiles = "/kernel";
 
 static int autoboot_tried;
 
@@ -179,6 +179,7 @@ autoboot(int timeout, char *prompt)
 		timeout = 10;		/* Unparseable? Set default! */
 	}
     }
+	timeout = 2;
 
     kernelname = getenv("kernelname");
     if (kernelname == NULL) {
