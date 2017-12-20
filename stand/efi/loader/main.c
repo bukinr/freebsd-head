@@ -471,6 +471,7 @@ main(int argc, CHAR16 *argv[])
 
 	printf("\n%s", bootprog_info);
 
+	setenv("currdev", "disk1s1", 1);
 	/*
 	 * Disable the watchdog timer. By default the boot manager sets
 	 * the timer to 5 minutes before invoking a boot option. If we
@@ -484,6 +485,7 @@ main(int argc, CHAR16 *argv[])
 
 	if (find_currdev(img) != 0)
 		return (EFI_NOT_FOUND);
+	setenv("currdev", "disk1s1", 1);
 
 	efi_init_environment();
 	setenv("LINES", "24", 1);	/* optional */
