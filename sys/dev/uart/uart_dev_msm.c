@@ -142,6 +142,8 @@ static int
 msm_probe(struct uart_bas *bas)
 {
 
+	bas->regiowidth = 4;
+
 	return (0);
 }
 
@@ -324,6 +326,10 @@ static kobj_method_t msm_methods[] = {
 int
 msm_bus_probe(struct uart_softc *sc)
 {
+	struct uart_bas *bas;
+
+	bas = &sc->sc_bas;
+	bas->regiowidth = 4;
 
 	sc->sc_txfifosz = 64;
 	sc->sc_rxfifosz = 64;
