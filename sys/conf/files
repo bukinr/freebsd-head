@@ -2995,6 +2995,7 @@ dev/scc/scc_dev_quicc.c		optional scc quicc
 dev/scc/scc_dev_sab82532.c	optional scc
 dev/scc/scc_dev_z8530.c		optional scc
 dev/sdhci/sdhci.c		optional sdhci
+dev/sdhci/sdhci_fdt.c		optional sdhci
 dev/sdhci/sdhci_fdt_gpio.c	optional sdhci fdt gpio
 dev/sdhci/sdhci_if.m		optional sdhci
 dev/sdhci/sdhci_acpi.c		optional sdhci acpi
@@ -3197,8 +3198,7 @@ dev/usb/controller/uhci.c		optional uhci
 dev/usb/controller/uhci_pci.c		optional uhci pci
 dev/usb/controller/xhci.c		optional xhci
 dev/usb/controller/xhci_pci.c		optional xhci pci
-#dev/usb/controller/qcom_ehci.c		optional qcom_ehci
-#dev/usb/controller/apq8064_ehci.c	optional qcom_ehci
+dev/usb/controller/apq8064_ehci.c	optional qcom_ehci
 dev/usb/controller/saf1761_otg.c	optional saf1761otg
 dev/usb/controller/saf1761_otg_fdt.c	optional saf1761otg fdt
 dev/usb/controller/uss820dci.c		optional uss820dci
