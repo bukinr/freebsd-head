@@ -24,6 +24,8 @@ ident		GENERIC
 makeoptions	DEBUG=-g		# Build kernel with gdb(1) debug symbols
 makeoptions	WITH_CTF=1		# Run ctfconvert(1) for DTrace support
 
+makeoptions     MODULES_OVERRIDE=""
+
 options 	SCHED_ULE		# ULE scheduler
 options 	PREEMPTION		# Enable kernel thread preemption
 #options 	VIMAGE			# Subsystem virtualization, e.g. VNET
@@ -74,8 +76,10 @@ options 	VFP			# Floating-point support
 options 	RACCT			# Resource accounting framework
 options 	RACCT_DEFAULT_TO_DISABLED # Set kern.racct.enable=0 by default
 options 	RCTL			# Resource limits
-options 	SMP
+# options 	SMP
 options 	INTRNG
+
+options		ROOTDEVNAME=\"ufs:mmcsd0s2\"
 
 # Debugging support.  Always need this:
 options 	KDB			# Enable kernel debugger support.
