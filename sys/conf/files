@@ -2233,11 +2233,9 @@ dev/ixgbe/if_ixv.c		optional ixv inet \
 	compile-with "${NORMAL_C} -I$S/dev/ixgbe -DSMP"
 dev/ixgbe/if_bypass.c		optional ix inet \
 	compile-with "${NORMAL_C} -I$S/dev/ixgbe"
-dev/ixgbe/ixgbe_netmap.c	optional ix inet \
-	compile-with "${NORMAL_C} -I$S/dev/ixgbe"
 dev/ixgbe/if_fdir.c		optional ix inet | ixv inet \
 	compile-with "${NORMAL_C} -I$S/dev/ixgbe"
-dev/ixgbe/if_sriov.c		optional ix inet | ixv inet \
+dev/ixgbe/if_sriov.c		optional ix inet \
 	compile-with "${NORMAL_C} -I$S/dev/ixgbe"
 dev/ixgbe/ix_txrx.c		optional ix inet | ixv inet \
 	compile-with "${NORMAL_C} -I$S/dev/ixgbe"
@@ -3119,6 +3117,8 @@ dev/stg/tmc18c30_subr.c		optional stg
 dev/stge/if_stge.c		optional stge
 dev/sym/sym_hipd.c		optional sym				\
 	dependency	"$S/dev/sym/sym_{conf,defs}.h"
+dev/syscon/syscon.c		optional fdt syscon
+dev/syscon/syscon_if.m		optional fdt syscon
 dev/syscons/blank/blank_saver.c	optional blank_saver
 dev/syscons/daemon/daemon_saver.c optional daemon_saver
 dev/syscons/dragon/dragon_saver.c optional dragon_saver
