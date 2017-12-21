@@ -800,6 +800,10 @@ add_fdt_mem_regions(struct mem_region *mr, int mrcnt, vm_paddr_t *physmap,
     u_int *physmap_idxp)
 {
 
+	add_physmap_entry(0x80000000, 0x06000000, physmap, physmap_idxp);
+	add_physmap_entry(0x90000000, 0x2DA00000, physmap, physmap_idxp);
+	return;
+
 	for (int i = 0; i < mrcnt; i++) {
 		if (!add_physmap_entry(mr[i].mr_start, mr[i].mr_size, physmap,
 		    physmap_idxp))
@@ -1056,7 +1060,7 @@ initarm(struct arm64_bootparams *abp)
 	physmap_idx = 0;
 	efihdr = (struct efi_map_header *)preload_search_info(kmdp,
 	    MODINFO_METADATA | MODINFOMD_EFI_MAP);
-	if (efihdr != NULL)
+	if (efihdr != NULL && 1 == 0)
 		add_efi_map_entries(efihdr, physmap, &physmap_idx);
 #ifdef FDT
 	else {
