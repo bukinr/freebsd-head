@@ -3184,6 +3184,7 @@ dev/ubsec/ubsec.c		optional ubsec
 #
 dev/usb/controller/at91dci.c		optional at91dci
 dev/usb/controller/at91dci_atmelarm.c	optional at91dci at91rm9200
+dev/usb/controller/msm_ehci.c		optional msm_ehci
 dev/usb/controller/musb_otg.c		optional musb
 dev/usb/controller/musb_otg_atmelarm.c	optional musb at91rm9200
 dev/usb/controller/dwc_otg.c		optional dwcotg
@@ -3196,7 +3197,6 @@ dev/usb/controller/uhci.c		optional uhci
 dev/usb/controller/uhci_pci.c		optional uhci pci
 dev/usb/controller/xhci.c		optional xhci
 dev/usb/controller/xhci_pci.c		optional xhci pci
-dev/usb/controller/apq8064_ehci.c	optional qcom_ehci
 dev/usb/controller/saf1761_otg.c	optional saf1761otg
 dev/usb/controller/saf1761_otg_fdt.c	optional saf1761otg fdt
 dev/usb/controller/uss820dci.c		optional uss820dci
