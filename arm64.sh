@@ -13,3 +13,6 @@ echo "boot"
 
 # dtc -o - -O dts -I dtb /tftpboot/dragonboard410c.dtb | less
 
+scp	\
+	/home/br/obj/usr/home/br/dev/freebsd-head/arm64.aarch64/sys/GENERIC/modules/usr/home/br/dev/freebsd-head/sys/modules/hwpmc/hwpmc.ko \
+	/home/br/obj/usr/home/br/dev/freebsd-head/arm64.aarch64/sys/GENERIC/kernel 10.5.0.45:~/
