@@ -89,6 +89,20 @@ etm_attach(device_t dev)
 
 	etm_sc = sc;
 
+#define	TRCARCHMAJ_S	8
+#define	TRCARCHMAJ_M	(0xf << TRCARCHMAJ_S)
+#define	TRCARCHMIN_S	4
+#define	TRCARCHMIN_M	(0xf << TRCARCHMIN_S)
+	uint32_t reg;
+
+	printf("Reading ETM version\n");
+	reg = bus_read_4(sc->res, TRCIDR1);
+	printf("Reading ETM version done\n");
+
+	printf("ETM Version: %d.%d\n",
+	    (reg & TRCARCHMAJ_M) >> TRCARCHMAJ_S,
+	    (reg & TRCARCHMIN_M) >> TRCARCHMIN_S);
+
 	return (0);
 }
 

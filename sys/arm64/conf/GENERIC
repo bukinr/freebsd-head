@@ -97,6 +97,8 @@ options 	MALLOC_DEBUG_MAXZONES=8	# Separate malloc(9) zones
 # CPU frequency control
 device		cpufreq
 
+device		etm
+
 # Ethernet NICs
 device		mdio
 device		mii
