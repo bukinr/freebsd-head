@@ -93,6 +93,8 @@ arm/qualcomm/qcom_smem.c	standard
 arm/qualcomm/qcom_smd.c		standard
 arm/qualcomm/qcom_rpm.c		standard
 arm/qualcomm/qcom_rpm_if.m	standard
+arm/qualcomm/qcom_rpmcc.c	standard
+arm/qualcomm/qcom_rpmcc_if.m	standard
 arm/arm/syscon.c		standard
 arm/arm/syscon_if.m		standard
 arm/mv/armada38x/armada38x_rtc.c		optional mv_rtc fdt
