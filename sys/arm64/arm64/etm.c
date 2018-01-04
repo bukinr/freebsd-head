@@ -121,6 +121,5 @@ static driver_t etm_driver = {
 
 static devclass_t etm_devclass;
 
-EARLY_DRIVER_MODULE(etm, simplebus, etm_driver, etm_devclass,
-    0, 0, BUS_PASS_BUS + BUS_PASS_ORDER_MIDDLE);
+DRIVER_MODULE(etm, simplebus, etm_driver, etm_devclass, 0, 0);
 MODULE_VERSION(etm, 1);
