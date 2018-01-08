@@ -95,8 +95,8 @@ arm/qualcomm/qcom_rpm.c		standard
 arm/qualcomm/qcom_rpm_if.m	standard
 arm/qualcomm/qcom_rpmcc.c	standard
 arm/qualcomm/qcom_rpmcc_if.m	standard
-arm/arm/syscon.c		standard
-arm/arm/syscon_if.m		standard
+#arm/arm/syscon.c		standard
+#arm/arm/syscon_if.m		standard
 arm/mv/armada38x/armada38x_rtc.c		optional mv_rtc fdt
 arm64/acpica/acpi_machdep.c	optional	acpi
 arm64/acpica/OsdEnvironment.c	optional	acpi
