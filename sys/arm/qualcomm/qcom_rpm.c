@@ -38,6 +38,9 @@ __FBSDID("$FreeBSD$");
 
 #include <machine/bus.h>
 
+#include <arm/qualcomm/qcom_rpm.h>
+#include <arm/qualcomm/qcom_smd.h>
+
 //#include <dev/fdt/fdt_regulator.h>
 #include <dev/fdt/simplebus.h>
 #include <dev/ofw/ofw_bus_subr.h>
@@ -80,7 +83,6 @@ MALLOC_DEFINE(M_RPM, "RPM", "RPM");
 #define RPM_ACK_DONE		(1U <<  0)
 #define RPM_ACK_NOTIFICATION	(1U << 30)
 #define RPM_ACK_REJECTED	(1U << 31)
-
 
 #define RPM_LOCK(_sc)			mtx_lock(&(_sc)->mtx)
 #define	RPM_UNLOCK(_sc)			mtx_unlock(&(_sc)->mtx)
@@ -129,6 +131,25 @@ struct rpm_softc {
 	device_t		syscon_dev;
 	uint32_t		pic_reg;
 	uint32_t		pic_mask;
+};
+
+struct qcom_rpm_header {
+	uint32_t service_type;
+	uint32_t length;
+};
+
+struct qcom_rpm_request {
+	uint32_t msg_id;
+	uint32_t flags;
+	uint32_t type;
+	uint32_t id;
+	uint32_t data_len;
+};
+
+struct smd_packet {
+	struct qcom_rpm_header hdr;
+	struct qcom_rpm_request req;
+	uint8_t payload[];
 };
 
 /*					req, status, select, req size */
@@ -298,7 +319,7 @@ err_intr(void *arg)
 
 	sc = arg;
 
-	SYSCON_WRITE_4(sc->syscon_dev, sc->dev, sc->pic_reg, sc->pic_mask);
+	//SYSCON_WRITE_4(sc->syscon_dev, sc->dev, sc->pic_reg, sc->pic_mask);
 	device_printf(sc->dev, "RPM got fatal interrupt.\n");
 	return (FILTER_HANDLED);
 }
@@ -349,7 +370,7 @@ rpm_write_cmd(device_t dev, device_t consumer, int ctx, int res_id,
 	WR4(sc, CTRL_BASE, RPM_CTRL_REQ_CONTEXT, 1 << ctx);
 	RD4(sc, CTRL_BASE, RPM_CTRL_REQ_CONTEXT);
 
-	SYSCON_WRITE_4(sc->syscon_dev, sc->dev, sc->pic_reg, sc->pic_mask);
+	//SYSCON_WRITE_4(sc->syscon_dev, sc->dev, sc->pic_reg, sc->pic_mask);
 
 //printf("%s: WFI\n", __func__);
 	if (cold) {
@@ -439,6 +460,32 @@ rpm_parse_syscon(struct rpm_softc *sc)
 	return 0;
 }
 
+void
+qcom_rpm_smd_write(int state, uint32_t type, uint32_t id, void *buf, size_t count)
+{
+	struct smd_packet *pkt;
+	size_t size;
+
+	printf("%s\n", __func__);
+
+	pkt = (struct smd_packet *)malloc(PAGE_SIZE, M_DEVBUF, M_WAITOK | M_ZERO);
+
+	pkt->hdr.service_type = RPM_SERVICE_TYPE_REQUEST;
+	pkt->hdr.length = sizeof(struct qcom_rpm_request) + count;
+
+	pkt->req.msg_id = 1;
+	pkt->req.flags = state;
+	pkt->req.type = type;
+	pkt->req.id = id;
+	pkt->req.data_len = count;
+	memcpy(pkt->payload, buf, count);
+
+	size = sizeof(*pkt) + count;
+
+	//ret = rpmsg_send(pkt, size);
+	qcom_smd_send(pkt, size);
+}
+
 static int
 rpm_probe(device_t dev)
 {
@@ -452,14 +499,6 @@ rpm_probe(device_t dev)
 	device_set_desc(dev, "Qualcomm RPM");
 
 	return (BUS_PROBE_DEFAULT);
-}
-
-static int
-rpm_detach(device_t dev)
-{
-
-	/* This device is always present. */
-	return (EBUSY);
 }
 
 static int
@@ -598,7 +637,6 @@ static device_method_t qcom_rpm_methods[] = {
 	/* Device interface */
 	DEVMETHOD(device_probe,		rpm_probe),
 	DEVMETHOD(device_attach,	rpm_attach),
-	DEVMETHOD(device_detach,	rpm_detach),
 
 	/* RPM interface */
 	DEVMETHOD(qcom_rpm_write_cmd,	rpm_write_cmd),

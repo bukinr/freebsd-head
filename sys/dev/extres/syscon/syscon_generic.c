@@ -112,6 +112,7 @@ syscon_generic_write_4(struct syscon *syscon, bus_size_t offset, uint32_t val)
 	sc = device_get_softc(syscon->pdev);
 
 	SYSCON_LOCK(sc);
+	printf("bus write %lx %lx %x\n", rman_get_start(sc->mem_res), offset, val);
 	bus_write_4(sc->mem_res, offset, val);
 	SYSCON_UNLOCK(sc);
 	return (0);
@@ -212,5 +213,5 @@ static devclass_t syscon_generic_devclass;
  * implementations.
  */
 EARLY_DRIVER_MODULE(syscon_generic, simplebus, syscon_generic_driver,
-    syscon_generic_devclass, 0, 0, BUS_PASS_DEFAULT - 1000);
+    syscon_generic_devclass, 0, 0, BUS_PASS_INTERRUPT + BUS_PASS_ORDER_FIRST);
 MODULE_VERSION(syscon_generic, 1);

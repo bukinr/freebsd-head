@@ -45,7 +45,7 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
 
-//#include <arm/qualcomm/qcom_smem.h>
+#include <arm/qualcomm/qcom_smem.h>
 extern struct bus_space memmap_bus;
 
 static struct ofw_compat_data compat_data[] = {
@@ -55,6 +55,7 @@ static struct ofw_compat_data compat_data[] = {
 
 struct qcom_smem_softc {
 	struct resource		*res;
+	bus_addr_t		smem;
 };
 struct qcom_smem_softc *qcom_smem_sc;
 
@@ -95,6 +96,53 @@ struct smem_header {
 	struct smem_global_entry toc[SMEM_ITEM_COUNT];
 };
 
+struct smem_region {
+	uint32_t aux_base;
+	void *virt_base;
+	size_t size;
+};
+
+
+void *
+qcom_smem_get(uint32_t host, uint32_t item, size_t *size)
+{
+	struct qcom_smem_softc *sc;
+	struct smem_header *hdr;
+	struct smem_global_entry *entry;
+	//struct smem_region *area;
+	//uint32_t aux_base;
+	//int i;
+
+	sc = qcom_smem_sc;
+
+	hdr = (struct smem_header *)sc->smem;
+	entry = &hdr->toc[item];
+
+	//aux_base = entry->aux_base & AUX_BASE_MASK;
+
+	if (host == QCOM_SMEM_HOST_ANY) {
+		if (!entry->allocated)	
+			return (NULL);
+
+		if (size != NULL)
+			*size = entry->size;
+
+		return ((void *)((uint64_t)sc->smem + entry->offset));
+#if 0
+		for (i = 0; i < smem->num_regions; i++) {
+			area = &smem->regions[i];
+			if (area->aux_base == aux_base || !aux_base) {
+				if (size != NULL)
+					*size = entry->size;
+				return (area->virt_base + entry->offset);
+			}
+		}
+#endif
+	}
+		
+	return (NULL);
+}
+
 static int
 qcom_smem_probe(device_t dev)
 {
@@ -116,9 +164,7 @@ qcom_smem_attach(device_t dev)
 
 	sc = device_get_softc(dev);
 
-#if 0
 	qcom_smem_sc = sc;
-#endif
 
 	phandle_t node;
 	phandle_t mem;
@@ -137,19 +183,21 @@ qcom_smem_attach(device_t dev)
 
 	printf("attached, base %lx size %lx\n", base, size);
 
-	bus_addr_t chipid;
+	bus_addr_t smem;
 	//uint32_t reg;
 	if (bus_space_map(&memmap_bus, base,
-	    size, 0, &chipid) != 0)
-		panic("Couldn't map chipid\n");
-	printf("chipid %lx\n", chipid);
+	    size, 0, &smem) != 0)
+		panic("Couldn't map smem\n");
+	printf("smem %lx\n", smem);
+
+	sc->smem = smem;
 
 	struct smem_header *hdr;
 	uint32_t *versions;
 	uint32_t item;
 	uint32_t sbl_version;
 
-	hdr = (struct smem_header *)chipid;
+	hdr = (struct smem_header *)smem;
 	versions = hdr->version;
 	sbl_version = versions[SMEM_MASTER_SBL_VERSION_INDEX];
 	printf("sbl_version %d\n", sbl_version);
@@ -173,8 +221,8 @@ qcom_smem_attach(device_t dev)
 	printf("entry->offset %x\n", entry->offset);
 	printf("entry->size %d\n", entry->size);
 
-	//reg = bus_space_read_4(&memmap_bus, chipid, 0x0);
-	//bus_space_unmap(&memmap_bus, chipid, size);
+	//reg = bus_space_read_4(&memmap_bus, smem, 0x0);
+	//bus_space_unmap(&memmap_bus, smem, size);
 	//printf("reg %x\n", reg);
 
 	return (0);

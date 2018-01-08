@@ -47,6 +47,8 @@ __FBSDID("$FreeBSD$");
 #include "syscon_if.h"
 #include "qcom_rpmcc_if.h"
 
+#include <arm/qualcomm/qcom_rpm.h>
+#include <arm/qualcomm/qcom_smd.h>
 
 #define RPM_REQUEST_TIMEOUT	(5 * hz)
 
@@ -128,6 +130,12 @@ struct rpmcc_softc {
 	device_t		syscon_dev;
 	uint32_t		pic_reg;
 	uint32_t		pic_mask;
+};
+
+struct clk_smd_rpm_req {
+	uint32_t key;
+	uint32_t nbytes; 
+	uint32_t value;
 };
 
 /*					req, status, select, req size */
@@ -281,7 +289,7 @@ err_intr(void *arg)
 
 	sc = arg;
 
-	SYSCON_WRITE_4(sc->syscon_dev, sc->dev, sc->pic_reg, sc->pic_mask);
+	//SYSCON_WRITE_4(sc->syscon_dev, sc->pic_reg, sc->pic_mask);
 	device_printf(sc->dev, "RPM got fatal interrupt.\n");
 	return (FILTER_HANDLED);
 }
@@ -332,7 +340,7 @@ rpmcc_write_cmd(device_t dev, device_t consumer, int ctx, int res_id,
 	WR4(sc, CTRL_BASE, RPM_CTRL_REQ_CONTEXT, 1 << ctx);
 	RD4(sc, CTRL_BASE, RPM_CTRL_REQ_CONTEXT);
 
-	SYSCON_WRITE_4(sc->syscon_dev, sc->dev, sc->pic_reg, sc->pic_mask);
+	//SYSCON_WRITE_4(sc->syscon_dev, sc->pic_reg, sc->pic_mask);
 
 //printf("%s: WFI\n", __func__);
 	if (cold) {
@@ -535,6 +543,17 @@ rpmcc_attach(device_t dev)
 	}
 #endif
 	};
+
+	printf("%s\n", __func__);
+
+	struct clk_smd_rpm_req req = {
+		.key = QCOM_RPM_SMD_KEY_ENABLE,
+		.nbytes = sizeof(uint32_t),
+		.value = 1,
+	};
+
+	qcom_rpm_smd_write(QCOM_SMD_RPM_ACTIVE_STATE, 
+	    QCOM_SMD_RPM_CLK_BUF_A, 1, &req, sizeof(req));
 
 	return (0);
 fail:
