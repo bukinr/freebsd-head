@@ -128,6 +128,21 @@ struct smd_channel_info_word_pair {
 struct qcom_smd_channel {
 	char *name;
 	struct smd_channel_info_word_pair *info_word;
+	size_t fifo_size;
+	void *tx_fifo;
+};
+
+/*
+ * SMD channel states.
+ */
+enum smd_channel_state {
+	SMD_CHANNEL_CLOSED,
+	SMD_CHANNEL_OPENING,
+	SMD_CHANNEL_OPENED,
+	SMD_CHANNEL_FLUSHING,
+	SMD_CHANNEL_CLOSING,
+	SMD_CHANNEL_RESET,
+	SMD_CHANNEL_RESET_OPENING
 };
 
 struct qcom_smd_edge {
@@ -186,12 +201,78 @@ smd_intr(void *arg)
 
 static int
 qcom_smd_write_fifo(struct qcom_smd_channel *channel,
-    const void *data, size_t count)
+    void *data, size_t count)
 {
+	uint32_t head;
+	uint32_t *dst;
+	uint32_t *src;
+	int i;
 
 	printf("%s: len %ld\n", __func__, count);
 
+	head = channel->info_word->tx.head;
+
+	dst = (uint32_t *)((uint64_t)channel->tx_fifo + head);
+	src = (uint32_t *)data;
+
+	printf("%s: tx_fifo %lx data %lx\n", __func__, (uint64_t)dst, (uint64_t)src);
+
+	for (i = 0; i < count/4; i++) {
+		*dst++ = *src++;
+	}
+	//bcopy(data, (void *)(dst + head), count);
+	//memcpy((void *)(dst + head), data, count);
+
+	printf("write succeeded\n");
+
+	head += count;
+	head &= (channel->fifo_size - 1);
+	channel->info_word->tx.head = head;
+
 	return (0);
+}
+
+static void
+qcom_smd_channel_reset(struct qcom_smd_softc *sc,
+    struct qcom_smd_channel *channel)
+{
+
+	channel->info_word->tx.state = SMD_CHANNEL_CLOSED;
+	channel->info_word->tx.fDSR = 0;
+	channel->info_word->tx.fCTS = 0;
+	channel->info_word->tx.fCD = 0;
+	channel->info_word->tx.fRI = 0;
+	channel->info_word->tx.fHEAD = 0;
+	channel->info_word->tx.fTAIL = 0;
+	channel->info_word->tx.fSTATE = 1;
+	channel->info_word->tx.fBLOCKREADINTR = 1;
+	channel->info_word->tx.head = 0;
+	channel->info_word->rx.tail = 0;
+
+	SYSCON_WRITE_4(sc->syscon, 0x8, 1);
+}
+
+static void
+qcom_smd_channel_set_state(struct qcom_smd_softc *sc,
+    struct qcom_smd_channel *channel, int state)
+{
+	bool is_open;
+
+	if (state == SMD_CHANNEL_OPENED)
+		is_open = 1;
+	else
+		is_open = 0;
+
+	channel->info_word->tx.fDSR = is_open;
+	channel->info_word->tx.fCTS = is_open;
+	channel->info_word->tx.fCD = is_open;
+
+	channel->info_word->tx.state = state;
+	channel->info_word->tx.fSTATE = 1;
+
+	wmb();
+
+	SYSCON_WRITE_4(sc->syscon, 0x8, 1);
 }
 
 static void
@@ -242,16 +323,25 @@ qcom_scan_channels(struct qcom_smd_softc *sc, void *data, size_t len)
 			info_id = smem_items[tbl].info_base_id + cid;
 			fifo_id = smem_items[tbl].fifo_base_id + cid;
 
-			size_t sz;
-			qcom_smem_get(edge.remote_pid, fifo_id, &sz);
-			printf("fifo size %ld\n", sz);
+			qcom_smem_get(edge.remote_pid, fifo_id, &channel.fifo_size);
+			printf("fifo size %ld\n", channel.fifo_size);
 
 			info = qcom_smem_get(edge.remote_pid, info_id, NULL);
 			channel.info_word = info;
 
+			void *fifo_base;
+			fifo_base = qcom_smem_get(edge.remote_pid, fifo_id, NULL);
+			channel.tx_fifo = fifo_base;
+
+			qcom_smd_channel_reset(sc, &channel);
+			DELAY(10000);
+			qcom_smd_channel_set_state(sc, &channel, SMD_CHANNEL_OPENING);
+			DELAY(10000);
+			qcom_smd_channel_set_state(sc, &channel, SMD_CHANNEL_OPENED);
+			DELAY(10000);
+
 			printf("Dump TX, channel %d\n", i);
 			qcom_smd_channel_dump_info(&channel.info_word->tx);
-
 			printf("Dump RX, channel %d\n", i);
 			qcom_smd_channel_dump_info(&channel.info_word->rx);
 
@@ -259,6 +349,12 @@ qcom_scan_channels(struct qcom_smd_softc *sc, void *data, size_t len)
 			int tlen;
 			tlen = sizeof(hdr) + len;
 			qcom_smd_write_fifo(&channel, hdr, sizeof(hdr));
+
+			printf("Dump TX, channel %d\n", i);
+			qcom_smd_channel_dump_info(&channel.info_word->tx);
+			printf("Dump RX, channel %d\n", i);
+			qcom_smd_channel_dump_info(&channel.info_word->rx);
+
 			qcom_smd_write_fifo(&channel, data, len);
 			channel.info_word->tx.fHEAD = 1;
 			wmb();

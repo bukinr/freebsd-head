@@ -130,6 +130,8 @@ struct rpmcc_softc {
 	device_t		syscon_dev;
 	uint32_t		pic_reg;
 	uint32_t		pic_mask;
+
+	struct intr_config_hook config_intrhook;
 };
 
 struct clk_smd_rpm_req {
@@ -430,6 +432,29 @@ rpmcc_parse_syscon(struct rpmcc_softc *sc)
 	return 0;
 }
 
+static void
+qcom_rpmcc_delayed_attach(void *arg)
+{  
+	struct rpmcc_softc *sc;
+
+	sc = arg;
+ 
+	printf("%s\n", __func__);
+
+	struct clk_smd_rpm_req req = {
+		.key = QCOM_RPM_SMD_KEY_ENABLE,
+		.nbytes = sizeof(uint32_t),
+		.value = 1,
+	};
+
+	qcom_rpm_smd_write(QCOM_SMD_RPM_ACTIVE_STATE, 
+	    QCOM_SMD_RPM_CLK_BUF_A, 1, &req, sizeof(req));
+	qcom_rpm_smd_write(QCOM_SMD_RPM_ACTIVE_STATE, 
+	    QCOM_SMD_RPM_CLK_BUF_A, 2, &req, sizeof(req));
+
+	config_intrhook_disestablish(&sc->config_intrhook);
+}
+
 static int
 rpmcc_probe(device_t dev)
 {
@@ -546,14 +571,11 @@ rpmcc_attach(device_t dev)
 
 	printf("%s\n", __func__);
 
-	struct clk_smd_rpm_req req = {
-		.key = QCOM_RPM_SMD_KEY_ENABLE,
-		.nbytes = sizeof(uint32_t),
-		.value = 1,
-	};
-
-	qcom_rpm_smd_write(QCOM_SMD_RPM_ACTIVE_STATE, 
-	    QCOM_SMD_RPM_CLK_BUF_A, 1, &req, sizeof(req));
+	/* We'll run test later, but before / mount. */
+	sc->config_intrhook.ich_func = qcom_rpmcc_delayed_attach;
+	sc->config_intrhook.ich_arg = sc;
+	if (config_intrhook_establish(&sc->config_intrhook) != 0)
+		device_printf(dev, "config_intrhook_establish failed\n");
 
 	return (0);
 fail:

@@ -95,6 +95,8 @@ etm_attach(device_t dev)
 #define	TRCARCHMIN_M	(0xf << TRCARCHMIN_S)
 	uint32_t reg;
 
+	return (0);
+
 	printf("Reading ETM version\n");
 	reg = bus_read_4(sc->res, TRCIDR1);
 	printf("Reading ETM version done\n");
