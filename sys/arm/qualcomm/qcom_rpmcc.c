@@ -47,6 +47,8 @@ __FBSDID("$FreeBSD$");
 #include "syscon_if.h"
 #include "qcom_rpmcc_if.h"
 
+#include <arm64/arm64/etm.h>
+
 #include <arm/qualcomm/qcom_rpm.h>
 #include <arm/qualcomm/qcom_smd.h>
 
@@ -441,6 +443,9 @@ qcom_rpmcc_delayed_attach(void *arg)
  
 	printf("%s\n", __func__);
 
+	qcom_smd_channel_open();
+
+#if 0
 	struct clk_smd_rpm_req req = {
 		.key = QCOM_RPM_SMD_KEY_ENABLE,
 		.nbytes = sizeof(uint32_t),
@@ -449,8 +454,20 @@ qcom_rpmcc_delayed_attach(void *arg)
 
 	qcom_rpm_smd_write(QCOM_SMD_RPM_ACTIVE_STATE, 
 	    QCOM_SMD_RPM_CLK_BUF_A, 1, &req, sizeof(req));
+	//qcom_rpm_smd_write(QCOM_SMD_RPM_ACTIVE_STATE, 
+	//    QCOM_SMD_RPM_CLK_BUF_A, 2, &req, sizeof(req));
+#endif
+
+	//qdss
+	struct clk_smd_rpm_req req2 = {
+		.key = QCOM_RPM_SMD_KEY_STATE,
+		.nbytes = sizeof(uint32_t),
+		.value = ((int)(~0U>>1)),
+	};
 	qcom_rpm_smd_write(QCOM_SMD_RPM_ACTIVE_STATE, 
-	    QCOM_SMD_RPM_CLK_BUF_A, 2, &req, sizeof(req));
+	    QCOM_SMD_RPM_MISC_CLK, 1, &req2, sizeof(req2));
+
+	etm_print_version();
 
 	config_intrhook_disestablish(&sc->config_intrhook);
 }

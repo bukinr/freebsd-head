@@ -1,4 +1,5 @@
 void qcom_smd_send(void *data, size_t len);
+void qcom_smd_channel_open(void);
 
 #define QCOM_SMD_RPM_ACTIVE_STATE        0
 #define QCOM_SMD_RPM_SLEEP_STATE         1

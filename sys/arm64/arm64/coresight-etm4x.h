@@ -107,3 +107,5 @@
 #define	TRCPIDR(n)	(0xFE0 + (n) * 0x4)	/* Management Peripheral IDn Register [n=0-3] */
 #define	TRCPIDR567(n)	(0xFD4 + ((n) - 5) * 0x4) /*  Management Peripheral ID5 to Peripheral ID7 Registers */
 #define	TRCCIDR(n)	(0xFF0 + (n) * 0x4)	/* Management Component IDn Register [n=0-4] */
+
+void etm_print_version(void);

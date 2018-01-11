@@ -91,6 +91,18 @@ qcom_gcc_attach(device_t dev)
 
 #define	GCC_PCNOC_RPM_AHB_CBCR	0x027024
 
+#define	GCC_QDSS_BCR		0x29000
+#define	GCC_QDSS_CFG_AHB_CBCR	0x29008
+#define	GCC_QDSS_DAP_CBCR	0x29084
+
+	bus_write_4(sc->res, GCC_QDSS_BCR, 1);
+	DELAY(100000);
+	bus_write_4(sc->res, GCC_QDSS_CFG_AHB_CBCR, 1);
+	DELAY(100000);
+	bus_write_4(sc->res, GCC_QDSS_DAP_CBCR, 1);
+	DELAY(100000);
+	bus_write_4(sc->res, GCC_QDSS_BCR, 0);
+
 	printf("GCC_PCNOC_RPM_AHB_CBCR %x\n", bus_read_4(sc->res, GCC_PCNOC_RPM_AHB_CBCR));
 	return (0);
 

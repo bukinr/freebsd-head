@@ -121,8 +121,10 @@ qcom_smem_get(uint32_t host, uint32_t item, size_t *size)
 	//aux_base = entry->aux_base & AUX_BASE_MASK;
 
 	if (host == QCOM_SMEM_HOST_ANY) {
-		if (!entry->allocated)	
+		if (!entry->allocated) {
+			panic("here\n");
 			return (NULL);
+		}
 
 		if (size != NULL)
 			*size = entry->size;
@@ -139,7 +141,8 @@ qcom_smem_get(uint32_t host, uint32_t item, size_t *size)
 		}
 #endif
 	}
-		
+	panic("not here\n");
+	
 	return (NULL);
 }
 
@@ -188,13 +191,12 @@ qcom_smem_attach(device_t dev)
 	if (bus_space_map(&memmap_bus, base,
 	    size, 0, &smem) != 0)
 		panic("Couldn't map smem\n");
-	printf("smem %lx\n", smem);
+	printf("smem %lx size %lx\n", smem, size);
 
 	sc->smem = smem;
 
 	struct smem_header *hdr;
 	uint32_t *versions;
-	uint32_t item;
 	uint32_t sbl_version;
 
 	hdr = (struct smem_header *)smem;
@@ -206,6 +208,8 @@ qcom_smem_attach(device_t dev)
 	if ((sbl_version >> 16) == SMEM_GLOBAL_HEAP_VERSION)
 		printf("HEAP\n");
 
+#if 0
+	uint32_t item;
 	item = 13; /* SMEM_CHANNEL_ALLOC_TBL */
 	item = 14; /* SMEM_SMD_BASE_ID info_base_id */
 	item = 138; /* SMEM_SMD_BASE_ID info_base_id */
@@ -224,6 +228,7 @@ qcom_smem_attach(device_t dev)
 	//reg = bus_space_read_4(&memmap_bus, smem, 0x0);
 	//bus_space_unmap(&memmap_bus, smem, size);
 	//printf("reg %x\n", reg);
+#endif
 
 	return (0);
 }

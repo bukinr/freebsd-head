@@ -43,7 +43,15 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
 
-#include "etm.h"
+#include <arm64/arm64/coresight-etm4x.h>
+
+#define CORESIGHT_LAR           0xfb0
+#define CORESIGHT_LSR           0xfb4
+#define CORESIGHT_AUTHSTATUS    0xfb8
+#define CORESIGHT_DEVID         0xfc8
+#define CORESIGHT_DEVTYPE       0xfcc
+   
+#define CORESIGHT_UNLOCK        0xc5acce55
 
 static struct ofw_compat_data compat_data[] = {
 	{ "arm,coresight-etm4x",		1 },
@@ -75,6 +83,35 @@ etm_probe(device_t dev)
 	return (BUS_PROBE_DEFAULT);
 }
 
+void
+etm_print_version(void)
+{
+	struct etm_softc *sc;
+	uint32_t reg;
+
+	sc = etm_sc;
+
+#define	TRCARCHMAJ_S	8
+#define	TRCARCHMAJ_M	(0xf << TRCARCHMAJ_S)
+#define	TRCARCHMIN_S	4
+#define	TRCARCHMIN_M	(0xf << TRCARCHMIN_S)
+
+	/* Unlocking Coresight */
+	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
+
+	isb();
+
+	/* Unlocking ETM */
+	bus_write_4(sc->res, TRCOSLAR, 0);
+
+	isb();
+
+	reg = bus_read_4(sc->res, TRCIDR1);
+	printf("ETM Version: %d.%d\n",
+	    (reg & TRCARCHMAJ_M) >> TRCARCHMAJ_S,
+	    (reg & TRCARCHMIN_M) >> TRCARCHMIN_S);
+}
+
 static int
 etm_attach(device_t dev)
 {
@@ -87,23 +124,12 @@ etm_attach(device_t dev)
 		return (ENXIO);
 	}
 
+	if (etm_sc != NULL)
+		return (0);
+
 	etm_sc = sc;
 
-#define	TRCARCHMAJ_S	8
-#define	TRCARCHMAJ_M	(0xf << TRCARCHMAJ_S)
-#define	TRCARCHMIN_S	4
-#define	TRCARCHMIN_M	(0xf << TRCARCHMIN_S)
-	uint32_t reg;
-
-	return (0);
-
-	printf("Reading ETM version\n");
-	reg = bus_read_4(sc->res, TRCIDR1);
-	printf("Reading ETM version done\n");
-
-	printf("ETM Version: %d.%d\n",
-	    (reg & TRCARCHMAJ_M) >> TRCARCHMAJ_S,
-	    (reg & TRCARCHMIN_M) >> TRCARCHMIN_S);
+	etm_print_version();
 
 	return (0);
 }
