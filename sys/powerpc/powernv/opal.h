@@ -1,10 +1,5 @@
 /*-
- * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
- *
- * Copyright (c) 2001 Brian Somers <brian@Awfulhak.org>
- *   based on work by Slawa Olhovchenkov
- *                    John Prince <johnp@knight-trosoft.com>
- *                    Eric Hernes
+ * Copyright (c) 2015 Nathan Whitehorn
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,38 +26,25 @@
  * $FreeBSD$
  */
 
-/*
- * A very small subset of cards.
- */
-enum digi_model {
-	PCXE,
-	PCXEVE,
-	PCXI,
-	PCXEM,
-	PCCX,
-	PCIEPCX,
-	PCIXR
-};
+#ifndef _POWERNV_OPAL_H
+#define _POWERNV_OPAL_H
 
-enum {
-	DIGIDB_INIT = (1<<0),
-	DIGIDB_OPEN = (1<<1),
-	DIGIDB_CLOSE = (1<<2),
-	DIGIDB_SET = (1<<3),
-	DIGIDB_INT = (1<<4),
-	DIGIDB_READ = (1<<5),
-	DIGIDB_WRITE = (1<<6),
-	DIGIDB_RX = (1<<7),
-	DIGIDB_TX = (1<<8),
-	DIGIDB_IRQ = (1<<9),
-	DIGIDB_MODEM = (1<<10),
-	DIGIDB_RI = (1<<11),
-};
+#include <sys/cdefs.h>
+#include <sys/types.h>
 
-#define	DIGIIO_REINIT		_IO('e', 'A')
-#define	DIGIIO_DEBUG		_IOW('e', 'B', int)
-#define	DIGIIO_RING		_IOWINT('e', 'C')
-#define	DIGIIO_MODEL		_IOR('e', 'D', enum digi_model)
-#define	DIGIIO_IDENT		_IOW('e', 'E', char *)
-#define	DIGIIO_SETALTPIN	_IOW('e', 'F', int)
-#define	DIGIIO_GETALTPIN	_IOR('e', 'G', int)
+/* Check if OPAL is correctly instantiated. Will try to instantiate it. */
+int opal_check(void);
+
+/* Call an OPAL method. Any pointers passed must be real-mode accessible! */
+int opal_call(uint64_t token, ...);
+
+#define OPAL_CONSOLE_WRITE	1
+#define OPAL_CONSOLE_READ	2
+#define	OPAL_CEC_POWER_DOWN	5
+#define	OPAL_CEC_REBOOT		6
+#define OPAL_START_CPU		41
+
+#define OPAL_SUCCESS		0
+#define	OPAL_BUSY_EVENT		-12
+
+#endif
