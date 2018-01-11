@@ -116,6 +116,7 @@ static int
 etm_attach(device_t dev)
 {
 	struct etm_softc *sc;
+	uint32_t reg;
 
 	sc = device_get_softc(dev);
 
@@ -130,6 +131,14 @@ etm_attach(device_t dev)
 	etm_sc = sc;
 
 	etm_print_version();
+
+	/* Disable the trace unit */
+	bus_write_4(sc->res, TRCPRGCTLR, 0);
+
+	/* Wait for an IDLE bit */
+	do {
+		reg = bus_read_4(sc->res, TRCSTATR);
+	} while ((reg & TRCSTATR_IDLE) == 0);
 
 	return (0);
 }
