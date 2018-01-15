@@ -12,6 +12,7 @@ make -j8 KERN${A}=PT buildkernel || exit 1
 
 VARS=`make buildenvvars`
 eval $VARS make -C lib/libipt || exit 1
+eval $VARS make -C lib/libpmcstat || exit 1
 eval $VARS make -C lib/libpmc || exit 1
 
 #cp /home/br/obj/usr/home/br/dev/freebsd-head/lib/libpmc/libpmc.so.5 /home/br/obj/usr/home/br/dev/freebsd-head/lib32/usr/lib32/libpmc.so.5
@@ -24,6 +25,8 @@ eval $VARS make -C usr.sbin/pmctrace clean all || exit 1
 #eval $VARS make -C usr.sbin/mtrace clean all || exit 1
 
 # /home/br/obj/usr/home/br/dev/freebsd-head/usr.sbin/mtrace/mtrace
+
+ssh 10.5.0.86 sudo killall pmcstat
 
 scp \
  /home/br/obj/usr/home/br/dev/freebsd-head/amd64.amd64/usr.sbin/pmcstat/pmcstat \
