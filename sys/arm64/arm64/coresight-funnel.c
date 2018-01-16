@@ -40,7 +40,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/module.h>
 #include <machine/bus.h>
 
-//#include <arm64/arm64/coresight-funnel.h>
+#include <arm64/arm64/coresight-funnel.h>
 
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
