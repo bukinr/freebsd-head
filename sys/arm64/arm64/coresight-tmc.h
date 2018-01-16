@@ -14,6 +14,9 @@
 #define	 CTL_TRACECAPTEN	(1 << 0)	/* Controls trace capture. */
 #define	TMC_RWD		0x024 /* RAM Write Data Register */
 #define	TMC_MODE	0x028 /* Mode Register */
+#define	 MODE_HW_FIFO		2
+#define	 MODE_SW_FIFO		1
+#define	 MODE_CIRCULAR_BUFFER	0
 #define	TMC_LBUFLEVEL	0x02C /* Latched Buffer Fill Level */
 #define	TMC_CBUFLEVEL	0x030 /* Current Buffer Fill Level */
 #define	TMC_BUFWM	0x034 /* Buffer Level Water Mark */

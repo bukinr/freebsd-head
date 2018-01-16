@@ -108,14 +108,13 @@ tmc_attach(device_t dev)
 
 	/* Unlock Coresight */
 	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
-	printf("unlock CS done\n");
-
 	wmb();
 
 	/* Unlock TMC */
 	bus_write_4(sc->res, TMC_LAR, 0);
-
 	wmb();
+
+	bus_write_4(sc->res, TMC_MODE, MODE_CIRCULAR_BUFFER);
 
 	bus_write_4(sc->res, TMC_CTL, CTL_TRACECAPTEN);
 
