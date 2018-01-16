@@ -91,7 +91,6 @@ static int
 tmc_attach(device_t dev)
 {
 	struct tmc_softc *sc;
-	//uint32_t reg;
 
 	sc = device_get_softc(dev);
 
@@ -106,17 +105,22 @@ tmc_attach(device_t dev)
 	tmc_sc = sc;
 
 	printf("%s: active TMC\n", __func__);
-#if 0
+
+
+	printf("unlock CS\n");
 	/* Unlock Coresight */
 	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
+	printf("unlock CS done\n");
 
 	wmb();
 
-	/* Unlock Debug */
-	bus_write_4(sc->res, EDOSLAR, 0);
+
+	/* Unlock TMC */
+	bus_write_4(sc->res, TMC_LAR, 0);
 
 	wmb();
 
+#if 0
 	/* Enable power */
 	reg = bus_read_4(sc->res, EDPRCR);
 	reg |= EDPRCR_COREPURQ;
@@ -126,6 +130,16 @@ tmc_attach(device_t dev)
 		reg = bus_read_4(sc->res, EDPRSR);
 	} while ((reg & EDPRCR_CORENPDRQ) == 0);
 #endif
+
+	bus_write_4(sc->res, TMC_CTL, CTL_TRACECAPTEN);
+	printf("%s: active TMC done\n", __func__);
+
+	uint32_t reg;
+	do {
+		printf("Reading STS\n");
+		reg = bus_read_4(sc->res, TMC_STS);
+		printf("Reading STS done\n");
+	} while ((reg & STS_TMCREADY) == 0);
 
 	return (0);
 }

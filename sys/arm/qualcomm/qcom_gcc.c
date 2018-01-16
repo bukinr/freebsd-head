@@ -94,12 +94,15 @@ qcom_gcc_attach(device_t dev)
 #define	GCC_QDSS_BCR		0x29000
 #define	GCC_QDSS_CFG_AHB_CBCR	0x29008
 #define	GCC_QDSS_DAP_CBCR	0x29084
+#define	GCC_QDSS_ETR_USB_CBCR	0x29028
 
 	bus_write_4(sc->res, GCC_QDSS_BCR, 1);
 	DELAY(100000);
 	bus_write_4(sc->res, GCC_QDSS_CFG_AHB_CBCR, 1);
 	DELAY(100000);
 	bus_write_4(sc->res, GCC_QDSS_DAP_CBCR, 1);
+	DELAY(100000);
+	bus_write_4(sc->res, GCC_QDSS_ETR_USB_CBCR, 1);
 	DELAY(100000);
 	bus_write_4(sc->res, GCC_QDSS_BCR, 0);
 

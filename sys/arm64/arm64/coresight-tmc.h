@@ -1,10 +1,17 @@
 #define	TMC_RSZ		0x004 /* RAM Size Register */
 #define	TMC_STS		0x00C /* Status Register */
+#define	 STS_MEMERR	(1 << 5)
+#define	 STS_EMPTY	(1 << 4)
+#define	 STS_FTEMPTY	(1 << 3)
+#define	 STS_TMCREADY	(1 << 2)
+#define	 STS_TRIGGERED	(1 << 1)
+#define	 STS_FULL	(1 << 0)
 #define	TMC_RRD		0x010 /* RAM Read Data Register */
 #define	TMC_RRP		0x014 /* RAM Read Pointer Register */
 #define	TMC_RWP		0x018 /* RAM Write Pointer Register */
 #define	TMC_TRG		0x01C /* Trigger Counter Register */
 #define	TMC_CTL		0x020 /* Control Register */
+#define	 CTL_TRACECAPTEN	(1 << 0)	/* Controls trace capture. */
 #define	TMC_RWD		0x024 /* RAM Write Data Register */
 #define	TMC_MODE	0x028 /* Mode Register */
 #define	TMC_LBUFLEVEL	0x02C /* Latched Buffer Fill Level */

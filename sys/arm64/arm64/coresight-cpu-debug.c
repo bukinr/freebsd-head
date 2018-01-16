@@ -154,5 +154,6 @@ static driver_t debug_driver = {
 
 static devclass_t debug_devclass;
 
-DRIVER_MODULE(debug, simplebus, debug_driver, debug_devclass, 0, 0);
+EARLY_DRIVER_MODULE(debug, simplebus, debug_driver, debug_devclass,
+    0, 0, BUS_PASS_BUS + BUS_PASS_ORDER_LATE);
 MODULE_VERSION(debug, 1);
