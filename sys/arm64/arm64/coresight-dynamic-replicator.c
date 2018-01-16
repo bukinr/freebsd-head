@@ -42,6 +42,9 @@ __FBSDID("$FreeBSD$");
 
 //#include <arm64/arm64/coresight-replicator.h>
 
+#define	REPLICATOR_IDFILTER0	0x00
+#define	REPLICATOR_IDFILTER1	0x04
+
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
 

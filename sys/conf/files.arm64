@@ -106,11 +106,11 @@ arm64/arm64/bzero.S		standard
 arm64/arm64/clock.c		standard
 arm64/arm64/copyinout.S		standard
 arm64/arm64/copystr.c		standard
-arm64/arm64/coresight-cpu-debug.c	standard
-arm64/arm64/coresight-etm4x.c		standard
-arm64/arm64/coresight-funnel.c		standard
-arm64/arm64/coresight-replicator.c	standard
-arm64/arm64/coresight-tmc.c		standard
+arm64/arm64/coresight-cpu-debug.c		standard
+arm64/arm64/coresight-etm4x.c			standard
+arm64/arm64/coresight-funnel.c			standard
+arm64/arm64/coresight-dynamic-replicator.c	standard
+arm64/arm64/coresight-tmc.c			standard
 arm64/arm64/cpu_errata.c	standard
 arm64/arm64/cpufunc_asm.S	standard
 arm64/arm64/db_disasm.c		optional	ddb
