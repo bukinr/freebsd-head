@@ -106,39 +106,22 @@ tmc_attach(device_t dev)
 
 	printf("%s: active TMC\n", __func__);
 
-
-	printf("unlock CS\n");
 	/* Unlock Coresight */
 	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
 	printf("unlock CS done\n");
 
 	wmb();
 
-
 	/* Unlock TMC */
 	bus_write_4(sc->res, TMC_LAR, 0);
 
 	wmb();
 
-#if 0
-	/* Enable power */
-	reg = bus_read_4(sc->res, EDPRCR);
-	reg |= EDPRCR_COREPURQ;
-	bus_write_4(sc->res, EDPRCR, reg);
-
-	do {
-		reg = bus_read_4(sc->res, EDPRSR);
-	} while ((reg & EDPRCR_CORENPDRQ) == 0);
-#endif
-
 	bus_write_4(sc->res, TMC_CTL, CTL_TRACECAPTEN);
-	printf("%s: active TMC done\n", __func__);
 
 	uint32_t reg;
 	do {
-		printf("Reading STS\n");
 		reg = bus_read_4(sc->res, TMC_STS);
-		printf("Reading STS done\n");
 	} while ((reg & STS_TMCREADY) == 0);
 
 	return (0);
