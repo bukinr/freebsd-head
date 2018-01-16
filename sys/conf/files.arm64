@@ -106,6 +106,11 @@ arm64/arm64/bzero.S		standard
 arm64/arm64/clock.c		standard
 arm64/arm64/copyinout.S		standard
 arm64/arm64/copystr.c		standard
+arm64/arm64/coresight-cpu-debug.c	standard
+arm64/arm64/coresight-etm4x.c		standard
+arm64/arm64/coresight-funnel.c		standard
+arm64/arm64/coresight-replicator.c	standard
+arm64/arm64/coresight-tmc.c		standard
 arm64/arm64/cpu_errata.c	standard
 arm64/arm64/cpufunc_asm.S	standard
 arm64/arm64/db_disasm.c		optional	ddb
@@ -117,8 +122,6 @@ arm64/arm64/dump_machdep.c	standard
 arm64/arm64/efirt_machdep.c	optional	efirt
 arm64/arm64/elf32_machdep.c	optional	compat_freebsd32
 arm64/arm64/elf_machdep.c	standard
-arm64/arm64/coresight-etm4x.c			optional	etm fdt
-arm64/arm64/coresight-cpu-debug.c		standard
 arm64/arm64/exception.S		standard
 arm64/arm64/freebsd32_machdep.c	optional	compat_freebsd32
 arm64/arm64/gicv3_its.c		optional	intrng fdt
