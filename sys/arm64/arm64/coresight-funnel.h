@@ -1,4 +1,6 @@
 #define	FUNNEL_FUNCTL		0x000 /* Funnel Control Register */
+#define	 FUNCTL_HOLDTIME_SHIFT	8
+#define	 FUNCTL_HOLDTIME_MASK	(0xf << FUNCTL_HOLDTIME_SHIFT)
 #define	FUNNEL_PRICTL		0x004 /* Priority Control Register */
 #define	FUNNEL_ITATBDATA0	0xEEC /* Integration Register, ITATBDATA0 */
 #define	FUNNEL_ITATBCTR2	0xEF0 /* Integration Register, ITATBCTR2 */

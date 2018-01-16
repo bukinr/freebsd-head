@@ -91,7 +91,7 @@ static int
 funnel_attach(device_t dev)
 {
 	struct funnel_softc *sc;
-	//uint32_t reg;
+	uint32_t reg;
 
 	sc = device_get_softc(dev);
 
@@ -104,6 +104,8 @@ funnel_attach(device_t dev)
 		return (0);
 
 	funnel_sc = sc;
+
+	printf("Device ID: %x\n", bus_read_4(sc->res, FUNNEL_DEVICEID));
 
 #if 0
 	/* Unlock Coresight */
@@ -125,6 +127,11 @@ funnel_attach(device_t dev)
 		reg = bus_read_4(sc->res, EDPRSR);
 	} while ((reg & EDPRCR_CORENPDRQ) == 0);
 #endif
+
+	reg = 0; //bus_read_4(sc->res, FUNNEL_FUNCTL);
+	reg |= 7 << FUNCTL_HOLDTIME_SHIFT;
+	reg |= (1 << 0); /* Enable port 0 */
+	bus_write_4(sc->res, FUNNEL_FUNCTL, reg);
 
 	return (0);
 }
