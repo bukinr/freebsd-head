@@ -103,7 +103,7 @@ replicator_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	if (replicator_sc != NULL)
+	if (device_get_unit(dev) != 0)
 		return (0);
 
 	replicator_sc = sc;
@@ -128,6 +128,9 @@ replicator_attach(device_t dev)
 		reg = bus_read_4(sc->res, EDPRSR);
 	} while ((reg & EDPRCR_CORENPDRQ) == 0);
 #endif
+
+	bus_write_4(sc->res, REPLICATOR_IDFILTER0, 0x00);
+	bus_write_4(sc->res, REPLICATOR_IDFILTER1, 0xff);
 
 	return (0);
 }

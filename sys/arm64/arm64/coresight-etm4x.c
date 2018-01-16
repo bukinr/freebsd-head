@@ -70,17 +70,31 @@ static struct resource_spec etm_spec[] = {
 };
 
 static int
-etm_probe(device_t dev)
+etm_configure(struct etm_softc *sc)
 {
-	if (!ofw_bus_status_okay(dev))
-		return (ENXIO);
+	uint32_t reg;
 
-	if (ofw_bus_search_compatible(dev, compat_data)->ocd_data == 0)
-		return (ENXIO);
+	/* Disable the trace unit */
+	bus_write_4(sc->res, TRCPRGCTLR, 0);
 
-	device_set_desc(dev, "AArch64 Embedded Trace Macrocell");
+	/* Wait for an IDLE bit */
+	do {
+		reg = bus_read_4(sc->res, TRCSTATR);
+	} while ((reg & TRCSTATR_IDLE) == 0);
 
-	return (BUS_PROBE_DEFAULT);
+	/* Configure ETM */
+	reg = TRCCONFIGR_RS;
+	bus_write_4(sc->res, TRCCONFIGR, reg);
+
+	/* Enable the trace unit */
+	bus_write_4(sc->res, TRCPRGCTLR, 1);
+
+	/* Wait for an IDLE bit */
+	do {
+		reg = bus_read_4(sc->res, TRCSTATR);
+	} while (reg & TRCSTATR_IDLE);
+
+	return (0);
 }
 
 void
@@ -113,10 +127,24 @@ etm_print_version(void)
 }
 
 static int
+etm_probe(device_t dev)
+{
+	if (!ofw_bus_status_okay(dev))
+		return (ENXIO);
+
+	if (ofw_bus_search_compatible(dev, compat_data)->ocd_data == 0)
+		return (ENXIO);
+
+	device_set_desc(dev, "AArch64 Embedded Trace Macrocell");
+
+	return (BUS_PROBE_DEFAULT);
+}
+
+
+static int
 etm_attach(device_t dev)
 {
 	struct etm_softc *sc;
-	uint32_t reg;
 
 	sc = device_get_softc(dev);
 
@@ -132,13 +160,7 @@ etm_attach(device_t dev)
 
 	etm_print_version();
 
-	/* Disable the trace unit */
-	bus_write_4(sc->res, TRCPRGCTLR, 0);
-
-	/* Wait for an IDLE bit */
-	do {
-		reg = bus_read_4(sc->res, TRCSTATR);
-	} while ((reg & TRCSTATR_IDLE) == 0);
+	etm_configure(sc);
 
 	return (0);
 }

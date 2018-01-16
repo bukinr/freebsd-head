@@ -100,11 +100,12 @@ tmc_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	if (tmc_sc != NULL)
+	if (device_get_unit(dev) != 1)
 		return (0);
 
 	tmc_sc = sc;
 
+	printf("%s: active TMC\n", __func__);
 #if 0
 	/* Unlock Coresight */
 	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);

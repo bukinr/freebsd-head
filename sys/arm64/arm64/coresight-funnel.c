@@ -100,7 +100,7 @@ funnel_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	if (funnel_sc != NULL)
+	if (device_get_unit(dev) != 1)
 		return (0);
 
 	funnel_sc = sc;

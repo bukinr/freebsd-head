@@ -37,6 +37,7 @@
 #define	 TRCSTATR_PMSTABLE	(1 << 1) /* The programmers' model is stable. */
 #define	 TRCSTATR_IDLE		(1 << 0) /* The trace unit is idle. */
 #define	TRCCONFIGR		0x010 /* Trace Trace Configuration Register */
+#define	 TRCCONFIGR_RS		(1 << 12) /* Return stack enable bit */
 #define	TRCAUXCTLR		0x018 /* Trace Auxiliary Control Register */
 #define	TRCEVENTCTL0R		0x020 /* Trace Event Control 0 Register */
 #define	TRCEVENTCTL1R		0x024 /* Trace Event Control 1 Register */
