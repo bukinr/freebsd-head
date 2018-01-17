@@ -91,6 +91,8 @@ static int armv7_allocate_pmc(enum pmc_event _pe, char *_ctrspec,
 #if defined(__aarch64__)
 static int arm64_allocate_pmc(enum pmc_event _pe, char *_ctrspec,
     struct pmc_op_pmcallocate *_pmc_config);
+static int etm_allocate_pmc(enum pmc_event _pe, char *_ctrspec,
+    struct pmc_op_pmcallocate *_pmc_config);
 #endif
 #if defined(__mips__)
 static int mips_allocate_pmc(enum pmc_event _pe, char* ctrspec,
@@ -361,8 +363,8 @@ PMC_MDEP_TABLE(p6, P6, PMC_CLASS_SOFT, PMC_CLASS_TSC);
 PMC_MDEP_TABLE(xscale, XSCALE, PMC_CLASS_SOFT, PMC_CLASS_XSCALE);
 PMC_MDEP_TABLE(cortex_a8, ARMV7, PMC_CLASS_SOFT, PMC_CLASS_ARMV7);
 PMC_MDEP_TABLE(cortex_a9, ARMV7, PMC_CLASS_SOFT, PMC_CLASS_ARMV7);
-PMC_MDEP_TABLE(cortex_a53, ARMV8, PMC_CLASS_SOFT, PMC_CLASS_ARMV8);
-PMC_MDEP_TABLE(cortex_a57, ARMV8, PMC_CLASS_SOFT, PMC_CLASS_ARMV8);
+PMC_MDEP_TABLE(cortex_a53, ARMV8, PMC_CLASS_SOFT, PMC_CLASS_ARMV8, PMC_CLASS_ETM);
+PMC_MDEP_TABLE(cortex_a57, ARMV8, PMC_CLASS_SOFT, PMC_CLASS_ARMV8, PMC_CLASS_ETM);
 PMC_MDEP_TABLE(mips24k, MIPS24K, PMC_CLASS_SOFT, PMC_CLASS_MIPS24K);
 PMC_MDEP_TABLE(mips74k, MIPS74K, PMC_CLASS_SOFT, PMC_CLASS_MIPS74K);
 PMC_MDEP_TABLE(octeon, OCTEON, PMC_CLASS_SOFT, PMC_CLASS_OCTEON);
@@ -379,6 +381,11 @@ static const struct pmc_event_descr tsc_event_table[] =
 static const struct pmc_event_descr pt_event_table[] =
 {
 	__PMC_EV_PT()
+};
+
+static const struct pmc_event_descr etm_event_table[] =
+{
+	__PMC_EV_ETM()
 };
 
 #undef	PMC_CLASS_TABLE_DESC
@@ -449,6 +456,7 @@ PMC_CLASS_TABLE_DESC(cortex_a9, ARMV7, cortex_a9, armv7);
 #if	defined(__aarch64__)
 PMC_CLASS_TABLE_DESC(cortex_a53, ARMV8, cortex_a53, arm64);
 PMC_CLASS_TABLE_DESC(cortex_a57, ARMV8, cortex_a57, arm64);
+PMC_CLASS_TABLE_DESC(etm, ETM, etm, etm);
 #endif
 #if defined(__mips__)
 PMC_CLASS_TABLE_DESC(mips24k, MIPS24K, mips24k, mips);
@@ -2684,6 +2692,83 @@ arm64_allocate_pmc(enum pmc_event pe, char *ctrspec __unused,
 
 	return (0);
 }
+
+#define	ARM_ETM_KW_BRANCHES	"branches"
+#define	ARM_ETM_KW_TSC		"tsc"
+#define	ARM_ETM_KW_MTC		"mtc"
+#define	ARM_ETM_KW_DISRETC	"disretc"
+#define	ARM_ETM_KW_ADDRA	"addra"
+#define	ARM_ETM_KW_ADDRB	"addrb"
+
+static int
+etm_allocate_pmc(enum pmc_event pe, char *ctrspec,
+    struct pmc_op_pmcallocate *pmc_config)
+{
+	struct pmc_md_etm_op_pmcallocate *pm_etm;
+	uint64_t addr;
+	uint32_t addrn;
+	char *p, *q, *e;
+
+	printf("%s\n", __func__);
+
+	if (pe != PMC_EV_ETM_ETM)
+		return (-1);
+
+	pm_etm = (struct pmc_md_etm_op_pmcallocate *)&pmc_config->pm_md.pm_etm;
+
+	addrn = 0;
+	while ((p = strsep(&ctrspec, ",")) != NULL) {
+		if (KWMATCH(p, ARM_ETM_KW_BRANCHES)) {
+			//pm_etm->flags |= ARM_ETM_FLAG_BRANCHES;
+		}
+
+		if (KWMATCH(p, ARM_ETM_KW_TSC)) {
+			//pm_etm->flags |= ARM_ETM_FLAG_TSC;
+		}
+
+		if (KWMATCH(p, ARM_ETM_KW_MTC)) {
+			//pm_etm->flags |= ARM_ETM_FLAG_MTC;
+		}
+
+		if (KWMATCH(p, ARM_ETM_KW_DISRETC)) {
+			//pm_etm->flags |= ARM_ETM_FLAG_DISRETC;
+		}
+
+		if (KWPREFIXMATCH(p, ARM_ETM_KW_ADDRA "=")) {
+			q = strchr(p, '=');
+			if (*++q == '\0') /* skip '=' */
+				return (-1);
+
+			addr = strtoul(q, &e, 0);
+			if (e == q || *e != '\0')
+				return (-1);
+			pm_etm->ranges[addrn * 2] = addr;
+		}
+
+		if (KWPREFIXMATCH(p, ARM_ETM_KW_ADDRB "=")) {
+			q = strchr(p, '=');
+			if (*++q == '\0') /* skip '=' */
+				return (-1);
+
+			addr = strtoul(q, &e, 0);
+			if (e == q || *e != '\0')
+				return (-1);
+			pm_etm->ranges[addrn * 2 + 1] = addr;
+
+			if (pm_etm->ranges[addrn * 2 + 1] < pm_etm->ranges[addrn * 2])
+				return (-1);
+			addrn += 1;
+			if (addrn > ETM_NADDR)
+				return (-1);
+		}
+	};
+
+	pm_etm->nranges = addrn;
+
+	pmc_config->pm_caps |= PMC_CAP_READ;
+
+	return (0);
+}
 #endif
 
 #if defined(__mips__)
@@ -2877,6 +2962,8 @@ pmc_allocate(const char *ctrspec, enum pmc_mode mode,
 	struct pmc_op_pmcallocate pmc_config;
 	const struct pmc_class_descr *pcd;
 
+	printf("%s\n", __func__);
+
 	spec_copy = NULL;
 	retval    = -1;
 
@@ -2895,6 +2982,7 @@ pmc_allocate(const char *ctrspec, enum pmc_mode mode,
 				break;
 			}
 
+	printf("%s 1\n", __func__);
 	if (spec_copy == NULL)
 		spec_copy = strdup(ctrspec);
 
@@ -2907,12 +2995,15 @@ pmc_allocate(const char *ctrspec, enum pmc_mode mode,
 	 */
 	ev = NULL;
 	for (n = 0; n < PMC_CLASS_TABLE_SIZE; n++) {
+		printf("%s 1 2\n", __func__);
 		pcd = pmc_class_table[n];
 		if (pmc_mdep_is_compatible_class(pcd->pm_evc_class) &&
 		    strncasecmp(ctrname, pcd->pm_evc_name,
 				pcd->pm_evc_name_size) == 0) {
+			printf("%s 1 2 3\n", __func__);
 			if ((ev = pmc_match_event_class(ctrname +
 			    pcd->pm_evc_name_size, pcd)) == NULL) {
+				printf("%s 1 2 3 4\n", __func__);
 				errno = EINVAL;
 				goto out;
 			}
@@ -2920,6 +3011,7 @@ pmc_allocate(const char *ctrspec, enum pmc_mode mode,
 		}
 	}
 
+	printf("%s 2\n", __func__);
 	/*
 	 * Otherwise, search for this event in all compatible PMC
 	 * classes.
@@ -3246,6 +3338,10 @@ pmc_event_names_of_class(enum pmc_class cl, const char ***eventnames,
 			count = PMC_EVENT_TABLE_SIZE(cortex_a57);
 			break;
 		}
+		break;
+	case PMC_CLASS_ETM:
+		ev = etm_event_table;
+		count = PMC_EVENT_TABLE_SIZE(etm);
 		break;
 	case PMC_CLASS_MIPS24K:
 		ev = mips24k_event_table;
@@ -3574,11 +3670,13 @@ pmc_init(void)
 #if defined(__aarch64__)
 	case PMC_CPU_ARMV8_CORTEX_A53:
 		PMC_MDEP_INIT(cortex_a53);
-		pmc_class_table[n] = &cortex_a53_class_table_descr;
+		pmc_class_table[n++] = &cortex_a53_class_table_descr;
+		pmc_class_table[n++] = &etm_class_table_descr;
 		break;
 	case PMC_CPU_ARMV8_CORTEX_A57:
 		PMC_MDEP_INIT(cortex_a57);
-		pmc_class_table[n] = &cortex_a57_class_table_descr;
+		pmc_class_table[n++] = &cortex_a57_class_table_descr;
+		pmc_class_table[n++] = &etm_class_table_descr;
 		break;
 #endif
 #if defined(__mips__)
@@ -3839,6 +3937,9 @@ _pmc_name_of_event(enum pmc_event pe, enum pmc_cputype cpu)
 		default:	/* Unknown CPU type. */
 			break;
 		}
+	} else if (pe == PMC_EV_ETM_ETM) {
+		ev = etm_event_table;
+		evfence = etm_event_table + PMC_EVENT_TABLE_SIZE(etm);
 	} else if (pe >= PMC_EV_MIPS24K_FIRST && pe <= PMC_EV_MIPS24K_LAST) {
 		ev = mips24k_event_table;
 		evfence = mips24k_event_table + PMC_EVENT_TABLE_SIZE(mips24k);

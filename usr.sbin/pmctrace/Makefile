@@ -8,9 +8,15 @@ MAN=
 LIBADD= elf pmc pmcstat
 
 .if ${MACHINE_CPUARCH} == "amd64"
-SRCS+=	pmctrace_pt.c	\
+SRCS+=	pmctrace_pt.c		\
 	pmctrace_pt.h
 LIBADD+= ipt
+.endif
+
+.if ${MACHINE_CPUARCH} == "aarch64"
+SRCS+=	pmctrace_etm.c		\
+	pmctrace_etm.h
+LIBADD+= 
 .endif
 
 .include <bsd.prog.mk>

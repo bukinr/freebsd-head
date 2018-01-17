@@ -72,6 +72,9 @@ __FBSDID("$FreeBSD$");
 #if defined(__amd64__)
 #include "pmctrace_pt.h"
 #endif
+#if defined(__aarch64__)
+#include "pmctrace_etm.h"
+#endif
 
 #define	MAX_CPU	4096
 
@@ -103,7 +106,9 @@ struct pmcstat_pmcs pmcstat_pmcs = LIST_HEAD_INITIALIZER(pmcstat_pmcs);
 
 static struct trace_dev trace_devs[] = {
 #if defined(__amd64__)
-	{ "pt",	ipt_process },
+	{ "pt",		ipt_process },
+#elif defined(__aarch64__)
+	{ "etm",	etm_process },
 #endif
 	{ NULL,	NULL }
 };
@@ -579,9 +584,10 @@ main(int argc, char *argv[])
 		errx(EX_USAGE, "ERROR: specify both or neither -i and -f");
 
 	for (i = 0; trace_devs[i].ev_spec != NULL; i++) {
-		if (strcmp(trace_devs[i].ev_spec, trace_devs[i].ev_spec) == 0) {
+		if (strcmp(trace_devs[i].ev_spec, ev->ev_spec) == 0) {
 			/* found */
 			pmctrace_cfg.trace_dev = &trace_devs[i];
+			break;
 		}
 	}
 

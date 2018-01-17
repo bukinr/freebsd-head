@@ -153,7 +153,8 @@ enum pmc_cputype {
 	__PMC_CLASS(ARMV8,	0x11,	"ARMv8")			\
 	__PMC_CLASS(MIPS74K,	0x12,	"MIPS 74K")			\
 	__PMC_CLASS(E500,	0x13,	"Freescale e500 class")		\
-	__PMC_CLASS(PT,		0x14,	"Intel PT")
+	__PMC_CLASS(PT,		0x14,	"Intel PT")			\
+	__PMC_CLASS(ETM,	0x15,	"ARM ETM")
 
 enum pmc_class {
 #undef  __PMC_CLASS
@@ -162,7 +163,7 @@ enum pmc_class {
 };
 
 #define	PMC_CLASS_FIRST	PMC_CLASS_TSC
-#define	PMC_CLASS_LAST	PMC_CLASS_PT
+#define	PMC_CLASS_LAST	PMC_CLASS_ETM
 
 /*
  * A PMC can be in the following states:

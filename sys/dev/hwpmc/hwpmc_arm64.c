@@ -480,6 +480,7 @@ pmc_arm64_initialize()
 	struct pmc_mdep *pmc_mdep;
 	struct pmc_classdep *pcd;
 	int idcode;
+	int ncpus;
 	int reg;
 
 	reg = arm64_pmcr_read();
@@ -495,8 +496,8 @@ pmc_arm64_initialize()
 	arm64_pcpu = malloc(sizeof(struct arm64_cpu *) * pmc_cpu_max(),
 		M_PMC, M_WAITOK | M_ZERO);
 
-	/* Just one class */
-	pmc_mdep = pmc_mdep_alloc(1);
+	/* CPU counters and ETM */
+	pmc_mdep = pmc_mdep_alloc(2);
 
 	switch (idcode) {
 	case PMCR_IDCODE_CORTEX_A57:
@@ -533,6 +534,9 @@ pmc_arm64_initialize()
 	pmc_mdep->pmd_switch_out = arm64_switch_out;
 
 	pmc_mdep->pmd_npmc   += arm64_npmcs;
+
+	ncpus = pmc_cpu_max();
+	pmc_etm_initialize(pmc_mdep, ncpus);
 
 	return (pmc_mdep);
 }
