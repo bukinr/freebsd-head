@@ -84,7 +84,7 @@ extern struct cdev *pmc_cdev[MAXCPU];
 #define	ETM_CAPS	(PMC_CAP_READ | PMC_CAP_INTERRUPT | PMC_CAP_SYSTEM | PMC_CAP_USER)
 
 #define	PMC_ETM_DEBUG
-#undef	PMC_ETM_DEBUG
+//#undef	PMC_ETM_DEBUG
 
 #ifdef	PMC_ETM_DEBUG
 #define	dprintf(fmt, ...)	printf(fmt, ##__VA_ARGS__)
@@ -334,11 +334,11 @@ etm_buffer_deallocate(uint32_t cpu, struct etm_buffer *etm_buf)
 	return (0);
 }
 
-#if 0
 static int
 etm_buffer_prepare(uint32_t cpu, struct pmc *pm,
     const struct pmc_op_pmcallocate *a)
 {
+#if 0
 	const struct pmc_md_etm_op_pmcallocate *pm_etma;
 	struct etm_cpu *etm_pc;
 	struct pmc_md_etm_pmc *pm_etm;
@@ -416,20 +416,21 @@ etm_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	 * etm_ext->rtit_ctl |= RTIT_CTL_MTC_FREQ(6);
 	 */
 
+#endif
 	return (0);
 }
-#endif
 
 static int
 etm_allocate_pmc(int cpu, int ri, struct pmc *pm,
     const struct pmc_op_pmcallocate *a)
 {
-#if 0
 	struct etm_cpu *etm_pc;
 	int i;
 
+#if 0
 	if ((cpu_stdext_feature & CPUID_STDEXT_PROCTRACE) == 0)
 		return (ENXIO);
+#endif
 
 	etm_pc = etm_pcpu[cpu];
 
@@ -477,7 +478,6 @@ etm_allocate_pmc(int cpu, int ri, struct pmc *pm,
 
 	if (a->pm_mode == PMC_MODE_ST)
 		etm_pc->flags |= FLAG_ETM_ALLOCATED;
-#endif
 
 	return (0);
 }
@@ -638,14 +638,14 @@ etm_enumerate(struct etm_cpu *etm_pc)
 static int
 etm_pcpu_init(struct pmc_mdep *md, int cpu)
 {
-#if 0
 	struct pmc_cpu *pc;
 	struct etm_cpu *etm_pc;
-	u_int cp[4];
 	int ri;
 
 	dprintf("%s: cpu %d\n", __func__, cpu);
 
+#if 0
+	u_int cp[4];
 	/* We rely on XSAVE support */
 	if ((cpu_feature2 & CPUID2_XSAVE) == 0) {
 		printf("Intel PT: XSAVE is not supported\n");
@@ -671,6 +671,7 @@ etm_pcpu_init(struct pmc_mdep *md, int cpu)
 
 	/* Enable XSAVE */
 	load_cr4(rcr4() | CR4_XSAVE);
+#endif
 
 	KASSERT(cpu == PCPU_GET(cpuid), ("Init on wrong CPU\n"));
 
@@ -698,8 +699,8 @@ etm_pcpu_init(struct pmc_mdep *md, int cpu)
 
 	pc->pc_hwpmcs[ri] = &etm_pc->tc_hw;
 
+#if 0
 	etm_enumerate(etm_pc);
-
 #endif
 	return (0);
 }
@@ -734,16 +735,16 @@ static int
 etm_trace_config(int cpu, int ri, struct pmc *pm,
     uint64_t *ranges, uint32_t nranges)
 {
-#if 0
 	struct etm_cpu *etm_pc;
-	uint64_t reg;
 
 	dprintf("%s\n", __func__);
 
 	etm_pc = etm_pcpu[cpu];
 
 	KASSERT(cpu == PCPU_GET(cpuid), ("Configuring wrong CPU\n"));
-	
+
+#if 0
+	uint64_t reg;
 	/* Ensure tracing is turned off */
 	reg = rdmsr(MSR_IA32_RTIT_CTL);
 	if (reg & RTIT_CTL_TRACEEN)
@@ -759,6 +760,8 @@ static int
 etm_read_trace(int cpu, int ri, struct pmc *pm,
     pmc_value_t *cycle, pmc_value_t *voffset)
 {
+
+	dprintf("%s\n", __func__);
 #if 0
 	struct etm_ext_area *etm_ext;
 	struct etm_save_area *save_area;
@@ -801,6 +804,8 @@ static int
 etm_read_pmc(int cpu, int ri, pmc_value_t *v)
 {
 
+	dprintf("%s\n", __func__);
+
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
 	    ("[etm,%d] illegal CPU value %d", __LINE__, cpu));
 	KASSERT(ri == 0, ("[etm,%d] illegal ri %d", __LINE__, ri));
@@ -835,10 +840,12 @@ etm_release_pmc(int cpu, int ri, struct pmc *pm)
 	KASSERT(phw->phw_pmc == NULL,
 	    ("[etm,%d] PHW pmc %p non-NULL", __LINE__, phw->phw_pmc));
 
+#if 0
 	dprintf("%s: cpu %d, output base %lx\n",
 	    __func__, cpu, rdmsr(MSR_IA32_RTIT_OUTPUT_BASE));
 	dprintf("%s: cpu %d, output base etmr %lx\n",
 	    __func__, cpu, rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_ETMRS));
+#endif
 
 	mode = PMC_TO_MODE(pm);
 	if (mode == PMC_MODE_TT)
@@ -880,11 +887,15 @@ etm_stop_pmc(int cpu, int ri)
 {
 	struct etm_cpu *etm_pc;
 
+	dprintf("%s\n", __func__);
+
 	etm_pc = etm_pcpu[cpu];
 
+#if 0
 	dprintf("%s: cpu %d, output base %lx, etmr %lx\n", __func__, cpu,
 	    rdmsr(MSR_IA32_RTIT_OUTPUT_BASE),
 	    rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_ETMRS));
+#endif
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
 	    ("[etm,%d] illegal CPU value %d", __LINE__, cpu));
@@ -902,6 +913,8 @@ etm_stop_pmc(int cpu, int ri)
 static int
 etm_write_pmc(int cpu, int ri, pmc_value_t v)
 {
+
+	dprintf("%s\n", __func__);
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
 	    ("[etm,%d] illegal CPU value %d", __LINE__, cpu));
