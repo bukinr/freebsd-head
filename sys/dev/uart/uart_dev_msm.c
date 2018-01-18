@@ -37,9 +37,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/conf.h>
 #include <sys/kdb.h>
 #include <machine/bus.h>
-#ifndef __aarch64__
-#include <machine/fdt.h>
-#endif
 
 #include <dev/uart/uart.h>
 #include <dev/uart/uart_cpu.h>
@@ -203,7 +200,6 @@ msm_init(struct uart_bas *bas, int baudrate, int databits, int stopbits,
 	SETREG(bas, UART_DM_CR, UART_DM_RESET_STALE_INT);
 
 	/* Enable/Disable Rx/Tx DM interfaces */
-	/* Disable Data Mover for now. */
 	uart_setreg(bas, UART_DM_DMEN, UART_DM_DMEN_RX_SC_ENABLE);
 
 	/* Enable transmitter and receiver */
