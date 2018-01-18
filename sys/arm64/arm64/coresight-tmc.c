@@ -114,8 +114,11 @@ tmc_attach(device_t dev)
 	bus_write_4(sc->res, TMC_LAR, 0);
 	wmb();
 
+	/* Configure TMC */
 	bus_write_4(sc->res, TMC_MODE, MODE_CIRCULAR_BUFFER);
+	bus_write_4(sc->res, TMC_AXICTL, AXICTL_SG_MODE);
 
+	/* Enable TMC */
 	bus_write_4(sc->res, TMC_CTL, CTL_TRACECAPTEN);
 
 	uint32_t reg;

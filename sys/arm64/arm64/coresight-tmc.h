@@ -23,6 +23,15 @@
 #define	TMC_RRPHI	0x038 /* RAM Read Pointer High Register */
 #define	TMC_RWPHI	0x03C /* RAM Write Pointer High Register */
 #define	TMC_AXICTL	0x110 /* AXI Control Register */
+#define	 AXICTL_WRBURSTLEN_S	8
+#define	 AXICTL_WRBURSTLEN_M	(0xf << WRBURSTLEN_S)
+#define	 AXICTL_SG_MODE		(1 << 7)	/* Scatter Gather Mode */
+#define	 AXICTL_CACHE_CTRL_BIT3	(1 << 5)
+#define	 AXICTL_CACHE_CTRL_BIT2	(1 << 4)
+#define	 AXICTL_CACHE_CTRL_BIT1	(1 << 3)
+#define	 AXICTL_CACHE_CTRL_BIT0	(1 << 2)
+#define	 AXICTL_PROT_CTRL_BIT1	(1 << 1)
+#define	 AXICTL_PROT_CTRL_BIT0	(1 << 0)
 #define	TMC_DBALO	0x118 /* Data Buffer Address Low Register */
 #define	TMC_DBAHI	0x11C /* Data Buffer Address High Register */
 #define	TMC_FFSR	0x300 /* Formatter and Flush Status Register */
