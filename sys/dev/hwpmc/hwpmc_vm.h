@@ -41,7 +41,7 @@ struct pmc_vm_map {
 	TAILQ_ENTRY(pmc_vm_map)		map_next;
 	struct thread			*t;
 	vm_object_t			obj;
-	struct pt_buffer		*pt_buf;
+	void *				buf;
 };
 
 struct cdev_cpu {

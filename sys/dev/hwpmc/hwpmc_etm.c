@@ -214,29 +214,29 @@ etm_configure_ranges(struct etm_cpu *etm_pc, const uint64_t *ranges,
 }
 #endif
 
-#if 0
 static int
 etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 {
 	struct pmc_vm_map *map;
 	struct etm_cpu *etm_pc;
-	uint64_t topa_size;
 	uint64_t segsize;
 	uint64_t offset;
-	uint32_t size;
 	uint32_t bufsize;
 	struct cdev_cpu *cc;
 	vm_object_t obj;
 	vm_page_t m;
+	uint32_t size;
 	int npages;
 	int ntopa;
-	int req;
-	int i, j;
+	int i;
+
+	printf("%s\n", __func__);
 
 	etm_pc = etm_pcpu[cpu];
 
 	bufsize = 128 * 1024 * 1024;
 
+#if 0
 	if (etm_pc->l0_ecx & CPUETM_TOPA_MULTI)
 		topa_size = TOPA_SIZE_4K;
 	else
@@ -245,50 +245,55 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 	segsize = PAGE_SIZE << (topa_size >> TOPA_SIZE_S);
 	ntopa = bufsize / segsize;
 	npages = segsize / PAGE_SIZE;
+#endif
+
+	segsize = PAGE_SIZE;
+	npages = 1;
+	ntopa = bufsize / segsize;
 
 	etm_buf->obj = obj = vm_pager_allocate(OBJT_PHYS, 0, bufsize,
 	    PROT_READ, 0, curthread->td_ucred);
 
-	size = roundup2((ntopa + 1) * 8, PAGE_SIZE);
+	size = roundup2(ntopa * 4, PAGE_SIZE);
 	etm_buf->topa_hw = malloc(size, M_ETM, M_WAITOK | M_ZERO);
 	etm_buf->topa_sw = malloc(ntopa * sizeof(struct topa_entry), M_ETM,
 	    M_WAITOK | M_ZERO);
+
+#define	ENTRY_LAST	1
+#define	ENTRY_NORMAL	2
+#define	ENTRY_LINK	3
 
 	VM_OBJECT_WLOCK(obj);
 	vm_object_reference_locked(obj);
 	offset = 0;
 	for (i = 0; i < ntopa; i++) {
-		req = VM_ALLOC_NOBUSY | VM_ALLOC_ZERO;
-		if (npages == 1)
-			m = vm_page_alloc(obj, i, req);
-		else
-			m = vm_page_alloc_contig(obj, i, req, npages, 0, ~0,
-			    bufsize, 0, VM_MEMATTR_DEFAULT);
+		m = vm_page_alloc(obj, i, VM_ALLOC_NOBUSY | VM_ALLOC_ZERO);
 		if (m == NULL) {
 			VM_OBJECT_WUNLOCK(obj);
 			printf("%s: Can't allocate memory.\n", __func__);
 			goto error;
 		}
-		for (j = 0; j < npages; j++)
-			m[j].valid = VM_PAGE_BITS_ALL;
+		m->valid = VM_PAGE_BITS_ALL;
 		etm_buf->topa_sw[i].size = segsize;
 		etm_buf->topa_sw[i].offset = offset;
-		etm_buf->topa_hw[i] = VM_PAGE_TO_PHYS(m) | topa_size;
+		etm_buf->topa_hw[i] = VM_PAGE_TO_PHYS(m);
 		if (i == (ntopa - 1))
-			etm_buf->topa_hw[i] |= TOPA_INT;
+			etm_buf->topa_hw[i] |= ENTRY_LAST;
+		else
+			etm_buf->topa_hw[i] |= ENTRY_NORMAL;
 
 		offset += segsize;
 	}
 	VM_OBJECT_WUNLOCK(obj);
 
-	/* The last entry is a pointer to the base table. */
-	etm_buf->topa_hw[ntopa] = vtophys(etm_buf->topa_hw) | TOPA_END;
+	///* The last entry is a pointer to the base table. */
+	//etm_buf->topa_hw[ntopa] = vtophys(etm_buf->topa_hw) | ENTRY_LAST;
 	etm_buf->cycle = 0;
 
 	map = malloc(sizeof(struct pmc_vm_map), M_ETM, M_WAITOK | M_ZERO);
 	map->t = curthread;
 	map->obj = obj;
-	map->etm_buf = etm_buf;
+	map->buf = (void *)etm_buf;
 
 	cc = pmc_cdev[cpu]->si_drv1;
 
@@ -305,12 +310,10 @@ error:
 
 	return (-1);
 }
-#endif
 
 static int
 etm_buffer_deallocate(uint32_t cpu, struct etm_buffer *etm_buf)
 {
-#if 0
 	struct pmc_vm_map *map, *map_tmp;
 	struct cdev_cpu *cc;
 
@@ -318,7 +321,7 @@ etm_buffer_deallocate(uint32_t cpu, struct etm_buffer *etm_buf)
 
 	mtx_lock(&cc->vm_mtx);
 	TAILQ_FOREACH_SAFE(map, &cc->pmc_maplist, map_next, map_tmp) {
-		if (map->etm_buf == etm_buf) {
+		if (map->buf == (void *)etm_buf) {
 			TAILQ_REMOVE(&cc->pmc_maplist, map, map_next);
 			free(map, M_ETM);
 			break;
@@ -330,7 +333,6 @@ etm_buffer_deallocate(uint32_t cpu, struct etm_buffer *etm_buf)
 	free(etm_buf->topa_sw, M_ETM);
 	vm_object_deallocate(etm_buf->obj);
 
-#endif
 	return (0);
 }
 
@@ -338,20 +340,21 @@ static int
 etm_buffer_prepare(uint32_t cpu, struct pmc *pm,
     const struct pmc_op_pmcallocate *a)
 {
-#if 0
 	const struct pmc_md_etm_op_pmcallocate *pm_etma;
 	struct etm_cpu *etm_pc;
 	struct pmc_md_etm_pmc *pm_etm;
 	struct etm_buffer *etm_buf;
-	struct xsave_header *hdr;
-	struct etm_ext_area *etm_ext;
-	struct etm_save_area *save_area;
-	enum pmc_mode mode;
+	//struct xsave_header *hdr;
+	//struct etm_ext_area *etm_ext;
+	//struct etm_save_area *save_area;
+	//enum pmc_mode mode;
 	int error;
 
 	etm_pc = etm_pcpu[cpu];
+#if 0
 	if ((etm_pc->l0_ecx & CPUETM_TOPA) == 0)
 		return (ENXIO);	/* We rely on TOPA support */
+#endif
 
 	pm_etma = (const struct pmc_md_etm_op_pmcallocate *)&a->pm_md.pm_etm;
 	pm_etm = (struct pmc_md_etm_pmc *)&pm->pm_md;
@@ -363,6 +366,7 @@ etm_buffer_prepare(uint32_t cpu, struct pmc *pm,
 		return (EINVAL);
 	}
 
+#if 0
 	save_area = &etm_pc->save_area;
 	bzero(save_area, sizeof(struct etm_save_area));
 
