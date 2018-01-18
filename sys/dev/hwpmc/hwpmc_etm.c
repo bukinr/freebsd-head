@@ -764,17 +764,16 @@ static int
 etm_read_trace(int cpu, int ri, struct pmc *pm,
     pmc_value_t *cycle, pmc_value_t *voffset)
 {
-
-	dprintf("%s\n", __func__);
-#if 0
-	struct etm_ext_area *etm_ext;
-	struct etm_save_area *save_area;
+	//struct etm_ext_area *etm_ext;
+	//struct etm_save_area *save_area;
 	struct pmc_md_etm_pmc *pm_etm;
 	struct etm_buffer *etm_buf;
 	struct etm_cpu *etm_pc;
-	uint64_t offset;
-	uint64_t reg;
-	uint32_t idx;
+	//uint64_t offset;
+	//uint64_t reg;
+	//uint32_t idx;
+
+	dprintf("%s\n", __func__);
 
 	etm_pc = etm_pcpu[cpu];
 	etm_pc->pm_mmap = pm;
@@ -782,6 +781,7 @@ etm_read_trace(int cpu, int ri, struct pmc *pm,
 	pm_etm = (struct pmc_md_etm_pmc *)&pm->pm_md;
 	etm_buf = &pm_etm->etm_buffers[cpu];
 
+#if 0
 	save_area = &etm_pc->save_area;
 	etm_ext = &save_area->etm_ext_area;
 
@@ -800,6 +800,9 @@ etm_read_trace(int cpu, int ri, struct pmc *pm,
 	dprintf("%s: %lx\n", __func__, rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_ETMRS));
 	dprintf("%s: cycle %ld offset %ld\n", __func__, etm_buf->cycle, offset);
 #endif
+
+	*cycle = 0;
+	*voffset = 0;
 
 	return (0);
 }
