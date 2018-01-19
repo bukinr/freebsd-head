@@ -45,6 +45,8 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
 
+#include "coresight-tmc_if.h"
+
 #define CORESIGHT_ITCTRL        0xf00
 #define CORESIGHT_CLAIMSET      0xfa0
 #define CORESIGHT_CLAIMCLR      0xfa4
@@ -129,10 +131,26 @@ tmc_attach(device_t dev)
 	return (0);
 }
 
+static int
+tmc_set_base(device_t dev, uint32_t low, uint32_t high)
+{
+	struct tmc_softc *sc;
+ 
+	sc = device_get_softc(dev);
+
+	bus_write_4(sc->res, TMC_DBALO, low);
+	bus_write_4(sc->res, TMC_DBAHI, high);
+
+	return (0);
+}
+
 static device_method_t tmc_methods[] = {
 	/* Device interface */
-	DEVMETHOD(device_probe,		tmc_probe),
-	DEVMETHOD(device_attach,	tmc_attach),
+	DEVMETHOD(device_probe,			tmc_probe),
+	DEVMETHOD(device_attach,		tmc_attach),
+
+	/* TMC interface */
+	DEVMETHOD(coresight_tmc_set_base,	tmc_set_base),
 	DEVMETHOD_END
 };
 
