@@ -109,8 +109,16 @@ tmc_attach(device_t dev)
 
 	tmc_sc = sc;
 
-	printf("%s: active TMC\n", __func__);
 #endif
+
+	//printf("%s: DEVID %x\n", __func__, bus_read_4(sc->res, TMC_DEVID));
+
+	uint32_t reg;
+	reg = bus_read_4(sc->res, TMC_DEVID);
+	reg &= DEVID_CONFIGTYPE_M;
+	if (reg == DEVID_CONFIGTYPE_ETR) {
+		printf("ETR configuration found\n");
+	}
 
 	return (0);
 }
@@ -162,6 +170,18 @@ tmc_set_base(device_t dev, uint32_t low, uint32_t high)
 	return (0);
 }
 
+static int
+tmc_read_trace(device_t dev)
+{
+	struct tmc_softc *sc;
+ 
+	sc = device_get_softc(dev);
+
+	printf("%s: status 0x%x\n", __func__, bus_read_4(sc->res, TMC_STS));
+
+	return (0);
+}
+
 static device_method_t tmc_methods[] = {
 	/* Device interface */
 	DEVMETHOD(device_probe,			tmc_probe),
@@ -170,6 +190,7 @@ static device_method_t tmc_methods[] = {
 	/* TMC interface */
 	DEVMETHOD(tmc_configure,	tmc_configure),
 	DEVMETHOD(tmc_set_base,		tmc_set_base),
+	DEVMETHOD(tmc_read_trace,	tmc_read_trace),
 	DEVMETHOD_END
 };
 

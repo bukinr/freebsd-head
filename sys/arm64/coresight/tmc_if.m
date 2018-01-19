@@ -47,3 +47,10 @@ METHOD int configure {
 	uint32_t	addr_low;
 	uint32_t	addr_high;
 };
+
+/**
+ *
+ */
+METHOD int read_trace {
+	device_t	dev;
+};

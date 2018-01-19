@@ -818,6 +818,8 @@ etm_read_trace(int cpu, int ri, struct pmc *pm,
 	etm_pc = etm_pcpu[cpu];
 	etm_pc->pm_mmap = pm;
 
+	TMC_READ_TRACE(etm_pc->dev_tmc);
+
 	pm_etm = (struct pmc_md_etm_pmc *)&pm->pm_md;
 	etm_buf = &pm_etm->etm_buffers[cpu];
 

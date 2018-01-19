@@ -54,6 +54,11 @@
 #define	TMC_LSR		0xFB4 /* Lock Status Register */
 #define	TMC_AUTHSTATUS	0xFB8 /* Authentication Status Register */
 #define	TMC_DEVID	0xFC8 /* Device Configuration Register */
+#define	 DEVID_CONFIGTYPE_S	6
+#define	 DEVID_CONFIGTYPE_M	(0x3 << DEVID_CONFIGTYPE_S)
+#define	 DEVID_CONFIGTYPE_ETB	(0 << DEVID_CONFIGTYPE_S)
+#define	 DEVID_CONFIGTYPE_ETR	(1 << DEVID_CONFIGTYPE_S)
+#define	 DEVID_CONFIGTYPE_ETF	(2 << DEVID_CONFIGTYPE_S)
 #define	TMC_DEVTYPE	0xFCC /* Device Type Identifier Register */
 #define	TMC_PERIPHID4	0xFD0 /* Peripheral ID4 Register */
 #define	TMC_PERIPHID5	0xFD4 /* Peripheral ID5 Register */
