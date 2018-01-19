@@ -177,7 +177,11 @@ tmc_read_trace(device_t dev)
  
 	sc = device_get_softc(dev);
 
-	printf("%s: status 0x%x\n", __func__, bus_read_4(sc->res, TMC_STS));
+	printf("%s: STS 0x%x, RRP 0x%x, RWP 0x%x, LBUFLEVEL %x\n", __func__,
+	    bus_read_4(sc->res, TMC_STS),
+	    bus_read_4(sc->res, TMC_RRP),
+	    bus_read_4(sc->res, TMC_RWP),
+	    bus_read_4(sc->res, TMC_LBUFLEVEL));
 
 	return (0);
 }
