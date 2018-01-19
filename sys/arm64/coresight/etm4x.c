@@ -71,39 +71,6 @@ static struct resource_spec etm_spec[] = {
 	{ -1, 0 }
 };
 
-static int
-etm_configure(device_t dev)
-{
-	struct etm_softc *sc;
-	uint32_t reg;
-
-	printf("%s\n", __func__);
-
-	sc = device_get_softc(dev);
-
-	/* Disable the trace unit */
-	bus_write_4(sc->res, TRCPRGCTLR, 0);
-
-	/* Wait for an IDLE bit */
-	do {
-		reg = bus_read_4(sc->res, TRCSTATR);
-	} while ((reg & TRCSTATR_IDLE) == 0);
-
-	/* Configure ETM */
-	reg = TRCCONFIGR_RS;
-	bus_write_4(sc->res, TRCCONFIGR, reg);
-
-	/* Enable the trace unit */
-	bus_write_4(sc->res, TRCPRGCTLR, 1);
-
-	/* Wait for an IDLE bit */
-	do {
-		reg = bus_read_4(sc->res, TRCSTATR);
-	} while (reg & TRCSTATR_IDLE);
-
-	return (0);
-}
-
 static void
 etm_print_version(struct etm_softc *sc)
 {
@@ -128,6 +95,41 @@ etm_print_version(struct etm_softc *sc)
 	printf("ETM Version: %d.%d\n",
 	    (reg & TRCARCHMAJ_M) >> TRCARCHMAJ_S,
 	    (reg & TRCARCHMIN_M) >> TRCARCHMIN_S);
+}
+
+static int
+etm_configure(device_t dev)
+{
+	struct etm_softc *sc;
+	uint32_t reg;
+
+	printf("%s\n", __func__);
+
+	sc = device_get_softc(dev);
+
+	etm_print_version(sc);
+
+	/* Disable the trace unit */
+	bus_write_4(sc->res, TRCPRGCTLR, 0);
+
+	/* Wait for an IDLE bit */
+	do {
+		reg = bus_read_4(sc->res, TRCSTATR);
+	} while ((reg & TRCSTATR_IDLE) == 0);
+
+	/* Configure ETM */
+	reg = TRCCONFIGR_RS;
+	bus_write_4(sc->res, TRCCONFIGR, reg);
+
+	/* Enable the trace unit */
+	bus_write_4(sc->res, TRCPRGCTLR, 1);
+
+	/* Wait for an IDLE bit */
+	do {
+		reg = bus_read_4(sc->res, TRCSTATR);
+	} while (reg & TRCSTATR_IDLE);
+
+	return (0);
 }
 
 static int
@@ -163,8 +165,6 @@ etm_attach(device_t dev)
 
 	etm_sc = sc;
 #endif
-
-	etm_print_version(sc);
 
 	return (0);
 }
