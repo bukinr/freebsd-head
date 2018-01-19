@@ -45,7 +45,7 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
 
-#include "coresight-tmc_if.h"
+#include "tmc_if.h"
 
 #define CORESIGHT_ITCTRL        0xf00
 #define CORESIGHT_CLAIMSET      0xfa0
@@ -67,7 +67,9 @@ struct tmc_softc {
 	struct resource		*res;
 };
 
+#if 0
 struct tmc_softc *tmc_sc;
+#endif
 
 static struct resource_spec tmc_spec[] = {
 	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },
@@ -101,12 +103,25 @@ tmc_attach(device_t dev)
 		return (ENXIO);
 	}
 
+#if 0
 	if (device_get_unit(dev) != 1)
 		return (0);
 
 	tmc_sc = sc;
 
 	printf("%s: active TMC\n", __func__);
+#endif
+
+	return (0);
+}
+
+static int
+tmc_configure(device_t dev, uint32_t low, uint32_t high)
+{
+	struct tmc_softc *sc;
+	uint32_t reg;
+ 
+	sc = device_get_softc(dev);
 
 	/* Unlock Coresight */
 	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
@@ -119,11 +134,12 @@ tmc_attach(device_t dev)
 	/* Configure TMC */
 	bus_write_4(sc->res, TMC_MODE, MODE_CIRCULAR_BUFFER);
 	bus_write_4(sc->res, TMC_AXICTL, AXICTL_SG_MODE);
+	bus_write_4(sc->res, TMC_DBALO, low);
+	bus_write_4(sc->res, TMC_DBAHI, high);
 
 	/* Enable TMC */
 	bus_write_4(sc->res, TMC_CTL, CTL_TRACECAPTEN);
 
-	uint32_t reg;
 	do {
 		reg = bus_read_4(sc->res, TMC_STS);
 	} while ((reg & STS_TMCREADY) == 0);
@@ -150,7 +166,8 @@ static device_method_t tmc_methods[] = {
 	DEVMETHOD(device_attach,		tmc_attach),
 
 	/* TMC interface */
-	DEVMETHOD(coresight_tmc_set_base,	tmc_set_base),
+	DEVMETHOD(tmc_configure,	tmc_configure),
+	DEVMETHOD(tmc_set_base,		tmc_set_base),
 	DEVMETHOD_END
 };
 

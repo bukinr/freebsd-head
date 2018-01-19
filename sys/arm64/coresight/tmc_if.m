@@ -28,12 +28,21 @@
 
 #include <sys/bus.h>
 
-INTERFACE coresight_tmc;
+INTERFACE tmc;
 
 /**
  *
  */
 METHOD int set_base {
+	device_t	dev;
+	uint32_t	addr_low;
+	uint32_t	addr_high;
+};
+
+/**
+ *
+ */
+METHOD int configure {
 	device_t	dev;
 	uint32_t	addr_low;
 	uint32_t	addr_high;

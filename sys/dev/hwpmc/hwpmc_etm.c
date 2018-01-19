@@ -124,6 +124,8 @@ struct etm_cpu {
 	uint32_t			flags;
 #define	FLAG_ETM_ALLOCATED		(1 << 0)
 	struct etm_save_area		save_area;
+	device_t			dev_tmc;
+	device_t			dev_etm;
 };
 
 static struct etm_cpu **etm_pcpu;
@@ -231,14 +233,6 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 	int i;
 
 	printf("%s\n", __func__);
-
-	devclass_t etm_class;
-	device_t dev;
-	etm_class = devclass_find("etm");
-	if (etm_class != NULL) {
-		dev = devclass_get_device(etm_class, 0);
-		printf("dev is %lx\n", (uint64_t)dev);
-	}
 
 	etm_pc = etm_pcpu[cpu];
 
@@ -656,6 +650,25 @@ etm_pcpu_init(struct pmc_mdep *md, int cpu)
 
 	dprintf("%s: cpu %d\n", __func__, cpu);
 
+	devclass_t etm_devclass, tmc_devclass;
+	device_t dev_etm, dev_tmc;
+
+	/* Find our ETM device */
+	etm_devclass = devclass_find("etm");
+	if (etm_devclass == NULL)
+		return (ENXIO);
+	dev_etm = devclass_get_device(etm_devclass, cpu);
+	if (dev_etm == NULL)
+		return (ENXIO);
+
+	/* Find our TMC device */
+	tmc_devclass = devclass_find("tmc");
+	if (tmc_devclass == NULL)
+		return (ENXIO);
+	dev_tmc = devclass_get_device(tmc_devclass, 1);
+	if (dev_tmc == NULL)
+		return (ENXIO);
+
 #if 0
 	u_int cp[4];
 	/* We rely on XSAVE support */
@@ -694,6 +707,8 @@ etm_pcpu_init(struct pmc_mdep *md, int cpu)
 	    __LINE__));
 
 	etm_pc = malloc(sizeof(struct etm_cpu), M_ETM, M_WAITOK | M_ZERO);
+	etm_pc->dev_etm = dev_etm;
+	etm_pc->dev_tmc = dev_tmc;
 
 	etm_pc->tc_hw.phw_state = PMC_PHW_FLAG_IS_ENABLED |
 	    PMC_PHW_CPU_TO_STATE(cpu) | PMC_PHW_INDEX_TO_STATE(0) |
