@@ -67,7 +67,14 @@ __FBSDID("$FreeBSD$");
 //#include <machine/intr_machdep.h>
 //#include <machine/specialreg.h>
 
+#include <machine/bus.h>
+#include <machine/resource.h>
+#include <sys/bus.h>
+#include <sys/rman.h>
+
 #include <dev/hwpmc/hwpmc_vm.h>
+
+#include "tmc_if.h"
 
 //#include <x86/apicvar.h>
 //#include <x86/x86_var.h>
@@ -302,6 +309,16 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 	mtx_lock(&cc->vm_mtx);
 	TAILQ_INSERT_HEAD(&cc->pmc_maplist, map, map_next);
 	mtx_unlock(&cc->vm_mtx);
+
+	uint64_t phys_addr;
+	uint32_t phys_lo;
+	uint32_t phys_hi;
+	phys_addr = vtophys(etm_buf->topa_hw);
+	phys_lo = phys_addr & 0xffffffff;
+	phys_hi = (phys_addr >> 32) & 0xffffffff;
+	printf("calling TMC_CONFIGURE\n");
+	TMC_CONFIGURE(etm_pc->dev_tmc, phys_lo, phys_hi);
+	printf("calling TMC_CONFIGURE done\n");
 
 	return (0);
 

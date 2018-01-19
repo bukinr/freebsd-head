@@ -123,6 +123,8 @@ tmc_configure(device_t dev, uint32_t low, uint32_t high)
  
 	sc = device_get_softc(dev);
 
+	printf("%s unit %d\n", __func__, device_get_unit(dev));
+
 	/* Unlock Coresight */
 	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
 	wmb();
