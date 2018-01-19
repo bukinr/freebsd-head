@@ -48,7 +48,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/proc.h>
 #include <sys/vmem.h>
 #include <sys/vmmeter.h>
-//#include <sys/bus.h>
+#include <sys/bus.h>
 #include <sys/kthread.h>
 #include <sys/pmclog.h>
 
@@ -231,6 +231,14 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 	int i;
 
 	printf("%s\n", __func__);
+
+	devclass_t etm_class;
+	device_t dev;
+	etm_class = devclass_find("etm");
+	if (etm_class != NULL) {
+		dev = devclass_get_device(etm_class, 0);
+		printf("dev is %lx\n", (uint64_t)dev);
+	}
 
 	etm_pc = etm_pcpu[cpu];
 
