@@ -75,6 +75,7 @@ __FBSDID("$FreeBSD$");
 #include <dev/hwpmc/hwpmc_vm.h>
 
 #include "tmc_if.h"
+#include "etm_if.h"
 
 //#include <x86/apicvar.h>
 //#include <x86/x86_var.h>

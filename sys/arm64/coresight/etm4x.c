@@ -45,6 +45,8 @@ __FBSDID("$FreeBSD$");
 
 #include <arm64/coresight/etm4x.h>
 
+#include "etm_if.h"
+
 #define CORESIGHT_LAR           0xfb0
 #define CORESIGHT_LSR           0xfb4
 #define CORESIGHT_AUTHSTATUS    0xfb8
@@ -70,9 +72,14 @@ static struct resource_spec etm_spec[] = {
 };
 
 static int
-etm_configure(struct etm_softc *sc)
+etm_configure(device_t dev)
 {
+	struct etm_softc *sc;
 	uint32_t reg;
+
+	printf("%s\n", __func__);
+
+	sc = device_get_softc(dev);
 
 	/* Disable the trace unit */
 	bus_write_4(sc->res, TRCPRGCTLR, 0);
@@ -97,13 +104,10 @@ etm_configure(struct etm_softc *sc)
 	return (0);
 }
 
-void
-etm_print_version(void)
+static void
+etm_print_version(struct etm_softc *sc)
 {
-	struct etm_softc *sc;
 	uint32_t reg;
-
-	sc = etm_sc;
 
 #define	TRCARCHMAJ_S	8
 #define	TRCARCHMAJ_M	(0xf << TRCARCHMAJ_S)
@@ -153,14 +157,14 @@ etm_attach(device_t dev)
 		return (ENXIO);
 	}
 
+#if 0
 	if (etm_sc != NULL)
 		return (0);
 
 	etm_sc = sc;
+#endif
 
-	etm_print_version();
-
-	etm_configure(sc);
+	etm_print_version(sc);
 
 	return (0);
 }
@@ -169,6 +173,8 @@ static device_method_t etm_methods[] = {
 	/* Device interface */
 	DEVMETHOD(device_probe,		etm_probe),
 	DEVMETHOD(device_attach,	etm_attach),
+
+	DEVMETHOD(etm_configure,	etm_configure),
 	DEVMETHOD_END
 };
 
