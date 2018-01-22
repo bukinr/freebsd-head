@@ -100,9 +100,6 @@ funnel_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	if (device_get_unit(dev) != 1)
-		return (0);
-
 	funnel_sc = sc;
 
 	printf("Device ID: %x\n", bus_read_4(sc->res, FUNNEL_DEVICEID));
@@ -130,7 +127,11 @@ funnel_attach(device_t dev)
 
 	reg = 0; //bus_read_4(sc->res, FUNNEL_FUNCTL);
 	reg |= 7 << FUNCTL_HOLDTIME_SHIFT;
-	reg |= (1 << 0); /* Enable port 0 */
+	if (device_get_unit(dev) == 0) {
+		reg |= (1 << 0); /* Enable port 0 */
+	} else {
+		reg |= (1 << 0); /* Enable port 0 */
+	}
 	bus_write_4(sc->res, FUNNEL_FUNCTL, reg);
 
 	return (0);
