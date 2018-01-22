@@ -204,6 +204,8 @@ tmc_configure_etr(device_t dev, uint32_t low, uint32_t high)
 	    FFCR_FON_TRIG_EVT | FFCR_TRIGON_TRIGIN;
 	bus_write_4(sc->res, TMC_FFCR, reg);
 
+	bus_write_4(sc->res, TMC_TRG, 16);
+
 	bus_write_4(sc->res, TMC_DBALO, low);
 	bus_write_4(sc->res, TMC_DBAHI, high);
 
