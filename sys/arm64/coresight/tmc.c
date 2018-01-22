@@ -181,7 +181,7 @@ tmc_attach(device_t dev)
 }
 
 static int
-tmc_configure(device_t dev, uint32_t low, uint32_t high)
+tmc_configure_etr(device_t dev, uint32_t low, uint32_t high)
 {
 	struct tmc_softc *sc;
 	uint32_t reg;
@@ -194,10 +194,16 @@ tmc_configure(device_t dev, uint32_t low, uint32_t high)
 
 	/* Configure TMC */
 	bus_write_4(sc->res, TMC_MODE, MODE_CIRCULAR_BUFFER);
+
+	reg = AXICTL_PROT_CTRL_BIT1 | AXICTL_WRBURSTLEN_16;
+	reg |= AXICTL_SG_MODE;
+	reg |= AXICTL_AXCACHE_OS;
+	bus_write_4(sc->res, TMC_AXICTL, reg);
+
 	reg = FFCR_EN_FMT | FFCR_EN_TI | FFCR_FON_FLIN |
 	    FFCR_FON_TRIG_EVT | FFCR_TRIGON_TRIGIN;
 	bus_write_4(sc->res, TMC_FFCR, reg);
-	bus_write_4(sc->res, TMC_AXICTL, AXICTL_SG_MODE);
+
 	bus_write_4(sc->res, TMC_DBALO, low);
 	bus_write_4(sc->res, TMC_DBAHI, high);
 
@@ -241,7 +247,7 @@ static device_method_t tmc_methods[] = {
 	DEVMETHOD(device_attach,		tmc_attach),
 
 	/* TMC interface */
-	DEVMETHOD(tmc_configure,	tmc_configure),
+	DEVMETHOD(tmc_configure,	tmc_configure_etr),
 	DEVMETHOD(tmc_set_base,		tmc_set_base),
 	DEVMETHOD(tmc_read_trace,	tmc_read_trace),
 	DEVMETHOD_END
