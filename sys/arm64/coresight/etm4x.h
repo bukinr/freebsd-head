@@ -60,7 +60,7 @@
 #define	 TRCCONFIGR_INSTP0_M	(0x3 << TRCCONFIGR_INSTP0_S)
 #define	 TRCCONFIGR_INSTP0_NONE	0 /* Do not trace load and store instructions as P0 instructions. */
 #define	 TRCCONFIGR_INSTP0_LDR	(1 << TRCCONFIGR_INSTP0_S) /* Trace load instructions as P0 instructions. */
-#define	 TRCCONFIGR_INSTP0_STR	(2 << TRCCONFIGR_INSTP0_S) /* Trace store instructions as P0 instructions.
+#define	 TRCCONFIGR_INSTP0_STR	(2 << TRCCONFIGR_INSTP0_S) /* Trace store instructions as P0 instructions. */
 #define	 TRCCONFIGR_INSTP0_LDRSTR (3 << TRCCONFIGR_INSTP0_S) /* Trace load and store instructions as P0 instr. */
 #define	TRCAUXCTLR		0x018 /* Trace Auxiliary Control Register */
 #define	TRCEVENTCTL0R		0x020 /* Trace Event Control 0 Register */
