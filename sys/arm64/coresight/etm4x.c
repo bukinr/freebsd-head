@@ -117,9 +117,46 @@ etm_configure(device_t dev)
 		reg = bus_read_4(sc->res, TRCSTATR);
 	} while ((reg & TRCSTATR_IDLE) == 0);
 
+
 	/* Configure ETM */
-	reg = TRCCONFIGR_RS;
+
+	/* Enable the return stack, global timestamping, Context ID, and Virtual context identifier tracing. */
+	reg = 0x18C1;
+	reg = TRCCONFIGR_RS | TRCCONFIGR_TS | TRCCONFIGR_CID | TRCCONFIGR_VMID;
 	bus_write_4(sc->res, TRCCONFIGR, reg);
+
+	/* Disable all event tracing. */
+	bus_write_4(sc->res, TRCEVENTCTL0R, 0);
+	bus_write_4(sc->res, TRCEVENTCTL1R, 0);
+
+	/* Disable stalling, if implemented. */
+	bus_write_4(sc->res, TRCSTALLCTLR, 0);
+
+	/* Enable trace synchronization every 4096 bytes of trace. */
+	bus_write_4(sc->res, TRCSYNCPR, 0xC);
+
+	/* Set a value for the trace ID. */
+	bus_write_4(sc->res, TRCTRACEIDR, 1);
+
+	/*
+	 * Disable the timestamp event. The trace unit still generates
+	 * timestamps due to other reasons such as trace synchronization.
+	 */
+	bus_write_4(sc->res, TRCTSCTLR, 0);
+
+	/* Enable ViewInst to trace everything, with the start/stop logic started. */
+	reg = 0x201;
+	reg = TRCVICTLR_SSSTATUS;
+	reg |= 1;
+	bus_write_4(sc->res, TRCVICTLR, reg);
+
+	/* No address range filtering for ViewInst. */
+	bus_write_4(sc->res, TRCVIIECTLR, 0);
+
+	/* No start or stop points for ViewInst. */
+	bus_write_4(sc->res, TRCVISSCTLR, 0);
+
+
 
 	/* Enable the trace unit */
 	bus_write_4(sc->res, TRCPRGCTLR, 1);

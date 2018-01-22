@@ -74,6 +74,7 @@
 #define	TRCQCTLR		0x044 /* Trace Q Element Control Register */
 #define	 TRCQCTLR_MODE_INC	(1 << 8) /* Include mode. */
 #define	TRCVICTLR		0x080 /* Trace ViewInst Main Control Register */
+#define	 TRCVICTLR_SSSTATUS	(1 << 9) /* The start/stop logic is in the started state. */
 #define	TRCVIIECTLR		0x084 /* Trace ViewInst Include/Exclude Control Register */
 #define	TRCVISSCTLR		0x088 /* Trace ViewInst Start/Stop Control Register */
 #define	TRCVIPCSSCTLR		0x08C /* Trace ViewInst Start/Stop PE Comparator Control Register */
