@@ -65,6 +65,7 @@ static struct ofw_compat_data compat_data[] = {
 
 struct tmc_softc {
 	struct resource		*res;
+	device_t		dev;
 };
 
 #if 0
@@ -92,11 +93,58 @@ tmc_probe(device_t dev)
 }
 
 static int
+tmc_unlock(struct tmc_softc *sc)
+{
+
+	/* Unlock Coresight */
+	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
+	wmb();
+
+	/* Unlock TMC */
+	bus_write_4(sc->res, TMC_LAR, 0);
+	wmb();
+
+	return (0);
+}
+
+static int
+tmc_enable(struct tmc_softc *sc)
+{
+	uint32_t reg;
+
+	/* Enable TMC */
+	bus_write_4(sc->res, TMC_CTL, CTL_TRACECAPTEN);
+
+	do {
+		reg = bus_read_4(sc->res, TMC_STS);
+	} while ((reg & STS_TMCREADY) == 0);
+
+	return (0);
+}
+
+static void
+tmc_configure_etf(struct tmc_softc *sc)
+{
+
+	printf("%s\n", __func__);
+
+	tmc_unlock(sc);
+
+	bus_write_4(sc->res, TMC_MODE, MODE_HW_FIFO);
+	bus_write_4(sc->res, TMC_FFCR, FFCR_EN_FMT | FFCR_EN_TI);
+	bus_write_4(sc->res, TMC_BUFWM, 0);
+
+	tmc_enable(sc);
+}
+
+static int
 tmc_attach(device_t dev)
 {
 	struct tmc_softc *sc;
 
 	sc = device_get_softc(dev);
+
+	sc->dev = dev;
 
 	if (bus_alloc_resources(dev, tmc_spec, &sc->res) != 0) {
 		device_printf(dev, "cannot allocate resources for device\n");
@@ -116,8 +164,17 @@ tmc_attach(device_t dev)
 	uint32_t reg;
 	reg = bus_read_4(sc->res, TMC_DEVID);
 	reg &= DEVID_CONFIGTYPE_M;
-	if (reg == DEVID_CONFIGTYPE_ETR) {
-		printf("ETR configuration found\n");
+	switch (reg) {
+	case DEVID_CONFIGTYPE_ETR:
+		printf("ETR configuration found, unit %d\n", device_get_unit(dev));
+		//tmc_configure_etr(sc);
+		break;
+	case DEVID_CONFIGTYPE_ETF:
+		printf("ETF configuration found, unit %d\n", device_get_unit(dev));
+		tmc_configure_etf(sc);
+		break;
+	default:
+		break;
 	}
 
 	return (0);
@@ -133,26 +190,18 @@ tmc_configure(device_t dev, uint32_t low, uint32_t high)
 
 	printf("%s unit %d\n", __func__, device_get_unit(dev));
 
-	/* Unlock Coresight */
-	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
-	wmb();
-
-	/* Unlock TMC */
-	bus_write_4(sc->res, TMC_LAR, 0);
-	wmb();
+	tmc_unlock(sc);
 
 	/* Configure TMC */
 	bus_write_4(sc->res, TMC_MODE, MODE_CIRCULAR_BUFFER);
+	reg = FFCR_EN_FMT | FFCR_EN_TI | FFCR_FON_FLIN |
+	    FFCR_FON_TRIG_EVT | FFCR_TRIGON_TRIGIN;
+	bus_write_4(sc->res, TMC_FFCR, reg);
 	bus_write_4(sc->res, TMC_AXICTL, AXICTL_SG_MODE);
 	bus_write_4(sc->res, TMC_DBALO, low);
 	bus_write_4(sc->res, TMC_DBAHI, high);
 
-	/* Enable TMC */
-	bus_write_4(sc->res, TMC_CTL, CTL_TRACECAPTEN);
-
-	do {
-		reg = bus_read_4(sc->res, TMC_STS);
-	} while ((reg & STS_TMCREADY) == 0);
+	tmc_enable(sc);
 
 	return (0);
 }
