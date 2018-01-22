@@ -321,6 +321,8 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 	TMC_CONFIGURE(etm_pc->dev_tmc, phys_lo, phys_hi);
 	printf("calling TMC_CONFIGURE done\n");
 
+	ETM_CONFIGURE(etm_pc->dev_etm);
+
 	return (0);
 
 error:
