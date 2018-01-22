@@ -32,12 +32,36 @@
  */
 
 #define	TRCPRGCTLR		0x004 /* Trace Programming Control Register */
+#define	 TRCPRGCTLR_EN		(1 << 0) /* Trace unit enable bit */
 #define	TRCPROCSELR		0x008 /* Trace PE Select Control Register */
 #define	TRCSTATR		0x00C /* Trace Trace Status Register */
 #define	 TRCSTATR_PMSTABLE	(1 << 1) /* The programmers' model is stable. */
 #define	 TRCSTATR_IDLE		(1 << 0) /* The trace unit is idle. */
 #define	TRCCONFIGR		0x010 /* Trace Trace Configuration Register */
+#define	 TRCCONFIGR_DV		(1 << 17) /* Data value tracing is enabled when INSTP0 is not 0b00 */
+#define	 TRCCONFIGR_DA		(1 << 16) /* Data address tracing is enabled when INSTP0 is not 0b00. */
+#define	 TRCCONFIGR_VMIDOPT	(1 << 15) /* Control bit to configure the Virtual context identifier value */
+#define	 TRCCONFIGR_QE_S	13 /* Q element enable field */
+#define	 TRCCONFIGR_QE_M	(0x3 << TRCCONFIGR_QE_S)
 #define	 TRCCONFIGR_RS		(1 << 12) /* Return stack enable bit */
+#define	 TRCCONFIGR_TS		(1 << 11) /* Global timestamp tracing is enabled. */
+#define	 TRCCONFIGR_COND_S	8 /* Conditional instruction tracing bit. */
+#define	 TRCCONFIGR_COND_M	(0x7 << TRCCONFIGR_COND_S)
+#define	 TRCCONFIGR_COND_DIS	0
+#define	 TRCCONFIGR_COND_LDR	(1 << TRCCONFIGR_COND_S) /* Conditional load instructions are traced. */
+#define	 TRCCONFIGR_COND_STR	(2 << TRCCONFIGR_COND_S) /* Conditional store instructions are traced. */
+#define	 TRCCONFIGR_COND_LDRSTR	(3 << TRCCONFIGR_COND_S) /* Conditional load and store instructions are traced. */
+#define	 TRCCONFIGR_COND_ALL	(7 << TRCCONFIGR_COND_S) /* All conditional instructions are traced. */
+#define	 TRCCONFIGR_VMID	(1 << 7) /* Virtual context identifier tracing is enabled. */
+#define	 TRCCONFIGR_CID		(1 << 6) /* Context ID tracing is enabled. */
+#define	 TRCCONFIGR_CCI		(1 << 4) /* Cycle counting in the instruction trace is enabled. */
+#define	 TRCCONFIGR_BB		(1 << 3) /* Branch broadcast mode is enabled. */
+#define	 TRCCONFIGR_INSTP0_S	1 /* Instruction P0 field. */
+#define	 TRCCONFIGR_INSTP0_M	(0x3 << TRCCONFIGR_INSTP0_S)
+#define	 TRCCONFIGR_INSTP0_NONE	0 /* Do not trace load and store instructions as P0 instructions. */
+#define	 TRCCONFIGR_INSTP0_LDR	(1 << TRCCONFIGR_INSTP0_S) /* Trace load instructions as P0 instructions. */
+#define	 TRCCONFIGR_INSTP0_STR	(2 << TRCCONFIGR_INSTP0_S) /* Trace store instructions as P0 instructions.
+#define	 TRCCONFIGR_INSTP0_LDRSTR (3 << TRCCONFIGR_INSTP0_S) /* Trace load and store instructions as P0 instr. */
 #define	TRCAUXCTLR		0x018 /* Trace Auxiliary Control Register */
 #define	TRCEVENTCTL0R		0x020 /* Trace Event Control 0 Register */
 #define	TRCEVENTCTL1R		0x024 /* Trace Event Control 1 Register */
@@ -48,11 +72,19 @@
 #define	TRCBBCTLR		0x03C /* Trace Branch Broadcast Control Register */
 #define	TRCTRACEIDR		0x040 /* Trace Trace ID Register */
 #define	TRCQCTLR		0x044 /* Trace Q Element Control Register */
+#define	 TRCQCTLR_MODE_INC	(1 << 8) /* Include mode. */
 #define	TRCVICTLR		0x080 /* Trace ViewInst Main Control Register */
 #define	TRCVIIECTLR		0x084 /* Trace ViewInst Include/Exclude Control Register */
 #define	TRCVISSCTLR		0x088 /* Trace ViewInst Start/Stop Control Register */
 #define	TRCVIPCSSCTLR		0x08C /* Trace ViewInst Start/Stop PE Comparator Control Register */
 #define	TRCVDCTLR		0x0A0 /* Trace ViewData Main Control Register */
+#define	 TRCVDCTLR_TRCEXDATA	(1 << 12) /* Exception and exception return data transfers are traced *
+#define	 TRCVDCTLR_TBI		(1 << 11) /* The trace unit assigns bits[63:56] to have the same value as bits[63:56] of the data address. */
+#define	 TRCVDCTLR_PCREL	(1 << 10) /* The trace unit does not trace the address or value portions of PC-relative transfers. */
+#define	 TRCVDCTLR_SPREL_S	8
+#define	 TRCVDCTLR_SPREL_M	(0x3 << TRCVDCTLR_SPREL_S)
+#define	 TRCVDCTLR_EVENT_S	0
+#define	 TRCVDCTLR_EVENT_M	(0xff << TRCVDCTLR_EVENT_S)
 #define	TRCVDSACCTLR		0x0A4 /* Trace ViewData Include/Exclude Single Address Comparator Control Register */
 #define	TRCVDARCCTLR		0x0A8 /* Trace ViewData Include/Exclude Address Range Comparator Control Register */
 #define	TRCSEQEVR(n)		(0x100 + (n) * 0x4)	/* Trace Sequencer State Transition Control Register [n=0-2] */
