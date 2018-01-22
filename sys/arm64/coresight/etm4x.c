@@ -103,7 +103,7 @@ etm_configure(device_t dev)
 	struct etm_softc *sc;
 	uint32_t reg;
 
-	printf("%s\n", __func__);
+	printf("%s: unit %d\n", __func__, device_get_unit(dev));
 
 	sc = device_get_softc(dev);
 
@@ -121,8 +121,8 @@ etm_configure(device_t dev)
 	/* Configure ETM */
 
 	/* Enable the return stack, global timestamping, Context ID, and Virtual context identifier tracing. */
-	reg = 0x18C1;
 	reg = TRCCONFIGR_RS | TRCCONFIGR_TS | TRCCONFIGR_CID | TRCCONFIGR_VMID;
+	reg = 0x18C1;
 	bus_write_4(sc->res, TRCCONFIGR, reg);
 
 	/* Disable all event tracing. */
