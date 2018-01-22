@@ -108,12 +108,12 @@ replicator_attach(device_t dev)
 
 	replicator_sc = sc;
 
-#if 0
 	/* Unlock Coresight */
 	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
 
 	wmb();
 
+#if 0
 	/* Unlock Debug */
 	bus_write_4(sc->res, EDOSLAR, 0);
 
