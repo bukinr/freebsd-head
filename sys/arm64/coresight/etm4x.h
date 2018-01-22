@@ -78,7 +78,7 @@
 #define	TRCVISSCTLR		0x088 /* Trace ViewInst Start/Stop Control Register */
 #define	TRCVIPCSSCTLR		0x08C /* Trace ViewInst Start/Stop PE Comparator Control Register */
 #define	TRCVDCTLR		0x0A0 /* Trace ViewData Main Control Register */
-#define	 TRCVDCTLR_TRCEXDATA	(1 << 12) /* Exception and exception return data transfers are traced *
+#define	 TRCVDCTLR_TRCEXDATA	(1 << 12) /* Exception and exception return data transfers are traced */
 #define	 TRCVDCTLR_TBI		(1 << 11) /* The trace unit assigns bits[63:56] to have the same value as bits[63:56] of the data address. */
 #define	 TRCVDCTLR_PCREL	(1 << 10) /* The trace unit does not trace the address or value portions of PC-relative transfers. */
 #define	 TRCVDCTLR_SPREL_S	8
