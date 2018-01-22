@@ -36,6 +36,12 @@
 #define	TMC_DBAHI	0x11C /* Data Buffer Address High Register */
 #define	TMC_FFSR	0x300 /* Formatter and Flush Status Register */
 #define	TMC_FFCR	0x304 /* Formatter and Flush Control Register */
+#define	 FFCR_EN_FMT		(1 << 0)
+#define	 FFCR_EN_TI		(1 << 1)
+#define	 FFCR_FON_FLIN		(1 << 4)
+#define	 FFCR_FON_TRIG_EVT	(1 << 5)
+#define	 FFCR_FLUSH_MAN		(1 << 6)
+#define	 FFCR_TRIGON_TRIGIN	(1 << 8)
 #define	TMC_PSCR	0x308 /* Periodic Synchronization Counter Register */
 #define	TMC_ITATBMDATA0	0xED0 /* Integration Test ATB Master Data Register 0 */
 #define	TMC_ITATBMCTR2	0xED4 /* Integration Test ATB Master Interface Control 2 Register */
