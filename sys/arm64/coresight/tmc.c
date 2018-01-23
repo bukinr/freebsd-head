@@ -121,10 +121,15 @@ tmc_enable(struct tmc_softc *sc)
 static void
 tmc_configure_etf(struct tmc_softc *sc)
 {
+	uint32_t reg;
 
 	printf("%s\n", __func__);
 
 	tmc_unlock(sc);
+
+	do {
+		reg = bus_read_4(sc->res, TMC_STS);
+	} while ((reg & STS_TMCREADY) == 0);
 
 	bus_write_4(sc->res, TMC_MODE, MODE_HW_FIFO);
 	bus_write_4(sc->res, TMC_FFCR, FFCR_EN_FMT | FFCR_EN_TI);
@@ -180,6 +185,10 @@ tmc_configure_etr(device_t dev, uint32_t low, uint32_t high)
 
 	tmc_unlock(sc);
 
+	do {
+		reg = bus_read_4(sc->res, TMC_STS);
+	} while ((reg & STS_TMCREADY) == 0);
+
 	/* Configure TMC */
 	bus_write_4(sc->res, TMC_MODE, MODE_CIRCULAR_BUFFER);
 
@@ -222,11 +231,12 @@ tmc_read_trace(device_t dev)
  
 	sc = device_get_softc(dev);
 
-	printf("%s: STS 0x%x, RRP 0x%x, RWP 0x%x, LBUFLEVEL %x\n", __func__,
+	printf("%s: STS 0x%x, RRP 0x%x, RWP 0x%x, LBUFLEVEL %x, RRD %x\n", __func__,
 	    bus_read_4(sc->res, TMC_STS),
 	    bus_read_4(sc->res, TMC_RRP),
 	    bus_read_4(sc->res, TMC_RWP),
-	    bus_read_4(sc->res, TMC_LBUFLEVEL));
+	    bus_read_4(sc->res, TMC_LBUFLEVEL),
+	    bus_read_4(sc->res, TMC_RRD));
 
 	return (0);
 }
