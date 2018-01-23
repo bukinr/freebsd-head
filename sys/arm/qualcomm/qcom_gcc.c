@@ -141,6 +141,13 @@ qcom_gcc_attach(device_t dev)
 #define	GCC_GPLL2_MODE	0x4A000
 	bus_write_4(sc->res, GCC_GPLL2_MODE, reg);
 
+
+	/* test */
+#define	GCC_QDSS_TRACECLKIN_CMD_RCGR	0x29048
+#define	GCC_QDSS_TRACECLKIN_CBCR	0x29060
+	bus_write_4(sc->res, GCC_QDSS_TRACECLKIN_CMD_RCGR, 1);
+	bus_write_4(sc->res, GCC_QDSS_TRACECLKIN_CBCR, 1);
+
 	return (0);
 }
 

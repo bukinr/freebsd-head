@@ -88,6 +88,8 @@ tmc_probe(device_t dev)
 	return (BUS_PROBE_DEFAULT);
 }
 
+#define	ACCESS_W	0xC5ACCE55
+
 static int
 tmc_unlock(struct tmc_softc *sc)
 {
@@ -97,7 +99,7 @@ tmc_unlock(struct tmc_softc *sc)
 	wmb();
 
 	/* Unlock TMC */
-	bus_write_4(sc->res, TMC_LAR, 0);
+	bus_write_4(sc->res, TMC_LAR, ACCESS_W);
 	wmb();
 
 	return (0);
@@ -110,10 +112,15 @@ tmc_enable(struct tmc_softc *sc)
 
 	/* Enable TMC */
 	bus_write_4(sc->res, TMC_CTL, CTL_TRACECAPTEN);
+	if ((bus_read_4(sc->res, TMC_CTL) & CTL_TRACECAPTEN) == 0)
+		panic("not enabled0\n");
 
 	do {
 		reg = bus_read_4(sc->res, TMC_STS);
-	} while ((reg & STS_TMCREADY) == 0);
+	} while ((reg & STS_TMCREADY) == 1);
+
+	if ((bus_read_4(sc->res, TMC_CTL) & CTL_TRACECAPTEN) == 0)
+		panic("not enabled1\n");
 
 	return (0);
 }
@@ -209,6 +216,9 @@ tmc_configure_etr(device_t dev, uint32_t low, uint32_t high)
 	bus_write_4(sc->res, TMC_DBALO, low);
 	bus_write_4(sc->res, TMC_DBAHI, high);
 
+	//?
+	bus_write_4(sc->res, TMC_RRP, low);
+
 	tmc_enable(sc);
 
 	return (0);
@@ -234,12 +244,28 @@ tmc_read_trace(device_t dev)
  
 	sc = device_get_softc(dev);
 
-	printf("%s: STS 0x%x, RRP 0x%x, RWP 0x%x, LBUFLEVEL %x, RRD %x\n", __func__,
+#if 0
+	printf("%s: STS %x, CTL %x, RSZ %x, RRP %x, RWP %x, LBUFLEVEL %x, CBUFLEVEL %x, RRD %x\n", __func__,
 	    bus_read_4(sc->res, TMC_STS),
+	    bus_read_4(sc->res, TMC_CTL),
+	    bus_read_4(sc->res, TMC_RSZ),
 	    bus_read_4(sc->res, TMC_RRP),
 	    bus_read_4(sc->res, TMC_RWP),
+	    bus_read_4(sc->res, TMC_CBUFLEVEL),
 	    bus_read_4(sc->res, TMC_LBUFLEVEL),
 	    bus_read_4(sc->res, TMC_RRD));
+#endif
+	printf("%s: STS %x, CTL %x, RSZ %x, RRP %x, RWP %x, LBUFLEVEL %x, CBUFLEVEL %x, \n", __func__,
+	    bus_read_4(sc->res, TMC_STS),
+	    bus_read_4(sc->res, TMC_CTL),
+	    bus_read_4(sc->res, TMC_RSZ),
+	    bus_read_4(sc->res, TMC_RRP),
+	    bus_read_4(sc->res, TMC_RWP),
+	    bus_read_4(sc->res, TMC_CBUFLEVEL),
+	    bus_read_4(sc->res, TMC_LBUFLEVEL));
+
+	if (device_get_unit(dev) == 0)
+		printf("RRD: %x\n", bus_read_4(sc->res, TMC_RRD));
 
 	return (0);
 }

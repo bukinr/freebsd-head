@@ -329,9 +329,10 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 	phys_lo = phys_addr & 0xffffffff;
 	phys_hi = (phys_addr >> 32) & 0xffffffff;
 
-	TMC_CONFIGURE_ETR(etm_pc->dev_etr, phys_lo, phys_hi);
-	TMC_CONFIGURE_ETF(etm_pc->dev_etr);
 	ETM_CONFIGURE(etm_pc->dev_etm);
+
+	TMC_CONFIGURE_ETF(etm_pc->dev_etf);
+	TMC_CONFIGURE_ETR(etm_pc->dev_etr, phys_lo, phys_hi);
 
 	return (0);
 

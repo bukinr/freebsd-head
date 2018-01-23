@@ -121,7 +121,9 @@ etm_configure(device_t dev)
 	/* Enable the return stack, global timestamping, Context ID, and Virtual context identifier tracing. */
 	reg = 0x18C1;
 	reg = TRCCONFIGR_RS | TRCCONFIGR_TS | TRCCONFIGR_CID | TRCCONFIGR_VMID;
-	bus_write_4(sc->res, TRCCONFIGR, reg);
+
+	//reg = 0x00031FC7; /* Enable all the options except cycle counting and branch broadcast. */
+	//bus_write_4(sc->res, TRCCONFIGR, reg);
 
 	/* Disable all event tracing. */
 	bus_write_4(sc->res, TRCEVENTCTL0R, 0);
@@ -133,8 +135,8 @@ etm_configure(device_t dev)
 	/* Enable trace synchronization every 4096 bytes of trace. */
 	bus_write_4(sc->res, TRCSYNCPR, 0xC);
 
-	/* Set a value for the trace ID. */
-	bus_write_4(sc->res, TRCTRACEIDR, 1);
+	/* Set a value for the trace ID, with bit[0]=0. */
+	bus_write_4(sc->res, TRCTRACEIDR, 2);
 
 	/*
 	 * Disable the timestamp event. The trace unit still generates
@@ -154,15 +156,20 @@ etm_configure(device_t dev)
 	/* No start or stop points for ViewInst. */
 	bus_write_4(sc->res, TRCVISSCTLR, 0);
 
+	/* Enable ViewData. */
+	//bus_write_4(sc->res, TRCVDCTLR, 1);
+	/* No address filtering for ViewData. */
+	//bus_write_4(sc->res, TRCVDSACCTLR, 0);
+
 
 
 	/* Enable the trace unit */
 	bus_write_4(sc->res, TRCPRGCTLR, 1);
 
-	/* Wait for an IDLE bit */
+	/* Wait for an IDLE bit to be LOW */
 	do {
 		reg = bus_read_4(sc->res, TRCSTATR);
-	} while (reg & TRCSTATR_IDLE);
+	} while ((reg & TRCSTATR_IDLE) == 1);
 
 	if ((bus_read_4(sc->res, TRCPRGCTLR) & 1) == 0)
 		panic("etm is not enabled\n");
