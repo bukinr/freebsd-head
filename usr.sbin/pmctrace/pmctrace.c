@@ -79,7 +79,7 @@ __FBSDID("$FreeBSD$");
 #define	MAX_CPU	4096
 
 #define	PMCTRACE_DEBUG
-#undef	PMCTRACE_DEBUG
+//#undef	PMCTRACE_DEBUG
 
 #ifdef	PMCTRACE_DEBUG
 #define	dprintf(fmt, ...)	printf(fmt, ##__VA_ARGS__)
@@ -159,6 +159,7 @@ pmctrace_init_cpu(uint32_t cpu)
 		printf("mmap failed: err %d\n", errno);
 		return (-1);
 	}
+	dprintf("%s: tc->base %lx\n", __func__, *(uint64_t *)tc->base);
 
 	return (0);
 }

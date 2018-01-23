@@ -109,15 +109,30 @@ replicator_attach(device_t dev)
 
 	wmb();
 
+	int outport;
+
+	outport = 0;
+
+	if (outport == 0) {
+		bus_write_4(sc->res, REPLICATOR_IDFILTER0, 0x00);
+		if (0x00 != bus_read_4(sc->res, REPLICATOR_IDFILTER0))
+			panic("read is invalid");
+
+		bus_write_4(sc->res, REPLICATOR_IDFILTER1, 0xff);
+		if (0xff != bus_read_4(sc->res, REPLICATOR_IDFILTER1))
+			panic("read is invalid");
+	} else {
+		bus_write_4(sc->res, REPLICATOR_IDFILTER1, 0x00);
+		if (0x00 != bus_read_4(sc->res, REPLICATOR_IDFILTER1))
+			panic("read is invalid");
+
+		bus_write_4(sc->res, REPLICATOR_IDFILTER0, 0xff);
+		if (0xff != bus_read_4(sc->res, REPLICATOR_IDFILTER0))
+			panic("read is invalid");
+	}
+
 	bus_write_4(sc->res, REPLICATOR_IDFILTER0, 0x00);
-	bus_write_4(sc->res, REPLICATOR_IDFILTER1, 0xff);
-
-	/* Check the value */
-	if (0x00 != bus_read_4(sc->res, REPLICATOR_IDFILTER0))
-		panic("read is invalid");
-
-	if (0xff != bus_read_4(sc->res, REPLICATOR_IDFILTER1))
-		panic("read is invalid");
+	bus_write_4(sc->res, REPLICATOR_IDFILTER1, 0x00);
 
 	return (0);
 }

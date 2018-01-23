@@ -137,6 +137,7 @@ etm_process(struct trace_cpu *tc, struct pmcstat_process *pp,
 	dprintf("%s: cpu %d, cycle %d, offset %ld\n",
 	    __func__, cpu, cycle, offset);
 
+	dprintf("tc->base %lx\n", *(uint64_t *)tc->base);
 	if (offset == tc->offset)
 		return (0);
 

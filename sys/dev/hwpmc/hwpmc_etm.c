@@ -132,7 +132,8 @@ struct etm_cpu {
 	uint32_t			flags;
 #define	FLAG_ETM_ALLOCATED		(1 << 0)
 	struct etm_save_area		save_area;
-	device_t			dev_tmc;
+	device_t			dev_etr;
+	device_t			dev_etf;
 	device_t			dev_etm;
 };
 
@@ -283,6 +284,16 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 			printf("%s: Can't allocate memory.\n", __func__);
 			goto error;
 		}
+		if (i == 0) {
+			if (m->flags & PG_ZERO)
+				printf("page zeroed\n");
+			else {
+				printf("page not zeroed\n");
+				uint64_t *addr;
+				addr = (uint64_t *)PHYS_TO_DMAP(VM_PAGE_TO_PHYS(m));
+				*addr = 0;
+			}
+		}
 		m->valid = VM_PAGE_BITS_ALL;
 		etm_buf->topa_sw[i].size = segsize;
 		etm_buf->topa_sw[i].offset = offset;
@@ -318,7 +329,7 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 	phys_lo = phys_addr & 0xffffffff;
 	phys_hi = (phys_addr >> 32) & 0xffffffff;
 	printf("calling TMC_CONFIGURE\n");
-	TMC_CONFIGURE(etm_pc->dev_tmc, phys_lo, phys_hi);
+	TMC_CONFIGURE(etm_pc->dev_etr, phys_lo, phys_hi);
 	printf("calling TMC_CONFIGURE done\n");
 
 	ETM_CONFIGURE(etm_pc->dev_etm);
@@ -673,7 +684,7 @@ etm_pcpu_init(struct pmc_mdep *md, int cpu)
 	dprintf("%s: cpu %d\n", __func__, cpu);
 
 	devclass_t etm_devclass, tmc_devclass;
-	device_t dev_etm, dev_tmc;
+	device_t dev_etm, dev_etr, dev_etf;
 
 	/* Find our ETM device */
 	etm_devclass = devclass_find("etm");
@@ -687,8 +698,12 @@ etm_pcpu_init(struct pmc_mdep *md, int cpu)
 	tmc_devclass = devclass_find("tmc");
 	if (tmc_devclass == NULL)
 		return (ENXIO);
-	dev_tmc = devclass_get_device(tmc_devclass, 1);
-	if (dev_tmc == NULL)
+
+	dev_etf = devclass_get_device(tmc_devclass, 0);
+	if (dev_etf == NULL)
+		return (ENXIO);
+	dev_etr = devclass_get_device(tmc_devclass, 1);
+	if (dev_etr == NULL)
 		return (ENXIO);
 
 #if 0
@@ -730,7 +745,8 @@ etm_pcpu_init(struct pmc_mdep *md, int cpu)
 
 	etm_pc = malloc(sizeof(struct etm_cpu), M_ETM, M_WAITOK | M_ZERO);
 	etm_pc->dev_etm = dev_etm;
-	etm_pc->dev_tmc = dev_tmc;
+	etm_pc->dev_etr = dev_etr;
+	etm_pc->dev_etf = dev_etf;
 
 	etm_pc->tc_hw.phw_state = PMC_PHW_FLAG_IS_ENABLED |
 	    PMC_PHW_CPU_TO_STATE(cpu) | PMC_PHW_INDEX_TO_STATE(0) |
@@ -823,7 +839,8 @@ etm_read_trace(int cpu, int ri, struct pmc *pm,
 	etm_pc = etm_pcpu[cpu];
 	etm_pc->pm_mmap = pm;
 
-	TMC_READ_TRACE(etm_pc->dev_tmc);
+	TMC_READ_TRACE(etm_pc->dev_etf);
+	TMC_READ_TRACE(etm_pc->dev_etr);
 
 	pm_etm = (struct pmc_md_etm_pmc *)&pm->pm_md;
 	etm_buf = &pm_etm->etm_buffers[cpu];
