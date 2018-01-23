@@ -90,6 +90,7 @@ funnel_attach(device_t dev)
 {
 	struct funnel_softc *sc;
 	uint32_t reg;
+	uint32_t reg1;
 
 	sc = device_get_softc(dev);
 
@@ -117,9 +118,7 @@ funnel_attach(device_t dev)
 	bus_write_4(sc->res, FUNNEL_FUNCTL, reg);
 
 	/* Check the value */
-	uint32_t reg1;
 	reg1 = bus_read_4(sc->res, FUNNEL_FUNCTL);
-
 	if (reg != reg1)
 		panic("read is invalid: reg %x reg1 %x", reg, reg1);
 
