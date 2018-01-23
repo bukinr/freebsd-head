@@ -328,10 +328,9 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 	phys_addr = vtophys(etm_buf->topa_hw);
 	phys_lo = phys_addr & 0xffffffff;
 	phys_hi = (phys_addr >> 32) & 0xffffffff;
-	printf("calling TMC_CONFIGURE\n");
-	TMC_CONFIGURE(etm_pc->dev_etr, phys_lo, phys_hi);
-	printf("calling TMC_CONFIGURE done\n");
 
+	TMC_CONFIGURE_ETR(etm_pc->dev_etr, phys_lo, phys_hi);
+	TMC_CONFIGURE_ETF(etm_pc->dev_etr);
 	ETM_CONFIGURE(etm_pc->dev_etm);
 
 	return (0);

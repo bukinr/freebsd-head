@@ -118,26 +118,6 @@ tmc_enable(struct tmc_softc *sc)
 	return (0);
 }
 
-static void
-tmc_configure_etf(struct tmc_softc *sc)
-{
-	uint32_t reg;
-
-	printf("%s\n", __func__);
-
-	tmc_unlock(sc);
-
-	do {
-		reg = bus_read_4(sc->res, TMC_STS);
-	} while ((reg & STS_TMCREADY) == 0);
-
-	bus_write_4(sc->res, TMC_MODE, MODE_HW_FIFO);
-	bus_write_4(sc->res, TMC_FFCR, FFCR_EN_FMT | FFCR_EN_TI);
-	bus_write_4(sc->res, TMC_BUFWM, 0);
-
-	tmc_enable(sc);
-}
-
 static int
 tmc_attach(device_t dev)
 {
@@ -160,15 +140,38 @@ tmc_attach(device_t dev)
 	switch (reg) {
 	case DEVID_CONFIGTYPE_ETR:
 		printf("ETR configuration found, unit %d\n", device_get_unit(dev));
-		//tmc_configure_etr(sc);
 		break;
 	case DEVID_CONFIGTYPE_ETF:
 		printf("ETF configuration found, unit %d\n", device_get_unit(dev));
-		tmc_configure_etf(sc);
 		break;
 	default:
 		break;
 	}
+
+	return (0);
+}
+
+static int
+tmc_configure_etf(device_t dev)
+{
+	struct tmc_softc *sc;
+	uint32_t reg;
+ 
+	sc = device_get_softc(dev);
+
+	printf("%s\n", __func__);
+
+	tmc_unlock(sc);
+
+	do {
+		reg = bus_read_4(sc->res, TMC_STS);
+	} while ((reg & STS_TMCREADY) == 0);
+
+	bus_write_4(sc->res, TMC_MODE, MODE_HW_FIFO);
+	bus_write_4(sc->res, TMC_FFCR, FFCR_EN_FMT | FFCR_EN_TI);
+	bus_write_4(sc->res, TMC_BUFWM, 0);
+
+	tmc_enable(sc);
 
 	return (0);
 }
@@ -247,7 +250,8 @@ static device_method_t tmc_methods[] = {
 	DEVMETHOD(device_attach,		tmc_attach),
 
 	/* TMC interface */
-	DEVMETHOD(tmc_configure,	tmc_configure_etr),
+	DEVMETHOD(tmc_configure_etr,	tmc_configure_etr),
+	DEVMETHOD(tmc_configure_etf,	tmc_configure_etf),
 	DEVMETHOD(tmc_set_base,		tmc_set_base),
 	DEVMETHOD(tmc_read_trace,	tmc_read_trace),
 	DEVMETHOD_END

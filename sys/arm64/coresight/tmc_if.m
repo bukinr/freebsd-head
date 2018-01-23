@@ -42,10 +42,17 @@ METHOD int set_base {
 /**
  *
  */
-METHOD int configure {
+METHOD int configure_etr {
 	device_t	dev;
 	uint32_t	addr_low;
 	uint32_t	addr_high;
+};
+
+/**
+ *
+ */
+METHOD int configure_etf {
+	device_t	dev;
 };
 
 /**

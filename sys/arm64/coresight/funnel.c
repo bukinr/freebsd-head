@@ -117,8 +117,7 @@ funnel_attach(device_t dev)
 	reg |= 0x0f;
 	bus_write_4(sc->res, FUNNEL_FUNCTL, reg);
 
-	reg = 0;
-	bus_write_4(sc->res, FUNNEL_PRICTL, reg);
+	bus_write_4(sc->res, FUNNEL_PRICTL, 0);
 
 	/* Check the value */
 	reg1 = bus_read_4(sc->res, FUNNEL_FUNCTL);
