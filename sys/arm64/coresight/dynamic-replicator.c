@@ -68,8 +68,6 @@ struct replicator_softc {
 	struct resource		*res;
 };
 
-struct replicator_softc *replicator_sc;
-
 static struct resource_spec replicator_spec[] = {
 	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },
 	{ -1, 0 }
@@ -106,31 +104,20 @@ replicator_attach(device_t dev)
 	if (device_get_unit(dev) != 0)
 		return (0);
 
-	replicator_sc = sc;
-
 	/* Unlock Coresight */
 	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
 
 	wmb();
 
-#if 0
-	/* Unlock Debug */
-	bus_write_4(sc->res, EDOSLAR, 0);
-
-	wmb();
-
-	/* Enable power */
-	reg = bus_read_4(sc->res, EDPRCR);
-	reg |= EDPRCR_COREPURQ;
-	bus_write_4(sc->res, EDPRCR, reg);
-
-	do {
-		reg = bus_read_4(sc->res, EDPRSR);
-	} while ((reg & EDPRCR_CORENPDRQ) == 0);
-#endif
-
 	bus_write_4(sc->res, REPLICATOR_IDFILTER0, 0x00);
 	bus_write_4(sc->res, REPLICATOR_IDFILTER1, 0xff);
+
+	/* Check the value */
+	if (0x00 != bus_read_4(sc->res, REPLICATOR_IDFILTER0))
+		panic("read is invalid");
+
+	if (0xff != bus_read_4(sc->res, REPLICATOR_IDFILTER1))
+		panic("read is invalid");
 
 	return (0);
 }

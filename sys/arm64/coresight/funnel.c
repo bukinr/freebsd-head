@@ -65,8 +65,6 @@ struct funnel_softc {
 	struct resource		*res;
 };
 
-struct funnel_softc *funnel_sc;
-
 static struct resource_spec funnel_spec[] = {
 	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },
 	{ -1, 0 }
@@ -100,30 +98,12 @@ funnel_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	funnel_sc = sc;
-
 	printf("Device ID: %x\n", bus_read_4(sc->res, FUNNEL_DEVICEID));
 
-#if 0
 	/* Unlock Coresight */
 	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
 
 	wmb();
-
-	/* Unlock Debug */
-	bus_write_4(sc->res, EDOSLAR, 0);
-
-	wmb();
-
-	/* Enable power */
-	reg = bus_read_4(sc->res, EDPRCR);
-	reg |= EDPRCR_COREPURQ;
-	bus_write_4(sc->res, EDPRCR, reg);
-
-	do {
-		reg = bus_read_4(sc->res, EDPRSR);
-	} while ((reg & EDPRCR_CORENPDRQ) == 0);
-#endif
 
 	reg = 0; //bus_read_4(sc->res, FUNNEL_FUNCTL);
 	reg |= 7 << FUNCTL_HOLDTIME_SHIFT;
@@ -132,7 +112,16 @@ funnel_attach(device_t dev)
 	} else {
 		reg |= (1 << 0); /* Enable port 0 */
 	}
+	/* XXX: enable all the ports */
+	reg |= 0x0f;
 	bus_write_4(sc->res, FUNNEL_FUNCTL, reg);
+
+	/* Check the value */
+	uint32_t reg1;
+	reg1 = bus_read_4(sc->res, FUNNEL_FUNCTL);
+
+	if (reg != reg1)
+		panic("read is invalid: reg %x reg1 %x", reg, reg1);
 
 	return (0);
 }

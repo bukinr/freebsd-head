@@ -68,10 +68,6 @@ struct tmc_softc {
 	device_t		dev;
 };
 
-#if 0
-struct tmc_softc *tmc_sc;
-#endif
-
 static struct resource_spec tmc_spec[] = {
 	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },
 	{ -1, 0 }
@@ -150,14 +146,6 @@ tmc_attach(device_t dev)
 		device_printf(dev, "cannot allocate resources for device\n");
 		return (ENXIO);
 	}
-
-#if 0
-	if (device_get_unit(dev) != 1)
-		return (0);
-
-	tmc_sc = sc;
-
-#endif
 
 	//printf("%s: DEVID %x\n", __func__, bus_read_4(sc->res, TMC_DEVID));
 

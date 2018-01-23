@@ -64,8 +64,6 @@ struct etm_softc {
 	struct resource		*res;
 };
 
-struct etm_softc *etm_sc;
-
 static struct resource_spec etm_spec[] = {
 	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },
 	{ -1, 0 }
@@ -195,13 +193,6 @@ etm_attach(device_t dev)
 		device_printf(dev, "cannot allocate resources for device\n");
 		return (ENXIO);
 	}
-
-#if 0
-	if (etm_sc != NULL)
-		return (0);
-
-	etm_sc = sc;
-#endif
 
 	return (0);
 }
