@@ -231,13 +231,12 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 	struct pmc_vm_map *map;
 	struct etm_cpu *etm_pc;
 	uint64_t segsize;
-	uint64_t offset;
+	//uint64_t offset;
 	uint32_t bufsize;
 	struct cdev_cpu *cc;
 	vm_object_t obj;
 	vm_page_t m;
 	uint32_t size;
-	int npages;
 	int ntopa;
 	int i;
 
@@ -245,7 +244,7 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 
 	etm_pc = etm_pcpu[cpu];
 
-	bufsize = 128 * 1024 * 1024;
+	bufsize = 2 * 1024 * 1024;
 
 #if 0
 	if (etm_pc->l0_ecx & CPUETM_TOPA_MULTI)
@@ -255,11 +254,9 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 
 	segsize = PAGE_SIZE << (topa_size >> TOPA_SIZE_S);
 	ntopa = bufsize / segsize;
-	npages = segsize / PAGE_SIZE;
 #endif
 
 	segsize = PAGE_SIZE;
-	npages = 1;
 	ntopa = bufsize / segsize;
 
 	etm_buf->obj = obj = vm_pager_allocate(OBJT_PHYS, 0, bufsize,
@@ -270,6 +267,27 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 	etm_buf->topa_sw = malloc(ntopa * sizeof(struct topa_entry), M_ETM,
 	    M_WAITOK | M_ZERO);
 
+	int npages;
+
+	ntopa = 1;
+	segsize = bufsize;
+	npages = bufsize / PAGE_SIZE;
+
+	VM_OBJECT_WLOCK(obj);
+	vm_object_reference_locked(obj);
+	m = vm_page_alloc_contig(obj, 0, VM_ALLOC_NOBUSY | VM_ALLOC_ZERO,
+	    npages, 0, ~0, PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
+	if (m == NULL) {
+		VM_OBJECT_WUNLOCK(obj);
+		printf("%s: Can't allocate memory.\n", __func__);
+		goto error;
+	}
+	for (i = 0; i < npages; i++)
+		m[i].valid = VM_PAGE_BITS_ALL;
+	etm_buf->topa_hw[0] = VM_PAGE_TO_PHYS(m);
+	VM_OBJECT_WUNLOCK(obj);
+
+#if 0
 #define	ENTRY_LAST	1
 #define	ENTRY_NORMAL	2
 #define	ENTRY_LINK	3
@@ -297,7 +315,7 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 		m->valid = VM_PAGE_BITS_ALL;
 		etm_buf->topa_sw[i].size = segsize;
 		etm_buf->topa_sw[i].offset = offset;
-		etm_buf->topa_hw[i] = VM_PAGE_TO_PHYS(m);
+		etm_buf->topa_hw[i] = (VM_PAGE_TO_PHYS(m) >> 12) << 4;
 		if (i == (ntopa - 1))
 			etm_buf->topa_hw[i] |= ENTRY_LAST;
 		else
@@ -306,6 +324,7 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 		offset += segsize;
 	}
 	VM_OBJECT_WUNLOCK(obj);
+#endif
 
 	///* The last entry is a pointer to the base table. */
 	//etm_buf->topa_hw[ntopa] = vtophys(etm_buf->topa_hw) | ENTRY_LAST;
@@ -326,6 +345,7 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 	uint32_t phys_lo;
 	uint32_t phys_hi;
 	phys_addr = vtophys(etm_buf->topa_hw);
+	phys_addr = VM_PAGE_TO_PHYS(m);
 	phys_lo = phys_addr & 0xffffffff;
 	phys_hi = (phys_addr >> 32) & 0xffffffff;
 
