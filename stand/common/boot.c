@@ -320,6 +320,8 @@ getrootmount(char *rootdev)
 	goto notfound;
 
     /* loop reading lines from /etc/fstab    What was that about sscanf again? */
+    fstyp = NULL;
+    dev = NULL;
     while (fgetstr(lbuf, sizeof(lbuf), fd) >= 0) {
 	if ((lbuf[0] == 0) || (lbuf[0] == '#'))
 	    continue;
@@ -331,6 +333,7 @@ getrootmount(char *rootdev)
 	    continue;
 	/* delimit and save */
 	*cp++ = 0;
+	free(dev);
 	dev = strdup(lbuf);
 
 	/* skip whitespace up to mountpoint */
@@ -350,6 +353,7 @@ getrootmount(char *rootdev)
 	while ((*cp != 0) && !isspace(*cp))
 	    cp++;
 	*cp = 0;
+	free(fstyp);
 	fstyp = strdup(ep);
 
 	/* skip whitespace up to mount options */
@@ -366,8 +370,6 @@ getrootmount(char *rootdev)
 	options = strdup(ep);
 	/* Build the <fstype>:<device> and save it in vfs.root.mountfrom */
 	sprintf(lbuf, "%s:%s", fstyp, dev);
-	free(dev);
-	free(fstyp);
 	setenv("vfs.root.mountfrom", lbuf, 0);
 
 	/* Don't override vfs.root.mountfrom.options if it is already set */
@@ -380,6 +382,8 @@ getrootmount(char *rootdev)
 	break;
     }
     close(fd);
+    free(dev);
+    free(fstyp);
 
 notfound:
     if (error) {
@@ -391,6 +395,7 @@ notfound:
 	    cp[strlen(cp) - 1] = '\0';
 	    setenv("vfs.root.mountfrom", cp, 0);
 	    error = 0;
+	    free(cp);
 	}
     }
 
