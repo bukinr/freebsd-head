@@ -131,9 +131,6 @@ replicator_attach(device_t dev)
 			panic("read is invalid");
 	}
 
-	bus_write_4(sc->res, REPLICATOR_IDFILTER0, 0x00);
-	bus_write_4(sc->res, REPLICATOR_IDFILTER1, 0x00);
-
 	return (0);
 }
 

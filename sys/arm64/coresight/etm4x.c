@@ -115,15 +115,14 @@ etm_configure(device_t dev)
 		reg = bus_read_4(sc->res, TRCSTATR);
 	} while ((reg & TRCSTATR_IDLE) == 0);
 
-
 	/* Configure ETM */
 
 	/* Enable the return stack, global timestamping, Context ID, and Virtual context identifier tracing. */
-	reg = 0x18C1;
 	reg = TRCCONFIGR_RS | TRCCONFIGR_TS | TRCCONFIGR_CID | TRCCONFIGR_VMID;
+	reg = 0x18C1;
 
 	//reg = 0x00031FC7; /* Enable all the options except cycle counting and branch broadcast. */
-	//bus_write_4(sc->res, TRCCONFIGR, reg);
+	bus_write_4(sc->res, TRCCONFIGR, reg);
 
 	/* Disable all event tracing. */
 	bus_write_4(sc->res, TRCEVENTCTL0R, 0);
@@ -160,8 +159,6 @@ etm_configure(device_t dev)
 	//bus_write_4(sc->res, TRCVDCTLR, 1);
 	/* No address filtering for ViewData. */
 	//bus_write_4(sc->res, TRCVDSACCTLR, 0);
-
-
 
 	/* Enable the trace unit */
 	bus_write_4(sc->res, TRCPRGCTLR, 1);

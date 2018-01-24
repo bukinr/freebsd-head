@@ -202,8 +202,9 @@ tmc_configure_etr(device_t dev, uint32_t low, uint32_t high)
 	/* Configure TMC */
 	bus_write_4(sc->res, TMC_MODE, MODE_CIRCULAR_BUFFER);
 
-	reg = AXICTL_PROT_CTRL_BIT1 | AXICTL_WRBURSTLEN_16;
-	reg |= AXICTL_SG_MODE;
+	reg = AXICTL_PROT_CTRL_BIT1;
+	reg |= AXICTL_WRBURSTLEN_16;
+	//reg |= AXICTL_SG_MODE;
 	reg |= AXICTL_AXCACHE_OS;
 	bus_write_4(sc->res, TMC_AXICTL, reg);
 
@@ -211,13 +212,19 @@ tmc_configure_etr(device_t dev, uint32_t low, uint32_t high)
 	    FFCR_FON_TRIG_EVT | FFCR_TRIGON_TRIGIN;
 	bus_write_4(sc->res, TMC_FFCR, reg);
 
-	bus_write_4(sc->res, TMC_TRG, 16);
+	bus_write_4(sc->res, TMC_TRG, 4);
 
 	bus_write_4(sc->res, TMC_DBALO, low);
 	bus_write_4(sc->res, TMC_DBAHI, high);
 
 	//?
+	bus_write_4(sc->res, TMC_RSZ, 128*1024*1024);
 	bus_write_4(sc->res, TMC_RRP, low);
+	bus_write_4(sc->res, TMC_RWP, low);
+
+	reg = bus_read_4(sc->res, TMC_STS);
+	reg &= ~STS_FULL;
+	bus_write_4(sc->res, TMC_STS, reg);
 
 	tmc_enable(sc);
 
@@ -264,7 +271,7 @@ tmc_read_trace(device_t dev)
 	    bus_read_4(sc->res, TMC_CBUFLEVEL),
 	    bus_read_4(sc->res, TMC_LBUFLEVEL));
 
-	if (device_get_unit(dev) == 0)
+	//if (device_get_unit(dev) == 0)
 		printf("RRD: %x\n", bus_read_4(sc->res, TMC_RRD));
 
 	return (0);

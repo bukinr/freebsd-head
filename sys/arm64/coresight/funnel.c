@@ -108,21 +108,26 @@ funnel_attach(device_t dev)
 
 	reg = 0; //bus_read_4(sc->res, FUNNEL_FUNCTL);
 	reg |= 7 << FUNCTL_HOLDTIME_SHIFT;
+#if 0
 	if (device_get_unit(dev) == 0) {
 		reg |= (1 << 0); /* Enable port 0 */
 	} else {
 		reg |= (1 << 0); /* Enable port 0 */
 	}
+#endif
 	/* XXX: enable all the ports */
-	reg |= 0x0f;
+	reg |= 0xff;
 	bus_write_4(sc->res, FUNNEL_FUNCTL, reg);
 
-	//bus_write_4(sc->res, FUNNEL_PRICTL, 1);
-
+#if 0
+	bus_write_4(sc->res, FUNNEL_PRICTL, 1);
 	/* Check the value */
 	reg1 = bus_read_4(sc->res, FUNNEL_FUNCTL);
 	if (reg != reg1)
 		panic("read is invalid: reg %x reg1 %x", reg, reg1);
+#endif
+	reg1 = bus_read_4(sc->res, FUNNEL_FUNCTL);
+	printf("FUNCTL %x", reg1);
 
 	return (0);
 }
