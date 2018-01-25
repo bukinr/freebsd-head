@@ -73,21 +73,6 @@ static struct resource_spec tmc_spec[] = {
 	{ -1, 0 }
 };
 
-static int
-tmc_probe(device_t dev)
-{
-
-	if (!ofw_bus_status_okay(dev))
-		return (ENXIO);
-
-	if (ofw_bus_search_compatible(dev, compat_data)->ocd_data == 0)
-		return (ENXIO);
-
-	device_set_desc(dev, "Coresight Trace Memory Controller (TMC)");
-
-	return (BUS_PROBE_DEFAULT);
-}
-
 #define	ACCESS_W	0xC5ACCE55
 
 static int
@@ -121,39 +106,6 @@ tmc_enable(struct tmc_softc *sc)
 
 	if ((bus_read_4(sc->res, TMC_CTL) & CTL_TRACECAPTEN) == 0)
 		panic("not enabled1\n");
-
-	return (0);
-}
-
-static int
-tmc_attach(device_t dev)
-{
-	struct tmc_softc *sc;
-
-	sc = device_get_softc(dev);
-
-	sc->dev = dev;
-
-	if (bus_alloc_resources(dev, tmc_spec, &sc->res) != 0) {
-		device_printf(dev, "cannot allocate resources for device\n");
-		return (ENXIO);
-	}
-
-	printf("%s: DEVID %x\n", __func__, bus_read_4(sc->res, TMC_DEVID));
-
-	uint32_t reg;
-	reg = bus_read_4(sc->res, TMC_DEVID);
-	reg &= DEVID_CONFIGTYPE_M;
-	switch (reg) {
-	case DEVID_CONFIGTYPE_ETR:
-		printf("ETR configuration found, unit %d\n", device_get_unit(dev));
-		break;
-	case DEVID_CONFIGTYPE_ETF:
-		printf("ETF configuration found, unit %d\n", device_get_unit(dev));
-		break;
-	default:
-		break;
-	}
 
 	return (0);
 }
@@ -205,8 +157,10 @@ tmc_configure_etr(device_t dev, uint32_t low, uint32_t high)
 	reg = AXICTL_PROT_CTRL_BIT1;
 	reg |= AXICTL_WRBURSTLEN_16;
 
-	/* Does not work on Qualcomm */
-	//reg |= AXICTL_SG_MODE;
+	/*
+	 * SG operation is broken on DragonBoard 410c
+	 * reg |= AXICTL_SG_MODE;
+	 */
 
 	reg |= AXICTL_AXCACHE_OS;
 	bus_write_4(sc->res, TMC_AXICTL, reg);
@@ -230,6 +184,56 @@ tmc_configure_etr(device_t dev, uint32_t low, uint32_t high)
 	bus_write_4(sc->res, TMC_STS, reg);
 
 	tmc_enable(sc);
+
+	return (0);
+}
+
+
+static int
+tmc_probe(device_t dev)
+{
+
+	if (!ofw_bus_status_okay(dev))
+		return (ENXIO);
+
+	if (ofw_bus_search_compatible(dev, compat_data)->ocd_data == 0)
+		return (ENXIO);
+
+	device_set_desc(dev, "Coresight Trace Memory Controller (TMC)");
+
+	return (BUS_PROBE_DEFAULT);
+}
+
+static int
+tmc_attach(device_t dev)
+{
+	struct tmc_softc *sc;
+
+	sc = device_get_softc(dev);
+
+	sc->dev = dev;
+
+	if (bus_alloc_resources(dev, tmc_spec, &sc->res) != 0) {
+		device_printf(dev, "cannot allocate resources for device\n");
+		return (ENXIO);
+	}
+
+	printf("%s: DEVID %x\n", __func__, bus_read_4(sc->res, TMC_DEVID));
+
+	uint32_t reg;
+	reg = bus_read_4(sc->res, TMC_DEVID);
+	reg &= DEVID_CONFIGTYPE_M;
+	switch (reg) {
+	case DEVID_CONFIGTYPE_ETR:
+		printf("ETR configuration found, unit %d\n", device_get_unit(dev));
+		break;
+	case DEVID_CONFIGTYPE_ETF:
+		tmc_configure_etf(dev);
+		printf("ETF configuration found, unit %d\n", device_get_unit(dev));
+		break;
+	default:
+		break;
+	}
 
 	return (0);
 }
