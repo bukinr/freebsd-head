@@ -303,8 +303,8 @@ tmc_read_trace(device_t dev)
 	    bus_read_4(sc->res, TMC_CBUFLEVEL),
 	    bus_read_4(sc->res, TMC_LBUFLEVEL));
 
-	if (device_get_unit(dev) == 0)
-		printf("RRD: %x\n", bus_read_4(sc->res, TMC_RRD));
+	//if (device_get_unit(dev) == 0)
+	//	printf("RRD: %x\n", bus_read_4(sc->res, TMC_RRD));
 
 	return (0);
 }
