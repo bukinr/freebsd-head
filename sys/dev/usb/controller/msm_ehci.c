@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2017 Ruslan Bukin <br@bsdpad.com>
+ * Copyright (c) 2018 Ruslan Bukin <br@bsdpad.com>
  * All rights reserved.
  *
  * This software was developed by BAE Systems, the University of Cambridge
@@ -42,121 +42,101 @@ __FBSDID("$FreeBSD$");
 #include <sys/kernel.h>
 #include <sys/module.h>
 
-#include <machine/bus.h>
-#include <dev/ofw/ofw_bus.h> 
+#include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
 
-#include <dev/usb/usb.h> 
+#include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
 
 #include <dev/usb/usb_core.h>
 #include <dev/usb/usb_busdma.h>
 #include <dev/usb/usb_process.h>
 #include <dev/usb/usb_util.h>
-
 #include <dev/usb/usb_controller.h>
 #include <dev/usb/usb_bus.h>
 #include <dev/usb/controller/ehci.h>
 #include <dev/usb/controller/ehcireg.h>
 
-#include "hsusb.h"
-
-#define EHCI_HC_DEVSTR			"Qualcomm Integrated USB 2.0 controller"
-
-#define RD4(sc, reg)		\
-	bus_space_read_4((sc)->sc_io_tag, (sc)->sc_io_hdl, reg)
-
-#define WR4(sc, reg, data)	\
-	bus_space_write_4((sc)->sc_io_tag, (sc)->sc_io_hdl, reg, data)
+#include <machine/bus.h>
 
 struct msm_ehci_softc {
-        ehci_softc_t            base;
-        struct resource         *res[3]; 
-        bus_space_tag_t         gpio_bst;
-        bus_space_handle_t      gpio_bsh;
-
+	ehci_softc_t		base;
+	struct resource		*res[3];
 };
 
 static struct resource_spec msm_ehci_spec[] = {
-        { SYS_RES_MEMORY,       0,      RF_ACTIVE },
-        { SYS_RES_MEMORY,       1,      RF_ACTIVE },
-        { SYS_RES_IRQ,          0,      RF_ACTIVE },
-        { -1, 0 }
+	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },
+	{ SYS_RES_MEMORY,	1,	RF_ACTIVE },
+	{ SYS_RES_IRQ,		0,	RF_ACTIVE },
+	{ -1, 0 }
 };
 
-static device_attach_t msm_ehci_attach;
 static device_detach_t msm_ehci_detach;
 
 static int
-msm_ehci_probe(device_t self)
+msm_ehci_probe(device_t dev)
 {
 
-	if (!ofw_bus_is_compatible(self, "qcom,ci-hdrc")) 
+	if (!ofw_bus_is_compatible(dev, "qcom,ci-hdrc"))
 		return (ENXIO);
 
-	device_set_desc(self, EHCI_HC_DEVSTR);
+	device_set_desc(dev, "Qualcomm USB 2.0 Controller");
 
 	return (BUS_PROBE_DEFAULT);
 }
 
 static int
-msm_ehci_attach(device_t self)
+msm_ehci_attach(device_t dev)
 {
-	ehci_softc_t *sc;
-        struct msm_ehci_softc *esc;
+	struct msm_ehci_softc *esc;
 	bus_space_handle_t bsh;
+	ehci_softc_t *sc;
 	int err;
 
-	esc = device_get_softc(self);
+	esc = device_get_softc(dev);
 	sc = &esc->base;
-	sc->sc_bus.parent = self;
+	sc->sc_bus.parent = dev;
 	sc->sc_bus.devices = sc->sc_devices;
 	sc->sc_bus.devices_max = EHCI_MAX_DEVICES;
 	sc->sc_bus.dma_bits = 32;
 
-        if (bus_alloc_resources(self, msm_ehci_spec, esc->res)) {
-                device_printf(self, "could not allocate resources\n");
-                return (ENXIO);
+	if (bus_alloc_resources(dev, msm_ehci_spec, esc->res)) {
+		device_printf(dev, "could not allocate resources\n");
+		return (ENXIO);
 	}
 
 	sc->sc_io_tag = rman_get_bustag(esc->res[0]);
 
-	/* get all DMA memory */
-	printf("get all DMA memory\n");
+	/* Get all DMA memory */
 	if (usb_bus_mem_alloc_all(&sc->sc_bus,
-	    USB_GET_DMA_TAG(self), &ehci_iterate_hw_softc)) {
-		printf("get all DMA memory failed\n");
+	    USB_GET_DMA_TAG(dev), &ehci_iterate_hw_softc)) {
 		return (ENOMEM);
-        }
+	}
 
-        /* EHCI registers */
-        sc->sc_io_tag = rman_get_bustag(esc->res[0]);
-        bsh = rman_get_bushandle(esc->res[0]);
-        sc->sc_io_size = rman_get_size(esc->res[0]);
-
-        /* GPIO */
-        esc->gpio_bst = rman_get_bustag(esc->res[1]);
-        esc->gpio_bsh = rman_get_bushandle(esc->res[1]);
+	/* EHCI registers */
+	sc->sc_io_tag = rman_get_bustag(esc->res[0]);
+	bsh = rman_get_bushandle(esc->res[0]);
+	sc->sc_io_size = rman_get_size(esc->res[0]);
 
 	if (bus_space_subregion(sc->sc_io_tag, bsh, 0x100,
 	    sc->sc_io_size, &sc->sc_io_hdl) != 0)
 		panic("%s: unable to subregion USB host registers",
-		    device_get_name(self));
+		    device_get_name(dev));
 
-	sc->sc_bus.bdev = device_add_child(self, "usbus", -1);
+	sc->sc_bus.bdev = device_add_child(dev, "usbus", -1);
 	if (!sc->sc_bus.bdev) {
-		device_printf(self, "Could not add USB device\n");
+		device_printf(dev, "Could not add USB device\n");
 		goto error;
 	}
 	device_set_ivars(sc->sc_bus.bdev, &sc->sc_bus);
-	device_set_desc(sc->sc_bus.bdev, EHCI_HC_DEVSTR);
+	device_set_desc(sc->sc_bus.bdev, "Qualcomm USB 2.0 Controller");
 
 	sprintf(sc->sc_vendor, "Qualcomm");
 
-	err = bus_setup_intr(self, esc->res[2], INTR_TYPE_BIO | INTR_MPSAFE,
+	err = bus_setup_intr(dev, esc->res[2], INTR_TYPE_BIO | INTR_MPSAFE,
 	    NULL, (driver_intr_t *)ehci_interrupt, sc, &sc->sc_intr_hdl);
 	if (err) {
-		device_printf(self, "Could not setup irq, %d\n", err);
+		device_printf(dev, "Could not setup irq, %d\n", err);
 		sc->sc_intr_hdl = NULL;
 		goto error;
 	}
@@ -170,69 +150,68 @@ msm_ehci_attach(device_t self)
 	}
 
 	if (err) {
-		device_printf(self, "USB init failed err=%d\n", err);
+		device_printf(dev, "USB init failed err=%d\n", err);
 		goto error;
 	}
 	return (0);
 
 error:
-	msm_ehci_detach(self);
+	msm_ehci_detach(dev);
 	return (ENXIO);
 }
 
 static int
-msm_ehci_detach(device_t self)
+msm_ehci_detach(device_t dev)
 {
-	ehci_softc_t *sc = device_get_softc(self);
+	ehci_softc_t *sc;
 	device_t bdev;
 	int err;
+
+	sc = device_get_softc(dev);
 
 	if (sc->sc_bus.bdev) {
 		bdev = sc->sc_bus.bdev;
 		device_detach(bdev);
-		device_delete_child(self, bdev);
+		device_delete_child(dev, bdev);
 	}
 
-	device_delete_children(self);
+	device_delete_children(dev);
 
 	if (sc->sc_irq_res && sc->sc_intr_hdl) {
-		/*
-		 * only call ehci_detach() after ehci_init()
-		 */
+		/* Call ehci_detach() after ehci_init() only. */
 		ehci_detach(sc);
 
-		err = bus_teardown_intr(self, sc->sc_irq_res, sc->sc_intr_hdl);
-
+		err = bus_teardown_intr(dev, sc->sc_irq_res, sc->sc_intr_hdl);
 		if (err)
-			/* XXX or should we panic? */
-			device_printf(self, "Could not tear down irq, %d\n",
+			device_printf(dev, "Could not tear down irq, %d\n",
 			    err);
 		sc->sc_intr_hdl = NULL;
 	}
 
 	if (sc->sc_irq_res) {
-		bus_release_resource(self, SYS_RES_IRQ, 0, sc->sc_irq_res);
+		bus_release_resource(dev, SYS_RES_IRQ, 0, sc->sc_irq_res);
 		sc->sc_irq_res = NULL;
 	}
 	if (sc->sc_io_res) {
-		bus_release_resource(self, SYS_RES_MEMORY, 0,
+		bus_release_resource(dev, SYS_RES_MEMORY, 0,
 		    sc->sc_io_res);
 		sc->sc_io_res = NULL;
 	}
+
 	usb_bus_mem_free_all(&sc->sc_bus, &ehci_iterate_hw_softc);
 
 	return (0);
 }
 
+
 static device_method_t ehci_methods[] = {
 	/* Device interface */
-	DEVMETHOD(device_probe, msm_ehci_probe),
-	DEVMETHOD(device_attach, msm_ehci_attach),
-	DEVMETHOD(device_detach, msm_ehci_detach),
-	DEVMETHOD(device_suspend, bus_generic_suspend),
-	DEVMETHOD(device_resume, bus_generic_resume),
-	DEVMETHOD(device_shutdown, bus_generic_shutdown),
-
+	DEVMETHOD(device_probe,		msm_ehci_probe),
+	DEVMETHOD(device_attach,	msm_ehci_attach),
+	DEVMETHOD(device_detach,	msm_ehci_detach),
+	DEVMETHOD(device_suspend,	bus_generic_suspend),
+	DEVMETHOD(device_resume,	bus_generic_resume),
+	DEVMETHOD(device_shutdown,	bus_generic_shutdown),
 	DEVMETHOD_END
 };
 
