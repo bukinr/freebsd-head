@@ -54,12 +54,11 @@ __FBSDID("$FreeBSD$");
 #include <dev/usb/usb_busdma.h>
 #include <dev/usb/usb_process.h>
 #include <dev/usb/usb_util.h>
+
 #include <dev/usb/usb_controller.h>
 #include <dev/usb/usb_bus.h>
 #include <dev/usb/controller/ehci.h>
 #include <dev/usb/controller/ehcireg.h>
-
-#include <machine/bus.h>
 
 struct msm_ehci_softc {
 	ehci_softc_t		base;
