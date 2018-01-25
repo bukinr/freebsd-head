@@ -643,8 +643,6 @@ etm_get_config(int cpu, int ri, struct pmc **ppm)
 	struct pmc_hw *phw;
 	struct etm_cpu *etm_pc;
 
-	dprintf("%s\n", __func__);
-
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
 	    ("[etm,%d] illegal CPU %d", __LINE__, cpu));
 	KASSERT(ri == 0, ("[etm,%d] illegal row-index %d", __LINE__, ri));
@@ -967,6 +965,7 @@ etm_start_pmc(int cpu, int ri)
 	KASSERT(ri == 0, ("[etm,%d] illegal row-index %d", __LINE__, ri));
 
 	etm_save_restore(etm_pc, false);
+	TMC_START(etm_pc->dev_etr);
 
 	return (0);
 }
@@ -995,6 +994,7 @@ etm_stop_pmc(int cpu, int ri)
 	 * This operation will disable tracing.
 	 */
 	etm_save_restore(etm_pc, true);
+	TMC_STOP(etm_pc->dev_etr);
 
 	return (0);
 }

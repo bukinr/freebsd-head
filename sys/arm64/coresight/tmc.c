@@ -111,6 +111,33 @@ tmc_enable(struct tmc_softc *sc)
 }
 
 static int
+tmc_start(device_t dev)
+{
+	struct tmc_softc *sc;
+ 
+	sc = device_get_softc(dev);
+
+	tmc_enable(sc);
+
+	return (0);
+}
+
+static int
+tmc_stop(device_t dev)
+{
+	struct tmc_softc *sc;
+	uint32_t reg;
+ 
+	sc = device_get_softc(dev);
+
+	reg = bus_read_4(sc->res, TMC_CTL);
+	reg &= ~CTL_TRACECAPTEN;
+	bus_write_4(sc->res, TMC_CTL, reg);
+
+	return (0);
+}
+
+static int
 tmc_configure_etf(device_t dev)
 {
 	struct tmc_softc *sc;
@@ -182,8 +209,6 @@ tmc_configure_etr(device_t dev, uint32_t low, uint32_t high)
 	reg = bus_read_4(sc->res, TMC_STS);
 	reg &= ~STS_FULL;
 	bus_write_4(sc->res, TMC_STS, reg);
-
-	tmc_enable(sc);
 
 	return (0);
 }
@@ -292,6 +317,8 @@ static device_method_t tmc_methods[] = {
 	/* TMC interface */
 	DEVMETHOD(tmc_configure_etr,	tmc_configure_etr),
 	DEVMETHOD(tmc_configure_etf,	tmc_configure_etf),
+	DEVMETHOD(tmc_start,		tmc_start),
+	DEVMETHOD(tmc_stop,		tmc_stop),
 	DEVMETHOD(tmc_set_base,		tmc_set_base),
 	DEVMETHOD(tmc_read_trace,	tmc_read_trace),
 	DEVMETHOD_END
