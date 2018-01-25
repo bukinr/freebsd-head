@@ -150,7 +150,7 @@ pmctrace_init_cpu(uint32_t cpu)
 		return (-1);
 	}
 
-	tc->bufsize = 2 * 1024 * 1024;
+	tc->bufsize = 128 * 1024 * 1024;
 	tc->cycle = 0;
 	tc->offset = 0;
 
@@ -585,7 +585,8 @@ main(int argc, char *argv[])
 		errx(EX_USAGE, "ERROR: specify both or neither -i and -f");
 
 	for (i = 0; trace_devs[i].ev_spec != NULL; i++) {
-		if (strcmp(trace_devs[i].ev_spec, ev->ev_spec) == 0) {
+		if (strncmp(trace_devs[i].ev_spec, ev->ev_spec,
+		    strlen(trace_devs[i].ev_spec)) == 0) {
 			/* found */
 			pmctrace_cfg.trace_dev = &trace_devs[i];
 			break;
