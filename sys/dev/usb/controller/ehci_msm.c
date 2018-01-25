@@ -71,6 +71,9 @@ static struct resource_spec msm_ehci_spec[] = {
 	{ -1, 0 }
 };
 
+#define	EHCI_HC_DEVSTR		"Qualcomm USB 2.0 controller"
+
+static device_attach_t msm_ehci_attach;
 static device_detach_t msm_ehci_detach;
 
 static int
@@ -80,7 +83,7 @@ msm_ehci_probe(device_t dev)
 	if (!ofw_bus_is_compatible(dev, "qcom,ci-hdrc"))
 		return (ENXIO);
 
-	device_set_desc(dev, "Qualcomm USB 2.0 Controller");
+	device_set_desc(dev, EHCI_HC_DEVSTR);
 
 	return (BUS_PROBE_DEFAULT);
 }
@@ -129,7 +132,7 @@ msm_ehci_attach(device_t dev)
 		goto error;
 	}
 	device_set_ivars(sc->sc_bus.bdev, &sc->sc_bus);
-	device_set_desc(sc->sc_bus.bdev, "Qualcomm USB 2.0 Controller");
+	device_set_desc(sc->sc_bus.bdev, EHCI_HC_DEVSTR);
 
 	sprintf(sc->sc_vendor, "Qualcomm");
 
@@ -178,7 +181,7 @@ msm_ehci_detach(device_t dev)
 	device_delete_children(dev);
 
 	if (sc->sc_irq_res && sc->sc_intr_hdl) {
-		/* Call ehci_detach() after ehci_init() only. */
+		/* only call ehci_detach() after ehci_init() */
 		ehci_detach(sc);
 
 		err = bus_teardown_intr(dev, sc->sc_irq_res, sc->sc_intr_hdl);

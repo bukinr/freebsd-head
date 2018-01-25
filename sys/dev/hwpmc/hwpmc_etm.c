@@ -888,8 +888,8 @@ etm_start_pmc(int cpu, int ri)
 	KASSERT(ri == 0, ("[etm,%d] illegal row-index %d", __LINE__, ri));
 
 	etm_save_restore(etm_pc, false);
-	ETM_START(etm_pc->dev_etm);
 	TMC_START(etm_pc->dev_etr);
+	ETM_START(etm_pc->dev_etm);
 
 	return (0);
 }
