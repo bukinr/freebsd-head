@@ -850,7 +850,7 @@ etm_read_trace(int cpu, int ri, struct pmc *pm,
 	//uint64_t reg;
 	//uint32_t idx;
 
-	dprintf("%s\n", __func__);
+	//dprintf("%s\n", __func__);
 
 	etm_pc = etm_pcpu[cpu];
 	etm_pc->pm_mmap = pm;
@@ -964,6 +964,7 @@ etm_start_pmc(int cpu, int ri)
 	KASSERT(ri == 0, ("[etm,%d] illegal row-index %d", __LINE__, ri));
 
 	etm_save_restore(etm_pc, false);
+	ETM_START(etm_pc->dev_etm);
 	TMC_START(etm_pc->dev_etr);
 
 	return (0);
@@ -993,6 +994,7 @@ etm_stop_pmc(int cpu, int ri)
 	 * This operation will disable tracing.
 	 */
 	etm_save_restore(etm_pc, true);
+	ETM_STOP(etm_pc->dev_etm);
 	TMC_STOP(etm_pc->dev_etr);
 
 	return (0);

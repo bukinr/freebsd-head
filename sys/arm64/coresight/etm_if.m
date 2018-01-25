@@ -36,3 +36,11 @@ INTERFACE etm;
 METHOD int configure {
 	device_t	dev;
 };
+
+METHOD int start {
+	device_t	dev;
+};
+
+METHOD int stop {
+	device_t	dev;
+};

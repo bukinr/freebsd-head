@@ -96,6 +96,47 @@ etm_print_version(struct etm_softc *sc)
 }
 
 static int
+etm_start(device_t dev)
+{
+	struct etm_softc *sc;
+	uint32_t reg;
+
+	sc = device_get_softc(dev);
+
+	/* Enable the trace unit */
+	bus_write_4(sc->res, TRCPRGCTLR, 1);
+
+	/* Wait for an IDLE bit to be LOW */
+	do {
+		reg = bus_read_4(sc->res, TRCSTATR);
+	} while ((reg & TRCSTATR_IDLE) == 1);
+
+	if ((bus_read_4(sc->res, TRCPRGCTLR) & 1) == 0)
+		panic("etm is not enabled\n");
+
+	return (0);
+}
+
+static int
+etm_stop(device_t dev)
+{
+	struct etm_softc *sc;
+	uint32_t reg;
+
+	sc = device_get_softc(dev);
+
+	/* Disable the trace unit */
+	bus_write_4(sc->res, TRCPRGCTLR, 0);
+
+	/* Wait for an IDLE bit */
+	do {
+		reg = bus_read_4(sc->res, TRCSTATR);
+	} while ((reg & TRCSTATR_IDLE) == 0);
+
+	return (0);
+}
+
+static int
 etm_configure(device_t dev)
 {
 	struct etm_softc *sc;
@@ -107,13 +148,7 @@ etm_configure(device_t dev)
 
 	etm_print_version(sc);
 
-	/* Disable the trace unit */
-	bus_write_4(sc->res, TRCPRGCTLR, 0);
-
-	/* Wait for an IDLE bit */
-	do {
-		reg = bus_read_4(sc->res, TRCSTATR);
-	} while ((reg & TRCSTATR_IDLE) == 0);
+	etm_stop(dev);
 
 	/* Configure ETM */
 
@@ -160,17 +195,6 @@ etm_configure(device_t dev)
 	/* No address filtering for ViewData. */
 	//bus_write_4(sc->res, TRCVDSACCTLR, 0);
 
-	/* Enable the trace unit */
-	bus_write_4(sc->res, TRCPRGCTLR, 1);
-
-	/* Wait for an IDLE bit to be LOW */
-	do {
-		reg = bus_read_4(sc->res, TRCSTATR);
-	} while ((reg & TRCSTATR_IDLE) == 1);
-
-	if ((bus_read_4(sc->res, TRCPRGCTLR) & 1) == 0)
-		panic("etm is not enabled\n");
-
 	return (0);
 }
 
@@ -210,6 +234,8 @@ static device_method_t etm_methods[] = {
 	DEVMETHOD(device_attach,	etm_attach),
 
 	DEVMETHOD(etm_configure,	etm_configure),
+	DEVMETHOD(etm_start,		etm_start),
+	DEVMETHOD(etm_stop,		etm_stop),
 	DEVMETHOD_END
 };
 
