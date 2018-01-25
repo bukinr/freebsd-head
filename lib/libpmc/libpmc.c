@@ -2962,8 +2962,6 @@ pmc_allocate(const char *ctrspec, enum pmc_mode mode,
 	struct pmc_op_pmcallocate pmc_config;
 	const struct pmc_class_descr *pcd;
 
-	printf("%s\n", __func__);
-
 	spec_copy = NULL;
 	retval    = -1;
 
@@ -2982,7 +2980,6 @@ pmc_allocate(const char *ctrspec, enum pmc_mode mode,
 				break;
 			}
 
-	printf("%s 1\n", __func__);
 	if (spec_copy == NULL)
 		spec_copy = strdup(ctrspec);
 
@@ -2995,15 +2992,12 @@ pmc_allocate(const char *ctrspec, enum pmc_mode mode,
 	 */
 	ev = NULL;
 	for (n = 0; n < PMC_CLASS_TABLE_SIZE; n++) {
-		printf("%s 1 2\n", __func__);
 		pcd = pmc_class_table[n];
 		if (pmc_mdep_is_compatible_class(pcd->pm_evc_class) &&
 		    strncasecmp(ctrname, pcd->pm_evc_name,
 				pcd->pm_evc_name_size) == 0) {
-			printf("%s 1 2 3\n", __func__);
 			if ((ev = pmc_match_event_class(ctrname +
 			    pcd->pm_evc_name_size, pcd)) == NULL) {
-				printf("%s 1 2 3 4\n", __func__);
 				errno = EINVAL;
 				goto out;
 			}
@@ -3011,7 +3005,6 @@ pmc_allocate(const char *ctrspec, enum pmc_mode mode,
 		}
 	}
 
-	printf("%s 2\n", __func__);
 	/*
 	 * Otherwise, search for this event in all compatible PMC
 	 * classes.
