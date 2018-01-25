@@ -203,8 +203,8 @@ tmc_configure_etr(device_t dev, uint32_t low, uint32_t high)
 
 	//?
 	bus_write_4(sc->res, TMC_RSZ, 2*1024*1024);
-	bus_write_4(sc->res, TMC_RRP, low);
-	bus_write_4(sc->res, TMC_RWP, low);
+	//bus_write_4(sc->res, TMC_RRP, low);
+	//bus_write_4(sc->res, TMC_RWP, low);
 
 	reg = bus_read_4(sc->res, TMC_STS);
 	reg &= ~STS_FULL;

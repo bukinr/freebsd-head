@@ -84,9 +84,8 @@ struct topa_entry {
 };
 
 struct etm_buffer {
-	uint32_t		*topa_hw;
-	struct topa_entry	*topa_sw;
 	uint64_t		cycle;
+	uint64_t		phys_base;
 	vm_object_t		obj;
 };
 

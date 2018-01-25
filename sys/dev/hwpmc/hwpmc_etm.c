@@ -230,14 +230,14 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 {
 	struct pmc_vm_map *map;
 	struct etm_cpu *etm_pc;
-	uint64_t segsize;
-	//uint64_t offset;
 	uint32_t bufsize;
+	uint64_t phys_base;
+	uint32_t phys_lo;
+	uint32_t phys_hi;
 	struct cdev_cpu *cc;
 	vm_object_t obj;
 	vm_page_t m;
-	uint32_t size;
-	int ntopa;
+	int npages;
 	int i;
 
 	printf("%s\n", __func__);
@@ -245,32 +245,9 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 	etm_pc = etm_pcpu[cpu];
 
 	bufsize = 2 * 1024 * 1024;
-
-#if 0
-	if (etm_pc->l0_ecx & CPUETM_TOPA_MULTI)
-		topa_size = TOPA_SIZE_4K;
-	else
-		topa_size = TOPA_SIZE_128M;
-
-	segsize = PAGE_SIZE << (topa_size >> TOPA_SIZE_S);
-	ntopa = bufsize / segsize;
-#endif
-
-	segsize = PAGE_SIZE;
-	ntopa = bufsize / segsize;
-
 	etm_buf->obj = obj = vm_pager_allocate(OBJT_PHYS, 0, bufsize,
 	    PROT_READ, 0, curthread->td_ucred);
 
-	size = roundup2(ntopa * 4, PAGE_SIZE);
-	etm_buf->topa_hw = malloc(size, M_ETM, M_WAITOK | M_ZERO);
-	etm_buf->topa_sw = malloc(ntopa * sizeof(struct topa_entry), M_ETM,
-	    M_WAITOK | M_ZERO);
-
-	int npages;
-
-	ntopa = 1;
-	segsize = bufsize;
 	npages = bufsize / PAGE_SIZE;
 
 	VM_OBJECT_WLOCK(obj);
@@ -280,55 +257,13 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 	if (m == NULL) {
 		VM_OBJECT_WUNLOCK(obj);
 		printf("%s: Can't allocate memory.\n", __func__);
-		goto error;
+		vm_object_deallocate(obj);
+		return (-1);
 	}
 	for (i = 0; i < npages; i++)
 		m[i].valid = VM_PAGE_BITS_ALL;
-	etm_buf->topa_hw[0] = VM_PAGE_TO_PHYS(m);
+	phys_base = VM_PAGE_TO_PHYS(m);
 	VM_OBJECT_WUNLOCK(obj);
-
-#if 0
-#define	ENTRY_LAST	1
-#define	ENTRY_NORMAL	2
-#define	ENTRY_LINK	3
-
-	VM_OBJECT_WLOCK(obj);
-	vm_object_reference_locked(obj);
-	offset = 0;
-	for (i = 0; i < ntopa; i++) {
-		m = vm_page_alloc(obj, i, VM_ALLOC_NOBUSY | VM_ALLOC_ZERO);
-		if (m == NULL) {
-			VM_OBJECT_WUNLOCK(obj);
-			printf("%s: Can't allocate memory.\n", __func__);
-			goto error;
-		}
-		if (i == 0) {
-			if (m->flags & PG_ZERO)
-				printf("page zeroed\n");
-			else {
-				printf("page not zeroed\n");
-				uint64_t *addr;
-				addr = (uint64_t *)PHYS_TO_DMAP(VM_PAGE_TO_PHYS(m));
-				*addr = 0;
-			}
-		}
-		m->valid = VM_PAGE_BITS_ALL;
-		etm_buf->topa_sw[i].size = segsize;
-		etm_buf->topa_sw[i].offset = offset;
-		etm_buf->topa_hw[i] = (VM_PAGE_TO_PHYS(m) >> 12) << 4;
-		if (i == (ntopa - 1))
-			etm_buf->topa_hw[i] |= ENTRY_LAST;
-		else
-			etm_buf->topa_hw[i] |= ENTRY_NORMAL;
-
-		offset += segsize;
-	}
-	VM_OBJECT_WUNLOCK(obj);
-#endif
-
-	///* The last entry is a pointer to the base table. */
-	//etm_buf->topa_hw[ntopa] = vtophys(etm_buf->topa_hw) | ENTRY_LAST;
-	etm_buf->cycle = 0;
 
 	map = malloc(sizeof(struct pmc_vm_map), M_ETM, M_WAITOK | M_ZERO);
 	map->t = curthread;
@@ -341,25 +276,16 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 	TAILQ_INSERT_HEAD(&cc->pmc_maplist, map, map_next);
 	mtx_unlock(&cc->vm_mtx);
 
-	uint64_t phys_addr;
-	uint32_t phys_lo;
-	uint32_t phys_hi;
-	phys_addr = vtophys(etm_buf->topa_hw);
-	phys_addr = VM_PAGE_TO_PHYS(m);
-	phys_lo = phys_addr & 0xffffffff;
-	phys_hi = (phys_addr >> 32) & 0xffffffff;
+	etm_buf->phys_base = phys_base;
+	etm_buf->cycle = 0;
+
+	phys_lo = phys_base & 0xffffffff;
+	phys_hi = (phys_base >> 32) & 0xffffffff;
 
 	ETM_CONFIGURE(etm_pc->dev_etm);
 	TMC_CONFIGURE_ETR(etm_pc->dev_etr, phys_lo, phys_hi);
 
 	return (0);
-
-error:
-	free(etm_buf->topa_hw, M_ETM);
-	free(etm_buf->topa_sw, M_ETM);
-	vm_object_deallocate(obj);
-
-	return (-1);
 }
 
 static int
@@ -382,8 +308,6 @@ etm_buffer_deallocate(uint32_t cpu, struct etm_buffer *etm_buf)
 	}
 	mtx_unlock(&cc->vm_mtx);
 
-	free(etm_buf->topa_hw, M_ETM);
-	free(etm_buf->topa_sw, M_ETM);
 	vm_object_deallocate(etm_buf->obj);
 
 	return (0);
