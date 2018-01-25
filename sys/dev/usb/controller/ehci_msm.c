@@ -60,12 +60,12 @@ __FBSDID("$FreeBSD$");
 #include <dev/usb/controller/ehci.h>
 #include <dev/usb/controller/ehcireg.h>
 
-struct msm_ehci_softc {
+struct ehci_msm_softc {
 	ehci_softc_t		base;
 	struct resource		*res[3];
 };
 
-static struct resource_spec msm_ehci_spec[] = {
+static struct resource_spec ehci_msm_spec[] = {
 	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },
 	{ SYS_RES_MEMORY,	1,	RF_ACTIVE },
 	{ SYS_RES_IRQ,		0,	RF_ACTIVE },
@@ -74,11 +74,11 @@ static struct resource_spec msm_ehci_spec[] = {
 
 #define	EHCI_HC_DEVSTR		"Qualcomm USB 2.0 controller"
 
-static device_attach_t msm_ehci_attach;
-static device_detach_t msm_ehci_detach;
+static device_attach_t ehci_msm_attach;
+static device_detach_t ehci_msm_detach;
 
 static int
-msm_ehci_probe(device_t dev)
+ehci_msm_probe(device_t dev)
 {
 
 	if (!ofw_bus_is_compatible(dev, "qcom,ci-hdrc"))
@@ -90,9 +90,9 @@ msm_ehci_probe(device_t dev)
 }
 
 static int
-msm_ehci_attach(device_t dev)
+ehci_msm_attach(device_t dev)
 {
-	struct msm_ehci_softc *esc;
+	struct ehci_msm_softc *esc;
 	bus_space_handle_t bsh;
 	ehci_softc_t *sc;
 	int err;
@@ -104,7 +104,7 @@ msm_ehci_attach(device_t dev)
 	sc->sc_bus.devices_max = EHCI_MAX_DEVICES;
 	sc->sc_bus.dma_bits = 32;
 
-	if (bus_alloc_resources(dev, msm_ehci_spec, esc->res)) {
+	if (bus_alloc_resources(dev, ehci_msm_spec, esc->res)) {
 		device_printf(dev, "could not allocate resources\n");
 		return (ENXIO);
 	}
@@ -160,12 +160,12 @@ msm_ehci_attach(device_t dev)
 	return (0);
 
 error:
-	msm_ehci_detach(dev);
+	ehci_msm_detach(dev);
 	return (ENXIO);
 }
 
 static int
-msm_ehci_detach(device_t dev)
+ehci_msm_detach(device_t dev)
 {
 	ehci_softc_t *sc;
 	device_t bdev;
@@ -210,9 +210,9 @@ msm_ehci_detach(device_t dev)
 
 static device_method_t ehci_methods[] = {
 	/* Device interface */
-	DEVMETHOD(device_probe,		msm_ehci_probe),
-	DEVMETHOD(device_attach,	msm_ehci_attach),
-	DEVMETHOD(device_detach,	msm_ehci_detach),
+	DEVMETHOD(device_probe,		ehci_msm_probe),
+	DEVMETHOD(device_attach,	ehci_msm_attach),
+	DEVMETHOD(device_detach,	ehci_msm_detach),
 	DEVMETHOD(device_suspend,	bus_generic_suspend),
 	DEVMETHOD(device_resume,	bus_generic_resume),
 	DEVMETHOD(device_shutdown,	bus_generic_shutdown),
@@ -227,5 +227,5 @@ static driver_t ehci_driver = {
 
 static devclass_t ehci_devclass;
 
-DRIVER_MODULE(ehci, simplebus, ehci_driver, ehci_devclass, 0, 0);
-MODULE_DEPEND(ehci, usb, 1, 1, 1);
+DRIVER_MODULE(ehci_msm, simplebus, ehci_driver, ehci_devclass, 0, 0);
+MODULE_DEPEND(ehci_msm, usb, 1, 1, 1);
