@@ -46,6 +46,7 @@ METHOD int configure_etr {
 	device_t	dev;
 	uint32_t	addr_low;
 	uint32_t	addr_high;
+	uint32_t	bufsize;
 };
 
 /**

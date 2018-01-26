@@ -163,7 +163,8 @@ tmc_configure_etf(device_t dev)
 }
 
 static int
-tmc_configure_etr(device_t dev, uint32_t low, uint32_t high)
+tmc_configure_etr(device_t dev, uint32_t low, uint32_t high,
+    uint32_t bufsize)
 {
 	struct tmc_softc *sc;
 	uint32_t reg;
@@ -202,7 +203,7 @@ tmc_configure_etr(device_t dev, uint32_t low, uint32_t high)
 	bus_write_4(sc->res, TMC_DBAHI, high);
 
 	//?
-	bus_write_4(sc->res, TMC_RSZ, 2*1024*1024);
+	bus_write_4(sc->res, TMC_RSZ, bufsize / 4); // size in 32bit words
 	//bus_write_4(sc->res, TMC_RRP, low);
 	//bus_write_4(sc->res, TMC_RWP, low);
 
