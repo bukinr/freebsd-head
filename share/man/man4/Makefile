@@ -70,9 +70,15 @@ MAN=	aac.4 \
 	audit.4 \
 	auditpipe.4 \
 	aue.4 \
+	${_aw_gpio.4} \
+	${_aw_mmc.4} \
+	${_aw_rtc.4} \
+	${_aw_sid.4} \
+	${_aw_syscon.4} \
 	axe.4 \
 	axge.4 \
 	bce.4 \
+	${_bcm283x_pwm.4} \
 	bcma.4 \
 	bfe.4 \
 	bge.4 \
@@ -551,6 +557,7 @@ MAN=	aac.4 \
 	vkbd.4 \
 	vlan.4 \
 	vxlan.4 \
+	${_vmm.4} \
 	${_vmx.4} \
 	vpo.4 \
 	vr.4 \
@@ -756,6 +763,14 @@ MLINKS+=xl.4 if_xl.4
 _armv8crypto.4=	armv8crypto.4
 .endif
 
+.if ${MACHINE_CPUARCH} == "arm" || ${MACHINE_CPUARCH} == "aarch64"
+_aw_gpio.4=	aw_gpio.4
+_aw_mmc.4=	aw_mmc.4
+_aw_rtc.4=	aw_rtc.4
+_aw_sid.4=	aw_sid.4
+_aw_syscon.4=	aw_syscon.4
+.endif
+
 .if ${MACHINE_CPUARCH} == "amd64" || ${MACHINE_CPUARCH} == "i386"
 _acpi_asus.4=	acpi_asus.4
 _acpi_asus_wmi.4=	acpi_asus_wmi.4
@@ -861,11 +876,16 @@ MLINKS+=sfxge.4 if_sfxge.4
 
 .if ${MK_BHYVE} != "no"
 _bhyve.4=	bhyve.4
+_vmm.4=		vmm.4
 .endif
 .endif
 
 .if ${MACHINE_CPUARCH} == "mips"
 _nvram2env.4=	nvram2env.4
+.endif
+
+.if ${MACHINE_ARCH:Marmv[67]*} != "" || ${MACHINE_CPUARCH} == "aarch64"
+_bcm283x_pwm.4=  bcm283x_pwm.4
 .endif
 
 .if exists(${.CURDIR}/man4.${MACHINE_CPUARCH})
