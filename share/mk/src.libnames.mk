@@ -136,6 +136,7 @@ _LIBRARIES=	\
 		ngatm \
 		nv \
 		nvpair \
+		opencsd \
 		opie \
 		pam \
 		panel \
