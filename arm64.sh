@@ -27,6 +27,7 @@ scp	\
 	/home/br/obj/usr/home/br/dev/freebsd-head/arm64.aarch64/usr.sbin/pmcstat/pmcstat \
 	/home/br/obj/usr/home/br/dev/freebsd-head/arm64.aarch64/usr.sbin/pmctrace/pmctrace \
 	/home/br/obj/usr/home/br/dev/freebsd-head/arm64.aarch64/lib/libpmc/libpmc.so.5 \
+	/home/br/obj/usr/home/br/dev/freebsd-head/arm64.aarch64/lib/libopencsd/libopencsd.so.0 \
 	/home/br/obj/usr/home/br/dev/freebsd-head/arm64.aarch64/sys/GENERIC/kernel \
 	10.5.0.45:/tmp/
 #ssh 10.5.0.45 sudo mount -o ro /
