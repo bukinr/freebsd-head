@@ -42,11 +42,9 @@ SRCS+=	\
 	ocsd_error.cpp				\
 	ocsd_error_logger.cpp			\
 	ocsd_gen_elem_list.cpp			\
-						\
+	ocsd_lib_dcd_register.cpp		\
 	ocsd_msg_logger.cpp			\
 	ocsd_version.cpp
-
-# ocsd_lib_dcd_register.cpp
 
 SRCS+=	\
 	trc_component.cpp			\
