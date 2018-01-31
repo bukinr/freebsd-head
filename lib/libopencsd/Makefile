@@ -9,12 +9,6 @@ OPENCSDSRC=	${SRCTOP}/contrib/opencsd
 
 .PATH:	${OPENCSDSRC}/decoder/source/etmv4/		\
 	${OPENCSDSRC}/decoder/source/etmv3/		\
-	${OPENCSDSRC}/decoder/include/opencsd/etmv4/	\
-	${OPENCSDSRC}/decoder/include/opencsd/etmv3/	\
-	${OPENCSDSRC}/decoder/include/opencsd/stm/	\
-	${OPENCSDSRC}/decoder/include/opencsd/ptm/	\
-	${OPENCSDSRC}/decoder/include/opencsd/c_api/	\
-	${OPENCSDSRC}/decoder/include/opencsd/		\
 	${OPENCSDSRC}/decoder/source/pkt_printers/	\
 	${OPENCSDSRC}/decoder/source/mem_acc/		\
 	${OPENCSDSRC}/decoder/source/i_dec/		\
@@ -22,6 +16,12 @@ OPENCSDSRC=	${SRCTOP}/contrib/opencsd
 	${OPENCSDSRC}/decoder/source/ptm/		\
 	${OPENCSDSRC}/decoder/source/stm/		\
 	${OPENCSDSRC}/decoder/source/			\
+	${OPENCSDSRC}/decoder/include/opencsd/etmv4/	\
+	${OPENCSDSRC}/decoder/include/opencsd/etmv3/	\
+	${OPENCSDSRC}/decoder/include/opencsd/stm/	\
+	${OPENCSDSRC}/decoder/include/opencsd/ptm/	\
+	${OPENCSDSRC}/decoder/include/opencsd/c_api/	\
+	${OPENCSDSRC}/decoder/include/opencsd/		\
 	${OPENCSDSRC}/decoder/include
 
 LIB=	opencsd
