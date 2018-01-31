@@ -13,6 +13,8 @@ OPENCSDSRC=	${SRCTOP}/contrib/opencsd
 	${OPENCSDSRC}/decoder/include/opencsd/stm/	\
 	${OPENCSDSRC}/decoder/include/opencsd/ptm/	\
 	${OPENCSDSRC}/decoder/include/opencsd/c_api/	\
+	${OPENCSDSRC}/decoder/source/mem_acc/		\
+	${OPENCSDSRC}/decoder/source/i_dec/		\
 	${OPENCSDSRC}/decoder/include/opencsd/		\
 	${OPENCSDSRC}/decoder/source/c_api/		\
 	${OPENCSDSRC}/decoder/source/			\
@@ -53,6 +55,17 @@ SRCS+=	\
 	trc_gen_elem.cpp			\
 	trc_printable_elem.cpp			\
 	trc_ret_stack.cpp
+
+SRCS+=	\
+	trc_mem_acc_base.cpp			\
+	trc_mem_acc_cb.cpp			\
+	trc_mem_acc_mapper.cpp			\
+	trc_mem_acc_bufptr.cpp			\
+	trc_mem_acc_file.cpp
+
+SRCS+=	\
+	trc_i_decode.cpp			\
+	trc_idec_arminst.cpp
 
 CFLAGS+=	\
 	-I${OPENCSDSRC}/decoder/include/	\
@@ -122,7 +135,7 @@ STMINCSDIR=${INCLUDEDIR}/opencsd/stm/
 
 INCSGROUPS=INCS APIINCS ETMV3INCS ETMV4INCS PTMINCS STMINCS
 
-LIBADD=	
+LIBADD= cxxrt c++
 
 WARNS?= 1
 
