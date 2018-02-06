@@ -89,7 +89,7 @@ etm_print_version(struct etm_softc *sc)
 
 	isb();
 
-	reg = bus_read_4(sc->res, TRCIDR1);
+	reg = bus_read_4(sc->res, TRCIDR(1));
 	printf("ETM Version: %d.%d\n",
 	    (reg & TRCARCHMAJ_M) >> TRCARCHMAJ_S,
 	    (reg & TRCARCHMIN_M) >> TRCARCHMIN_S);
@@ -137,7 +137,7 @@ etm_stop(device_t dev)
 }
 
 static int
-etm_configure(device_t dev)
+etm_configure(device_t dev, struct etm_config *config)
 {
 	struct etm_softc *sc;
 	uint32_t reg;
@@ -150,13 +150,28 @@ etm_configure(device_t dev)
 
 	etm_stop(dev);
 
+#define	 TRCACATR_DTBM		(1 << 21)
+#define	 TRCACATR_DATARANGE	(1 << 20)
+#define	 TRCACATR_DATASIZE_S	18
+#define	 TRCACATR_DATASIZE_M	(0x3 << TRCACATR_DATASIZE_S)
+#define	 TRCACATR_DATASIZE_B	(0x0 << TRCACATR_DATASIZE_S)
+#define	 TRCACATR_DATASIZE_HW	(0x1 << TRCACATR_DATASIZE_S)
+#define	 TRCACATR_DATASIZE_W	(0x2 << TRCACATR_DATASIZE_S)
+#define	 TRCACATR_DATASIZE_DW	(0x3 << TRCACATR_DATASIZE_S)
+#define	 TRCACATR_DATAMATCH_S	16
+#define	 TRCACATR_DATAMATCH_M	(0x3 << TRCACATR_DATAMATCH_S)
+
 	/* Configure ETM */
 
 	/* Enable the return stack, global timestamping, Context ID, and Virtual context identifier tracing. */
-	reg = TRCCONFIGR_RS | TRCCONFIGR_TS | TRCCONFIGR_CID | TRCCONFIGR_VMID;
-	reg = 0x18C1;
-
+	//reg = TRCCONFIGR_RS | TRCCONFIGR_TS | TRCCONFIGR_CID | TRCCONFIGR_VMID;
+	//reg = 0x18C1;
 	//reg = 0x00031FC7; /* Enable all the options except cycle counting and branch broadcast. */
+
+	reg = TRCCONFIGR_RS | TRCCONFIGR_CID | TRCCONFIGR_VMID;
+	reg |= TRCCONFIGR_COND_ALL;
+	reg |= TRCCONFIGR_INSTP0_LDRSTR;
+	reg = 0x00031FC7; /* Enable all the options except cycle counting and branch broadcast. */
 	bus_write_4(sc->res, TRCCONFIGR, reg);
 
 	/* Disable all event tracing. */
@@ -170,7 +185,7 @@ etm_configure(device_t dev)
 	bus_write_4(sc->res, TRCSYNCPR, 0xC);
 
 	/* Set a value for the trace ID, with bit[0]=0. */
-	bus_write_4(sc->res, TRCTRACEIDR, 2);
+	bus_write_4(sc->res, TRCTRACEIDR, 0x10);
 
 	/*
 	 * Disable the timestamp event. The trace unit still generates
@@ -180,20 +195,68 @@ etm_configure(device_t dev)
 
 	/* Enable ViewInst to trace everything, with the start/stop logic started. */
 	reg = 0x201;
-	reg = TRCVICTLR_SSSTATUS;
-	reg |= 1;
+	//reg = TRCVICTLR_SSSTATUS;
+	//reg |= 1;
+
+	reg |= (0xf << 16);
+	reg &= ~(1 << 16); //choose excp level 0
+	reg |= (0xf << 20);
+	reg &= ~(1 << 20); //choose excp level 0
+
 	bus_write_4(sc->res, TRCVICTLR, reg);
 
+	bus_write_4(sc->res, TRCRSCTLR(0), (5 << 16) | (1 << 0));
+
+	int i;
+	for (i = 0; i < config->naddr * 2; i++) {
+		printf("configure range %d, address %lx\n", i, config->addr[i]);
+		bus_write_8(sc->res, TRCACVR(i), config->addr[i]);
+
+		reg = TRCACATR_DTBM;
+		reg |= TRCACATR_DATARANGE;
+		reg |= TRCACATR_DATASIZE_DW;
+		reg = 0;
+
+		/* Secure state */
+		reg |= (0xf << 8);
+		reg &= ~(1 << 8); //choose excp level 0
+		//reg &= ~(1 << 9); //choose excp level 1
+
+		/* Non secure state */
+		reg |= (0xf << 12);
+		reg &= ~(1 << 12); //choose excp level 0
+		//reg &= ~(1 << 13); //choose excp level 1
+
+		bus_write_4(sc->res, TRCACATR(i), reg);
+
+		//reg = bus_read_4(sc->res, TRCVIIECTLR);
+		//reg |= (1 << i);
+		//bus_write_4(sc->res, TRCVIIECTLR, reg);
+	}
+
+	/* No address filtering for ViewData. */
+	bus_write_4(sc->res, TRCVDARCCTLR, 0);
+
+	/* Clear the STATUS bit to zero */
+	bus_write_4(sc->res, TRCSSCSR(0), 0);
+
 	/* No address range filtering for ViewInst. */
-	bus_write_4(sc->res, TRCVIIECTLR, 0);
+	if (config->naddr == 0)
+		bus_write_4(sc->res, TRCVIIECTLR, 0);
+	else
+		bus_write_4(sc->res, TRCVIIECTLR, (1 << 0));
 
 	/* No start or stop points for ViewInst. */
 	bus_write_4(sc->res, TRCVISSCTLR, 0);
+	//bus_write_4(sc->res, TRCVISSCTLR, (1 << 0) | (1 << 17));
 
 	/* Enable ViewData. */
-	//bus_write_4(sc->res, TRCVDCTLR, 1);
+	bus_write_4(sc->res, TRCVDCTLR, 1);
+	/* Disable ViewData */
+	bus_write_4(sc->res, TRCVDCTLR, 0);
+
 	/* No address filtering for ViewData. */
-	//bus_write_4(sc->res, TRCVDSACCTLR, 0);
+	bus_write_4(sc->res, TRCVDSACCTLR, 0);
 
 	return (0);
 }
@@ -223,6 +286,12 @@ etm_attach(device_t dev)
 	if (bus_alloc_resources(dev, etm_spec, &sc->res) != 0) {
 		device_printf(dev, "cannot allocate resources for device\n");
 		return (ENXIO);
+	}
+
+	if (device_get_unit(dev) == 0) {
+		int i;
+		for (i = 0; i < 14; i++)
+			printf("TRCIDR%d: %x\n", i, bus_read_4(sc->res, TRCIDR(i)));
 	}
 
 	return (0);

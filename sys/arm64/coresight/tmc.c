@@ -95,6 +95,9 @@ tmc_enable(struct tmc_softc *sc)
 {
 	uint32_t reg;
 
+	if (bus_read_4(sc->res, TMC_CTL) & CTL_TRACECAPTEN)
+		return (-1);
+		
 	/* Enable TMC */
 	bus_write_4(sc->res, TMC_CTL, CTL_TRACECAPTEN);
 	if ((bus_read_4(sc->res, TMC_CTL) & CTL_TRACECAPTEN) == 0)
@@ -107,6 +110,8 @@ tmc_enable(struct tmc_softc *sc)
 	if ((bus_read_4(sc->res, TMC_CTL) & CTL_TRACECAPTEN) == 0)
 		panic("not enabled1\n");
 
+	printf("%s: enabled. RRP %x, RWP %x\n", __func__, bus_read_4(sc->res, TMC_RRP), bus_read_4(sc->res, TMC_RWP));
+
 	return (0);
 }
 
@@ -115,6 +120,8 @@ tmc_start(device_t dev)
 {
 	struct tmc_softc *sc;
  
+	printf("%s\n", __func__);
+
 	sc = device_get_softc(dev);
 
 	tmc_enable(sc);
@@ -128,6 +135,8 @@ tmc_stop(device_t dev)
 	struct tmc_softc *sc;
 	uint32_t reg;
  
+	printf("%s\n", __func__);
+
 	sc = device_get_softc(dev);
 
 	reg = bus_read_4(sc->res, TMC_CTL);
@@ -278,7 +287,7 @@ tmc_set_base(device_t dev, uint32_t low, uint32_t high)
 }
 
 static int
-tmc_read_trace(device_t dev)
+tmc_read_trace(device_t dev, uint64_t *offset)
 {
 	struct tmc_softc *sc;
  
@@ -303,6 +312,13 @@ tmc_read_trace(device_t dev)
 	    bus_read_4(sc->res, TMC_RWP),
 	    bus_read_4(sc->res, TMC_CBUFLEVEL),
 	    bus_read_4(sc->res, TMC_LBUFLEVEL));
+
+	uint32_t base_ptr;
+	uint32_t cur_ptr;
+	base_ptr = bus_read_4(sc->res, TMC_RRP);
+	cur_ptr = bus_read_4(sc->res, TMC_RWP);
+
+	*offset = (cur_ptr - base_ptr);
 
 	//if (device_get_unit(dev) == 0)
 	//	printf("RRD: %x\n", bus_read_4(sc->res, TMC_RRD));

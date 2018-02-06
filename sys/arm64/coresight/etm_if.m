@@ -27,6 +27,7 @@
 #
 
 #include <sys/bus.h>
+#include <arm64/coresight/etm4x.h>
 
 INTERFACE etm;
 
@@ -34,7 +35,8 @@ INTERFACE etm;
  *
  */
 METHOD int configure {
-	device_t	dev;
+	device_t		dev;
+	struct etm_config	*etm;
 };
 
 METHOD int start {

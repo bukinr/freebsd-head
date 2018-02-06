@@ -73,6 +73,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/rman.h>
 
 #include <dev/hwpmc/hwpmc_vm.h>
+#include <arm64/coresight/etm4x.h>
 
 #include "tmc_if.h"
 #include "etm_if.h"
@@ -244,7 +245,7 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 
 	etm_pc = etm_pcpu[cpu];
 
-	bufsize = 128 * 1024 * 1024;
+	bufsize = 16 * 1024 * 1024;
 	etm_buf->obj = obj = vm_pager_allocate(OBJT_PHYS, 0, bufsize,
 	    PROT_READ, 0, curthread->td_ucred);
 
@@ -282,8 +283,12 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 	phys_lo = phys_base & 0xffffffff;
 	phys_hi = (phys_base >> 32) & 0xffffffff;
 
-	ETM_CONFIGURE(etm_pc->dev_etm);
+	struct etm_config config;
+	config.naddr = 0;
 	TMC_CONFIGURE_ETR(etm_pc->dev_etr, phys_lo, phys_hi, bufsize);
+	ETM_CONFIGURE(etm_pc->dev_etm, &config);
+
+	TMC_START(etm_pc->dev_etr);
 
 	return (0);
 }
@@ -758,6 +763,15 @@ etm_trace_config(int cpu, int ri, struct pmc *pm,
 	etm_configure_ranges(etm_pc, ranges, nranges);
 #endif
 
+	struct etm_config config;
+	int i;
+
+	for (i = 0; i < nranges*2; i++) {
+		config.addr[i] = ranges[i];
+	}
+	config.naddr = nranges;
+	ETM_CONFIGURE(etm_pc->dev_etm, &config);
+
 	return (0);
 }
 
@@ -770,7 +784,7 @@ etm_read_trace(int cpu, int ri, struct pmc *pm,
 	struct pmc_md_etm_pmc *pm_etm;
 	struct etm_buffer *etm_buf;
 	struct etm_cpu *etm_pc;
-	//uint64_t offset;
+	uint64_t offset;
 	//uint64_t reg;
 	//uint32_t idx;
 
@@ -779,7 +793,7 @@ etm_read_trace(int cpu, int ri, struct pmc *pm,
 	etm_pc = etm_pcpu[cpu];
 	etm_pc->pm_mmap = pm;
 
-	TMC_READ_TRACE(etm_pc->dev_etr);
+	TMC_READ_TRACE(etm_pc->dev_etr, &offset);
 
 	pm_etm = (struct pmc_md_etm_pmc *)&pm->pm_md;
 	etm_buf = &pm_etm->etm_buffers[cpu];
@@ -805,7 +819,7 @@ etm_read_trace(int cpu, int ri, struct pmc *pm,
 #endif
 
 	*cycle = 0;
-	*voffset = 0;
+	*voffset = offset;
 
 	return (0);
 }
@@ -857,6 +871,8 @@ etm_release_pmc(int cpu, int ri, struct pmc *pm)
 	    __func__, cpu, rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_ETMRS));
 #endif
 
+	TMC_STOP(etm_pc->dev_etr);
+
 	mode = PMC_TO_MODE(pm);
 	if (mode == PMC_MODE_TT)
 		for (i = 0; i < pmc_cpu_max(); i++)
@@ -888,7 +904,6 @@ etm_start_pmc(int cpu, int ri)
 	KASSERT(ri == 0, ("[etm,%d] illegal row-index %d", __LINE__, ri));
 
 	etm_save_restore(etm_pc, false);
-	TMC_START(etm_pc->dev_etr);
 	ETM_START(etm_pc->dev_etm);
 
 	return (0);
@@ -919,7 +934,6 @@ etm_stop_pmc(int cpu, int ri)
 	 */
 	etm_save_restore(etm_pc, true);
 	ETM_STOP(etm_pc->dev_etm);
-	TMC_STOP(etm_pc->dev_etr);
 
 	return (0);
 }

@@ -95,13 +95,17 @@
 #define	TRCCNTRLDVR(n)		(0x140 + (n) * 0x4) /* 32 Trace Counter Reload Value Register [n=0-3] */
 #define	TRCCNTCTLR(n)		(0x150 + (n) * 0x4) /* 32 Trace Counter Control Register [n=0-3] */
 #define	TRCCNTVR(n)		(0x160 + (n) * 0x4) /* 32 Trace Counter Value Register [n=0-3] */
+
+#if 0
 #define	TRCIDR8			0x180 /* Trace ID Register 8 */
-#define	TRCIDR9s		0x184 /* Trace ID Register 9 */
+#define	TRCIDR9			0x184 /* Trace ID Register 9 */
 #define	TRCIDR10		0x188 /* Trace ID Register 10 */
 #define	TRCIDR11		0x18C /* Trace ID Register 11 */
 #define	TRCIDR12		0x190 /* Trace ID Register 12 */
 #define	TRCIDR13		0x194 /* Trace ID Register 13 */
+#endif
 #define	TRCIMSPEC(n)		(0x1C0 + (n) * 0x4)	/* Trace IMPLEMENTATION DEFINED register [n=0-7] */
+#if 0
 #define	TRCIDR0			0x1E0 /* Trace ID Register 0 */
 #define	TRCIDR1			0x1E4 /* Trace ID Register 1 */
 #define	TRCIDR2			0x1E8 /* Trace ID Register 2 */
@@ -110,6 +114,12 @@
 #define	TRCIDR5			0x1F4 /* Trace ID Register 5 */
 #define	TRCIDR6			0x1F8 /* Trace ID Register 6 */
 #define	TRCIDR7			0x1FC /* Trace ID Register 7 */
+#endif
+
+#define	TRCIDR0(n)		(0x1E0 + 0x4 * (n))
+#define	TRCIDR8(n)		(0x180 + 0x4 * (n))
+#define	TRCIDR(n)		((n > 7) ? TRCIDR8(n) : TRCIDR0(n))
+
 #define	TRCRSCTLR(n)		(0x200 + (n) * 0x4) /* Trace Resource Selection Control Register [n=2-31] */
 #define	TRCSSCCR(n)		(0x280 + (n) * 0x4) /* Trace Single-shot Comparator Control Register [n=0-7] */
 #define	TRCSSCSR(n)		(0x2A0 + (n) * 0x4) /* Trace Single-shot Comparator Status Register [n=0-7] */
@@ -143,3 +153,10 @@
 #define	TRCPIDR(n)		(0xFE0 + (n) * 0x4)	/* Management Peripheral IDn Register [n=0-3] */
 #define	TRCPIDR567(n)		(0xFD4 + ((n) - 5) * 0x4) /*  Management Peripheral ID5 to Peripheral ID7 Registers */
 #define	TRCCIDR(n)		(0xFF0 + (n) * 0x4)	/* Management Component IDn Register [n=0-4] */
+
+#define	ETM_N_COMPRATOR		16
+
+struct etm_config {
+	uint64_t addr[ETM_N_COMPRATOR];
+	uint32_t naddr;
+};

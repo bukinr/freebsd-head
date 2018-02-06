@@ -16,7 +16,7 @@ LIBADD+= ipt
 .if ${MACHINE_CPUARCH} == "aarch64"
 SRCS+=	pmctrace_etm.c		\
 	pmctrace_etm.h
-LIBADD+= 
+LIBADD+= opencsd
 .endif
 
 .include <bsd.prog.mk>

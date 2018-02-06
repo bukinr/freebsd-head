@@ -61,6 +61,7 @@ METHOD int configure_etf {
  */
 METHOD int read_trace {
 	device_t	dev;
+	uint64_t	*offset;
 };
 
 METHOD int start {
