@@ -623,7 +623,7 @@ etm_process(struct trace_cpu *tc, struct pmcstat_process *pp,
 		etm_process_chunk(mdata, (uint64_t)tc->base, tc->offset, tc->bufsize);
 		tc->offset = 0;
 		tc->cycle += 1;
-		etm_process_chunk(mdata, (uint64_t)tc->base, tc->offset, offset);
+		//etm_process_chunk(mdata, (uint64_t)tc->base, tc->offset, offset);
 		tc->offset = offset;
 	}
 

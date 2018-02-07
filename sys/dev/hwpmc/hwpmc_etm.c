@@ -245,7 +245,7 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 
 	etm_pc = etm_pcpu[cpu];
 
-	bufsize = 16 * 1024 * 1024;
+	bufsize = 2 * 1024 * 1024;
 	etm_buf->obj = obj = vm_pager_allocate(OBJT_PHYS, 0, bufsize,
 	    PROT_READ, 0, curthread->td_ucred);
 
@@ -777,7 +777,7 @@ etm_trace_config(int cpu, int ri, struct pmc *pm,
 
 static int
 etm_read_trace(int cpu, int ri, struct pmc *pm,
-    pmc_value_t *cycle, pmc_value_t *voffset)
+    pmc_value_t *vcycle, pmc_value_t *voffset)
 {
 	//struct etm_ext_area *etm_ext;
 	//struct etm_save_area *save_area;
@@ -785,6 +785,7 @@ etm_read_trace(int cpu, int ri, struct pmc *pm,
 	struct etm_buffer *etm_buf;
 	struct etm_cpu *etm_pc;
 	uint64_t offset;
+	uint64_t cycle;
 	//uint64_t reg;
 	//uint32_t idx;
 
@@ -793,7 +794,7 @@ etm_read_trace(int cpu, int ri, struct pmc *pm,
 	etm_pc = etm_pcpu[cpu];
 	etm_pc->pm_mmap = pm;
 
-	TMC_READ_TRACE(etm_pc->dev_etr, &offset);
+	TMC_READ_TRACE(etm_pc->dev_etr, &cycle, &offset);
 
 	pm_etm = (struct pmc_md_etm_pmc *)&pm->pm_md;
 	etm_buf = &pm_etm->etm_buffers[cpu];
@@ -818,7 +819,7 @@ etm_read_trace(int cpu, int ri, struct pmc *pm,
 	dprintf("%s: cycle %ld offset %ld\n", __func__, etm_buf->cycle, offset);
 #endif
 
-	*cycle = 0;
+	*vcycle = cycle;
 	*voffset = offset;
 
 	return (0);

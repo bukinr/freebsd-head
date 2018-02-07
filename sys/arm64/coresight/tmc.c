@@ -66,6 +66,7 @@ static struct ofw_compat_data compat_data[] = {
 struct tmc_softc {
 	struct resource		*res;
 	device_t		dev;
+	uint64_t		cycle;
 };
 
 static struct resource_spec tmc_spec[] = {
@@ -220,6 +221,8 @@ tmc_configure_etr(device_t dev, uint32_t low, uint32_t high,
 	reg &= ~STS_FULL;
 	bus_write_4(sc->res, TMC_STS, reg);
 
+	sc->cycle = 0;
+
 	return (0);
 }
 
@@ -287,7 +290,7 @@ tmc_set_base(device_t dev, uint32_t low, uint32_t high)
 }
 
 static int
-tmc_read_trace(device_t dev, uint64_t *offset)
+tmc_read_trace(device_t dev, uint64_t *cycle, uint64_t *offset)
 {
 	struct tmc_softc *sc;
  
@@ -318,7 +321,24 @@ tmc_read_trace(device_t dev, uint64_t *offset)
 	base_ptr = bus_read_4(sc->res, TMC_RRP);
 	cur_ptr = bus_read_4(sc->res, TMC_RWP);
 
-	*offset = (cur_ptr - base_ptr);
+	if (bus_read_4(sc->res, TMC_STS) & STS_FULL) {
+		sc->cycle++;
+		*offset = 0;
+		tmc_stop(dev);
+		tmc_start(dev);
+		printf("%s1: STS %x, CTL %x, RSZ %x, RRP %x, RWP %x, LBUFLEVEL %x, CBUFLEVEL %x, \n", __func__,
+		    bus_read_4(sc->res, TMC_STS),
+		    bus_read_4(sc->res, TMC_CTL),
+		    bus_read_4(sc->res, TMC_RSZ),
+		    bus_read_4(sc->res, TMC_RRP),
+		    bus_read_4(sc->res, TMC_RWP),
+		    bus_read_4(sc->res, TMC_CBUFLEVEL),
+		    bus_read_4(sc->res, TMC_LBUFLEVEL));
+	} else {
+		*offset = (cur_ptr - base_ptr);
+	}
+
+	*cycle = sc->cycle;
 
 	//if (device_get_unit(dev) == 0)
 	//	printf("RRD: %x\n", bus_read_4(sc->res, TMC_RRD));

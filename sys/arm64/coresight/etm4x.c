@@ -202,7 +202,6 @@ etm_configure(device_t dev, struct etm_config *config)
 	reg &= ~(1 << 16); //choose excp level 0
 	reg |= (0xf << 20);
 	reg &= ~(1 << 20); //choose excp level 0
-
 	bus_write_4(sc->res, TRCVICTLR, reg);
 
 	bus_write_4(sc->res, TRCRSCTLR(0), (5 << 16) | (1 << 0));
