@@ -386,6 +386,20 @@ pmcstat_image_get_elf_params(struct pmcstat_image *image,
 				break;
 			}
 		}
+	} else if (eh.e_type == ET_DYN) {
+		for (i = 0; i < eh.e_phnum; i++) {
+			if (gelf_getphdr(e, i, &ph) != &ph) {
+				warnx(
+"WARNING: Retrieval of PHDR entry #%ju in \"%s\" failed: %s.",
+				    (uintmax_t) i, buffer, elf_errmsg(-1));
+				goto done;
+			}
+			switch (ph.p_type) {
+			case PT_LOAD:
+				if ((ph.p_flags & PF_X) != 0)
+					image->pi_vaddr = ph.p_vaddr & (-ph.p_align);
+			}
+		}
 	}
 
 	/*
