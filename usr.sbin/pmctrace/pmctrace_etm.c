@@ -78,7 +78,7 @@ __FBSDID("$FreeBSD$");
 #include <opencsd/c_api/opencsd_c_api.h>
 
 #define	PMCTRACE_ETM_DEBUG
-//#undef	PMCTRACE_ETM_DEBUG
+#undef	PMCTRACE_ETM_DEBUG
 
 static uint8_t test_trc_id_override = 0x00; // no trace ID override.
 /* buffer to handle a packet string */
@@ -95,7 +95,6 @@ static int frame_raw_packed = 0;
 #define	dprintf(fmt, ...)
 #endif
 
-#if 1
 static struct pmcstat_symbol *
 symbol_lookup(const struct mtrace_data *mdata, uint64_t ip, struct pmcstat_image **img)
 {
@@ -123,7 +122,6 @@ symbol_lookup(const struct mtrace_data *mdata, uint64_t ip, struct pmcstat_image
 
 	return (NULL);
 }
-#endif
 
 static ocsd_err_t
 attach_raw_printers(dcd_tree_handle_t dcd_tree_h)
