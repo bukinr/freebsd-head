@@ -185,10 +185,12 @@ etm_configure(device_t dev, struct etm_config *config)
 	if (config->excp_level > 2)
 		return (-1);
 
-	reg |= (0xf << 16);
-	reg &= ~(1 << (16 + config->excp_level));
-	reg |= (0xf << 20);
-	reg &= ~(1 << (20 + config->excp_level));
+	printf("%s: Configure exception level %d\n", __func__, config->excp_level);
+
+	reg |= TRCVICTLR_EXLEVEL_NS_M;
+	reg &= ~TRCVICTLR_EXLEVEL_NS(config->excp_level);
+	reg |= TRCVICTLR_EXLEVEL_S_M;
+	reg &= ~TRCVICTLR_EXLEVEL_S(config->excp_level);
 	bus_write_4(sc->res, TRCVICTLR, reg);
 
 	bus_write_4(sc->res, TRCRSCTLR(0), (5 << 16) | (1 << 0));
@@ -198,10 +200,10 @@ etm_configure(device_t dev, struct etm_config *config)
 		printf("configure range %d, address %lx\n", i, config->addr[i]);
 		bus_write_8(sc->res, TRCACVR(i), config->addr[i]);
 
+		reg = 0;
 		/* Secure state */
 		reg |= TRCACATR_EXLEVEL_S_M;
 		reg &= ~TRCACATR_EXLEVEL_S(config->excp_level);
-
 		/* Non-secure state */
 		reg |= TRCACATR_EXLEVEL_NS_M;
 		reg &= ~TRCACATR_EXLEVEL_NS(config->excp_level);

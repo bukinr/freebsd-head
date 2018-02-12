@@ -106,22 +106,19 @@ symbol_lookup(const struct mtrace_data *mdata, uint64_t ip, struct pmcstat_image
 
 	map = pmcstat_process_find_map(mdata->pp, ip);
 	if (map != NULL) {
-		//dprintf("cpu%d: 0x%lx map found\n", mdata->cpu, ip);
 		image = map->ppm_image;
 		newpc = ip - (map->ppm_lowpc +
 		    (image->pi_vaddr - image->pi_start));
 
-		//printf("looking for newpc %lx, ip %lx, lowpc %llx, offset %llx, pi_vadd %llx, pi_start %llx entry %llx\n",
-		//    newpc, ip, map->ppm_lowpc, map->ppm_offset, image->pi_vaddr, image->pi_start, image->pi_entry);
 		sym = pmcstat_symbol_search(image, newpc);
 		*img = image;
 
-		//if (sym == NULL)
-		//	dprintf("cpu%d: symbol 0x%lx not found\n", mdata->cpu, newpc);
+		if (sym == NULL)
+			dprintf("cpu%d: symbol 0x%lx not found\n", mdata->cpu, newpc);
 
 		return (sym);
 	} else {
-		//dprintf("cpu%d: 0x%lx map not found\n", mdata->cpu, ip);
+		dprintf("cpu%d: 0x%lx map not found\n", mdata->cpu, ip);
 	}
 
 	return (NULL);
@@ -545,12 +542,9 @@ etm_process_chunk(struct mtrace_data *mdata __unused, uint64_t base __unused,
 			bytes_done += bytes_this_time;
 			printf("BYTES DONE %d\n", bytes_done);
 		} else if (OCSD_DATA_RESP_IS_WAIT(dp_ret)) {
-			printf("IS_WAIT rcvd !\n");
-			exit(5);
 			dp_ret = ocsd_dt_process_data(dcdtree_handle, OCSD_OP_FLUSH, 0, 0, NULL, NULL);
 		} else {
 			ret = OCSD_ERR_DATA_DECODE_FATAL;
-			exit(6);
 		}
 	}
 
@@ -604,8 +598,8 @@ etm_process(struct trace_cpu *tc, struct pmcstat_process *pp,
 	dprintf("%s: cpu %d, cycle %d, offset %ld\n",
 	    __func__, cpu, cycle, offset);
 
-	//dprintf("tc->base %lx\n", *(uint64_t *)tc->base);
-	dprintf("%s: tc->base %lx, *tc->base %lx\n", __func__, (uint64_t)tc->base, *(uint64_t *)tc->base);
+	dprintf("%s: tc->base %lx, *tc->base %lx\n", __func__,
+	    (uint64_t)tc->base, *(uint64_t *)tc->base);
 
 	if (offset == tc->offset)
 		return (0);

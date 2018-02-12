@@ -227,14 +227,12 @@ etm_configure_ranges(struct etm_cpu *etm_pc, const uint64_t *ranges,
 #endif
 
 static int
-etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
+etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf,
+    uint32_t bufsize)
 {
 	struct pmc_vm_map *map;
 	struct etm_cpu *etm_pc;
-	uint32_t bufsize;
 	uint64_t phys_base;
-	uint32_t phys_lo;
-	uint32_t phys_hi;
 	struct cdev_cpu *cc;
 	vm_object_t obj;
 	vm_page_t m;
@@ -245,7 +243,6 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 
 	etm_pc = etm_pcpu[cpu];
 
-	bufsize = 16 * 1024 * 1024;
 	etm_buf->obj = obj = vm_pager_allocate(OBJT_PHYS, 0, bufsize,
 	    PROT_READ, 0, curthread->td_ucred);
 
@@ -279,26 +276,6 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 
 	etm_buf->phys_base = phys_base;
 	etm_buf->cycle = 0;
-
-	phys_lo = phys_base & 0xffffffff;
-	phys_hi = (phys_base >> 32) & 0xffffffff;
-
-	struct etm_config config;
-	config.naddr = 0;
-	TMC_CONFIGURE_ETR(etm_pc->dev_etr, phys_lo, phys_hi, bufsize);
-
-#if 0
-	enum pmc_mode mode;
-	mode = PMC_TO_MODE(pm);
-	if (mode == PMC_MODE_ST)
-		config.excp_level = 1;
-	else
-		config.excp_level = 0;
-#endif
-
-	ETM_CONFIGURE(etm_pc->dev_etm, &config);
-
-	TMC_START(etm_pc->dev_etr);
 
 	return (0);
 }
@@ -336,10 +313,11 @@ etm_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	struct etm_cpu *etm_pc;
 	struct pmc_md_etm_pmc *pm_etm;
 	struct etm_buffer *etm_buf;
-	//struct xsave_header *hdr;
-	//struct etm_ext_area *etm_ext;
-	//struct etm_save_area *save_area;
-	//enum pmc_mode mode;
+	uint32_t bufsize;
+	struct etm_config config;
+	enum pmc_mode mode;
+	uint32_t phys_lo;
+	uint32_t phys_hi;
 	int error;
 
 	etm_pc = etm_pcpu[cpu];
@@ -352,10 +330,26 @@ etm_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	pm_etm = (struct pmc_md_etm_pmc *)&pm->pm_md;
 	etm_buf = &pm_etm->etm_buffers[cpu];
 
-	error = etm_buffer_allocate(cpu, etm_buf);
+	bufsize = 16 * 1024 * 1024;
+	error = etm_buffer_allocate(cpu, etm_buf, bufsize);
 	if (error != 0) {
 		dprintf("%s: can't allocate buffers\n", __func__);
 		return (EINVAL);
+	}
+
+	phys_lo = etm_buf->phys_base & 0xffffffff;
+	phys_hi = (etm_buf->phys_base >> 32) & 0xffffffff;
+	config.naddr = 0;
+	TMC_CONFIGURE_ETR(etm_pc->dev_etr, phys_lo, phys_hi, bufsize);
+
+	mode = PMC_TO_MODE(pm);
+	if (mode == PMC_MODE_ST)
+		config.excp_level = 1;
+	else
+		config.excp_level = 0;
+	else {
+		dprintf("%s: unsupported mode %d\n", __func__, mode);
+		return (-1);
 	}
 
 #if 0
@@ -373,24 +367,6 @@ etm_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	etm_ext->rtit_output_mask_etmrs = 0x7f;
 
 	etm_configure_ranges(etm_pc, pm_etma->ranges, pm_etma->nranges);
-
-	/*
-	 * TODO
-	 * if (sc->l0_ebx & CPUETM_PRW) {
-	 *     reg |= RTIT_CTL_FUPONPTW;
-	 *     reg |= RTIT_CTL_ETMWEN;
-	 * }
-	 */
-
-	mode = PMC_TO_MODE(pm);
-	if (mode == PMC_MODE_ST)
-		etm_ext->rtit_ctl |= RTIT_CTL_OS;
-	else if (mode == PMC_MODE_TT)
-		etm_ext->rtit_ctl |= RTIT_CTL_USER;
-	else {
-		dprintf("%s: unsupported mode %d\n", __func__, mode);
-		return (-1);
-	}
 
 	/* Enable FUP, TIP, TIP.PGE, TIP.PGD, TNT, MODE.Exec and MODE.TSX packets */
 	if (pm_etma->flags & INTEL_ETM_FLAG_BRANCHES)
@@ -411,8 +387,11 @@ etm_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	 * Note: Check Bitmap of supported MTC Period Encodings
 	 * etm_ext->rtit_ctl |= RTIT_CTL_MTC_FREQ(6);
 	 */
-
 #endif
+
+	ETM_CONFIGURE(etm_pc->dev_etm, &config);
+	TMC_START(etm_pc->dev_etr);
+
 	return (0);
 }
 
