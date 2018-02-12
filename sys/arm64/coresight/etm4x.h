@@ -75,6 +75,12 @@
 #define	 TRCQCTLR_MODE_INC	(1 << 8) /* Include mode. */
 #define	TRCVICTLR		0x080 /* Trace ViewInst Main Control Register */
 #define	 TRCVICTLR_SSSTATUS	(1 << 9) /* The start/stop logic is in the started state. */
+#define	 TRCVICTLR_EXLEVEL_NS_S	20
+#define	 TRCVICTLR_EXLEVEL_NS_M	(0xf << TRCVICTLR_EXLEVEL_NS_S)
+#define	 TRCVICTLR_EXLEVEL_NS(n) (0x1 << ((n) + TRCVICTLR_EXLEVEL_NS_S))
+#define	 TRCVICTLR_EXLEVEL_S_S	16
+#define	 TRCVICTLR_EXLEVEL_S_M	(0xf << TRCVICTLR_EXLEVEL_S_S)
+#define	 TRCVICTLR_EXLEVEL_S(n)	(0x1 << ((n) + TRCVICTLR_EXLEVEL_S_S))
 #define	TRCVIIECTLR		0x084 /* Trace ViewInst Include/Exclude Control Register */
 #define	TRCVISSCTLR		0x088 /* Trace ViewInst Start/Stop Control Register */
 #define	TRCVIPCSSCTLR		0x08C /* Trace ViewInst Start/Stop PE Comparator Control Register */
@@ -95,30 +101,15 @@
 #define	TRCCNTRLDVR(n)		(0x140 + (n) * 0x4) /* 32 Trace Counter Reload Value Register [n=0-3] */
 #define	TRCCNTCTLR(n)		(0x150 + (n) * 0x4) /* 32 Trace Counter Control Register [n=0-3] */
 #define	TRCCNTVR(n)		(0x160 + (n) * 0x4) /* 32 Trace Counter Value Register [n=0-3] */
-
-#if 0
-#define	TRCIDR8			0x180 /* Trace ID Register 8 */
-#define	TRCIDR9			0x184 /* Trace ID Register 9 */
-#define	TRCIDR10		0x188 /* Trace ID Register 10 */
-#define	TRCIDR11		0x18C /* Trace ID Register 11 */
-#define	TRCIDR12		0x190 /* Trace ID Register 12 */
-#define	TRCIDR13		0x194 /* Trace ID Register 13 */
-#endif
 #define	TRCIMSPEC(n)		(0x1C0 + (n) * 0x4)	/* Trace IMPLEMENTATION DEFINED register [n=0-7] */
-#if 0
-#define	TRCIDR0			0x1E0 /* Trace ID Register 0 */
-#define	TRCIDR1			0x1E4 /* Trace ID Register 1 */
-#define	TRCIDR2			0x1E8 /* Trace ID Register 2 */
-#define	TRCIDR3			0x1EC /* Trace ID Register 3 */
-#define	TRCIDR4			0x1F0 /* Trace ID Register 4 */
-#define	TRCIDR5			0x1F4 /* Trace ID Register 5 */
-#define	TRCIDR6			0x1F8 /* Trace ID Register 6 */
-#define	TRCIDR7			0x1FC /* Trace ID Register 7 */
-#endif
 
 #define	TRCIDR0(n)		(0x1E0 + 0x4 * (n))
 #define	TRCIDR8(n)		(0x180 + 0x4 * (n))
 #define	TRCIDR(n)		((n > 7) ? TRCIDR8(n) : TRCIDR0(n))
+#define	 TRCIDR1_TRCARCHMAJ_S	8
+#define	 TRCIDR1_TRCARCHMAJ_M	(0xf << TRCIDR1_TRCARCHMAJ_S)
+#define	 TRCIDR1_TRCARCHMIN_S	4
+#define	 TRCIDR1_TRCARCHMIN_M	(0xf << TRCIDR1_TRCARCHMIN_S)
 
 #define	TRCRSCTLR(n)		(0x200 + (n) * 0x4) /* Trace Resource Selection Control Register [n=2-31] */
 #define	TRCSSCCR(n)		(0x280 + (n) * 0x4) /* Trace Single-shot Comparator Control Register [n=0-7] */
@@ -130,6 +121,22 @@
 #define	TRCPDSR			0x314 /* Management PowerDown Status Register */
 #define	TRCACVR(n)		(0x400 + (n) * 0x8) /* Trace Address Comparator Value Register [n=0-15] */
 #define	TRCACATR(n)		(0x480 + (n) * 0x8) /* Trace Address Comparator Access Type Register [n=0-15] */
+#define	 TRCACATR_DTBM		(1 << 21)
+#define	 TRCACATR_DATARANGE	(1 << 20)
+#define	 TRCACATR_DATASIZE_S	18
+#define	 TRCACATR_DATASIZE_M	(0x3 << TRCACATR_DATASIZE_S)
+#define	 TRCACATR_DATASIZE_B	(0x0 << TRCACATR_DATASIZE_S)
+#define	 TRCACATR_DATASIZE_HW	(0x1 << TRCACATR_DATASIZE_S)
+#define	 TRCACATR_DATASIZE_W	(0x2 << TRCACATR_DATASIZE_S)
+#define	 TRCACATR_DATASIZE_DW	(0x3 << TRCACATR_DATASIZE_S)
+#define	 TRCACATR_DATAMATCH_S	16
+#define	 TRCACATR_DATAMATCH_M	(0x3 << TRCACATR_DATAMATCH_S)
+#define	 TRCACATR_EXLEVEL_S_S	8
+#define	 TRCACATR_EXLEVEL_S_M	(0xf << TRCACATR_EXLEVEL_S_S)
+#define	 TRCACATR_EXLEVEL_S(n)	(0x1 << ((n) + TRCACATR_EXLEVEL_S_S))
+#define	 TRCACATR_EXLEVEL_NS_S	12
+#define	 TRCACATR_EXLEVEL_NS_M	(0xf << TRCACATR_EXLEVEL_NS_S)
+#define	 TRCACATR_EXLEVEL_NS(n)	(0x1 << ((n) + TRCACATR_EXLEVEL_NS_S))
 #define	TRCDVCVR(n)		(0x500 + (n) * 0x8) /* Trace Data Value Comparator Value Register [n=0-7] */
 #define	TRCDVCMR(n)		(0x580 + (n) * 0x8) /* Trace Data Value Comparator Mask Register [n=0-7] */
 #define	TRCCIDCVR(n)		(0x600 + (n) * 0x8) /* Trace Context ID Comparator Value Register [n=0-7] */
