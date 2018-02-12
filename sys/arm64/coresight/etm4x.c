@@ -74,11 +74,6 @@ etm_print_version(struct etm_softc *sc)
 {
 	uint32_t reg;
 
-#define	TRCARCHMAJ_S	8
-#define	TRCARCHMAJ_M	(0xf << TRCARCHMAJ_S)
-#define	TRCARCHMIN_S	4
-#define	TRCARCHMIN_M	(0xf << TRCARCHMIN_S)
-
 	/* Unlocking Coresight */
 	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
 
@@ -91,8 +86,8 @@ etm_print_version(struct etm_softc *sc)
 
 	reg = bus_read_4(sc->res, TRCIDR(1));
 	printf("ETM Version: %d.%d\n",
-	    (reg & TRCARCHMAJ_M) >> TRCARCHMAJ_S,
-	    (reg & TRCARCHMIN_M) >> TRCARCHMIN_S);
+	    (reg & TRCIDR1_TRCARCHMAJ_M) >> TRCIDR1_TRCARCHMAJ_S,
+	    (reg & TRCIDR1_TRCARCHMIN_M) >> TRCIDR1_TRCARCHMIN_S);
 }
 
 static int
@@ -150,17 +145,6 @@ etm_configure(device_t dev, struct etm_config *config)
 
 	etm_stop(dev);
 
-#define	 TRCACATR_DTBM		(1 << 21)
-#define	 TRCACATR_DATARANGE	(1 << 20)
-#define	 TRCACATR_DATASIZE_S	18
-#define	 TRCACATR_DATASIZE_M	(0x3 << TRCACATR_DATASIZE_S)
-#define	 TRCACATR_DATASIZE_B	(0x0 << TRCACATR_DATASIZE_S)
-#define	 TRCACATR_DATASIZE_HW	(0x1 << TRCACATR_DATASIZE_S)
-#define	 TRCACATR_DATASIZE_W	(0x2 << TRCACATR_DATASIZE_S)
-#define	 TRCACATR_DATASIZE_DW	(0x3 << TRCACATR_DATASIZE_S)
-#define	 TRCACATR_DATAMATCH_S	16
-#define	 TRCACATR_DATAMATCH_M	(0x3 << TRCACATR_DATAMATCH_S)
-
 	/* Configure ETM */
 
 	/* Enable the return stack, global timestamping, Context ID, and Virtual context identifier tracing. */
@@ -214,22 +198,14 @@ etm_configure(device_t dev, struct etm_config *config)
 		printf("configure range %d, address %lx\n", i, config->addr[i]);
 		bus_write_8(sc->res, TRCACVR(i), config->addr[i]);
 
-		reg = TRCACATR_DTBM;
-		reg |= TRCACATR_DATARANGE;
-		reg |= TRCACATR_DATASIZE_DW;
-		reg = 0;
-
 		/* Secure state */
-		reg |= (0xf << 8);
-		reg &= ~(1 << (8 + config->excp_level));
-		/* Non secure state */
-		reg |= (0xf << 12);
-		reg &= ~(1 << (12 + config->excp_level));
-		bus_write_4(sc->res, TRCACATR(i), reg);
+		reg |= TRCACATR_EXLEVEL_S_M;
+		reg &= ~TRCACATR_EXLEVEL_S(config->excp_level);
 
-		//reg = bus_read_4(sc->res, TRCVIIECTLR);
-		//reg |= (1 << i);
-		//bus_write_4(sc->res, TRCVIIECTLR, reg);
+		/* Non-secure state */
+		reg |= TRCACATR_EXLEVEL_NS_M;
+		reg &= ~TRCACATR_EXLEVEL_NS(config->excp_level);
+		bus_write_4(sc->res, TRCACATR(i), reg);
 	}
 
 	/* No address filtering for ViewData. */
@@ -246,10 +222,7 @@ etm_configure(device_t dev, struct etm_config *config)
 
 	/* No start or stop points for ViewInst. */
 	bus_write_4(sc->res, TRCVISSCTLR, 0);
-	//bus_write_4(sc->res, TRCVISSCTLR, (1 << 0) | (1 << 17));
 
-	/* Enable ViewData. */
-	bus_write_4(sc->res, TRCVDCTLR, 1);
 	/* Disable ViewData */
 	bus_write_4(sc->res, TRCVDCTLR, 0);
 
