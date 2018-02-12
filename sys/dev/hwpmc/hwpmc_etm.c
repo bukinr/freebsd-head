@@ -345,7 +345,7 @@ etm_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	mode = PMC_TO_MODE(pm);
 	if (mode == PMC_MODE_ST)
 		config.excp_level = 1;
-	else
+	else if (mode == PMC_MODE_TT)
 		config.excp_level = 0;
 	else {
 		dprintf("%s: unsupported mode %d\n", __func__, mode);
