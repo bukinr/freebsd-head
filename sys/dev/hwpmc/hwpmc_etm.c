@@ -64,9 +64,6 @@ __FBSDID("$FreeBSD$");
 #include <vm/vm_radix.h>
 #include <vm/pmap.h>
 
-//#include <machine/intr_machdep.h>
-//#include <machine/specialreg.h>
-
 #include <machine/bus.h>
 #include <machine/resource.h>
 #include <sys/bus.h>
@@ -78,11 +75,7 @@ __FBSDID("$FreeBSD$");
 #include "tmc_if.h"
 #include "etm_if.h"
 
-//#include <x86/apicvar.h>
-//#include <x86/x86_var.h>
-
 static MALLOC_DEFINE(M_ETM, "etm", "ETM driver");
-//static uint64_t etm_xsave_mask;
 
 extern struct cdev *pmc_cdev[MAXCPU];
 
@@ -755,7 +748,7 @@ etm_trace_config(int cpu, int ri, struct pmc *pm,
 	struct etm_config config;
 	int i;
 
-	for (i = 0; i < nranges*2; i++) {
+	for (i = 0; i < nranges * 2; i++) {
 		config.addr[i] = ranges[i];
 	}
 	config.naddr = nranges;
