@@ -398,6 +398,7 @@ pmcstat_image_get_elf_params(struct pmcstat_image *image,
 			case PT_LOAD:
 				if ((ph.p_flags & PF_X) != 0)
 					image->pi_vaddr = ph.p_vaddr & (-ph.p_align);
+				break;
 			}
 		}
 	}

@@ -27,6 +27,11 @@ OPENCSDSRC=	${SRCTOP}/contrib/opencsd
 LIB=	opencsd
 SHLIB_MAJOR=0
 
+# Uncomment for debugging
+#CFLAGS += -g -O0 -DDEBUG
+#CPPFLAGS += -g -O0 -DDEBUG
+#CXXFLAGS += -g -O0 -DDEBUG
+
 # ETMv3
 SRCS=	\
 	trc_cmp_cfg_etmv3.cpp		\
@@ -166,7 +171,7 @@ STMINCSDIR=${INCLUDEDIR}/opencsd/stm/
 
 INCSGROUPS=INCS APIINCS ETMV3INCS ETMV4INCS PTMINCS STMINCS
 
-LIBADD= cxxrt c++
+LIBADD= cxxrt cplusplus
 
 WARNS?= 1
 
