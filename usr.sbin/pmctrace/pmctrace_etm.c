@@ -97,7 +97,7 @@ static int frame_raw_packed = 0;
 
 #if 1
 static struct pmcstat_symbol *
-symbol_lookup(const struct mtrace_data *mdata, uint64_t ip)
+symbol_lookup(const struct mtrace_data *mdata, uint64_t ip, struct pmcstat_image **img)
 {
 	struct pmcstat_image *image;
 	struct pmcstat_symbol *sym;
@@ -113,15 +113,35 @@ symbol_lookup(const struct mtrace_data *mdata, uint64_t ip)
 	printf("mdata->pp %lx\n", (uint64_t)mdata->pp);
 #endif
 
+	if (ip == 0)
+		return (NULL);
+
 	map = pmcstat_process_find_map(mdata->pp, ip);
 	if (map != NULL) {
+		//dprintf("cpu%d: 0x%lx map found\n", mdata->cpu, ip);
 		image = map->ppm_image;
+		//if (ip & (1ULL << 63))
+		if (map->ppm_offset == 0)
+			newpc = ip;
+		else {
+			//newpc = ip - map->ppm_lowpc - image->pi_vaddr + 1 * image->pi_start;
+			newpc = ip - map->ppm_offset + image->pi_start;
+		}
 		newpc = ip - (map->ppm_lowpc +
-			(image->pi_vaddr - image->pi_start));
+		    (image->pi_vaddr - image->pi_start));
+		//newpc += image->pi_start;
+
+		//printf("looking for newpc %lx, ip %lx, lowpc %llx, offset %llx, pi_vadd %llx, pi_start %llx entry %llx\n",
+		//    newpc, ip, map->ppm_lowpc, map->ppm_offset, image->pi_vaddr, image->pi_start, image->pi_entry);
 		sym = pmcstat_symbol_search(image, newpc);
+		*img = image;
+
+		//if (sym == NULL)
+		//	dprintf("cpu%d: symbol 0x%lx not found\n", mdata->cpu, newpc);
+
 		return (sym);
 	} else {
-		dprintf("cpu%d: 0x%lx map not found\n", mdata->cpu, ip);
+		//dprintf("cpu%d: 0x%lx map not found\n", mdata->cpu, ip);
 	}
 
 	return (NULL);
@@ -395,14 +415,17 @@ gen_trace_elem_print(const void *p_context, const ocsd_trc_index_t index_sop __u
 	//mdata->ip = (elem->st_addr);
 
 	struct pmcstat_symbol *sym;
+	struct pmcstat_image *image;
+
 	if (elem->st_addr == 0)
 		return (0);
-	sym = symbol_lookup(mdata, elem->st_addr);
+	sym = symbol_lookup(mdata, elem->st_addr, &image);
 	if (sym) {
-		printf("cpu%d:  IP 0x%lx %s\n", mdata->cpu, elem->st_addr,
+		printf("cpu%d:  IP 0x%lx %s %s\n", mdata->cpu, elem->st_addr,
+		    pmcstat_string_unintern(image->pi_name),
 		    pmcstat_string_unintern(sym->ps_name));
  	} else {
-		//dprintf("cpu%d: 0x%lx not found\n", mdata->cpu, mdata->ip);
+		//dprintf("cpu%d: symbol 0x%lx not found\n", mdata->cpu, elem->st_addr);
 	}
 
 	switch (elem->elem_type) {

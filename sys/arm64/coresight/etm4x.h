@@ -159,4 +159,5 @@
 struct etm_config {
 	uint64_t addr[ETM_N_COMPRATOR];
 	uint32_t naddr;
+	uint8_t excp_level;
 };

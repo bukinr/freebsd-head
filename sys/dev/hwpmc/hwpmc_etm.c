@@ -93,7 +93,7 @@ extern struct cdev *pmc_cdev[MAXCPU];
 #define	ETM_CAPS	(PMC_CAP_READ | PMC_CAP_INTERRUPT | PMC_CAP_SYSTEM | PMC_CAP_USER)
 
 #define	PMC_ETM_DEBUG
-//#undef	PMC_ETM_DEBUG
+#undef	PMC_ETM_DEBUG
 
 #ifdef	PMC_ETM_DEBUG
 #define	dprintf(fmt, ...)	printf(fmt, ##__VA_ARGS__)
@@ -245,7 +245,7 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 
 	etm_pc = etm_pcpu[cpu];
 
-	bufsize = 2 * 1024 * 1024;
+	bufsize = 16 * 1024 * 1024;
 	etm_buf->obj = obj = vm_pager_allocate(OBJT_PHYS, 0, bufsize,
 	    PROT_READ, 0, curthread->td_ucred);
 
@@ -286,6 +286,16 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf)
 	struct etm_config config;
 	config.naddr = 0;
 	TMC_CONFIGURE_ETR(etm_pc->dev_etr, phys_lo, phys_hi, bufsize);
+
+#if 0
+	enum pmc_mode mode;
+	mode = PMC_TO_MODE(pm);
+	if (mode == PMC_MODE_ST)
+		config.excp_level = 1;
+	else
+		config.excp_level = 0;
+#endif
+
 	ETM_CONFIGURE(etm_pc->dev_etm, &config);
 
 	TMC_START(etm_pc->dev_etr);
@@ -770,6 +780,14 @@ etm_trace_config(int cpu, int ri, struct pmc *pm,
 		config.addr[i] = ranges[i];
 	}
 	config.naddr = nranges;
+
+	enum pmc_mode mode;
+	mode = PMC_TO_MODE(pm);
+	if (mode == PMC_MODE_ST)
+		config.excp_level = 1;
+	else
+		config.excp_level = 0;
+
 	ETM_CONFIGURE(etm_pc->dev_etm, &config);
 
 	return (0);

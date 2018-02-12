@@ -198,10 +198,13 @@ etm_configure(device_t dev, struct etm_config *config)
 	//reg = TRCVICTLR_SSSTATUS;
 	//reg |= 1;
 
+	if (config->excp_level > 2)
+		return (-1);
+
 	reg |= (0xf << 16);
-	reg &= ~(1 << 16); //choose excp level 0
+	reg &= ~(1 << (16 + config->excp_level));
 	reg |= (0xf << 20);
-	reg &= ~(1 << 20); //choose excp level 0
+	reg &= ~(1 << (20 + config->excp_level));
 	bus_write_4(sc->res, TRCVICTLR, reg);
 
 	bus_write_4(sc->res, TRCRSCTLR(0), (5 << 16) | (1 << 0));
@@ -218,14 +221,10 @@ etm_configure(device_t dev, struct etm_config *config)
 
 		/* Secure state */
 		reg |= (0xf << 8);
-		reg &= ~(1 << 8); //choose excp level 0
-		//reg &= ~(1 << 9); //choose excp level 1
-
+		reg &= ~(1 << (8 + config->excp_level));
 		/* Non secure state */
 		reg |= (0xf << 12);
-		reg &= ~(1 << 12); //choose excp level 0
-		//reg &= ~(1 << 13); //choose excp level 1
-
+		reg &= ~(1 << (12 + config->excp_level));
 		bus_write_4(sc->res, TRCACATR(i), reg);
 
 		//reg = bus_read_4(sc->res, TRCVIIECTLR);
