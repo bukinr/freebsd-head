@@ -479,10 +479,6 @@ etm_process_chunk(struct mtrace_data *mdata __unused, uint64_t base __unused,
 
 	dprintf("%s\n", __func__);
 
-	//ocsd_def_errlog_init(OCSD_ERR_SEV_INFO,1);
-	ocsd_def_errlog_init(0, 0);
-	ret = ocsd_def_errlog_config_output(C_API_MSGLOGOUT_FLG_FILE | C_API_MSGLOGOUT_FLG_STDOUT, "c_api_test.log");
-
 	dcdtree_handle = C_API_INVALID_TREE_HANDLE;
 	dcdtree_handle = ocsd_create_dcd_tree(OCSD_TRC_SRC_FRAME_FORMATTED, OCSD_DFRMTR_FRAME_MEM_ALIGN);
  
@@ -629,6 +625,14 @@ etm_process(struct trace_cpu *tc, struct pmcstat_process *pp,
 static int
 etm_init(void)
 {
+	int ret;
+
+	//ocsd_def_errlog_init(OCSD_ERR_SEV_INFO,1);
+	ocsd_def_errlog_init(0, 0);
+
+	ret = ocsd_def_errlog_config_output(C_API_MSGLOGOUT_FLG_FILE | C_API_MSGLOGOUT_FLG_STDOUT, "c_api_test.log");
+	if (ret != OCSD_OK)
+		return (-1);
 
 	return (0);
 }
