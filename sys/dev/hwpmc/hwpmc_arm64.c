@@ -545,4 +545,5 @@ void
 pmc_arm64_finalize(struct pmc_mdep *md)
 {
 
+	pmc_etm_finalize(md);
 }
