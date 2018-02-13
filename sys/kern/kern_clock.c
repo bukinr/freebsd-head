@@ -461,8 +461,7 @@ hardclock_cpu(int usermode)
 	thread_unlock(td);
 
 #ifdef HWPMC_HOOKS
-	if (PMC_CPU_HAS_SAMPLES(PCPU_GET(cpuid)))
-		PMC_CALL_HOOK_UNLOCKED(curthread, PMC_FN_DO_SAMPLES, NULL);
+	PMC_CALL_HOOK_UNLOCKED(curthread, PMC_FN_DO_SAMPLES, NULL);
 	if (td->td_intr_frame != NULL)
 		PMC_SOFT_CALL_TF( , , clock, hard, td->td_intr_frame);
 #endif
@@ -548,8 +547,7 @@ hardclock_cnt(int cnt, int usermode)
 	}
 
 #ifdef	HWPMC_HOOKS
-	if (PMC_CPU_HAS_SAMPLES(PCPU_GET(cpuid)))
-		PMC_CALL_HOOK_UNLOCKED(curthread, PMC_FN_DO_SAMPLES, NULL);
+	PMC_CALL_HOOK_UNLOCKED(curthread, PMC_FN_DO_SAMPLES, NULL);
 	if (td->td_intr_frame != NULL)
 		PMC_SOFT_CALL_TF( , , clock, hard, td->td_intr_frame);
 #endif
