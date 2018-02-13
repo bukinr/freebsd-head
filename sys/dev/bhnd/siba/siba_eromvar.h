@@ -1,10 +1,8 @@
 /*-
- * Copyright (c) 2013-2014 Robert N. M. Watson
- * All rights reserved.
+ * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
  *
- * This software was developed by SRI International and the University of
- * Cambridge Computer Laboratory under DARPA/AFRL contract (FA8750-10-C-0237)
- * ("CTSRD"), as part of the DARPA CRASH research programme.
+ * Copyright (c) 2018 Landon Fuller <landonf@FreeBSD.org>
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,39 +24,23 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
+ * 
  * $FreeBSD$
  */
 
-#ifndef _BOOT_LOADER_H_
-#define	_BOOT_LOADER_H_
+#ifndef	_SIBA_SIBA_EROMVAR_H_
+#define	_SIBA_SIBA_EROMVAR_H_
 
-/* beri_console.c */
-extern struct console	 altera_jtag_uart_console;
+#include <dev/bhnd/bhnd.h>
+#include <dev/bhnd/bhnd_erom.h>
 
-/* beri_disk.c */
-extern struct devsw	 beri_cfi_disk;
-extern struct devsw	 beri_sdcard_disk;
+#include "sibavar.h"
 
-/* devicename.c */
-struct env_var;
-int	 beri_arch_setcurrdev(struct env_var *, int, const void *);
-char	*beri_arch_fmtdev(void *);
-int	 beri_arch_getdev(void **, const char *, const char **);
+struct siba_erom;
 
-/* exec.c */
-extern struct file_format	beri_elf;
+#define	SIBA_EROM_
 
-/* main.c */
-extern int		 boot2_argc;
-extern char		**boot2_argv;
-extern char		**boot2_envv;
-extern struct bootinfo	 boot2_bootinfo;
+int	siba_erom_get_core_id(struct siba_erom *sc, u_int core_idx,
+	    struct siba_core_id *result);
 
-/* metadata.c */
-int	md_load64(char *args, vm_offset_t *modulep, vm_offset_t *dtbp);
-
-/* vers.c */
-extern char		bootprog_info[];
-
-#endif /* !_BOOT_LOADER_H_ */
+#endif /* _SIBA_SIBA_EROMVAR_H_ */
