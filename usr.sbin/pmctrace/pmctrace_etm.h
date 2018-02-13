@@ -34,7 +34,6 @@
 #ifndef _PMCTRACE_ETM_H_
 #define _PMCTRACE_ETM_H_
 
-int etm_process(struct trace_cpu *cc, struct pmcstat_process *pp,
-    uint32_t cpu, uint32_t cycle, uint64_t offset, uint32_t flags);
+extern struct trace_dev_methods etm_methods;
 
 #endif /* !_PMCTRACE_ETM_H_ */

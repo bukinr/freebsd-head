@@ -89,6 +89,8 @@ __FBSDID("$FreeBSD$");
 #define	dprintf(fmt, ...)
 #endif
 
+static int ipt_flags;
+
 static struct pmcstat_symbol *
 symbol_lookup(struct mtrace_data *mdata)
 {
@@ -221,7 +223,7 @@ dump_packets(struct mtrace_data *mdata, struct pt_packet_decoder *decoder,
 			break;
 		case ppt_tnt_8:
 		case ppt_tnt_64:
-			if (mdata->flags & FLAG_BRANCH_TNT)
+			if (ipt_flags & FLAG_BRANCH_TNT)
 				print_tnt_payload(mdata, offset, &packet.payload.tnt);
 			break;
 		case ppt_mode:
@@ -308,7 +310,7 @@ ipt_process_chunk(struct mtrace_data *mdata, uint64_t base,
 	return (0);
 }
 
-int
+static int
 ipt_process(struct trace_cpu *tc, struct pmcstat_process *pp,
     uint32_t cpu, uint32_t cycle, uint64_t offset,
     uint32_t flags)
@@ -347,3 +349,24 @@ ipt_process(struct trace_cpu *tc, struct pmcstat_process *pp,
 
 	return (0);
 }
+
+static int
+ipt_option(int option)
+{
+
+	switch (option) {
+	case 't':
+		/* Decode 'Taken/Not_Taken branch' packet. */
+		ipt_flags |= FLAG_BRANCH_TNT;
+		break;
+	default:
+		break;
+	}
+
+	return (0);
+}
+
+struct trace_dev_methods ipt_methods = {
+	.process = ipt_process,
+	.option = ipt_option,
+};

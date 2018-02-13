@@ -79,7 +79,7 @@ __FBSDID("$FreeBSD$");
 #define	MAX_CPU	4096
 
 #define	PMCTRACE_DEBUG
-#undef	PMCTRACE_DEBUG
+//#undef	PMCTRACE_DEBUG
 
 #ifdef	PMCTRACE_DEBUG
 #define	dprintf(fmt, ...)	printf(fmt, ##__VA_ARGS__)
@@ -106,9 +106,9 @@ struct pmcstat_pmcs pmcstat_pmcs = LIST_HEAD_INITIALIZER(pmcstat_pmcs);
 
 static struct trace_dev trace_devs[] = {
 #if defined(__amd64__)
-	{ "pt",		ipt_process },
+	{ "pt",		&ipt_methods },
 #elif defined(__aarch64__)
-	{ "etm",	etm_process },
+	{ "etm",	&etm_methods },
 #endif
 	{ NULL,	NULL }
 };
@@ -150,7 +150,7 @@ pmctrace_init_cpu(uint32_t cpu)
 		return (-1);
 	}
 
-	tc->bufsize = 128 * 1024 * 1024;
+	tc->bufsize = 16 * 1024 * 1024;
 	tc->cycle = 0;
 	tc->offset = 0;
 
@@ -159,7 +159,7 @@ pmctrace_init_cpu(uint32_t cpu)
 		printf("mmap failed: err %d\n", errno);
 		return (-1);
 	}
-	dprintf("%s: tc->base %lx\n", __func__, *(uint64_t *)tc->base);
+	dprintf("%s: tc->base %lx, *tc->base %lx\n", __func__, (uint64_t)tc->base, *(uint64_t *)tc->base);
 
 	return (0);
 }
@@ -188,7 +188,7 @@ pmctrace_process_cpu(int cpu, struct pmcstat_ev *ev)
 		pp = pmcstat_kernproc;
 
 	if (pp)
-		trace_dev->process(tc, pp, cpu, cycle,
+		trace_dev->methods->process(tc, pp, cpu, cycle,
 		    offset, pmctrace_cfg.flags);
 	else
 		dprintf("pp not found\n");
@@ -542,13 +542,6 @@ main(int argc, char *argv[])
 	while ((option = getopt(argc, argv,
 	    "tu:s:i:f:")) != -1)
 		switch (option) {
-		case 't':
-			/*
-			 * Decode 'Taken/Not_Taken branch' packet.
-			 * TODO: Intel PT only?
-			 */
-			pmctrace_cfg.flags |= FLAG_BRANCH_TNT;
-			break;
 		case 'i':
 			func_image = strdup(optarg);
 			break;
@@ -557,6 +550,9 @@ main(int argc, char *argv[])
 			break;
 		case 'u':
 		case 's':
+			//if (ev != NULL)
+			//	usage();
+
 			if ((ev = malloc(sizeof(struct pmcstat_ev))) == NULL)
 				errx(EX_SOFTWARE, "ERROR: Out of memory.");
 			if (option == 'u') {
@@ -567,14 +563,35 @@ main(int argc, char *argv[])
 				ev->ev_mode = PMC_MODE_ST;
 				supervisor_mode = 1;
 			}
-
 			ev->ev_spec = strdup(optarg);
 			if (ev->ev_spec == NULL)
 				errx(EX_SOFTWARE, "ERROR: Out of memory.");
+
+			for (i = 0; trace_devs[i].ev_spec != NULL; i++) {
+				if (strncmp(trace_devs[i].ev_spec, ev->ev_spec,
+				    strlen(trace_devs[i].ev_spec)) == 0) {
+					/* found */
+					pmctrace_cfg.trace_dev = &trace_devs[i];
+					break;
+				}
+			}
+
+			if (pmctrace_cfg.trace_dev == NULL)
+				errx(EX_SOFTWARE, "ERROR: trace device not found");
+			break;
+		case 't':
+			//if (ev == NULL)
+			//	usage();
+
+			if (pmctrace_cfg.trace_dev->methods->option != NULL)
+				pmctrace_cfg.trace_dev->methods->option(option);
 			break;
 		default:
 			break;
 		};
+
+	if (pmctrace_cfg.trace_dev->methods->init != NULL)
+		pmctrace_cfg.trace_dev->methods->init();
 
 	if ((user_mode == 0 && supervisor_mode == 0) ||
 	    (user_mode == 1 && supervisor_mode == 1))
@@ -583,18 +600,6 @@ main(int argc, char *argv[])
 	if ((func_image == NULL && func_name != NULL) ||
 	    (func_image != NULL && func_name == NULL))
 		errx(EX_USAGE, "ERROR: specify both or neither -i and -f");
-
-	for (i = 0; trace_devs[i].ev_spec != NULL; i++) {
-		if (strncmp(trace_devs[i].ev_spec, ev->ev_spec,
-		    strlen(trace_devs[i].ev_spec)) == 0) {
-			/* found */
-			pmctrace_cfg.trace_dev = &trace_devs[i];
-			break;
-		}
-	}
-
-	if (pmctrace_cfg.trace_dev == NULL)
-		errx(EX_SOFTWARE, "ERROR: trace device not found");
 
 	args.pa_argc = (argc -= optind);
 	args.pa_argv = (argv += optind);

@@ -95,6 +95,9 @@ static int frame_raw_packed = 0;
 #define	dprintf(fmt, ...)
 #endif
 
+static int etm_flags;
+
+#if 0
 static struct pmcstat_symbol *
 symbol_lookup(const struct mtrace_data *mdata, uint64_t ip, struct pmcstat_image **img)
 {
@@ -122,6 +125,7 @@ symbol_lookup(const struct mtrace_data *mdata, uint64_t ip, struct pmcstat_image
 
 	return (NULL);
 }
+#endif
 
 static ocsd_err_t
 attach_raw_printers(dcd_tree_handle_t dcd_tree_h)
@@ -312,7 +316,7 @@ create_generic_decoder(dcd_tree_handle_t handle, const char *p_name, const void 
                 * print the packets as well as the decode - use the packet processors monitor
                 * output this time, as the main output is attached to the packet decoder.
                 */
-		if (1 == 0)
+		if (1 == 1)
             ret = ocsd_dt_attach_packet_callback(handle,CSID,OCSD_C_API_CB_PKT_MON,packet_monitor,p_context);
 		else
 		ret = 0;
@@ -371,7 +375,7 @@ n snapshot.*/
     return create_generic_decoder(dcd_tree_h,OCSD_BUILTIN_DCD_ETMV4I,(void *)&trace_config,0,base,start,end);
 }
 
-#if 1
+#if 0
 static ocsd_datapath_resp_t
 gen_trace_elem_print(const void *p_context, const ocsd_trc_index_t index_sop __unused,
     const uint8_t trc_chan_id __unused, const ocsd_generic_trace_elem *elem __unused)
@@ -481,18 +485,15 @@ etm_process_chunk(struct mtrace_data *mdata __unused, uint64_t base __unused,
 
 	dcdtree_handle = C_API_INVALID_TREE_HANDLE;
 	dcdtree_handle = ocsd_create_dcd_tree(OCSD_TRC_SRC_FRAME_FORMATTED, OCSD_DFRMTR_FRAME_MEM_ALIGN);
-	//dcdtree_handle = ocsd_create_dcd_tree(OCSD_TRC_SRC_SINGLE, OCSD_DFRMTR_FRAME_MEM_ALIGN);
  
 	if(dcdtree_handle == C_API_INVALID_TREE_HANDLE) {
 		printf("can't find dcd tree\n");
-		exit(1);
 		return (-1);
 	}
 
 	ret = create_decoder_etmv4(dcdtree_handle, base, start, end);
 	if (ret != OCSD_OK) {
 		printf("can't create decoder: base %lx start %lx end %lx\n", base, start, end);
-		exit(2);
 		return (-2);
 	}
 
@@ -582,7 +583,7 @@ etm_process_chunk(struct mtrace_data *mdata __unused, uint64_t base __unused,
 	return (0);
 }
 
-int
+static int
 etm_process(struct trace_cpu *tc, struct pmcstat_process *pp,
     uint32_t cpu, uint32_t cycle, uint64_t offset,
     uint32_t flags)
@@ -624,3 +625,31 @@ etm_process(struct trace_cpu *tc, struct pmcstat_process *pp,
 
 	return (0);
 }
+
+static int
+etm_init(void)
+{
+
+	return (0);
+}
+
+static int
+etm_option(int option)
+{
+
+	switch (option) {
+	case 't':
+		etm_flags |= 1;
+		break;
+	default:
+		break;
+	}
+
+	return (0);
+}
+
+struct trace_dev_methods etm_methods = {
+	.init = etm_init,
+	.process = etm_process,
+	.option = etm_option,
+};
