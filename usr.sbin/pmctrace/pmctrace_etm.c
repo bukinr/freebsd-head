@@ -89,6 +89,8 @@ __FBSDID("$FreeBSD$");
 #define	PACKET_STR_LEN	1024
 static char packet_str[PACKET_STR_LEN];
 
+static dcd_tree_handle_t dcdtree_handle;
+
 static int etm_flags;
 #define	FLAG_FORMAT			(1 << 0)
 #define	FLAG_FRAME_RAW_UNPACKED		(1 << 1)
@@ -384,40 +386,15 @@ static int
 etm_process_chunk(struct mtrace_data *mdata __unused, uint64_t base __unused,
     uint64_t start __unused, uint64_t end __unused)
 {
-	dcd_tree_handle_t dcdtree_handle;
-	int ret;
-
-	dprintf("%s\n", __func__);
-
-	dcdtree_handle = C_API_INVALID_TREE_HANDLE;
-	dcdtree_handle = ocsd_create_dcd_tree(OCSD_TRC_SRC_FRAME_FORMATTED, OCSD_DFRMTR_FRAME_MEM_ALIGN);
- 
-	if(dcdtree_handle == C_API_INVALID_TREE_HANDLE) {
-		printf("can't find dcd tree\n");
-		return (-1);
-	}
-
-	ret = create_decoder_etmv4(dcdtree_handle, base, start, end);
-	if (ret != OCSD_OK) {
-		printf("can't create decoder: base %lx start %lx end %lx\n", base, start, end);
-		return (-2);
-	}
-
-	ocsd_tl_log_mapped_mem_ranges(dcdtree_handle);
-
-	if (etm_flags & FLAG_FORMAT)
-		ocsd_dt_set_gen_elem_printer(dcdtree_handle);
-	else
-		ocsd_dt_set_gen_elem_outfn(dcdtree_handle, gen_trace_elem_print_lookup, mdata);
-
-	attach_raw_printers(dcdtree_handle);
-
-	int dp_ret;
-	int bytes_this_time;
-	int block_index;
 	uint32_t bytes_done;
 	uint32_t block_size;
 	uint8_t *p_block;
+	int bytes_this_time;
+	int block_index;
+	int dp_ret;
+	int ret;
+
+	dprintf("%s\n", __func__);
 
 	bytes_this_time = 0;
 	block_index = 0;
@@ -495,8 +472,10 @@ etm_process(struct trace_cpu *tc, struct pmcstat_process *pp,
 }
 
 static int
-etm_init(void)
+etm_init(struct trace_cpu *tc)
 {
+	uint64_t start;
+	uint64_t end;
 	int flags;
 	int ret;
 
@@ -510,6 +489,34 @@ etm_init(void)
 	ret = ocsd_def_errlog_config_output(flags, "c_api_test.log");
 	if (ret != OCSD_OK)
 		return (-1);
+
+	dcdtree_handle = C_API_INVALID_TREE_HANDLE;
+	dcdtree_handle = ocsd_create_dcd_tree(OCSD_TRC_SRC_FRAME_FORMATTED, OCSD_DFRMTR_FRAME_MEM_ALIGN);
+ 
+	if(dcdtree_handle == C_API_INVALID_TREE_HANDLE) {
+		printf("can't find dcd tree\n");
+		return (-1);
+	}
+
+	start = (uint64_t)tc->base;
+	end = (uint64_t)tc->base + tc->bufsize;
+
+	ret = create_decoder_etmv4(dcdtree_handle, (uint64_t)tc->base, start, end);
+	if (ret != OCSD_OK) {
+		printf("can't create decoder: base %lx start %lx end %lx\n",
+		    (uint64_t)tc->base, start, end);
+		return (-2);
+	}
+
+	ocsd_tl_log_mapped_mem_ranges(dcdtree_handle);
+
+	if (etm_flags & FLAG_FORMAT)
+		ocsd_dt_set_gen_elem_printer(dcdtree_handle);
+	else
+		ocsd_dt_set_gen_elem_outfn(dcdtree_handle, gen_trace_elem_print_lookup,
+		    (const struct mtrace_data *)&tc->mdata);
+
+	attach_raw_printers(dcdtree_handle);
 
 	return (0);
 }

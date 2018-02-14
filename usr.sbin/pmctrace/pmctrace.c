@@ -161,6 +161,9 @@ pmctrace_init_cpu(uint32_t cpu)
 	}
 	dprintf("%s: tc->base %lx, *tc->base %lx\n", __func__, (uint64_t)tc->base, *(uint64_t *)tc->base);
 
+	if (pmctrace_cfg.trace_dev->methods->init != NULL)
+		pmctrace_cfg.trace_dev->methods->init(tc);
+
 	return (0);
 }
 
@@ -589,9 +592,6 @@ main(int argc, char *argv[])
 		default:
 			break;
 		};
-
-	if (pmctrace_cfg.trace_dev->methods->init != NULL)
-		pmctrace_cfg.trace_dev->methods->init();
 
 	if ((user_mode == 0 && supervisor_mode == 0) ||
 	    (user_mode == 1 && supervisor_mode == 1))
