@@ -213,14 +213,12 @@ packet_monitor(void *context __unused,
 
 			/* print it using the library output logger. */
 			ocsd_def_errlog_msgout(packet_str);
-			printf("%s: %s", __func__, packet_str);
 		}
 		break;
 
 	case OCSD_OP_EOT:
 		sprintf(packet_str,"**** END OF TRACE ****\n");
 		ocsd_def_errlog_msgout(packet_str);
-		printf("%s: %s", __func__, packet_str);
 		break;
 	default:
 		printf("%s: unknown op %d\n", __func__, op);
@@ -490,9 +488,7 @@ etm_init(struct trace_cpu *tc)
 	if (ret != OCSD_OK)
 		return (-1);
 
-	dcdtree_handle = C_API_INVALID_TREE_HANDLE;
 	dcdtree_handle = ocsd_create_dcd_tree(OCSD_TRC_SRC_FRAME_FORMATTED, OCSD_DFRMTR_FRAME_MEM_ALIGN);
- 
 	if(dcdtree_handle == C_API_INVALID_TREE_HANDLE) {
 		printf("can't find dcd tree\n");
 		return (-1);
