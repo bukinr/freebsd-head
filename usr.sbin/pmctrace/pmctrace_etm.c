@@ -78,7 +78,7 @@ __FBSDID("$FreeBSD$");
 #include <opencsd/c_api/opencsd_c_api.h>
 
 #define	PMCTRACE_ETM_DEBUG
-//#undef	PMCTRACE_ETM_DEBUG
+#undef	PMCTRACE_ETM_DEBUG
 
 #ifdef	PMCTRACE_ETM_DEBUG
 #define	dprintf(fmt, ...)	printf(fmt, ##__VA_ARGS__)
@@ -437,11 +437,8 @@ etm_process(struct trace_cpu *tc, struct pmcstat_process *pp,
 	mdata->pp = pp;
 	mdata->flags = flags;
 
-	dprintf("%s: cpu %d, cycle %d, offset %ld\n",
-	    __func__, cpu, cycle, offset);
-
-	dprintf("%s: tc->base %lx, *tc->base %lx\n", __func__,
-	    (uint64_t)tc->base, *(uint64_t *)tc->base);
+	dprintf("%s: cpu %d, cycle %d, offset %ld, tc->base %lx, *tc->base %lx\n",
+	    __func__, cpu, cycle, offset, (uint64_t)tc->base, *(uint64_t *)tc->base);
 
 	if (offset == tc->offset)
 		return (0);
@@ -474,21 +471,20 @@ etm_init(struct trace_cpu *tc)
 {
 	uint64_t start;
 	uint64_t end;
-	int flags;
 	int ret;
 
-#ifdef PMCTRACE_ETM_DEBUG
 	ocsd_def_errlog_init(OCSD_ERR_SEV_INFO, 1);
-#else
-	ocsd_def_errlog_init(0, 0);
-#endif
 
-	flags = C_API_MSGLOGOUT_FLG_FILE | C_API_MSGLOGOUT_FLG_STDOUT;
-	ret = ocsd_def_errlog_config_output(flags, "c_api_test.log");
+#ifdef PMCTRACE_ETM_DEBUG
+	ret = ocsd_def_errlog_config_output(C_API_MSGLOGOUT_FLG_FILE |
+	    C_API_MSGLOGOUT_FLG_STDOUT, "c_api_test.log");
 	if (ret != OCSD_OK)
 		return (-1);
+	}
+#endif
 
-	dcdtree_handle = ocsd_create_dcd_tree(OCSD_TRC_SRC_FRAME_FORMATTED, OCSD_DFRMTR_FRAME_MEM_ALIGN);
+	dcdtree_handle = ocsd_create_dcd_tree(OCSD_TRC_SRC_FRAME_FORMATTED,
+	    OCSD_DFRMTR_FRAME_MEM_ALIGN);
 	if(dcdtree_handle == C_API_INVALID_TREE_HANDLE) {
 		printf("can't find dcd tree\n");
 		return (-1);
