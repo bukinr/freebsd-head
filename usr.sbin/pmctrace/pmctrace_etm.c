@@ -413,7 +413,7 @@ etm_process_chunk(struct mtrace_data *mdata __unused, uint64_t base __unused,
 			    ((uint8_t *)p_block) + bytes_done,
 			    &bytes_this_time);
 			bytes_done += bytes_this_time;
-			printf("BYTES DONE %d\n", bytes_done);
+			dprintf("BYTES DONE %d\n", bytes_done);
 		} else if (OCSD_DATA_RESP_IS_WAIT(dp_ret)) {
 			dp_ret = ocsd_dt_process_data(dcdtree_handle, OCSD_OP_FLUSH, 0, 0, NULL, NULL);
 		} else {
@@ -500,7 +500,9 @@ etm_init(struct trace_cpu *tc)
 		return (-2);
 	}
 
+#ifdef PMCTRACE_ETM_DEBUG
 	ocsd_tl_log_mapped_mem_ranges(dcdtree_handle);
+#endif
 
 	if (etm_flags & FLAG_FORMAT)
 		ocsd_dt_set_gen_elem_printer(dcdtree_handle);

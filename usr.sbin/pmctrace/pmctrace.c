@@ -79,7 +79,7 @@ __FBSDID("$FreeBSD$");
 #define	MAX_CPU	4096
 
 #define	PMCTRACE_DEBUG
-//#undef	PMCTRACE_DEBUG
+#undef	PMCTRACE_DEBUG
 
 #ifdef	PMCTRACE_DEBUG
 #define	dprintf(fmt, ...)	printf(fmt, ##__VA_ARGS__)
