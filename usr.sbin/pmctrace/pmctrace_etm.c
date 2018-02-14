@@ -78,16 +78,7 @@ __FBSDID("$FreeBSD$");
 #include <opencsd/c_api/opencsd_c_api.h>
 
 #define	PMCTRACE_ETM_DEBUG
-#undef	PMCTRACE_ETM_DEBUG
-
-static uint8_t test_trc_id_override = 0x00; // no trace ID override.
-/* buffer to handle a packet string */
-#define PACKET_STR_LEN 1024
-static char packet_str[PACKET_STR_LEN];
-static ocsd_trace_protocol_t test_protocol = OCSD_PROTOCOL_ETMV4I; // ETMV4 protocl
-
-static int frame_raw_unpacked = 1;
-static int frame_raw_packed = 0;
+//#undef	PMCTRACE_ETM_DEBUG
 
 #ifdef	PMCTRACE_ETM_DEBUG
 #define	dprintf(fmt, ...)	printf(fmt, ##__VA_ARGS__)
@@ -95,9 +86,15 @@ static int frame_raw_packed = 0;
 #define	dprintf(fmt, ...)
 #endif
 
-static int etm_flags;
+#define	PACKET_STR_LEN	1024
+static char packet_str[PACKET_STR_LEN];
 
-#if 0
+static int etm_flags;
+#define	FLAG_FORMAT			(1 << 0)
+#define	FLAG_FRAME_RAW_UNPACKED		(1 << 1)
+#define	FLAG_FRAME_RAW_PACKED		(1 << 2)
+#define	FLAG_CALLBACK_MEM_ACC		(1 << 3)
+
 static struct pmcstat_symbol *
 symbol_lookup(const struct mtrace_data *mdata, uint64_t ip, struct pmcstat_image **img)
 {
@@ -125,54 +122,59 @@ symbol_lookup(const struct mtrace_data *mdata, uint64_t ip, struct pmcstat_image
 
 	return (NULL);
 }
-#endif
 
 static ocsd_err_t
 attach_raw_printers(dcd_tree_handle_t dcd_tree_h)
 {
-    ocsd_err_t err = OCSD_OK;
-    int flags = 0;
-    if (frame_raw_unpacked)
-        flags |= OCSD_DFRMTR_UNPACKED_RAW_OUT;
-    if (frame_raw_packed)
-        flags |= OCSD_DFRMTR_PACKED_RAW_OUT;
-    if (flags)
-    {
-        err = ocsd_dt_set_raw_frame_printer(dcd_tree_h, flags);
-    }
-    return err;
+	ocsd_err_t err;
+	int flags;
+
+	flags = 0;
+	err = OCSD_OK;
+
+	if (etm_flags & FLAG_FRAME_RAW_UNPACKED)
+		flags |= OCSD_DFRMTR_UNPACKED_RAW_OUT;
+
+	if (etm_flags & FLAG_FRAME_RAW_PACKED)
+		flags |= OCSD_DFRMTR_PACKED_RAW_OUT;
+
+	if (flags)
+		err = ocsd_dt_set_raw_frame_printer(dcd_tree_h, flags);
+
+	return err;
 }
 
-/* print an array of hex data - used by the packet monitor to print hex data from packet.*/
-static int print_data_array(const uint8_t *p_array, const int array_size, char *p_buffer, int buf_size)
+static int
+print_data_array(const uint8_t *p_array, const int array_size,
+    char *p_buffer, int buf_size)
 {
-    int chars_printed = 0;
-    int bytes_processed;
-    p_buffer[0] = 0;
-  
-    if(buf_size > 9)
-    {
-        /* set up the header */
-        strcat(p_buffer,"[ ");
-        chars_printed+=2;
- 
-        for(bytes_processed = 0; bytes_processed < array_size; bytes_processed++)
-        {
-           sprintf(p_buffer+chars_printed,"0x%02X ", p_array[bytes_processed]);
-           chars_printed += 5;
-           if((chars_printed + 5) > buf_size)
-               break;
-        }
+	int bytes_processed;
+	int chars_printed;
 
-        strcat(p_buffer,"];");
-        chars_printed+=2;
-    }
-    else if(buf_size >= 4)
-    {
-        sprintf(p_buffer,"[];");
-        chars_printed+=3;
-    }
-    return chars_printed;
+	chars_printed = 0;
+	p_buffer[0] = 0;
+
+	if (buf_size > 9) {
+		strcat(p_buffer, "[ ");
+		chars_printed += 2;
+ 
+		for (bytes_processed = 0; bytes_processed < array_size;
+		    bytes_processed++) {
+			sprintf(p_buffer + chars_printed, "0x%02X ",
+			    p_array[bytes_processed]);
+			chars_printed += 5;
+			if ((chars_printed + 5) > buf_size)
+				break;
+		}
+
+		strcat(p_buffer, "];");
+		chars_printed += 2;
+	} else if (buf_size >= 4) {
+		sprintf(p_buffer, "[];");
+		chars_printed += 3;
+	}
+
+	return (chars_printed);
 }
 
 static void
@@ -187,19 +189,23 @@ packet_monitor(void *context __unused,
 
 	offset = 0;
  
-	//printf("%s: op %d\n", __func__, op);
-
 	switch(op) {
 	case OCSD_OP_DATA:
-		sprintf(packet_str,"Idx:%"  OCSD_TRC_IDX_STR ";", index_sop);
+		sprintf(packet_str, "Idx:%"  OCSD_TRC_IDX_STR ";", index_sop);
 		offset = strlen(packet_str);
-		offset += print_data_array(p_data,size,packet_str+offset,PACKET_STR_LEN-offset);
+		offset += print_data_array(p_data, size, packet_str + offset,
+		    PACKET_STR_LEN - offset);
 
-		/* got a packet - convert to string and use the libraries' message output to print to file and stdoout */
-		if (ocsd_pkt_str(test_protocol,p_packet_in,packet_str+offset,PACKET_STR_LEN-offset) == OCSD_OK) {
+		/*
+		 * Got a packet -- convert to string and use the libraries'
+		 * message output to print to file and stdoout
+		 */
+
+		if (ocsd_pkt_str(OCSD_PROTOCOL_ETMV4I, p_packet_in, packet_str + offset,
+		    PACKET_STR_LEN - offset) == OCSD_OK) {
 			/* add in <CR> */
 			if (strlen(packet_str) == PACKET_STR_LEN - 1) /* maximum length */
-				packet_str[PACKET_STR_LEN-2] = '\n';
+				packet_str[PACKET_STR_LEN - 2] = '\n';
 			else
 				strcat(packet_str,"\n");
 
@@ -212,27 +218,24 @@ packet_monitor(void *context __unused,
 	case OCSD_OP_EOT:
 		sprintf(packet_str,"**** END OF TRACE ****\n");
 		ocsd_def_errlog_msgout(packet_str);
-			printf("%s: %s", __func__, packet_str);
+		printf("%s: %s", __func__, packet_str);
 		break;
 	default:
-		printf("unknown op %d\n", op);
+		printf("%s: unknown op %d\n", __func__, op);
 		break;
 	}
 }
 
-#if 0
 static uint32_t
 cs_etm_decoder__mem_access(const void *context __unused,
     const ocsd_vaddr_t address __unused, const ocsd_mem_space_acc_t mem_space __unused,
     const uint32_t req_size __unused, uint8_t *buffer __unused)
 {
 
-	printf("%s\n", __func__);
-	//exit(23);
+	/* TODO */
 
 	return (0);
 }
-#endif
 
 static ocsd_err_t
 create_test_memory_acc(dcd_tree_handle_t handle, uint64_t base, uint64_t start, uint64_t end)
@@ -248,136 +251,80 @@ create_test_memory_acc(dcd_tree_handle_t handle, uint64_t base, uint64_t start, 
 	p_mem_buffer = (uint8_t *)(base + start);
 	mem_length = (end-start);
 
-#if 1
-	ret = ocsd_dt_add_buffer_mem_acc(handle, address, OCSD_MEM_SPACE_ANY,
-	    p_mem_buffer, mem_length);
-	if (ret != OCSD_OK) {
-		printf("can't create accessor: ret %d\n", ret);
-		exit(3);
-	}
-#else
+	if (etm_flags & FLAG_CALLBACK_MEM_ACC)
+		ret = ocsd_dt_add_callback_mem_acc(handle, base+start, base+end-1,
+		    OCSD_MEM_SPACE_ANY, cs_etm_decoder__mem_access, NULL);
+	else
+		ret = ocsd_dt_add_buffer_mem_acc(handle, address, OCSD_MEM_SPACE_ANY,
+		    p_mem_buffer, mem_length);
 
-	ret = ocsd_dt_add_callback_mem_acc(handle, base+start, base+end-1, OCSD_MEM_SPACE_ANY,
-	    cs_etm_decoder__mem_access, NULL);
-	if (ret != OCSD_OK) {
-		printf("failed\n");
-		exit(45);
-	}
-#endif
+	if (ret != OCSD_OK)
+		printf("%s: can't create memory accessor: ret %d\n", __func__, ret);
 
 	return (ret);
-
-#if 0
-	//ocsd_dt_add_callback_mem_acc(handle, const ocsd_vaddr_t st_address, const ocsd_vaddr_t en_address, const ocsd_mem_space_acc_t mem_space, Fn_MemAcc_CB p_cb_func, const void *p_context);
-#endif
-
-#if 0
-    ocsd_err_t ret = OCSD_OK;
-    char mem_file_path[512];
-    uint32_t i0adjust = 0x100;
-    int i = 0;
- 
-    /* region list to test multi region memory file API */
-    ocsd_file_mem_region_t region_list[4];
-  
-    /* path to the file containing the memory image traced - raw binary data in the snapshot  */
-    strcpy(mem_file_path,default_path_to_snapshot);
-    strcat(mem_file_path,memory_dump_filename);
- 
-    /*
-    * decide how to handle the file - test the normal memory accessor (contiguous binary file),
-    * a callback accessor or a multi-region file (e.g. similar to using the code region in a .so)
-    *
-    * The same memory dump file is used in each case, we just present it differently
-    * to test the API functions.
-    */
-
-    /* memory access callback */
-     ret = create_mem_acc_cb(handle,mem_file_path);
-	return (ret);
-#endif
 }
 
 static ocsd_err_t
 create_generic_decoder(dcd_tree_handle_t handle, const char *p_name, const void *p_cfg,
     const void *p_context __unused, uint64_t base, uint64_t start, uint64_t end)
 { 
-    ocsd_err_t ret = OCSD_OK;
-    uint8_t CSID = 0;
-  
-        /* Full decode - need decoder, and memory dump */
+	ocsd_err_t ret;
+	uint8_t CSID;
+
+	CSID = 0;
+
 	printf("%s\n", __func__);
-  
-        /* create the packet decoder and packet processor pair from the supplied name */
-        ret = ocsd_dt_create_decoder(handle,p_name,OCSD_CREATE_FLG_FULL_DECODER,p_cfg,&CSID);
-        if(ret == OCSD_OK)
-        {
-                /*
-                * print the packets as well as the decode - use the packet processors monitor
-                * output this time, as the main output is attached to the packet decoder.
-                */
-		if (1 == 1)
-            ret = ocsd_dt_attach_packet_callback(handle,CSID,OCSD_C_API_CB_PKT_MON,packet_monitor,p_context);
-		else
-		ret = 0;
 
-            /* attach a memory accessor */
-            if(ret == OCSD_OK)
-                ret = create_test_memory_acc(handle, base, start, end);
+	ret = ocsd_dt_create_decoder(handle, p_name, OCSD_CREATE_FLG_FULL_DECODER,
+	    p_cfg, &CSID);
+	if(ret != OCSD_OK)
+		return (-1);
 
-            /* if the attach failed then destroy the decoder. */
-            if(ret != OCSD_OK) {
-		printf("attach failed\n");
-		exit(25);
-                ocsd_dt_remove_decoder(handle,CSID);
-		}
-        } else {
-		exit(29);
+	if (etm_flags & FLAG_FORMAT) {
+		ret = ocsd_dt_attach_packet_callback(handle, CSID, OCSD_C_API_CB_PKT_MON,
+		    packet_monitor, p_context);
+		if (ret != OCSD_OK)
+			return (-1);
 	}
 
-    return ret;
+	/* attach a memory accessor */
+	ret = create_test_memory_acc(handle, base, start, end);
+	if(ret != OCSD_OK)
+		ocsd_dt_remove_decoder(handle,CSID);
+
+	return (ret);
 }
 
-/*** ETMV4 specific settings ***/
+/* ETMv4 settings */
 static ocsd_err_t
 create_decoder_etmv4(dcd_tree_handle_t dcd_tree_h, uint64_t base, uint64_t start, uint64_t end)
 {
-    ocsd_etmv4_cfg trace_config;
-    
-    /*
-    * populate the ETMv4 configuration structure with
-    * hard coded values from snapshot .ini files.
-    */
-    
-    trace_config.arch_ver   = ARCH_V8;
-    trace_config.core_prof  = profile_CortexA;
-    
-    trace_config.reg_configr    = 0x000000C1;
-    trace_config.reg_traceidr   = 0x00000010;   /* this is the trace ID -> 0x10, change this to analyse other streams i
-n snapshot.*/
-         
-    if(test_trc_id_override != 0)
-    {
-        trace_config.reg_traceidr = (uint32_t)test_trc_id_override;
-    }
-            
-    trace_config.reg_idr0   = 0x28000EA1;
-    trace_config.reg_idr1   = 0x4100F403;
-    trace_config.reg_idr2   = 0x00000488;
-    trace_config.reg_idr8   = 0x0;
-    trace_config.reg_idr9   = 0x0;
-    trace_config.reg_idr10  = 0x0;
-    trace_config.reg_idr11  = 0x0;
-    trace_config.reg_idr12  = 0x0;
-    trace_config.reg_idr13  = 0x0;
-     
-    /* create an ETMV4 decoder - no context needed as we have a single stream to a single handler. */
-    return create_generic_decoder(dcd_tree_h,OCSD_BUILTIN_DCD_ETMV4I,(void *)&trace_config,0,base,start,end);
+	ocsd_etmv4_cfg trace_config;
+	ocsd_err_t ret;
+
+	trace_config.arch_ver = ARCH_V8;
+	trace_config.core_prof = profile_CortexA;
+
+	trace_config.reg_configr = 0x000000C1;
+	trace_config.reg_traceidr = 0x00000010;   /* Trace ID */
+
+	trace_config.reg_idr0   = 0x28000EA1;
+	trace_config.reg_idr1   = 0x4100F403;
+	trace_config.reg_idr2   = 0x00000488;
+	trace_config.reg_idr8   = 0x0;
+	trace_config.reg_idr9   = 0x0;
+	trace_config.reg_idr10  = 0x0;
+	trace_config.reg_idr11  = 0x0;
+	trace_config.reg_idr12  = 0x0;
+	trace_config.reg_idr13  = 0x0;
+
+	ret = create_generic_decoder(dcd_tree_h, OCSD_BUILTIN_DCD_ETMV4I,
+	    (void *)&trace_config, 0, base, start, end);
+	return (ret);
 }
 
-#if 0
 static ocsd_datapath_resp_t
-gen_trace_elem_print(const void *p_context, const ocsd_trc_index_t index_sop __unused,
+gen_trace_elem_print_lookup(const void *p_context, const ocsd_trc_index_t index_sop __unused,
     const uint8_t trc_chan_id __unused, const ocsd_generic_trace_elem *elem __unused)
 { 
 	const struct mtrace_data *mdata;
@@ -399,13 +346,10 @@ gen_trace_elem_print(const void *p_context, const ocsd_trc_index_t index_sop __u
 	if (elem->st_addr == 0)
 		return (0);
 	sym = symbol_lookup(mdata, elem->st_addr, &image);
-	if (sym) {
+	if (sym)
 		printf("cpu%d:  IP 0x%lx %s %s\n", mdata->cpu, elem->st_addr,
 		    pmcstat_string_unintern(image->pi_name),
 		    pmcstat_string_unintern(sym->ps_name));
- 	} else {
-		//dprintf("cpu%d: symbol 0x%lx not found\n", mdata->cpu, elem->st_addr);
-	}
 
 	switch (elem->elem_type) {
 	case OCSD_GEN_TRC_ELEM_UNKNOWN:
@@ -436,40 +380,6 @@ gen_trace_elem_print(const void *p_context, const ocsd_trc_index_t index_sop __u
 	return (resp);
 }
 
-#else
-/*          
-* printer for the generic trace elements when decoder output is being processed
-*/
-static ocsd_datapath_resp_t gen_trace_elem_print(const void *p_context __unused, const ocsd_trc_index_t index_sop,
-    const uint8_t trc_chan_id, const ocsd_generic_trace_elem *elem)
-{           
-    ocsd_datapath_resp_t resp = OCSD_RESP_CONT;
-    int offset = 0;
-
-    sprintf(packet_str,"Idx:%"  OCSD_TRC_IDX_STR "; TrcID:0x%02X; ", index_sop, trc_chan_id);
-    offset = strlen(packet_str);
-
-    if(ocsd_gen_elem_str(elem, packet_str+offset,PACKET_STR_LEN - offset) == OCSD_OK)
-    {
-        /* add in <CR> */
-        if(strlen(packet_str) == PACKET_STR_LEN - 1) /* maximum length */
-            packet_str[PACKET_STR_LEN-2] = '\n';
-        else
-            strcat(packet_str,"\n");
-    }
-    else
-    {
-        strcat(packet_str,"Unable to create element string\n");
-    }    
-    
-    /* print it using the library output logger. */
-    ocsd_def_errlog_msgout(packet_str);
-	printf("%s: %s\n", __func__, packet_str);
-         
-    return resp;
-}
-#endif
-
 static int
 etm_process_chunk(struct mtrace_data *mdata __unused, uint64_t base __unused,
     uint64_t start __unused, uint64_t end __unused)
@@ -495,14 +405,12 @@ etm_process_chunk(struct mtrace_data *mdata __unused, uint64_t base __unused,
 
 	ocsd_tl_log_mapped_mem_ranges(dcdtree_handle);
 
-	if (1 == 1)
-		ocsd_dt_set_gen_elem_outfn(dcdtree_handle, gen_trace_elem_print, mdata);
-	else
+	if (etm_flags & FLAG_FORMAT)
 		ocsd_dt_set_gen_elem_printer(dcdtree_handle);
+	else
+		ocsd_dt_set_gen_elem_outfn(dcdtree_handle, gen_trace_elem_print_lookup, mdata);
 
 	attach_raw_printers(dcdtree_handle);
-
-	//ocsd_def_errlog_init(OCSD_ERR_SEV_INFO,0);
 
 	int dp_ret;
 	int bytes_this_time;
@@ -518,11 +426,6 @@ etm_process_chunk(struct mtrace_data *mdata __unused, uint64_t base __unused,
 	p_block = (uint8_t *)(base + start);
 
 	ret = OCSD_OK;
-	dp_ret = OCSD_RESP_CONT;
-	uint32_t block_sz;
-	block_sz = 1024;
-
-	dp_ret = ocsd_dt_process_data(dcdtree_handle, OCSD_OP_RESET, 0, 0, NULL, NULL);
 	dp_ret = OCSD_RESP_CONT;
 
 	while (bytes_done < (uint32_t)block_size && (ret == OCSD_OK)) {
@@ -543,38 +446,7 @@ etm_process_chunk(struct mtrace_data *mdata __unused, uint64_t base __unused,
 		}
 	}
 
-#if 0
-    ocsd_err_t ret = OCSD_OK;
-    uint32_t bytes_done = 0;
-    ocsd_datapath_resp_t dp_ret = OCSD_RESP_CONT;
-    uint32_t bytes_this_time = 0;
-  
-    while((bytes_done < (uint32_t)block_size) && (ret == OCSD_OK))
-    {
-        if(OCSD_DATA_RESP_IS_CONT(dp_ret))
-        {
-            dp_ret = ocsd_dt_process_data(dcd_tree_h,
-                                OCSD_OP_DATA,
-                                block_index+bytes_done,
-                                block_size-bytes_done,
-                                ((uint8_t *)p_block)+bytes_done,
-                                &bytes_this_time);
-            bytes_done += bytes_this_time;
-        }
-        else if(OCSD_DATA_RESP_IS_WAIT(dp_ret))
-        {
-            dp_ret = ocsd_dt_process_data(dcd_tree_h, OCSD_OP_FLUSH,0,0,NULL,NULL);
-        }
-        else
-            ret = OCSD_ERR_DATA_DECODE_FATAL; /* data path responded with an error - stop processing */
-    }
-#endif
-
-	dprintf("%s: flush done\n", __func__);
-
-	ocsd_dt_process_data(dcdtree_handle, OCSD_OP_EOT, 0,0,NULL,NULL);
-
-	dprintf("%s: done\n", __func__);
+	ocsd_dt_process_data(dcdtree_handle, OCSD_OP_EOT, 0, 0, NULL, NULL);
 
 	return (0);
 }
@@ -625,12 +497,17 @@ etm_process(struct trace_cpu *tc, struct pmcstat_process *pp,
 static int
 etm_init(void)
 {
+	int flags;
 	int ret;
 
-	//ocsd_def_errlog_init(OCSD_ERR_SEV_INFO,1);
+#ifdef PMCTRACE_ETM_DEBUG
+	ocsd_def_errlog_init(OCSD_ERR_SEV_INFO, 1);
+#else
 	ocsd_def_errlog_init(0, 0);
+#endif
 
-	ret = ocsd_def_errlog_config_output(C_API_MSGLOGOUT_FLG_FILE | C_API_MSGLOGOUT_FLG_STDOUT, "c_api_test.log");
+	flags = C_API_MSGLOGOUT_FLG_FILE | C_API_MSGLOGOUT_FLG_STDOUT;
+	ret = ocsd_def_errlog_config_output(flags, "c_api_test.log");
 	if (ret != OCSD_OK)
 		return (-1);
 
@@ -643,7 +520,7 @@ etm_option(int option)
 
 	switch (option) {
 	case 't':
-		etm_flags |= 1;
+		etm_flags |= FLAG_FORMAT;
 		break;
 	default:
 		break;
