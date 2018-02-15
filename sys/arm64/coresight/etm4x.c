@@ -55,6 +55,15 @@ __FBSDID("$FreeBSD$");
    
 #define CORESIGHT_UNLOCK        0xc5acce55
 
+/*
+ * Typical trace flow:
+ *
+ * CPU0 -> ETM0 -> funnel1 -> funnel0 -> TMC(ETF) -> replicator -> TMC(ETR) -> DRAM
+ * CPU1 -> ETM1 -> funnel1 -^
+ * CPU2 -> ETM2 -> funnel1 -^
+ * CPU3 -> ETM3 -> funnel1 -^
+ */
+
 static struct ofw_compat_data compat_data[] = {
 	{ "arm,coresight-etm4x",		1 },
 	{ NULL,					0 }
@@ -98,6 +107,8 @@ etm_start(device_t dev)
 
 	sc = device_get_softc(dev);
 
+	printf("%s\n", __func__);
+
 	/* Enable the trace unit */
 	bus_write_4(sc->res, TRCPRGCTLR, 1);
 
@@ -119,6 +130,8 @@ etm_stop(device_t dev)
 	uint32_t reg;
 
 	sc = device_get_softc(dev);
+
+	printf("%s\n", __func__);
 
 	/* Disable the trace unit */
 	bus_write_4(sc->res, TRCPRGCTLR, 0);
@@ -247,7 +260,6 @@ etm_probe(device_t dev)
 
 	return (BUS_PROBE_DEFAULT);
 }
-
 
 static int
 etm_attach(device_t dev)
