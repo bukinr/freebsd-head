@@ -111,7 +111,8 @@ tmc_enable(struct tmc_softc *sc)
 	if ((bus_read_4(sc->res, TMC_CTL) & CTL_TRACECAPTEN) == 0)
 		panic("not enabled1\n");
 
-	printf("%s: enabled. RRP %x, RWP %x\n", __func__, bus_read_4(sc->res, TMC_RRP), bus_read_4(sc->res, TMC_RWP));
+	printf("%s: enabled. RRP %x, RWP %x\n", __func__,
+	    bus_read_4(sc->res, TMC_RRP), bus_read_4(sc->res, TMC_RWP));
 
 	return (0);
 }
@@ -165,9 +166,18 @@ tmc_configure_etf(device_t dev)
 
 	bus_write_4(sc->res, TMC_MODE, MODE_HW_FIFO);
 	bus_write_4(sc->res, TMC_FFCR, FFCR_EN_FMT | FFCR_EN_TI);
-	bus_write_4(sc->res, TMC_BUFWM, 0);
+	bus_write_4(sc->res, TMC_BUFWM, 0x800-1);
 
 	tmc_enable(sc);
+
+	printf("%s: STS %x, CTL %x, RSZ %x, RRP %x, RWP %x, LBUFLEVEL %x, CBUFLEVEL %x, \n", __func__,
+	    bus_read_4(sc->res, TMC_STS),
+	    bus_read_4(sc->res, TMC_CTL),
+	    bus_read_4(sc->res, TMC_RSZ),
+	    bus_read_4(sc->res, TMC_RRP),
+	    bus_read_4(sc->res, TMC_RWP),
+	    bus_read_4(sc->res, TMC_CBUFLEVEL),
+	    bus_read_4(sc->res, TMC_LBUFLEVEL));
 
 	return (0);
 }
@@ -307,7 +317,8 @@ tmc_read_trace(device_t dev, uint64_t *cycle, uint64_t *offset)
 	    bus_read_4(sc->res, TMC_LBUFLEVEL),
 	    bus_read_4(sc->res, TMC_RRD));
 #endif
-	printf("%s: STS %x, CTL %x, RSZ %x, RRP %x, RWP %x, LBUFLEVEL %x, CBUFLEVEL %x, \n", __func__,
+	printf("%s%d: STS %x, CTL %x, RSZ %x, RRP %x, RWP %x, LBUFLEVEL %x, CBUFLEVEL %x, \n", __func__,
+	    device_get_unit(dev),
 	    bus_read_4(sc->res, TMC_STS),
 	    bus_read_4(sc->res, TMC_CTL),
 	    bus_read_4(sc->res, TMC_RSZ),
@@ -323,7 +334,8 @@ tmc_read_trace(device_t dev, uint64_t *cycle, uint64_t *offset)
 
 	if (bus_read_4(sc->res, TMC_STS) & STS_FULL) {
 		sc->cycle++;
-		*offset = 0;
+		if (offset != NULL)
+			*offset = 0;
 		tmc_stop(dev);
 		tmc_start(dev);
 		printf("%s1: STS %x, CTL %x, RSZ %x, RRP %x, RWP %x, LBUFLEVEL %x, CBUFLEVEL %x, \n", __func__,
@@ -335,10 +347,12 @@ tmc_read_trace(device_t dev, uint64_t *cycle, uint64_t *offset)
 		    bus_read_4(sc->res, TMC_CBUFLEVEL),
 		    bus_read_4(sc->res, TMC_LBUFLEVEL));
 	} else {
-		*offset = (cur_ptr - base_ptr);
+		if (offset != NULL)
+			*offset = (cur_ptr - base_ptr);
 	}
 
-	*cycle = sc->cycle;
+	if (cycle != NULL)
+		*cycle = sc->cycle;
 
 	//if (device_get_unit(dev) == 0)
 	//	printf("RRD: %x\n", bus_read_4(sc->res, TMC_RRD));

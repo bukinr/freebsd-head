@@ -90,7 +90,6 @@ funnel_attach(device_t dev)
 {
 	struct funnel_softc *sc;
 	uint32_t reg;
-	uint32_t reg1;
 
 	sc = device_get_softc(dev);
 
@@ -99,35 +98,17 @@ funnel_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	printf("Device ID: %x\n", bus_read_4(sc->res, FUNNEL_DEVICEID));
-
 	/* Unlock Coresight */
 	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
 
 	wmb();
 
-	reg = 0; //bus_read_4(sc->res, FUNNEL_FUNCTL);
-	reg |= 7 << FUNCTL_HOLDTIME_SHIFT;
-#if 0
-	if (device_get_unit(dev) == 0) {
-		reg |= (1 << 0); /* Enable port 0 */
-	} else {
-		reg |= (1 << 0); /* Enable port 0 */
-	}
-#endif
+	printf("Device ID: %x\n", bus_read_4(sc->res, FUNNEL_DEVICEID));
+
+	reg = 7 << FUNCTL_HOLDTIME_SHIFT;
 	/* XXX: enable all the ports */
 	reg |= 0xff;
 	bus_write_4(sc->res, FUNNEL_FUNCTL, reg);
-
-#if 0
-	bus_write_4(sc->res, FUNNEL_PRICTL, 1);
-	/* Check the value */
-	reg1 = bus_read_4(sc->res, FUNNEL_FUNCTL);
-	if (reg != reg1)
-		panic("read is invalid: reg %x reg1 %x", reg, reg1);
-#endif
-	reg1 = bus_read_4(sc->res, FUNNEL_FUNCTL);
-	printf("FUNCTL %x", reg1);
 
 	return (0);
 }

@@ -92,7 +92,6 @@ static int
 replicator_attach(device_t dev)
 {
 	struct replicator_softc *sc;
-	//uint32_t reg;
 
 	sc = device_get_softc(dev);
 
@@ -101,35 +100,31 @@ replicator_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	if (device_get_unit(dev) != 0)
-		return (0);
-
 	/* Unlock Coresight */
 	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
 
 	wmb();
 
+	uint8_t val0, val1;
 	int outport;
 
 	outport = 0;
 
 	if (outport == 0) {
-		bus_write_4(sc->res, REPLICATOR_IDFILTER0, 0x00);
-		if (0x00 != bus_read_4(sc->res, REPLICATOR_IDFILTER0))
-			panic("read is invalid");
-
-		bus_write_4(sc->res, REPLICATOR_IDFILTER1, 0xff);
-		if (0xff != bus_read_4(sc->res, REPLICATOR_IDFILTER1))
-			panic("read is invalid");
+		val0 = 0x00;
+		val1 = 0xff;
 	} else {
-		bus_write_4(sc->res, REPLICATOR_IDFILTER1, 0x00);
-		if (0x00 != bus_read_4(sc->res, REPLICATOR_IDFILTER1))
-			panic("read is invalid");
-
-		bus_write_4(sc->res, REPLICATOR_IDFILTER0, 0xff);
-		if (0xff != bus_read_4(sc->res, REPLICATOR_IDFILTER0))
-			panic("read is invalid");
+		val0 = 0xff;
+		val1 = 0x00;
 	}
+
+	bus_write_4(sc->res, REPLICATOR_IDFILTER0, val0);
+	if (bus_read_4(sc->res, REPLICATOR_IDFILTER0) != val0)
+		panic("Unable to setup replicator.");
+
+	bus_write_4(sc->res, REPLICATOR_IDFILTER1, val1);
+	if (bus_read_4(sc->res, REPLICATOR_IDFILTER1) != val1)
+		panic("Unable to setup replicator.");
 
 	return (0);
 }

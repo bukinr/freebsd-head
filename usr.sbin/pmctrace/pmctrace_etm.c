@@ -273,7 +273,7 @@ create_generic_decoder(dcd_tree_handle_t handle, const char *p_name, const void 
 
 	CSID = 0;
 
-	printf("%s\n", __func__);
+	dprintf("%s\n", __func__);
 
 	ret = ocsd_dt_create_decoder(handle, p_name, OCSD_CREATE_FLG_FULL_DECODER,
 	    p_cfg, &CSID);
@@ -281,8 +281,8 @@ create_generic_decoder(dcd_tree_handle_t handle, const char *p_name, const void 
 		return (-1);
 
 	if (etm_flags & FLAG_FORMAT) {
-		ret = ocsd_dt_attach_packet_callback(handle, CSID, OCSD_C_API_CB_PKT_MON,
-		    packet_monitor, p_context);
+		ret = ocsd_dt_attach_packet_callback(handle, CSID,
+		    OCSD_C_API_CB_PKT_MON, packet_monitor, p_context);
 		if (ret != OCSD_OK)
 			return (-1);
 	}
@@ -297,7 +297,8 @@ create_generic_decoder(dcd_tree_handle_t handle, const char *p_name, const void 
 
 /* ETMv4 settings */
 static ocsd_err_t
-create_decoder_etmv4(dcd_tree_handle_t dcd_tree_h, uint64_t base, uint64_t start, uint64_t end)
+create_decoder_etmv4(dcd_tree_handle_t dcd_tree_h, uint64_t base,
+    uint64_t start, uint64_t end)
 {
 	ocsd_etmv4_cfg trace_config;
 	ocsd_err_t ret;
@@ -333,8 +334,9 @@ gen_trace_elem_print_lookup(const void *p_context, const ocsd_trc_index_t index_
 	mdata = (const struct mtrace_data *)p_context;
 
 	resp = OCSD_RESP_CONT;
+
 #if 0
-	printf("%s: Idx:%d ELEM TYPE %d, st_addr %lx, en_addr %lx\n",
+	dprintf("%s: Idx:%d ELEM TYPE %d, st_addr %lx, en_addr %lx\n",
 	    __func__, index_sop, elem->elem_type, elem->st_addr, elem->en_addr);
 #endif
 
@@ -381,8 +383,8 @@ gen_trace_elem_print_lookup(const void *p_context, const ocsd_trc_index_t index_
 }
 
 static int
-etm_process_chunk(struct mtrace_data *mdata __unused, uint64_t base __unused,
-    uint64_t start __unused, uint64_t end __unused)
+etm_process_chunk(struct mtrace_data *mdata __unused, uint64_t base,
+    uint64_t start, uint64_t end)
 {
 	uint32_t bytes_done;
 	uint32_t block_size;
@@ -397,7 +399,7 @@ etm_process_chunk(struct mtrace_data *mdata __unused, uint64_t base __unused,
 	bytes_this_time = 0;
 	block_index = 0;
 	bytes_done = 0;
-	block_size = (end-start);
+	block_size = (end - start);
 	p_block = (uint8_t *)(base + start);
 
 	ret = OCSD_OK;
@@ -406,7 +408,7 @@ etm_process_chunk(struct mtrace_data *mdata __unused, uint64_t base __unused,
 	while (bytes_done < (uint32_t)block_size && (ret == OCSD_OK)) {
 
 		if (OCSD_DATA_RESP_IS_CONT(dp_ret)) {
-			printf("process data, block_size %d\n", block_size-bytes_done);
+			dprintf("process data, block_size %d\n", block_size - bytes_done);
 			dp_ret = ocsd_dt_process_data(dcdtree_handle, OCSD_OP_DATA,
 			    block_index + bytes_done,
 			    block_size - bytes_done,
@@ -415,7 +417,8 @@ etm_process_chunk(struct mtrace_data *mdata __unused, uint64_t base __unused,
 			bytes_done += bytes_this_time;
 			dprintf("BYTES DONE %d\n", bytes_done);
 		} else if (OCSD_DATA_RESP_IS_WAIT(dp_ret)) {
-			dp_ret = ocsd_dt_process_data(dcdtree_handle, OCSD_OP_FLUSH, 0, 0, NULL, NULL);
+			dp_ret = ocsd_dt_process_data(dcdtree_handle, OCSD_OP_FLUSH,
+			    0, 0, NULL, NULL);
 		} else {
 			ret = OCSD_ERR_DATA_DECODE_FATAL;
 		}
