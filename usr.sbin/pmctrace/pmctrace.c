@@ -159,7 +159,8 @@ pmctrace_init_cpu(uint32_t cpu)
 		printf("mmap failed: err %d\n", errno);
 		return (-1);
 	}
-	dprintf("%s: tc->base %lx, *tc->base %lx\n", __func__, (uint64_t)tc->base, *(uint64_t *)tc->base);
+	dprintf("%s: tc->base %lx, *tc->base %lx\n", __func__,
+	    (uint64_t)tc->base, *(uint64_t *)tc->base);
 
 	if (pmctrace_cfg.trace_dev->methods->init != NULL)
 		pmctrace_cfg.trace_dev->methods->init(tc);
@@ -435,7 +436,7 @@ pmctrace_run(bool user_mode, char *func_name, char *func_image)
 	int c;
 
 	stopping = 0;
-	running = 10;
+	running = 3;
 	started = 0;
 
 	if (user_mode) {
