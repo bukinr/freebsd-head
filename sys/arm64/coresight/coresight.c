@@ -45,14 +45,15 @@ __FBSDID("$FreeBSD$");
 
 #include <arm64/coresight/coresight.h>
 
-int
-coresight_parse_port(phandle_t node)
+static int
+coresight_port_find_endpoint(phandle_t node)
 {
 	char *name;
 	int ret;
 	phandle_t child;
 	phandle_t xref;
 
+	/* Port found, now find endpoint. */
 	for (child = OF_child(node); child != 0; child = OF_peer(child)) {
 		ret = OF_getprop_alloc(child, "name", sizeof(*name), (void **)&name);
 		if (ret == -1)
@@ -63,19 +64,29 @@ coresight_parse_port(phandle_t node)
 				printf("failed\n");
 				continue;
 			}
+			if (OF_getproplen(child, "slave-mode") >= 0) {
+				printf("endpoint is slave-mode\n");
+			}
+
 			printf("remote-endpoint found\n");
 		}
+		free(name, M_OFWPROP);
+		break;
 	}
 
 	return (0);
 }
 
 static int
-coresight_get_ports(phandle_t node)
+coresight_get_ports(phandle_t node,
+    struct coresight_platform_data *pdata)
 {
 	phandle_t child;
+	pcell_t port_reg;
+	phandle_t xref;
 	char *name;
 	int ret;
+	phandle_t endpoint;
 
 	child = ofw_bus_find_child(node, "ports");
 	if (child)
@@ -88,21 +99,39 @@ coresight_get_ports(phandle_t node)
 
 		//printf("name %s, ret %d\n", name, ret);
 
-		if (strcasecmp(name, "port") == 0) {
-			//printf("Port found\n");
-			coresight_parse_port(child);
-		} else if (strncasecmp(name, "port@", 6)) {
-			//printf("Port@ found\n");
-			coresight_parse_port(child);
+		if (strcasecmp(name, "port") ||
+		    strncasecmp(name, "port@", 6)) {
+
+			if (OF_getencprop(child, "reg", (void *)&port_reg,
+				sizeof(port_reg)) > 0) {
+			}
+
+			/* Port found */
+			if (1 == 0)
+				coresight_port_find_endpoint(child);
+
+			endpoint = ofw_bus_find_child(child, "endpoint");
+			if (endpoint) {
+				printf("endpoint found\n");
+				if (OF_getencprop(endpoint, "remote-endpoint", &xref,
+				    sizeof(xref)) == -1) {
+					printf("failed\n");
+					continue;
+				}
+				if (OF_getproplen(endpoint, "slave-mode") >= 0)
+					pdata->in_ports++;
+				else
+					pdata->out_ports++;
+			}
 		}
 	}
 
 	return (0);
 }
 
-
 static int
-coresight_get_cpu(phandle_t node, struct coresight_platform_data *pdata)
+coresight_get_cpu(phandle_t node,
+    struct coresight_platform_data *pdata)
 {
 	phandle_t cpu_node;
 	pcell_t xref;
@@ -124,14 +153,17 @@ coresight_get_cpu(phandle_t node, struct coresight_platform_data *pdata)
 }
 
 int
-coresight_get_platform_data(device_t dev, struct coresight_platform_data *pdata)
+coresight_get_platform_data(device_t dev,
+    struct coresight_platform_data *pdata)
 {
 	phandle_t node;
 
 	node = ofw_bus_get_node(dev);
 
 	coresight_get_cpu(node, pdata);
-	coresight_get_ports(node);
+	coresight_get_ports(node, pdata);
+
+	printf("Total ports: in %d out %d\n", pdata->in_ports, pdata->out_ports);
 
 	return (0);
 }

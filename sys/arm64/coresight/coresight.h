@@ -3,7 +3,8 @@
 
 struct coresight_platform_data {
 	int cpu;
+	int in_ports;
+	int out_ports;
 };
 
-int coresight_parse_port(phandle_t node);
 int coresight_get_platform_data(device_t dev, struct coresight_platform_data *pdata);
