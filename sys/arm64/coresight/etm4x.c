@@ -71,7 +71,8 @@ static struct ofw_compat_data compat_data[] = {
 };
 
 struct etm_softc {
-	struct resource		*res;
+	struct resource			*res;
+	struct coresight_platform_data	pdata;
 };
 
 static struct resource_spec etm_spec[] = {
@@ -280,7 +281,7 @@ etm_attach(device_t dev)
 			printf("TRCIDR%d: %x\n", i, bus_read_4(sc->res, TRCIDR(i)));
 	}
 
-	coresight_parse_ports(dev);
+	coresight_get_platform_data(dev, &sc->pdata);
 
 	return (0);
 }

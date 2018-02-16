@@ -40,6 +40,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/module.h>
 #include <machine/bus.h>
 
+#include <arm64/coresight/coresight.h>
 #include <arm64/coresight/tmc.h>
 
 #include <dev/ofw/ofw_bus.h>
@@ -64,9 +65,10 @@ static struct ofw_compat_data compat_data[] = {
 };
 
 struct tmc_softc {
-	struct resource		*res;
-	device_t		dev;
-	uint64_t		cycle;
+	struct resource			*res;
+	device_t			dev;
+	uint64_t			cycle;
+	struct coresight_platform_data	pdata;
 };
 
 static struct resource_spec tmc_spec[] = {
@@ -265,6 +267,8 @@ tmc_attach(device_t dev)
 		device_printf(dev, "cannot allocate resources for device\n");
 		return (ENXIO);
 	}
+
+	coresight_get_platform_data(dev, &sc->pdata);
 
 	printf("%s: DEVID %x\n", __func__, bus_read_4(sc->res, TMC_DEVID));
 

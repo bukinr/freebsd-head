@@ -40,6 +40,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/module.h>
 #include <machine/bus.h>
 
+#include <arm64/coresight/coresight.h>
 #include <arm64/coresight/funnel.h>
 
 #include <dev/ofw/ofw_bus.h>
@@ -62,7 +63,8 @@ static struct ofw_compat_data compat_data[] = {
 };
 
 struct funnel_softc {
-	struct resource		*res;
+	struct resource			*res;
+	struct coresight_platform_data	pdata;
 };
 
 static struct resource_spec funnel_spec[] = {
@@ -97,6 +99,8 @@ funnel_attach(device_t dev)
 		device_printf(dev, "cannot allocate resources for device\n");
 		return (ENXIO);
 	}
+
+	coresight_get_platform_data(dev, &sc->pdata);
 
 	/* Unlock Coresight */
 	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);

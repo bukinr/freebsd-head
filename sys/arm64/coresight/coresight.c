@@ -57,7 +57,7 @@ coresight_parse_port(phandle_t node)
 		ret = OF_getprop_alloc(child, "name", sizeof(*name), (void **)&name);
 		if (ret == -1)
 			continue;
-		if (strcmp(name, "endpoint") == 0) {
+		if (strcasecmp(name, "endpoint") == 0) {
 			printf("Endpoint found\n");
 			if (OF_getencprop(child, "remote-endpoint", &xref, sizeof(xref)) == -1) {
 				printf("failed\n");
@@ -70,15 +70,12 @@ coresight_parse_port(phandle_t node)
 	return (0);
 }
 
-int
-coresight_parse_ports(device_t dev)
+static int
+coresight_get_ports(phandle_t node)
 {
-	phandle_t node;
 	phandle_t child;
 	char *name;
 	int ret;
-
-	node = ofw_bus_get_node(dev);
 
 	child = ofw_bus_find_child(node, "ports");
 	if (child)
@@ -88,11 +85,29 @@ coresight_parse_ports(device_t dev)
 		ret = OF_getprop_alloc(child, "name", sizeof(*name), (void **)&name);
 		if (ret == -1)
 			continue;
-		if (strcmp(name, "port") == 0) {
-			printf("Port found\n");
+
+		//printf("name %s, ret %d\n", name, ret);
+
+		if (strcasecmp(name, "port") == 0) {
+			//printf("Port found\n");
+			coresight_parse_port(child);
+		} else if (strncasecmp(name, "port@", 6)) {
+			//printf("Port@ found\n");
 			coresight_parse_port(child);
 		}
 	}
+
+	return (0);
+}
+
+int
+coresight_get_platform_data(device_t dev, struct coresight_platform_data *pdata)
+{
+	phandle_t node;
+
+	node = ofw_bus_get_node(dev);
+
+	coresight_get_ports(node);
 
 	return (0);
 }
