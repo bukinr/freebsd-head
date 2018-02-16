@@ -43,6 +43,7 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
 
+#include <arm64/coresight/coresight.h>
 #include <arm64/coresight/etm4x.h>
 
 #include "etm_if.h"
@@ -278,6 +279,8 @@ etm_attach(device_t dev)
 		for (i = 0; i < 14; i++)
 			printf("TRCIDR%d: %x\n", i, bus_read_4(sc->res, TRCIDR(i)));
 	}
+
+	coresight_parse_ports(dev);
 
 	return (0);
 }
