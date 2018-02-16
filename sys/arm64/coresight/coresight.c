@@ -100,6 +100,29 @@ coresight_get_ports(phandle_t node)
 	return (0);
 }
 
+
+static int
+coresight_get_cpu(phandle_t node, struct coresight_platform_data *pdata)
+{
+	phandle_t cpu_node;
+	pcell_t xref;
+	pcell_t cpu_reg;
+
+	if (OF_getencprop(node, "cpu", &xref, sizeof(xref)) != -1) {
+		//printf("cpu xref found\n");
+		cpu_node = OF_node_from_xref(xref);
+		if (OF_getencprop(cpu_node, "reg", (void *)&cpu_reg,
+			sizeof(cpu_reg)) > 0) {
+			//printf("cpu reg found: %d\n", cpu_reg);
+			pdata->cpu = cpu_reg;
+
+			return (0);
+		}
+	}
+
+	return (-1);
+}
+
 int
 coresight_get_platform_data(device_t dev, struct coresight_platform_data *pdata)
 {
@@ -107,6 +130,7 @@ coresight_get_platform_data(device_t dev, struct coresight_platform_data *pdata)
 
 	node = ofw_bus_get_node(dev);
 
+	coresight_get_cpu(node, pdata);
 	coresight_get_ports(node);
 
 	return (0);
