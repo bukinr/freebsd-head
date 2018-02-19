@@ -68,7 +68,7 @@ struct tmc_softc {
 	struct resource			*res;
 	device_t			dev;
 	uint64_t			cycle;
-	struct coresight_platform_data	pdata;
+	struct coresight_platform_data	*pdata;
 };
 
 static struct resource_spec tmc_spec[] = {
@@ -268,7 +268,7 @@ tmc_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	coresight_get_platform_data(dev, &sc->pdata);
+	sc->pdata = coresight_get_platform_data(dev);
 
 	printf("%s: DEVID %x\n", __func__, bus_read_4(sc->res, TMC_DEVID));
 

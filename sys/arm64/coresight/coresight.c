@@ -45,6 +45,8 @@ __FBSDID("$FreeBSD$");
 
 #include <arm64/coresight/coresight.h>
 
+MALLOC_DEFINE(M_CORESIGHT, "coresight", "ARM Coresight");
+
 static int
 coresight_port_find_endpoint(phandle_t node)
 {
@@ -86,7 +88,8 @@ coresight_get_ports(phandle_t node,
 	phandle_t xref;
 	char *name;
 	int ret;
-	phandle_t endpoint;
+	phandle_t endpoint_child;
+	struct endpoint *endp;
 
 	child = ofw_bus_find_child(node, "ports");
 	if (child)
@@ -110,18 +113,27 @@ coresight_get_ports(phandle_t node,
 			if (1 == 0)
 				coresight_port_find_endpoint(child);
 
-			endpoint = ofw_bus_find_child(child, "endpoint");
-			if (endpoint) {
+			endpoint_child = ofw_bus_find_child(child, "endpoint");
+			if (endpoint_child) {
 				printf("endpoint found\n");
-				if (OF_getencprop(endpoint, "remote-endpoint", &xref,
+				if (OF_getencprop(endpoint_child, "remote-endpoint", &xref,
 				    sizeof(xref)) == -1) {
 					printf("failed\n");
 					continue;
 				}
-				if (OF_getproplen(endpoint, "slave-mode") >= 0)
+				endp = malloc(sizeof(struct endpoint), M_CORESIGHT,
+				    M_WAITOK | M_ZERO);
+				endp->node = OF_node_from_xref(xref);
+				if (OF_getproplen(endpoint_child, "slave-mode") >= 0) {
 					pdata->in_ports++;
-				else
+					endp->slave = 1;
+				} else {
 					pdata->out_ports++;
+				}
+
+				mtx_lock(&pdata->mtx_lock);
+				TAILQ_INSERT_TAIL(&pdata->endpoints, endp, link);
+				mtx_unlock(&pdata->mtx_lock);
 			}
 		}
 	}
@@ -152,18 +164,23 @@ coresight_get_cpu(phandle_t node,
 	return (-1);
 }
 
-int
-coresight_get_platform_data(device_t dev,
-    struct coresight_platform_data *pdata)
+struct coresight_platform_data *
+coresight_get_platform_data(device_t dev)
 {
+	struct coresight_platform_data *pdata;
 	phandle_t node;
 
 	node = ofw_bus_get_node(dev);
+
+	pdata = malloc(sizeof(struct coresight_platform_data),
+	    M_CORESIGHT, M_WAITOK | M_ZERO);
+	mtx_init(&pdata->mtx_lock, "Coresight Platform Data", NULL, MTX_DEF);
+	TAILQ_INIT(&pdata->endpoints);
 
 	coresight_get_cpu(node, pdata);
 	coresight_get_ports(node, pdata);
 
 	printf("Total ports: in %d out %d\n", pdata->in_ports, pdata->out_ports);
 
-	return (0);
+	return (pdata);
 }
