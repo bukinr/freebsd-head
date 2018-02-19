@@ -269,6 +269,7 @@ tmc_attach(device_t dev)
 	}
 
 	sc->pdata = coresight_get_platform_data(dev);
+	coresight_register(dev, sc->pdata);
 
 	printf("%s: DEVID %x\n", __func__, bus_read_4(sc->res, TMC_DEVID));
 

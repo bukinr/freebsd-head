@@ -153,8 +153,12 @@ etm_configure(device_t dev, struct etm_config *config)
 	uint32_t reg;
 
 	printf("%s: unit %d\n", __func__, device_get_unit(dev));
-
+	
 	sc = device_get_softc(dev);
+
+	device_t out_dev;
+	out_dev = coresight_get_output_device(sc->pdata);
+	printf("out_dev %lx\n", (uint64_t)out_dev);
 
 	etm_print_version(sc);
 
@@ -282,6 +286,7 @@ etm_attach(device_t dev)
 	}
 
 	sc->pdata = coresight_get_platform_data(dev);
+	coresight_register(dev, sc->pdata);
 
 	return (0);
 }

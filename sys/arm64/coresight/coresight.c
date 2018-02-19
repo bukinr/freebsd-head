@@ -46,6 +46,15 @@ __FBSDID("$FreeBSD$");
 #include <arm64/coresight/coresight.h>
 
 MALLOC_DEFINE(M_CORESIGHT, "coresight", "ARM Coresight");
+static struct mtx cs_mtx;
+
+struct coresight_device {
+	TAILQ_ENTRY(coresight_device) link;
+	device_t dev;
+	phandle_t node;
+	struct coresight_platform_data *pdata;
+};
+TAILQ_HEAD(coresight_device_list, coresight_device) cs_devs = TAILQ_HEAD_INITIALIZER(cs_devs);
 
 static int
 coresight_port_find_endpoint(phandle_t node)
@@ -80,10 +89,10 @@ coresight_port_find_endpoint(phandle_t node)
 }
 
 static int
-coresight_get_ports(phandle_t node,
+coresight_get_ports(phandle_t dev_node,
     struct coresight_platform_data *pdata)
 {
-	phandle_t child;
+	phandle_t node, child;
 	pcell_t port_reg;
 	phandle_t xref;
 	char *name;
@@ -91,9 +100,11 @@ coresight_get_ports(phandle_t node,
 	phandle_t endpoint_child;
 	struct endpoint *endp;
 
-	child = ofw_bus_find_child(node, "ports");
+	child = ofw_bus_find_child(dev_node, "ports");
 	if (child)
 		node = child;
+	else
+		node = dev_node;
 
 	for (child = OF_child(node); child != 0; child = OF_peer(child)) {
 		ret = OF_getprop_alloc(child, "name", sizeof(*name), (void **)&name);
@@ -123,7 +134,9 @@ coresight_get_ports(phandle_t node,
 				}
 				endp = malloc(sizeof(struct endpoint), M_CORESIGHT,
 				    M_WAITOK | M_ZERO);
-				endp->node = OF_node_from_xref(xref);
+				endp->my_node = endpoint_child;
+				endp->their_node = OF_node_from_xref(xref);
+				endp->dev_node = dev_node;
 				if (OF_getproplen(endpoint_child, "slave-mode") >= 0) {
 					pdata->in_ports++;
 					endp->slave = 1;
@@ -139,6 +152,67 @@ coresight_get_ports(phandle_t node,
 	}
 
 	return (0);
+}
+
+int
+coresight_register(device_t dev, struct coresight_platform_data *pdata)
+{
+	struct coresight_device *cs_dev;
+
+	cs_dev = malloc(sizeof(struct coresight_device), M_CORESIGHT, M_WAITOK | M_ZERO);
+	cs_dev->dev = dev;
+	cs_dev->node = ofw_bus_get_node(dev);
+	cs_dev->pdata = pdata;
+
+	mtx_lock(&cs_mtx);
+	TAILQ_INSERT_TAIL(&cs_devs, cs_dev, link);
+	mtx_unlock(&cs_mtx);
+
+	return (0);
+}
+
+device_t
+coresight_get_output_device(struct coresight_platform_data *pdata)
+{
+	struct endpoint *endp;
+	struct endpoint *endp2;
+	boolean_t found;
+	struct coresight_device *cs_dev;
+
+	printf("%s\n", __func__);
+
+	if (pdata->out_ports != 1)
+		return (NULL);
+
+	printf("%s: 1\n", __func__);
+
+	/* Find my output endpoint */
+	found = 0;
+	TAILQ_FOREACH(endp, &pdata->endpoints, link) {
+		if (endp->slave == 0) {
+			found = 1;
+			break;
+		}
+	}
+
+	if (!found)
+		return (NULL);
+
+	printf("%s: 2\n", __func__);
+
+	TAILQ_FOREACH(cs_dev, &cs_devs, link) {
+		if (cs_dev->pdata == pdata)
+			continue;
+		TAILQ_FOREACH(endp2, &cs_dev->pdata->endpoints, link) {
+			//printf("endp->node %lx endp2->node %lx\n", (uint64_t)endp->node, (uint64_t)endp2->node);
+			if (endp->their_node == endp2->my_node) {
+				printf("found\n");
+				return (cs_dev->dev);
+			}
+		}
+	}
+
+	return (NULL);
 }
 
 static int
@@ -184,3 +258,12 @@ coresight_get_platform_data(device_t dev)
 
 	return (pdata);
 }
+
+static void
+coresight_init(void)
+{
+
+	mtx_init(&cs_mtx, "ARM Coresight", NULL, MTX_DEF);
+}
+
+SYSINIT(coresight, SI_SUB_DRIVERS, SI_ORDER_FIRST, coresight_init, NULL);

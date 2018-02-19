@@ -3,7 +3,9 @@
 
 struct endpoint {
 	TAILQ_ENTRY(endpoint) link;
-	phandle_t node;
+	phandle_t my_node;
+	phandle_t their_node;
+	phandle_t dev_node;
 	boolean_t slave;
 };
 
@@ -16,3 +18,5 @@ struct coresight_platform_data {
 };
 
 struct coresight_platform_data * coresight_get_platform_data(device_t dev);
+device_t coresight_get_output_device(struct coresight_platform_data *pdata);
+int coresight_register(device_t dev, struct coresight_platform_data *pdata);
