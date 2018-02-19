@@ -191,7 +191,12 @@ function core.boot()
 	loader.perform("boot");
 end
 
-function core.bootserial()
+function core.isSingleUserBoot()
+	local single_user = loader.getenv("boot_single");
+	return single_user ~= nil and single_user:lower() == "yes";
+end
+
+function core.isSerialBoot()
 	local c = loader.getenv("console");
 
 	if (c ~= nil) then
