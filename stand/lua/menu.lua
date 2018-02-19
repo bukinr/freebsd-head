@@ -63,7 +63,7 @@ menu.boot_options = {
 			return "Load System "..color.highlight("D").."efaults";
 		end,
 		func = function()
-			core.setDefaults()
+			core.setDefaults();
 		end,
 		alias = {"d", "D"}
 	},
@@ -161,6 +161,9 @@ menu.welcome = {
 		name = function()
 			return color.highlight("Esc").."ape to loader prompt";
 		end,
+		func = function()
+			loader.setenv("autoboot_delay", "NO");
+		end,
 		alias = {core.KEYSTR_ESCAPE}
 	},
 
@@ -197,21 +200,29 @@ menu.welcome = {
 		carousel_id = "kernel",
 		items = core.kernelList,
 		name = function(idx, choice, all_choices)
-			if #all_choices == 0 then
+			if (#all_choices == 0) then
 				return "Kernel: ";
 			end
 
-			local kernel_name = color.escapef(color.GREEN) ..
-			    choice .. color.default();
-			if (idx == 1) then
-				kernel_name = "default/" .. kernel_name;
+			local is_default = (idx == 1);
+			local kernel_name = "";
+			local name_color;
+			if (is_default) then
+				name_color = color.escapef(color.GREEN);
+				kernel_name = "default/";
+			else
+				name_color = color.escapef(color.BLUE);
 			end
+			kernel_name = kernel_name .. name_color .. choice ..
+			    color.default();
 			return color.highlight("K").."ernel: " .. kernel_name ..
 			    " (" .. idx ..
 			    " of " .. #all_choices .. ")";
 		end,
-		func = function(choice)
-			config.reload(choice);
+		func = function(idx, choice, all_choices)
+			if (#all_choices > 1) then
+				config.reload(choice);
+			end
 		end,
 		alias = {"k", "K"}
 	},
@@ -259,10 +270,10 @@ function menu.run(m)
 	screen.defcursor();
 	local alias_table = drawer.drawscreen(m);
 
---	menu.autoboot();
+	menu.autoboot();
 
 	cont = true;
-	while cont do
+	while (cont) do
 		local key = io.getchar();
 
 		-- Special key behaviors
@@ -284,7 +295,7 @@ function menu.run(m)
 		end
 
 		-- if we have an alias do the assigned action:
-		if(sel_entry ~= nil) then
+		if (sel_entry ~= nil) then
 			if (sel_entry.entry_type == core.MENU_ENTRY) then
 				-- run function
 				sel_entry.func();
@@ -294,13 +305,20 @@ function menu.run(m)
 				local caridx = menu.getCarouselIndex(carid);
 				local choices = sel_entry.items();
 
-				caridx = (caridx % #choices) + 1;
-				menu.setCarouselIndex(carid, caridx);
-				sel_entry.func(choices[caridx]);
+				if (#choices > 0) then
+					caridx = (caridx % #choices) + 1;
+					menu.setCarouselIndex(carid, caridx);
+					sel_entry.func(caridx, choices[caridx],
+					    choices);
+				end
 			elseif (sel_entry.entry_type == core.MENU_SUBMENU) then
 				-- recurse
 				cont = menu.run(sel_entry.submenu());
 			elseif (sel_entry.entry_type == core.MENU_RETURN) then
+				-- allow entry to have a function/side effect
+				if (sel_entry.func ~= nil) then
+					sel_entry.func();
+				end
 				-- break recurse
 				cont = false;
 			end
@@ -321,11 +339,11 @@ function menu.run(m)
 end
 
 function menu.skip()
-	if core.bootserial() then
+	if (core.bootserial() )then
 		return true;
 	end
 	local c = string.lower(loader.getenv("console") or "");
-	if (c:match("^efi[ ;]") or c:match("[ ;]efi[ ;]")) ~= nil then
+	if ((c:match("^efi[ ;]") or c:match("[ ;]efi[ ;]")) ~= nil) then
 		return true;
 	end
 
@@ -335,13 +353,15 @@ function menu.skip()
 end
 
 function menu.autoboot()
-	if menu.already_autoboot == true then
+	if (menu.already_autoboot == true) then
 		return;
 	end
 	menu.already_autoboot = true;
 
 	local ab = loader.getenv("autoboot_delay");
-	if ab == "NO" or ab == "no" then
+	if (ab ~= nil) and (ab:lower() == "no") then
+		return;
+	elseif (tonumber(ab) == -1) then
 		core.boot();
 	end
 	ab = tonumber(ab) or 10;
@@ -358,13 +378,11 @@ function menu.autoboot()
 		print("Autoboot in "..time.." seconds, hit [Enter] to boot"
 			      .." or any other key to stop     ");
 		screen.defcursor();
-		if io.ischar() then
+		if (io.ischar()) then
 			local ch = io.getchar();
-			if ch == core.KEY_ENTER then
+			if (ch == core.KEY_ENTER) then
 				break;
 			else
-				-- prevent autoboot when escaping to interpreter
-				loader.setenv("autoboot_delay", "NO");
 				-- erase autoboot msg
 				screen.setcursor(0, y);
 				print("                                        "
@@ -388,4 +406,4 @@ function OnOff(str, b)
 	end
 end
 
-return menu
+return menu;
