@@ -1,5 +1,6 @@
 --
 -- Copyright (c) 2015 Pedro Souza <pedrosouza@freebsd.org>
+-- Copyright (C) 2018 Kyle Evans <kevans@FreeBSD.org>
 -- All rights reserved.
 --
 -- Redistribution and use in source and binary forms, with or without
@@ -196,7 +197,7 @@ function config.loadmod(mod, silent)
 					if (not silent) then
 						print("Failed to execute '" ..
 						    v.before ..
-						    "' before loading '".. k ..
+						    "' before loading '" .. k ..
 						    "'");
 					end
 					status = false;
@@ -227,7 +228,9 @@ function config.loadmod(mod, silent)
 			end
 
 		else
-			--if not silent then print("Skiping module '".. k .. "'"); end
+			-- if not silent then
+				-- print("Skiping module '". . k .. "'");
+			-- end
 		end
 	end
 
@@ -431,4 +434,4 @@ function config.loadelf()
 end
 
 
-return config
+return config;

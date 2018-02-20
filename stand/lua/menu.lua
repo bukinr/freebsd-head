@@ -1,5 +1,6 @@
 --
 -- Copyright (c) 2015 Pedro Souza <pedrosouza@freebsd.org>
+-- Copyright (C) 2018 Kyle Evans <kevans@FreeBSD.org>
 -- All rights reserved.
 --
 -- Redistribution and use in source and binary forms, with or without
@@ -27,13 +28,13 @@
 --
 
 
-local menu = {};
-
 local core = require("core");
 local color = require("color");
 local config = require("config");
 local screen = require("screen");
 local drawer = require("drawer");
+
+local menu = {};
 
 local OnOff;
 local skip;
@@ -41,6 +42,40 @@ local run;
 local autoboot;
 local carousel_choices = {};
 
+menu.handlers = {
+	-- Menu handlers take the current menu and selected entry as parameters,
+	-- and should return a boolean indicating whether execution should
+	-- continue or not. The return value may be omitted if this entry should
+	-- have no bearing on whether we continue or not, indicating that we
+	-- should just continue after execution.
+	[core.MENU_ENTRY] = function(current_menu, entry)
+		-- run function
+		entry.func();
+	end,
+	[core.MENU_CAROUSEL_ENTRY] = function(current_menu, entry)
+		-- carousel (rotating) functionality
+		local carid = entry.carousel_id;
+		local caridx = menu.getCarouselIndex(carid);
+		local choices = entry.items();
+
+		if (#choices > 0) then
+			caridx = (caridx % #choices) + 1;
+			menu.setCarouselIndex(carid, caridx);
+			entry.func(caridx, choices[caridx], choices);
+		end
+	end,
+	[core.MENU_SUBMENU] = function(current_menu, entry)
+		-- recurse
+		return menu.run(entry.submenu());
+	end,
+	[core.MENU_RETURN] = function(current_menu, entry)
+		-- allow entry to have a function/side effect
+		if (entry.func ~= nil) then
+			entry.func();
+		end
+		return false;
+	end,
+};
 -- loader menu tree is rooted at menu.welcome
 
 menu.boot_options = {
@@ -137,11 +172,22 @@ menu.welcome = {
 		local menu_entries = menu.welcome.all_entries;
 		-- Swap the first two menu items on single user boot
 		if (core.isSingleUserBoot()) then
-			local multiuser = menu_entries[1];
-			local singleuser = menu_entries[2];
+			-- We'll cache the swapped menu, for performance
+			if (menu.welcome.swapped_menu ~= nil) then
+				return menu.welcome.swapped_menu;
+			end
+			-- Shallow copy the table
+			menu_entries = core.shallowCopyTable(menu_entries);
 
-			menu_entries[2] = multiuser;
-			menu_entries[1] = singleuser;
+			-- Swap the first two menu entries
+			menu_entries[1], menu_entries[2] =
+			    menu_entries[2], menu_entries[1];
+
+			-- Then set their names to their alternate names
+			menu_entries[1].name, menu_entries[2].name =
+			    menu_entries[1].alternate_name,
+			    menu_entries[2].alternate_name;
+			menu.welcome.swapped_menu = menu_entries;
 		end
 		return menu_entries;
 	end,
@@ -153,6 +199,11 @@ menu.welcome = {
 				return color.highlight("B") ..
 				    "oot Multi user " ..
 				    color.highlight("[Enter]");
+			end,
+			-- Not a standard menu entry function!
+			alternate_name = function()
+				return color.highlight("B") ..
+				    "oot Multi user";
 			end,
 			func = function()
 				core.setSingleUser(false);
@@ -167,6 +218,11 @@ menu.welcome = {
 			name = function()
 				return "Boot " .. color.highlight("S") ..
 				    "ingle user";
+			end,
+			-- Not a standard menu entry function!
+			alternate_name = function()
+				return "Boot " .. color.highlight("S") ..
+				    "ingle user " .. color.highlight("[Enter]");
 			end,
 			func = function()
 				core.setSingleUser(true);
@@ -236,7 +292,7 @@ menu.welcome = {
 				end
 				kernel_name = kernel_name .. name_color ..
 				    choice .. color.default();
-				return color.highlight("K").."ernel: " ..
+				return color.highlight("K") .. "ernel: " ..
 				    kernel_name .. " (" .. idx .. " of " ..
 				    #all_choices .. ")";
 			end,
@@ -299,7 +355,7 @@ function menu.run(m)
 		-- Special key behaviors
 		if ((key == core.KEY_BACKSPACE) or (key == core.KEY_DELETE)) and
 		    (m ~= menu.welcome) then
-			break
+			break;
 		elseif (key == core.KEY_ENTER) then
 			core.boot();
 			-- Should not return
@@ -316,31 +372,16 @@ function menu.run(m)
 
 		-- if we have an alias do the assigned action:
 		if (sel_entry ~= nil) then
-			if (sel_entry.entry_type == core.MENU_ENTRY) then
-				-- run function
-				sel_entry.func();
-			elseif (sel_entry.entry_type == core.MENU_CAROUSEL_ENTRY) then
-				-- carousel (rotating) functionality
-				local carid = sel_entry.carousel_id;
-				local caridx = menu.getCarouselIndex(carid);
-				local choices = sel_entry.items();
-
-				if (#choices > 0) then
-					caridx = (caridx % #choices) + 1;
-					menu.setCarouselIndex(carid, caridx);
-					sel_entry.func(caridx, choices[caridx],
-					    choices);
+			-- Get menu handler
+			local handler = menu.handlers[sel_entry.entry_type];
+			if (handler ~= nil) then
+				-- The handler's return value indicates whether
+				-- we need to exit this menu. An omitted return
+				-- value means "continue" by default.
+				cont = handler(m, sel_entry);
+				if (cont == nil) then
+					cont = true;
 				end
-			elseif (sel_entry.entry_type == core.MENU_SUBMENU) then
-				-- recurse
-				cont = menu.run(sel_entry.submenu());
-			elseif (sel_entry.entry_type == core.MENU_RETURN) then
-				-- allow entry to have a function/side effect
-				if (sel_entry.func ~= nil) then
-					sel_entry.func();
-				end
-				-- break recurse
-				cont = false;
 			end
 			-- if we got an alias key the screen is out of date:
 			screen.clear();
@@ -415,7 +456,7 @@ function menu.autoboot()
 		end
 
 		loader.delay(50000);
-	until time <= 0
+	until time <= 0;
 	core.boot();
 
 end
