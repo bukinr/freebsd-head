@@ -254,6 +254,36 @@ etm_configure(device_t dev, struct etm_config *config)
 }
 
 static int
+etm_enable(void *arg)
+{
+	struct etm_config *config;
+
+	config = arg;
+
+	printf("%s\n", __func__);
+
+	return (0);
+}
+
+static int
+etm_disable(void)
+{
+
+	printf("%s\n", __func__);
+
+	return (0);
+}
+
+struct coresight_ops_source ops = {
+	.enable = &etm_enable,
+	.disable = &etm_disable,
+};
+
+struct coresight_ops etmv4_cs_ops = {
+	.source_ops = &ops,
+};
+
+static int
 etm_probe(device_t dev)
 {
 	if (!ofw_bus_status_okay(dev))
@@ -286,7 +316,13 @@ etm_attach(device_t dev)
 	}
 
 	sc->pdata = coresight_get_platform_data(dev);
-	coresight_register(dev, sc->pdata);
+
+	struct coresight_desc desc;
+	desc.pdata = sc->pdata;
+	desc.dev = dev;
+	desc.dev_type = CORESIGHT_ETMV4;
+	desc.ops = &etmv4_cs_ops;
+	coresight_register(&desc);
 
 	return (0);
 }

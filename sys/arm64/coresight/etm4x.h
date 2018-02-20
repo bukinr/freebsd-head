@@ -31,6 +31,9 @@
  * $FreeBSD$
  */
 
+#ifndef	_ARM64_CORESIGHT_ETM4X_H_
+#define	_ARM64_CORESIGHT_ETM4X_H_
+
 #define	TRCPRGCTLR		0x004 /* Trace Programming Control Register */
 #define	 TRCPRGCTLR_EN		(1 << 0) /* Trace unit enable bit */
 #define	TRCPROCSELR		0x008 /* Trace PE Select Control Register */
@@ -161,10 +164,4 @@
 #define	TRCPIDR567(n)		(0xFD4 + ((n) - 5) * 0x4) /*  Management Peripheral ID5 to Peripheral ID7 Registers */
 #define	TRCCIDR(n)		(0xFF0 + (n) * 0x4)	/* Management Component IDn Register [n=0-4] */
 
-#define	ETM_N_COMPRATOR		16
-
-struct etm_config {
-	uint64_t addr[ETM_N_COMPRATOR];
-	uint32_t naddr;
-	uint8_t excp_level;
-};
+#endif /* !_ARM64_CORESIGHT_ETM4X_H_ */

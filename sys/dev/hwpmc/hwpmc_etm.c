@@ -69,8 +69,10 @@ __FBSDID("$FreeBSD$");
 #include <sys/bus.h>
 #include <sys/rman.h>
 
-#include <dev/hwpmc/hwpmc_vm.h>
+#include <arm64/coresight/coresight.h>
 #include <arm64/coresight/etm4x.h>
+
+#include <dev/hwpmc/hwpmc_vm.h>
 
 #include "tmc_if.h"
 #include "etm_if.h"
@@ -382,6 +384,7 @@ etm_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	 */
 #endif
 
+	coresight_enable_etmv4(cpu, &config);
 	ETM_CONFIGURE(etm_pc->dev_etm, &config);
 	TMC_START(etm_pc->dev_etr);
 
@@ -760,6 +763,7 @@ etm_trace_config(int cpu, int ri, struct pmc *pm,
 	else
 		config.excp_level = 0;
 
+	coresight_enable_etmv4(cpu, &config);
 	ETM_CONFIGURE(etm_pc->dev_etm, &config);
 
 	return (0);

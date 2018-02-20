@@ -90,6 +90,7 @@ funnel_probe(device_t dev)
 static int
 funnel_attach(device_t dev)
 {
+	struct coresight_desc desc;
 	struct funnel_softc *sc;
 	uint32_t reg;
 
@@ -101,7 +102,12 @@ funnel_attach(device_t dev)
 	}
 
 	sc->pdata = coresight_get_platform_data(dev);
-	coresight_register(dev, sc->pdata);
+
+	desc.pdata = sc->pdata;
+	desc.dev = dev;
+	desc.dev_type = CORESIGHT_FUNNEL;
+	//desc.ops = &etmv4_cs_ops;
+	coresight_register(&desc);
 
 	/* Unlock Coresight */
 	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
@@ -111,8 +117,13 @@ funnel_attach(device_t dev)
 	printf("Device ID: %x\n", bus_read_4(sc->res, FUNNEL_DEVICEID));
 
 	reg = 7 << FUNCTL_HOLDTIME_SHIFT;
+
 	/* XXX: enable all the ports */
-	reg |= 0xff;
+	//reg |= 0xff;
+
+	/* Enable port 0 */
+	reg |= (1 << 0);
+	reg |= (1 << 4);
 	bus_write_4(sc->res, FUNNEL_FUNCTL, reg);
 
 	return (0);

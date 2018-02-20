@@ -48,13 +48,7 @@ __FBSDID("$FreeBSD$");
 MALLOC_DEFINE(M_CORESIGHT, "coresight", "ARM Coresight");
 static struct mtx cs_mtx;
 
-struct coresight_device {
-	TAILQ_ENTRY(coresight_device) link;
-	device_t dev;
-	phandle_t node;
-	struct coresight_platform_data *pdata;
-};
-TAILQ_HEAD(coresight_device_list, coresight_device) cs_devs = TAILQ_HEAD_INITIALIZER(cs_devs);
+struct coresight_device_list cs_devs;
 
 static int
 coresight_port_find_endpoint(phandle_t node)
@@ -155,14 +149,16 @@ coresight_get_ports(phandle_t dev_node,
 }
 
 int
-coresight_register(device_t dev, struct coresight_platform_data *pdata)
+coresight_register(struct coresight_desc *desc)
 {
 	struct coresight_device *cs_dev;
 
 	cs_dev = malloc(sizeof(struct coresight_device), M_CORESIGHT, M_WAITOK | M_ZERO);
-	cs_dev->dev = dev;
-	cs_dev->node = ofw_bus_get_node(dev);
-	cs_dev->pdata = pdata;
+	cs_dev->dev = desc->dev;
+	cs_dev->node = ofw_bus_get_node(desc->dev);
+	cs_dev->pdata = desc->pdata;
+	cs_dev->dev_type = desc->dev_type;
+	cs_dev->ops = desc->ops;
 
 	mtx_lock(&cs_mtx);
 	TAILQ_INSERT_TAIL(&cs_devs, cs_dev, link);
@@ -264,6 +260,7 @@ coresight_init(void)
 {
 
 	mtx_init(&cs_mtx, "ARM Coresight", NULL, MTX_DEF);
+	TAILQ_INIT(&cs_devs);
 }
 
 SYSINIT(coresight, SI_SUB_DRIVERS, SI_ORDER_FIRST, coresight_init, NULL);

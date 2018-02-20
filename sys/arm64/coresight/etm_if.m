@@ -28,6 +28,7 @@
 
 #include <sys/bus.h>
 #include <arm64/coresight/etm4x.h>
+#include <arm64/coresight/coresight.h>
 
 INTERFACE etm;
 

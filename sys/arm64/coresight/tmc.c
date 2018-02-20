@@ -269,18 +269,26 @@ tmc_attach(device_t dev)
 	}
 
 	sc->pdata = coresight_get_platform_data(dev);
-	coresight_register(dev, sc->pdata);
 
 	printf("%s: DEVID %x\n", __func__, bus_read_4(sc->res, TMC_DEVID));
+
+	struct coresight_desc desc;
+	desc.pdata = sc->pdata;
+	desc.dev = dev;
+	//desc.ops = &etmv4_cs_ops;
 
 	uint32_t reg;
 	reg = bus_read_4(sc->res, TMC_DEVID);
 	reg &= DEVID_CONFIGTYPE_M;
 	switch (reg) {
 	case DEVID_CONFIGTYPE_ETR:
+		desc.dev_type = CORESIGHT_ETR;
+		coresight_register(&desc);
 		printf("ETR configuration found, unit %d\n", device_get_unit(dev));
 		break;
 	case DEVID_CONFIGTYPE_ETF:
+		desc.dev_type = CORESIGHT_ETF;
+		coresight_register(&desc);
 		tmc_configure_etf(dev);
 		printf("ETF configuration found, unit %d\n", device_get_unit(dev));
 		break;

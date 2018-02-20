@@ -103,7 +103,13 @@ replicator_attach(device_t dev)
 	}
 
 	sc->pdata = coresight_get_platform_data(dev);
-	coresight_register(dev, sc->pdata);
+
+	struct coresight_desc desc;
+	desc.pdata = sc->pdata;
+	desc.dev = dev;
+	desc.dev_type = CORESIGHT_DYNAMIC_REPLICATOR;
+	//desc.ops = &etmv4_cs_ops;
+	coresight_register(&desc);
 
 	/* Unlock Coresight */
 	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
