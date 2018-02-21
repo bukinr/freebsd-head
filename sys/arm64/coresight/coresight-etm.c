@@ -44,6 +44,45 @@ __FBSDID("$FreeBSD$");
 
 extern struct coresight_device_list cs_devs;
 
+static int
+coresight_build_path(struct coresight_device *cs_dev)
+{
+	struct coresight_device *out;
+	struct endpoint *endp;
+
+	printf("%s\n", __func__);
+
+	endp = coresight_get_output_endpoint(cs_dev->pdata);
+	if (endp == NULL)
+		return (-1);
+
+	out = coresight_get_output_device(endp);
+	if (out == NULL)
+		return (-2);
+
+	switch (out->dev_type) {
+	//case CORESIGHT_ETMV4:
+	//	out->ops->source_ops->enable(config);
+	//	break;
+	case CORESIGHT_ETR:
+	case CORESIGHT_ETF:
+		printf("enabling SINK ops\n");
+		out->ops->sink_ops->enable();
+		break;
+	case CORESIGHT_DYNAMIC_REPLICATOR:
+	case CORESIGHT_FUNNEL:
+		printf("enabling LINK ops\n");
+		out->ops->link_ops->enable();
+		break;
+	default:
+		break;
+	}
+
+	printf("%s: done\n", __func__);
+
+	return (0);
+}
+
 int
 coresight_enable_etmv4(int cpu, struct etm_config *config)
 {
@@ -52,8 +91,11 @@ coresight_enable_etmv4(int cpu, struct etm_config *config)
 	TAILQ_FOREACH(cs_dev, &cs_devs, link) {
 		if (cs_dev->dev_type == CORESIGHT_ETMV4 &&
 		    cs_dev->pdata->cpu == cpu) {
-			cs_dev->ops->source_ops->enable(config);
 			printf("ETMv4 cs_dev found\n");
+
+			coresight_build_path(cs_dev);
+
+			cs_dev->ops->source_ops->enable(config);
 			break;
 		}
 	}

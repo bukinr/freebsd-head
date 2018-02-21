@@ -73,6 +73,31 @@ static struct resource_spec funnel_spec[] = {
 };
 
 static int
+funnel_enable(void)
+{
+
+	printf("%s\n", __func__);
+
+	return (0);
+}
+
+static void
+funnel_disable(void)
+{
+
+	printf("%s\n", __func__);
+}
+
+static struct coresight_ops_link ops = {
+	.enable = &funnel_enable,
+	.disable = &funnel_disable,
+};
+
+static struct coresight_ops funnel_cs_ops = {
+	.link_ops = &ops,
+};
+
+static int
 funnel_probe(device_t dev)
 {
 
@@ -106,7 +131,7 @@ funnel_attach(device_t dev)
 	desc.pdata = sc->pdata;
 	desc.dev = dev;
 	desc.dev_type = CORESIGHT_FUNNEL;
-	//desc.ops = &etmv4_cs_ops;
+	desc.ops = &funnel_cs_ops;
 	coresight_register(&desc);
 
 	/* Unlock Coresight */

@@ -131,6 +131,7 @@ coresight_get_ports(phandle_t dev_node,
 				endp->my_node = endpoint_child;
 				endp->their_node = OF_node_from_xref(xref);
 				endp->dev_node = dev_node;
+				//endp->cs_dev = 
 				if (OF_getproplen(endpoint_child, "slave-mode") >= 0) {
 					pdata->in_ports++;
 					endp->slave = 1;
@@ -167,43 +168,35 @@ coresight_register(struct coresight_desc *desc)
 	return (0);
 }
 
-device_t
-coresight_get_output_device(struct coresight_platform_data *pdata)
+struct endpoint *
+coresight_get_output_endpoint(struct coresight_platform_data *pdata)
 {
 	struct endpoint *endp;
-	struct endpoint *endp2;
-	boolean_t found;
-	struct coresight_device *cs_dev;
-
-	printf("%s\n", __func__);
 
 	if (pdata->out_ports != 1)
 		return (NULL);
 
-	printf("%s: 1\n", __func__);
-
-	/* Find my output endpoint */
-	found = 0;
 	TAILQ_FOREACH(endp, &pdata->endpoints, link) {
-		if (endp->slave == 0) {
-			found = 1;
-			break;
-		}
+		if (endp->slave == 0)
+			return (endp);
 	}
 
-	if (!found)
-		return (NULL);
+	return (NULL);
+}
 
-	printf("%s: 2\n", __func__);
+struct coresight_device *
+coresight_get_output_device(struct endpoint *endp)
+{
+	struct coresight_device *cs_dev;
+	struct endpoint *endp2;
 
 	TAILQ_FOREACH(cs_dev, &cs_devs, link) {
-		if (cs_dev->pdata == pdata)
-			continue;
 		TAILQ_FOREACH(endp2, &cs_dev->pdata->endpoints, link) {
-			//printf("endp->node %lx endp2->node %lx\n", (uint64_t)endp->node, (uint64_t)endp2->node);
+			//printf("endp->node %lx endp2->node %lx\n",
+			//    (uint64_t)endp->node, (uint64_t)endp2->node);
 			if (endp->their_node == endp2->my_node) {
 				printf("found\n");
-				return (cs_dev->dev);
+				return (cs_dev);
 			}
 		}
 	}

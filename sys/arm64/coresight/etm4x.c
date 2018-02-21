@@ -156,9 +156,9 @@ etm_configure(device_t dev, struct etm_config *config)
 	
 	sc = device_get_softc(dev);
 
-	device_t out_dev;
-	out_dev = coresight_get_output_device(sc->pdata);
-	printf("out_dev %lx\n", (uint64_t)out_dev);
+	//device_t out_dev;
+	//out_dev = coresight_get_output_device(sc->pdata);
+	//printf("out_dev %lx\n", (uint64_t)out_dev);
 
 	etm_print_version(sc);
 
@@ -274,12 +274,12 @@ etm_disable(void)
 	return (0);
 }
 
-struct coresight_ops_source ops = {
+static struct coresight_ops_source ops = {
 	.enable = &etm_enable,
 	.disable = &etm_disable,
 };
 
-struct coresight_ops etmv4_cs_ops = {
+static struct coresight_ops etmv4_cs_ops = {
 	.source_ops = &ops,
 };
 

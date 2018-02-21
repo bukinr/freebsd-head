@@ -74,7 +74,8 @@ struct etm_config {
 };
 
 struct coresight_platform_data * coresight_get_platform_data(device_t dev);
-device_t coresight_get_output_device(struct coresight_platform_data *pdata);
+struct endpoint * coresight_get_output_endpoint(struct coresight_platform_data *pdata);
+struct coresight_device * coresight_get_output_device(struct endpoint *endp);
 int coresight_register(struct coresight_desc *desc);
 int coresight_enable_etmv4(int cpu, struct etm_config *);
 

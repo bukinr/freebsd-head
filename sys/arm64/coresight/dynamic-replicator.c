@@ -76,6 +76,31 @@ static struct resource_spec replicator_spec[] = {
 };
 
 static int
+replicator_enable(void)
+{
+
+	printf("%s\n", __func__);
+
+	return (0);
+}
+
+static void
+replicator_disable(void)
+{
+
+	printf("%s\n", __func__);
+}
+
+static struct coresight_ops_link ops = {
+	.enable = &replicator_enable,
+	.disable = &replicator_disable,
+};
+
+static struct coresight_ops replicator_cs_ops = {
+	.link_ops = &ops,
+};
+
+static int
 replicator_probe(device_t dev)
 {
 
@@ -108,7 +133,7 @@ replicator_attach(device_t dev)
 	desc.pdata = sc->pdata;
 	desc.dev = dev;
 	desc.dev_type = CORESIGHT_DYNAMIC_REPLICATOR;
-	//desc.ops = &etmv4_cs_ops;
+	desc.ops = &replicator_cs_ops;
 	coresight_register(&desc);
 
 	/* Unlock Coresight */
