@@ -1,8 +1,7 @@
 #ifndef _ARM64_CORESIGHT_CORESIGHT_H_
 #define _ARM64_CORESIGHT_CORESIGHT_H_
 
-#include <dev/ofw/ofw_bus.h>
-#include <dev/ofw/ofw_bus_subr.h>
+#include <dev/ofw/openfirm.h>
 
 struct endpoint {
 	TAILQ_ENTRY(endpoint) link;
