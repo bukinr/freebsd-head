@@ -78,8 +78,33 @@ static struct resource_spec replicator_spec[] = {
 static int
 replicator_enable(struct coresight_device *out, struct endpoint *endp)
 {
+	struct replicator_softc *sc;
+	uint8_t val0, val1;
+	int outport;
 
-	printf("%s\n", __func__);
+	printf("%s: port reg %d\n", __func__, endp->reg);
+
+	sc = device_get_softc(out->dev);
+
+	outport = endp->reg;
+
+	/* Enable the port. The other port should be disabled */
+
+	if (outport == 0) {
+		val0 = 0x00;
+		val1 = 0xff;
+	} else {
+		val0 = 0xff;
+		val1 = 0x00;
+	}
+
+	bus_write_4(sc->res, REPLICATOR_IDFILTER0, val0);
+	if (bus_read_4(sc->res, REPLICATOR_IDFILTER0) != val0)
+		panic("Unable to setup replicator.");
+
+	bus_write_4(sc->res, REPLICATOR_IDFILTER1, val1);
+	if (bus_read_4(sc->res, REPLICATOR_IDFILTER1) != val1)
+		panic("Unable to setup replicator.");
 
 	return (0);
 }
@@ -140,27 +165,6 @@ replicator_attach(device_t dev)
 	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
 
 	wmb();
-
-	uint8_t val0, val1;
-	int outport;
-
-	outport = 0;
-
-	if (outport == 0) {
-		val0 = 0x00;
-		val1 = 0xff;
-	} else {
-		val0 = 0xff;
-		val1 = 0x00;
-	}
-
-	bus_write_4(sc->res, REPLICATOR_IDFILTER0, val0);
-	if (bus_read_4(sc->res, REPLICATOR_IDFILTER0) != val0)
-		panic("Unable to setup replicator.");
-
-	bus_write_4(sc->res, REPLICATOR_IDFILTER1, val1);
-	if (bus_read_4(sc->res, REPLICATOR_IDFILTER1) != val1)
-		panic("Unable to setup replicator.");
 
 	return (0);
 }
