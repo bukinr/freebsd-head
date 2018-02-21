@@ -384,7 +384,10 @@ etm_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	 */
 #endif
 
-	coresight_enable_etmv4(cpu, &config);
+	struct coresight_event event;
+	event.src = CORESIGHT_ETMV4;
+	event.sink = CORESIGHT_ETR;
+	coresight_enable_etmv4(cpu, &event);
 	ETM_CONFIGURE(etm_pc->dev_etm, &config);
 	TMC_START(etm_pc->dev_etr);
 
@@ -763,7 +766,10 @@ etm_trace_config(int cpu, int ri, struct pmc *pm,
 	else
 		config.excp_level = 0;
 
-	coresight_enable_etmv4(cpu, &config);
+	struct coresight_event event;
+	event.src = CORESIGHT_ETMV4;
+	event.sink = CORESIGHT_ETR;
+	coresight_enable_etmv4(cpu, &event);
 	ETM_CONFIGURE(etm_pc->dev_etm, &config);
 
 	return (0);

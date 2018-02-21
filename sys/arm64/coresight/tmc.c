@@ -94,7 +94,7 @@ tmc_unlock(struct tmc_softc *sc)
 }
 
 static int
-tmc_enable(struct tmc_softc *sc)
+tmc_enable0(struct tmc_softc *sc)
 {
 	uint32_t reg;
 
@@ -128,7 +128,7 @@ tmc_start(device_t dev)
 
 	sc = device_get_softc(dev);
 
-	tmc_enable(sc);
+	tmc_enable0(sc);
 
 	return (0);
 }
@@ -170,7 +170,7 @@ tmc_configure_etf(device_t dev)
 	bus_write_4(sc->res, TMC_FFCR, FFCR_EN_FMT | FFCR_EN_TI);
 	bus_write_4(sc->res, TMC_BUFWM, 0x800-1);
 
-	tmc_enable(sc);
+	tmc_enable0(sc);
 
 	printf("%s: STS %x, CTL %x, RSZ %x, RRP %x, RWP %x, LBUFLEVEL %x, CBUFLEVEL %x, \n", __func__,
 	    bus_read_4(sc->res, TMC_STS),
@@ -238,6 +238,30 @@ tmc_configure_etr(device_t dev, uint32_t low, uint32_t high,
 	return (0);
 }
 
+static int
+tmc_enable(struct coresight_device *out, struct endpoint *endp)
+{
+
+	printf("%s\n", __func__);
+
+	return (0);
+}
+
+static void
+tmc_disable(void)
+{
+
+	printf("%s\n", __func__);
+}
+
+static struct coresight_ops_sink ops = {
+	.enable = &tmc_enable,
+	.disable = &tmc_disable,
+};
+
+static struct coresight_ops tmc_cs_ops = {
+	.sink_ops = &ops,
+};
 
 static int
 tmc_probe(device_t dev)
@@ -275,7 +299,7 @@ tmc_attach(device_t dev)
 	struct coresight_desc desc;
 	desc.pdata = sc->pdata;
 	desc.dev = dev;
-	//desc.ops = &etmv4_cs_ops;
+	desc.ops = &tmc_cs_ops;
 
 	uint32_t reg;
 	reg = bus_read_4(sc->res, TMC_DEVID);

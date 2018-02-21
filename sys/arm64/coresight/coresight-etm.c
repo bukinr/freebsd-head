@@ -45,7 +45,8 @@ __FBSDID("$FreeBSD$");
 extern struct coresight_device_list cs_devs;
 
 static int
-coresight_build_path_one(struct coresight_device *out, struct endpoint *out_endp)
+coresight_build_path_one(struct coresight_device *out,
+    struct endpoint *out_endp, struct coresight_event *event)
 {
 
 	printf("%s\n", __func__);
@@ -57,7 +58,7 @@ coresight_build_path_one(struct coresight_device *out, struct endpoint *out_endp
 	case CORESIGHT_ETR:
 	case CORESIGHT_ETF:
 		printf("enabling SINK ops\n");
-		//out->ops->sink_ops->enable();
+		out->ops->sink_ops->enable(out, out_endp);
 		break;
 	case CORESIGHT_DYNAMIC_REPLICATOR:
 	case CORESIGHT_FUNNEL:
@@ -73,31 +74,45 @@ coresight_build_path_one(struct coresight_device *out, struct endpoint *out_endp
 	return (0);
 }
 
-static int
-coresight_build_path(struct coresight_device *cs_dev)
+static struct coresight_device *
+coresight_build_path0(struct coresight_device *out,
+    struct coresight_event *event)
 {
-	struct coresight_device *out;
 	struct endpoint *out_endp;
 	struct endpoint *endp;
 
-	out = cs_dev;
-	do {
-		endp = coresight_get_output_endpoint(out->pdata);
-		if (endp == NULL)
-			return (-1);
+	TAILQ_FOREACH(endp, &out->pdata->endpoints, link) {
+		if (endp->slave != 0)
+			continue;
 
 		out = coresight_get_output_device(endp, &out_endp);
-		if (out == NULL)
-			return (-2);
+		if (out) {
+			coresight_build_path_one(out, out_endp, event);
 
-		coresight_build_path_one(out, out_endp);
-	} while (out);
+			/* Sink device found, stop iteration */
+			if (out->dev_type == event->sink)
+				return (NULL);
+		}
+	}
+
+	return (out);
+}
+
+static int
+coresight_build_path(struct coresight_device *cs_dev,
+    struct coresight_event *event)
+{
+	struct coresight_device *out;
+
+	out = cs_dev;
+	while (out)
+		out = coresight_build_path0(out, event);
 
 	return (0);
 }
 
 int
-coresight_enable_etmv4(int cpu, struct etm_config *config)
+coresight_enable_etmv4(int cpu, struct coresight_event *event)
 {
 	struct coresight_device *cs_dev;
 
@@ -106,12 +121,26 @@ coresight_enable_etmv4(int cpu, struct etm_config *config)
 		    cs_dev->pdata->cpu == cpu) {
 			printf("ETMv4 cs_dev found\n");
 
-			coresight_build_path(cs_dev);
-
-			cs_dev->ops->source_ops->enable(config);
+			coresight_build_path(cs_dev, event);
+			cs_dev->ops->source_ops->enable(event);
 			break;
 		}
 	}
 
 	return (0);
+}
+
+int
+coresight_enable(int cpu, struct coresight_event *event)
+{
+
+	switch (event->src) {
+	case CORESIGHT_ETMV4:
+		coresight_enable_etmv4(cpu, event);
+		return (0);
+	default:
+		break;
+	};
+
+	return (-1);
 }

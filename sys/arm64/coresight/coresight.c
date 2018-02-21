@@ -179,8 +179,9 @@ coresight_get_output_endpoint(struct coresight_platform_data *pdata)
 {
 	struct endpoint *endp;
 
-	if (pdata->out_ports != 1)
+	if (pdata->out_ports != 1) {
 		return (NULL);
+	}
 
 	TAILQ_FOREACH(endp, &pdata->endpoints, link) {
 		if (endp->slave == 0)
