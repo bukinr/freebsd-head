@@ -110,9 +110,14 @@ coresight_get_ports(phandle_t dev_node,
 		if (strcasecmp(name, "port") ||
 		    strncasecmp(name, "port@", 6)) {
 
+			port_reg = -1;
 			if (OF_getencprop(child, "reg", (void *)&port_reg,
 				sizeof(port_reg)) > 0) {
+				printf("reg found\n");
+			} else {
+				printf("reg not found\n");
 			}
+			printf("%s: port_reg %d\n", __func__, port_reg);
 
 			/* Port found */
 			if (1 == 0)
@@ -131,6 +136,7 @@ coresight_get_ports(phandle_t dev_node,
 				endp->my_node = endpoint_child;
 				endp->their_node = OF_node_from_xref(xref);
 				endp->dev_node = dev_node;
+				endp->reg = port_reg;
 				//endp->cs_dev = 
 				if (OF_getproplen(endpoint_child, "slave-mode") >= 0) {
 					pdata->in_ports++;
@@ -185,7 +191,7 @@ coresight_get_output_endpoint(struct coresight_platform_data *pdata)
 }
 
 struct coresight_device *
-coresight_get_output_device(struct endpoint *endp)
+coresight_get_output_device(struct endpoint *endp, struct endpoint **out_endp)
 {
 	struct coresight_device *cs_dev;
 	struct endpoint *endp2;
@@ -196,6 +202,7 @@ coresight_get_output_device(struct endpoint *endp)
 			//    (uint64_t)endp->node, (uint64_t)endp2->node);
 			if (endp->their_node == endp2->my_node) {
 				printf("found\n");
+				*out_endp = endp2;
 				return (cs_dev);
 			}
 		}

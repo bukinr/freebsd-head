@@ -45,20 +45,10 @@ __FBSDID("$FreeBSD$");
 extern struct coresight_device_list cs_devs;
 
 static int
-coresight_build_path(struct coresight_device *cs_dev)
+coresight_build_path_one(struct coresight_device *out, struct endpoint *out_endp)
 {
-	struct coresight_device *out;
-	struct endpoint *endp;
 
 	printf("%s\n", __func__);
-
-	endp = coresight_get_output_endpoint(cs_dev->pdata);
-	if (endp == NULL)
-		return (-1);
-
-	out = coresight_get_output_device(endp);
-	if (out == NULL)
-		return (-2);
 
 	switch (out->dev_type) {
 	//case CORESIGHT_ETMV4:
@@ -67,18 +57,41 @@ coresight_build_path(struct coresight_device *cs_dev)
 	case CORESIGHT_ETR:
 	case CORESIGHT_ETF:
 		printf("enabling SINK ops\n");
-		out->ops->sink_ops->enable();
+		//out->ops->sink_ops->enable();
 		break;
 	case CORESIGHT_DYNAMIC_REPLICATOR:
 	case CORESIGHT_FUNNEL:
 		printf("enabling LINK ops\n");
-		out->ops->link_ops->enable();
+		out->ops->link_ops->enable(out, out_endp);
 		break;
 	default:
 		break;
 	}
 
 	printf("%s: done\n", __func__);
+
+	return (0);
+}
+
+static int
+coresight_build_path(struct coresight_device *cs_dev)
+{
+	struct coresight_device *out;
+	struct endpoint *out_endp;
+	struct endpoint *endp;
+
+	out = cs_dev;
+	do {
+		endp = coresight_get_output_endpoint(out->pdata);
+		if (endp == NULL)
+			return (-1);
+
+		out = coresight_get_output_device(endp, &out_endp);
+		if (out == NULL)
+			return (-2);
+
+		coresight_build_path_one(out, out_endp);
+	} while (out);
 
 	return (0);
 }

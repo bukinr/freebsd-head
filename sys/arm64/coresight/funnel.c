@@ -73,10 +73,19 @@ static struct resource_spec funnel_spec[] = {
 };
 
 static int
-funnel_enable(void)
+funnel_enable(struct coresight_device *out, struct endpoint *endp)
 {
+	struct funnel_softc *sc;
+	uint32_t reg;
+
+	sc = device_get_softc(out->dev);
 
 	printf("%s\n", __func__);
+	printf("%s: enabling reg %d\n", __func__, endp->reg);
+
+	reg = bus_read_4(sc->res, FUNNEL_FUNCTL);
+	reg |= (1 << endp->reg);
+	bus_write_4(sc->res, FUNNEL_FUNCTL, reg);
 
 	return (0);
 }
@@ -147,8 +156,8 @@ funnel_attach(device_t dev)
 	//reg |= 0xff;
 
 	/* Enable port 0 */
-	reg |= (1 << 0);
-	reg |= (1 << 4);
+	//reg |= (1 << 0);
+	//reg |= (1 << 4);
 	bus_write_4(sc->res, FUNNEL_FUNCTL, reg);
 
 	return (0);

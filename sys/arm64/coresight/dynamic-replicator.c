@@ -76,7 +76,7 @@ static struct resource_spec replicator_spec[] = {
 };
 
 static int
-replicator_enable(void)
+replicator_enable(struct coresight_device *out, struct endpoint *endp)
 {
 
 	printf("%s\n", __func__);

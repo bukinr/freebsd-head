@@ -9,6 +9,7 @@ struct endpoint {
 	phandle_t their_node;
 	phandle_t dev_node;
 	boolean_t slave;
+	int reg;
 };
 
 struct coresight_platform_data {
@@ -25,27 +26,6 @@ enum cs_dev_type {
 	CORESIGHT_ETF,
 	CORESIGHT_DYNAMIC_REPLICATOR,
 	CORESIGHT_FUNNEL,
-};
-
-struct coresight_ops_sink {
-	int (*enable)(void);
-	void (*disable)(void);
-};
-
-struct coresight_ops_link {
-	int (*enable)(void);
-	void (*disable)(void);
-};
-
-struct coresight_ops_source {
-	int (*enable)(void *);
-	int (*disable)(void);
-};
-
-struct coresight_ops {
-	struct coresight_ops_sink *sink_ops;
-	struct coresight_ops_link *link_ops;
-	struct coresight_ops_source *source_ops;
 };
 
 struct coresight_desc {
@@ -66,6 +46,27 @@ struct coresight_device {
 
 TAILQ_HEAD(coresight_device_list, coresight_device);
 
+struct coresight_ops_sink {
+	int (*enable)(void);
+	void (*disable)(void);
+};
+
+struct coresight_ops_link {
+	int (*enable)(struct coresight_device *out, struct endpoint *endp);
+	void (*disable)(void);
+};
+
+struct coresight_ops_source {
+	int (*enable)(void *);
+	int (*disable)(void);
+};
+
+struct coresight_ops {
+	struct coresight_ops_sink *sink_ops;
+	struct coresight_ops_link *link_ops;
+	struct coresight_ops_source *source_ops;
+};
+
 #define	ETM_N_COMPRATOR		16
 struct etm_config {
 	uint64_t addr[ETM_N_COMPRATOR];
@@ -75,7 +76,7 @@ struct etm_config {
 
 struct coresight_platform_data * coresight_get_platform_data(device_t dev);
 struct endpoint * coresight_get_output_endpoint(struct coresight_platform_data *pdata);
-struct coresight_device * coresight_get_output_device(struct endpoint *endp);
+struct coresight_device * coresight_get_output_device(struct endpoint *endp, struct endpoint **);
 int coresight_register(struct coresight_desc *desc);
 int coresight_enable_etmv4(int cpu, struct etm_config *);
 
