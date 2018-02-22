@@ -37,8 +37,8 @@ function password.read()
 	local str = ""
 	local n = 0
 
-	repeat
-		ch = io.getchar()
+	while true do
+		local ch = io.getchar()
 		if ch == core.KEY_ENTER then
 			break
 		end
@@ -55,7 +55,7 @@ function password.read()
 			str = str .. string.char(ch)
 			n = n + 1
 		end
-	until n == 16
+	end
 	return str
 end
 
