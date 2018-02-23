@@ -246,6 +246,16 @@ tmc_configure_etr(device_t dev, uint32_t low, uint32_t high,
 }
 
 static int
+tmc_read(struct coresight_device *out, struct endpoint *endp,
+    struct coresight_event *event)
+{
+
+	printf("%s\n", __func__);
+
+	return (0);
+}
+
+static int
 tmc_prepare(struct coresight_device *out, struct endpoint *endp,
     struct coresight_event *event)
 {
@@ -335,6 +345,7 @@ tmc_enable(struct coresight_device *out, struct endpoint *endp,
 }
 
 static struct coresight_ops_sink ops = {
+	.read = &tmc_read,
 	.prepare = &tmc_prepare,
 	.enable = &tmc_enable,
 	.disable = &tmc_disable,
@@ -424,17 +435,6 @@ tmc_read_trace(device_t dev, uint64_t *cycle, uint64_t *offset)
  
 	sc = device_get_softc(dev);
 
-#if 0
-	printf("%s: STS %x, CTL %x, RSZ %x, RRP %x, RWP %x, LBUFLEVEL %x, CBUFLEVEL %x, RRD %x\n", __func__,
-	    bus_read_4(sc->res, TMC_STS),
-	    bus_read_4(sc->res, TMC_CTL),
-	    bus_read_4(sc->res, TMC_RSZ),
-	    bus_read_4(sc->res, TMC_RRP),
-	    bus_read_4(sc->res, TMC_RWP),
-	    bus_read_4(sc->res, TMC_CBUFLEVEL),
-	    bus_read_4(sc->res, TMC_LBUFLEVEL),
-	    bus_read_4(sc->res, TMC_RRD));
-#endif
 	printf("%s%d: STS %x, CTL %x, RSZ %x, RRP %x, RWP %x, LBUFLEVEL %x, CBUFLEVEL %x, \n", __func__,
 	    device_get_unit(dev),
 	    bus_read_4(sc->res, TMC_STS),
@@ -472,9 +472,6 @@ tmc_read_trace(device_t dev, uint64_t *cycle, uint64_t *offset)
 
 	if (cycle != NULL)
 		*cycle = sc->cycle;
-
-	//if (device_get_unit(dev) == 0)
-	//	printf("RRD: %x\n", bus_read_4(sc->res, TMC_RRD));
 
 	return (0);
 }

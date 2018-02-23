@@ -346,8 +346,6 @@ etm_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	event->rrp = phys_lo;
 	event->rwp = phys_lo;
 
-	//TMC_CONFIGURE_ETR(etm_pc->dev_etr, phys_lo, phys_hi, bufsize);
-
 	mode = PMC_TO_MODE(pm);
 	if (mode == PMC_MODE_ST) {
 		event->excp_level = 1;
@@ -813,7 +811,7 @@ etm_read_trace(int cpu, int ri, struct pmc *pm,
 	event = &etm_pc->event;
 
 	TMC_READ_TRACE(etm_pc->dev_etr, &cycle, &offset);
-	//TMC_READ_TRACE(etm_pc->dev_etf, NULL, NULL);
+	//coresight_read_sink(event);
 
 	pm_etm = (struct pmc_md_etm_pmc *)&pm->pm_md;
 	etm_buf = &pm_etm->etm_buffers[cpu];
@@ -895,7 +893,6 @@ etm_release_pmc(int cpu, int ri, struct pmc *pm)
 	event = &etm_pc->event;
 
 	coresight_disable(cpu, event);
-	//TMC_STOP(etm_pc->dev_etr);
 
 	mode = PMC_TO_MODE(pm);
 	if (mode == PMC_MODE_TT)

@@ -64,6 +64,7 @@ struct coresight_event {
 };
 
 struct coresight_ops_sink {
+	int (*read)(struct coresight_device *out, struct endpoint *endp, struct coresight_event *event);
 	int (*prepare)(struct coresight_device *out, struct endpoint *endp, struct coresight_event *event);
 	int (*enable)(struct coresight_device *out, struct endpoint *endp, struct coresight_event *event);
 	void (*disable)(struct coresight_device *out, struct coresight_event *event);
