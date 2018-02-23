@@ -481,7 +481,7 @@ etm_init(struct trace_cpu *tc)
 	int ret;
 
 	ocsd_def_errlog_init(OCSD_ERR_SEV_INFO, 1);
-	//ocsd_def_errlog_init(0, 0);
+	ocsd_def_errlog_init(0, 0);
 
 #ifdef PMCTRACE_ETM_DEBUG
 #if 0

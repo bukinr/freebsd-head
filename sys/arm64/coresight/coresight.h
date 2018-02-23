@@ -55,6 +55,7 @@ struct coresight_event {
 	enum cs_dev_type src;
 	enum cs_dev_type sink;
 
+	int started;
 	int cycle;
 	uint32_t low;
 	uint32_t high;

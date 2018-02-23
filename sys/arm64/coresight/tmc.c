@@ -267,7 +267,6 @@ tmc_prepare(struct coresight_device *out, struct endpoint *endp,
 	printf("%s unit %d\n", __func__, device_get_unit(out->dev));
 
 	tmc_unlock(sc);
-
 	tmc_stop(out->dev);
 
 	do {
@@ -323,7 +322,6 @@ tmc_disable(struct coresight_device *out, struct coresight_event *event)
 
 	printf("%s\n", __func__);
 
-	tmc_stop(out->dev);
 }
 
 static int
@@ -339,7 +337,13 @@ tmc_enable(struct coresight_device *out, struct endpoint *endp,
 	//event->rrp = bus_read_4(sc->res, TMC_RRP);
 	//event->rwp = bus_read_4(sc->res, TMC_RWP);
 
-	tmc_start(out->dev);
+	if (event->started == 0) {
+		tmc_unlock(sc);
+		tmc_stop(out->dev);
+		tmc_prepare(out, endp, event);
+		tmc_start(out->dev);
+		event->started = 1;
+	}
 
 	return (0);
 }

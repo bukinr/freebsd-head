@@ -247,6 +247,7 @@ coresight_disable(int cpu, struct coresight_event *event)
 		if (cs_dev->dev_type == CORESIGHT_ETMV4 &&
 		    cs_dev->pdata->cpu == cpu) {
 
+			cs_dev->ops->source_ops->disable(cs_dev);
 			coresight_build_path(cs_dev, event, CORESIGHT_DISABLE);
 			break;
 		}
@@ -265,6 +266,7 @@ coresight_enable(int cpu, struct coresight_event *event)
 		    cs_dev->pdata->cpu == cpu) {
 
 			coresight_build_path(cs_dev, event, CORESIGHT_ENABLE);
+			cs_dev->ops->source_ops->enable(cs_dev, event);
 			break;
 		}
 	}

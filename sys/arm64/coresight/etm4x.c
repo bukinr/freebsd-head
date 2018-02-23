@@ -260,6 +260,7 @@ etm_enable(struct coresight_device *out, struct coresight_event *config)
 
 	printf("%s\n", __func__);
 
+	etm_prepare(out, config);
 	etm_start(out->dev);
 
 	return (0);
