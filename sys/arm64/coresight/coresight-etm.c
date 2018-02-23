@@ -47,6 +47,7 @@ extern struct coresight_device_list cs_devs;
 #define	CORESIGHT_DISABLE	0
 #define	CORESIGHT_ENABLE	1
 #define	CORESIGHT_PREPARE	2
+#define	CORESIGHT_READ		3
 
 static int
 coresight_build_path_one(struct coresight_device *out,
@@ -72,6 +73,9 @@ coresight_build_path_one(struct coresight_device *out,
 			break;
 		case CORESIGHT_PREPARE:
 			out->ops->sink_ops->prepare(out, out_endp, event);
+			break;
+		case CORESIGHT_READ:
+			out->ops->sink_ops->read(out, out_endp, event);
 			break;
 		};
 		break;
@@ -267,6 +271,24 @@ coresight_enable(int cpu, struct coresight_event *event)
 
 			coresight_build_path(cs_dev, event, CORESIGHT_ENABLE);
 			cs_dev->ops->source_ops->enable(cs_dev, event);
+			break;
+		}
+	}
+
+	return (0);
+}
+
+int
+coresight_read(int cpu, struct coresight_event *event)
+{
+	struct coresight_device *cs_dev;
+
+	TAILQ_FOREACH(cs_dev, &cs_devs, link) {
+		if (cs_dev->dev_type == CORESIGHT_ETMV4 &&
+		    cs_dev->pdata->cpu == cpu) {
+
+			coresight_build_path(cs_dev, event, CORESIGHT_READ);
+			//cs_dev->ops->source_ops->read(cs_dev, event);
 			break;
 		}
 	}

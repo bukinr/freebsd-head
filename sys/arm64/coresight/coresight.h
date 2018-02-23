@@ -57,6 +57,7 @@ struct coresight_event {
 
 	int started;
 	int cycle;
+	uint32_t offset;
 	uint32_t low;
 	uint32_t high;
 	uint32_t bufsize;
@@ -104,5 +105,6 @@ int coresight_disable_source(int cpu, struct coresight_event *);
 int coresight_enable(int cpu, struct coresight_event *event);
 int coresight_disable(int cpu, struct coresight_event *event);
 int coresight_prepare(int cpu, struct coresight_event *event);
+int coresight_read(int cpu, struct coresight_event *event);
 
 #endif /* !_ARM64_CORESIGHT_CORESIGHT_H_ */

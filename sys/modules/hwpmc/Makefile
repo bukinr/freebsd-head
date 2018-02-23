@@ -10,7 +10,7 @@ SRCS=	hwpmc_mod.c hwpmc_logging.c hwpmc_soft.c hwpmc_vm.c vnode_if.h
 
 .if ${MACHINE_CPUARCH} == "aarch64"
 SRCS+=  hwpmc_arm64.c hwpmc_arm64_md.c
-SRCS+=  hwpmc_etm.c device_if.h bus_if.h tmc_if.h etm_if.h
+SRCS+=  hwpmc_etm.c device_if.h bus_if.h
 .endif
 
 .if ${MACHINE_CPUARCH} == "amd64"

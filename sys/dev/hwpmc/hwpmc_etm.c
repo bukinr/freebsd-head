@@ -74,9 +74,6 @@ __FBSDID("$FreeBSD$");
 
 #include <dev/hwpmc/hwpmc_vm.h>
 
-#include "tmc_if.h"
-#include "etm_if.h"
-
 static MALLOC_DEFINE(M_ETM, "etm", "ETM driver");
 
 extern struct cdev *pmc_cdev[MAXCPU];
@@ -809,8 +806,9 @@ etm_read_trace(int cpu, int ri, struct pmc *pm,
 	struct coresight_event *event;
 	event = &etm_pc->event;
 
-	TMC_READ_TRACE(etm_pc->dev_etr, &cycle, &offset);
-	//coresight_read_sink(event);
+	coresight_read(cpu, event);
+	cycle = event->cycle;
+	offset = event->offset;
 
 	pm_etm = (struct pmc_md_etm_pmc *)&pm->pm_md;
 	etm_buf = &pm_etm->etm_buffers[cpu];

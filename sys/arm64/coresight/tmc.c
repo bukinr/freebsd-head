@@ -46,8 +46,6 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
 
-#include "tmc_if.h"
-
 #define CORESIGHT_ITCTRL        0xf00
 #define CORESIGHT_CLAIMSET      0xfa0
 #define CORESIGHT_CLAIMCLR      0xfa4
@@ -249,8 +247,22 @@ static int
 tmc_read(struct coresight_device *out, struct endpoint *endp,
     struct coresight_event *event)
 {
+	struct tmc_softc *sc;
+	uint32_t cur_ptr;
+
+	sc = device_get_softc(out->dev);
 
 	printf("%s\n", __func__);
+
+	if (bus_read_4(sc->res, TMC_STS) & STS_FULL) {
+		event->offset = 0;
+		event->cycle++;
+		tmc_stop(out->dev);
+		tmc_start(out->dev);
+	} else {
+		cur_ptr = bus_read_4(sc->res, TMC_RWP);
+		event->offset = (cur_ptr - event->low);
+	}
 
 	return (0);
 }
@@ -420,19 +432,6 @@ tmc_attach(device_t dev)
 }
 
 static int
-tmc_set_base(device_t dev, uint32_t low, uint32_t high)
-{
-	struct tmc_softc *sc;
- 
-	sc = device_get_softc(dev);
-
-	bus_write_4(sc->res, TMC_DBALO, low);
-	bus_write_4(sc->res, TMC_DBAHI, high);
-
-	return (0);
-}
-
-static int
 tmc_read_trace(device_t dev, uint64_t *cycle, uint64_t *offset)
 {
 	struct tmc_softc *sc;
@@ -484,14 +483,6 @@ static device_method_t tmc_methods[] = {
 	/* Device interface */
 	DEVMETHOD(device_probe,			tmc_probe),
 	DEVMETHOD(device_attach,		tmc_attach),
-
-	/* TMC interface */
-	DEVMETHOD(tmc_configure_etr,	tmc_configure_etr),
-	DEVMETHOD(tmc_configure_etf,	tmc_configure_etf),
-	DEVMETHOD(tmc_start,		tmc_start),
-	DEVMETHOD(tmc_stop,		tmc_stop),
-	DEVMETHOD(tmc_set_base,		tmc_set_base),
-	DEVMETHOD(tmc_read_trace,	tmc_read_trace),
 	DEVMETHOD_END
 };
 
