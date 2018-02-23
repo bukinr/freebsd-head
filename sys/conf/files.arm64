@@ -156,7 +156,6 @@ arm64/coresight/coresight-etm.c		standard
 arm64/coresight/coresight.c		standard
 arm64/coresight/cpu-debug.c		standard
 arm64/coresight/etm4x.c			standard
-arm64/coresight/etm_if.m		standard
 arm64/coresight/funnel.c		standard
 arm64/coresight/dynamic-replicator.c	standard
 arm64/coresight/tmc.c			standard

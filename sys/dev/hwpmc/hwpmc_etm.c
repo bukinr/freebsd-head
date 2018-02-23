@@ -399,13 +399,7 @@ etm_buffer_prepare(uint32_t cpu, struct pmc *pm,
 
 	event->src = CORESIGHT_ETMV4;
 	event->sink = CORESIGHT_ETR;
-	//coresight_enable(cpu, event);
-
 	coresight_prepare(cpu, event);
-	//coresight_enable(cpu, event);
-
-	//ETM_CONFIGURE(etm_pc->dev_etm, &config);
-	//TMC_START(etm_pc->dev_etr);
 
 	return (0);
 }
@@ -791,11 +785,7 @@ etm_trace_config(int cpu, int ri, struct pmc *pm,
 
 	event->src = CORESIGHT_ETMV4;
 	event->sink = CORESIGHT_ETR;
-	//coresight_enable(cpu, event);
-	//ETM_CONFIGURE(etm_pc->dev_etm, &config);
-
 	coresight_prepare(cpu, event);
-	//coresight_enable(cpu, event);
 
 	return (0);
 }
@@ -945,8 +935,6 @@ etm_start_pmc(int cpu, int ri)
 	event = &etm_pc->event;
 	coresight_enable_source(cpu, event);
 
-	//ETM_START(etm_pc->dev_etm);
-
 	return (0);
 }
 
@@ -978,8 +966,6 @@ etm_stop_pmc(int cpu, int ri)
 	struct coresight_event *event;
 	event = &etm_pc->event;
 	coresight_disable_source(cpu, event);
-
-	//ETM_STOP(etm_pc->dev_etm);
 
 	return (0);
 }
