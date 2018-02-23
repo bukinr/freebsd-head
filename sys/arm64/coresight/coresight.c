@@ -202,7 +202,7 @@ coresight_get_output_device(struct endpoint *endp, struct endpoint **out_endp)
 			//printf("endp->node %lx endp2->node %lx\n",
 			//    (uint64_t)endp->node, (uint64_t)endp2->node);
 			if (endp->their_node == endp2->my_node) {
-				printf("found\n");
+				//printf("found\n");
 				*out_endp = endp2;
 				return (cs_dev);
 			}

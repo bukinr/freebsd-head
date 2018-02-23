@@ -101,6 +101,9 @@ tmc_enable0(struct tmc_softc *sc)
 	if (bus_read_4(sc->res, TMC_CTL) & CTL_TRACECAPTEN)
 		return (-1);
 		
+	printf("%s: enabling. RRP %x, RWP %x\n", __func__,
+	    bus_read_4(sc->res, TMC_RRP), bus_read_4(sc->res, TMC_RWP));
+
 	/* Enable TMC */
 	bus_write_4(sc->res, TMC_CTL, CTL_TRACECAPTEN);
 	if ((bus_read_4(sc->res, TMC_CTL) & CTL_TRACECAPTEN) == 0)
@@ -146,6 +149,10 @@ tmc_stop(device_t dev)
 	reg = bus_read_4(sc->res, TMC_CTL);
 	reg &= ~CTL_TRACECAPTEN;
 	bus_write_4(sc->res, TMC_CTL, reg);
+
+	do {
+		reg = bus_read_4(sc->res, TMC_STS);
+	} while ((reg & STS_TMCREADY) == 1);
 
 	return (0);
 }
@@ -239,22 +246,96 @@ tmc_configure_etr(device_t dev, uint32_t low, uint32_t high,
 }
 
 static int
-tmc_enable(struct coresight_device *out, struct endpoint *endp)
+tmc_prepare(struct coresight_device *out, struct endpoint *endp,
+    struct coresight_event *event)
 {
+	struct tmc_softc *sc;
+	uint32_t reg;
 
-	printf("%s\n", __func__);
+	sc = device_get_softc(out->dev);
+
+	printf("%s unit %d\n", __func__, device_get_unit(out->dev));
+
+	tmc_unlock(sc);
+
+	tmc_stop(out->dev);
+
+	do {
+		reg = bus_read_4(sc->res, TMC_STS);
+	} while ((reg & STS_TMCREADY) == 0);
+
+	/* Configure TMC */
+	bus_write_4(sc->res, TMC_MODE, MODE_CIRCULAR_BUFFER);
+
+	reg = AXICTL_PROT_CTRL_BIT1;
+	reg |= AXICTL_WRBURSTLEN_16;
+
+	/*
+	 * SG operation is broken on DragonBoard 410c
+	 * reg |= AXICTL_SG_MODE;
+	 */
+
+	reg |= AXICTL_AXCACHE_OS;
+	bus_write_4(sc->res, TMC_AXICTL, reg);
+
+	reg = FFCR_EN_FMT | FFCR_EN_TI | FFCR_FON_FLIN |
+	    FFCR_FON_TRIG_EVT | FFCR_TRIGON_TRIGIN;
+	bus_write_4(sc->res, TMC_FFCR, reg);
+
+	bus_write_4(sc->res, TMC_TRG, 8);
+
+	bus_write_4(sc->res, TMC_DBALO, event->low);
+	bus_write_4(sc->res, TMC_DBAHI, event->high);
+	bus_write_4(sc->res, TMC_RSZ, event->bufsize / 4); // size in 32bit words
+
+	bus_write_4(sc->res, TMC_RRP, event->low);
+	bus_write_4(sc->res, TMC_RWP, event->low);
+
+	//printf("Writing to TMC_RRP %x TMC_RWP %x\n", event->rrp, event->rwp);
+	//bus_write_4(sc->res, TMC_RRP, event->rwp);
+	//bus_write_4(sc->res, TMC_RWP, event->rwp);
+	//printf("Reading TMC_RRP %x TMC_RWP %x\n", bus_read_4(sc->res, TMC_RRP), bus_read_4(sc->res, TMC_RWP));
+
+	reg = bus_read_4(sc->res, TMC_STS);
+	reg &= ~STS_FULL;
+	bus_write_4(sc->res, TMC_STS, reg);
+
+	//event->cycle = 0;
+
+	tmc_start(out->dev);
 
 	return (0);
 }
 
 static void
-tmc_disable(void)
+tmc_disable(struct coresight_device *out, struct coresight_event *event)
 {
 
 	printf("%s\n", __func__);
+
+	tmc_stop(out->dev);
+}
+
+static int
+tmc_enable(struct coresight_device *out, struct endpoint *endp,
+    struct coresight_event *event)
+{
+	struct tmc_softc *sc;
+ 
+	sc = device_get_softc(out->dev);
+
+	printf("%s\n", __func__);
+
+	//event->rrp = bus_read_4(sc->res, TMC_RRP);
+	//event->rwp = bus_read_4(sc->res, TMC_RWP);
+
+	tmc_start(out->dev);
+
+	return (0);
 }
 
 static struct coresight_ops_sink ops = {
+	.prepare = &tmc_prepare,
 	.enable = &tmc_enable,
 	.disable = &tmc_disable,
 };
@@ -384,8 +465,9 @@ tmc_read_trace(device_t dev, uint64_t *cycle, uint64_t *offset)
 		    bus_read_4(sc->res, TMC_CBUFLEVEL),
 		    bus_read_4(sc->res, TMC_LBUFLEVEL));
 	} else {
-		if (offset != NULL)
+		if (offset != NULL) {
 			*offset = (cur_ptr - base_ptr);
+		}
 	}
 
 	if (cycle != NULL)

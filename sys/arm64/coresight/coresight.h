@@ -46,19 +46,39 @@ struct coresight_device {
 
 TAILQ_HEAD(coresight_device_list, coresight_device);
 
+#define	ETM_N_COMPRATOR		16
+
+struct coresight_event {
+	uint64_t addr[ETM_N_COMPRATOR];
+	uint32_t naddr;
+	uint8_t excp_level;
+	enum cs_dev_type src;
+	enum cs_dev_type sink;
+
+	int cycle;
+	uint32_t low;
+	uint32_t high;
+	uint32_t bufsize;
+	uint32_t rrp;
+	uint32_t rwp;
+};
+
 struct coresight_ops_sink {
-	int (*enable)(struct coresight_device *out, struct endpoint *endp);
-	void (*disable)(void);
+	int (*prepare)(struct coresight_device *out, struct endpoint *endp, struct coresight_event *event);
+	int (*enable)(struct coresight_device *out, struct endpoint *endp, struct coresight_event *event);
+	void (*disable)(struct coresight_device *out, struct coresight_event *event);
 };
 
 struct coresight_ops_link {
+	int (*prepare)(struct coresight_device *out, struct endpoint *endp, struct coresight_event *event);
 	int (*enable)(struct coresight_device *out, struct endpoint *endp);
-	void (*disable)(void);
+	void (*disable)(struct coresight_device *out);
 };
 
 struct coresight_ops_source {
-	int (*enable)(void *);
-	int (*disable)(void);
+	int (*prepare)(struct coresight_device *out, struct coresight_event *event);
+	int (*enable)(struct coresight_device *out, struct coresight_event *event);
+	int (*disable)(struct coresight_device *out);
 };
 
 struct coresight_ops {
@@ -67,26 +87,20 @@ struct coresight_ops {
 	struct coresight_ops_source *source_ops;
 };
 
-#define	ETM_N_COMPRATOR		16
 struct etm_config {
 	uint64_t addr[ETM_N_COMPRATOR];
 	uint32_t naddr;
 	uint8_t excp_level;
 };
 
-struct coresight_event {
-	uint64_t addr[ETM_N_COMPRATOR];
-	uint32_t naddr;
-	uint8_t excp_level;
-	enum cs_dev_type src;
-	enum cs_dev_type sink;
-};
-
 struct coresight_platform_data * coresight_get_platform_data(device_t dev);
 struct endpoint * coresight_get_output_endpoint(struct coresight_platform_data *pdata);
 struct coresight_device * coresight_get_output_device(struct endpoint *endp, struct endpoint **);
 int coresight_register(struct coresight_desc *desc);
-int coresight_enable_etmv4(int cpu, struct coresight_event *);
+int coresight_enable_source(int cpu, struct coresight_event *);
+int coresight_disable_source(int cpu, struct coresight_event *);
 int coresight_enable(int cpu, struct coresight_event *event);
+int coresight_disable(int cpu, struct coresight_event *event);
+int coresight_prepare(int cpu, struct coresight_event *event);
 
 #endif /* !_ARM64_CORESIGHT_CORESIGHT_H_ */

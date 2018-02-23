@@ -95,6 +95,8 @@ etm_print_version(struct etm_softc *sc)
 
 	isb();
 
+	return;
+
 	reg = bus_read_4(sc->res, TRCIDR(1));
 	printf("ETM Version: %d.%d\n",
 	    (reg & TRCIDR1_TRCARCHMAJ_M) >> TRCIDR1_TRCARCHMAJ_S,
@@ -117,6 +119,7 @@ etm_start(device_t dev)
 	/* Wait for an IDLE bit to be LOW */
 	do {
 		reg = bus_read_4(sc->res, TRCSTATR);
+		//printf(".");
 	} while ((reg & TRCSTATR_IDLE) == 1);
 
 	if ((bus_read_4(sc->res, TRCPRGCTLR) & 1) == 0)
@@ -152,17 +155,12 @@ etm_configure(device_t dev, struct etm_config *config)
 	struct etm_softc *sc;
 	uint32_t reg;
 
-	printf("%s: unit %d\n", __func__, device_get_unit(dev));
-	
+	printf("%s\n", __func__);
+
 	sc = device_get_softc(dev);
 
-	//device_t out_dev;
-	//out_dev = coresight_get_output_device(sc->pdata);
-	//printf("out_dev %lx\n", (uint64_t)out_dev);
-
 	etm_print_version(sc);
-
-	etm_stop(dev);
+	//etm_stop(dev);
 
 	/* Configure ETM */
 
@@ -204,7 +202,114 @@ etm_configure(device_t dev, struct etm_config *config)
 	if (config->excp_level > 2)
 		return (-1);
 
-	printf("%s: Configure exception level %d\n", __func__, config->excp_level);
+	//printf("%s: Configure exception level %d\n", __func__, config->excp_level);
+
+	reg |= TRCVICTLR_EXLEVEL_NS_M;
+	reg &= ~TRCVICTLR_EXLEVEL_NS(config->excp_level);
+	reg |= TRCVICTLR_EXLEVEL_S_M;
+	reg &= ~TRCVICTLR_EXLEVEL_S(config->excp_level);
+	bus_write_4(sc->res, TRCVICTLR, reg);
+
+	bus_write_4(sc->res, TRCRSCTLR(0), (5 << 16) | (1 << 0));
+
+	int i;
+	for (i = 0; i < config->naddr * 2; i++) {
+		printf("configure range %d, address %lx\n", i, config->addr[i]);
+		bus_write_8(sc->res, TRCACVR(i), config->addr[i]);
+
+		reg = 0;
+		/* Secure state */
+		reg |= TRCACATR_EXLEVEL_S_M;
+		reg &= ~TRCACATR_EXLEVEL_S(config->excp_level);
+		/* Non-secure state */
+		reg |= TRCACATR_EXLEVEL_NS_M;
+		reg &= ~TRCACATR_EXLEVEL_NS(config->excp_level);
+		bus_write_4(sc->res, TRCACATR(i), reg);
+	}
+
+	/* No address filtering for ViewData. */
+	bus_write_4(sc->res, TRCVDARCCTLR, 0);
+
+	/* Clear the STATUS bit to zero */
+	bus_write_4(sc->res, TRCSSCSR(0), 0);
+
+	/* No address range filtering for ViewInst. */
+	if (config->naddr == 0)
+		bus_write_4(sc->res, TRCVIIECTLR, 0);
+	else
+		bus_write_4(sc->res, TRCVIIECTLR, (1 << 0));
+
+	/* No start or stop points for ViewInst. */
+	bus_write_4(sc->res, TRCVISSCTLR, 0);
+
+	/* Disable ViewData */
+	bus_write_4(sc->res, TRCVDCTLR, 0);
+
+	/* No address filtering for ViewData. */
+	bus_write_4(sc->res, TRCVDSACCTLR, 0);
+
+	return (0);
+};
+
+static int
+etm_prepare(struct coresight_device *out, struct coresight_event *config)
+{
+	struct etm_softc *sc;
+	uint32_t reg;
+
+	printf("%s\n", __func__);
+
+	sc = device_get_softc(out->dev);
+
+	//device_t out_dev;
+	//out_dev = coresight_get_output_device(sc->pdata);
+	//printf("out_dev %lx\n", (uint64_t)out_dev);
+
+	etm_print_version(sc);
+
+	//etm_stop(out->dev);
+
+	/* Configure ETM */
+
+	/* Enable the return stack, global timestamping, Context ID, and Virtual context identifier tracing. */
+	//reg = TRCCONFIGR_RS | TRCCONFIGR_TS | TRCCONFIGR_CID | TRCCONFIGR_VMID;
+	//reg = 0x18C1;
+	//reg = 0x00031FC7; /* Enable all the options except cycle counting and branch broadcast. */
+
+	reg = TRCCONFIGR_RS | TRCCONFIGR_CID | TRCCONFIGR_VMID;
+	reg |= TRCCONFIGR_COND_ALL;
+	reg |= TRCCONFIGR_INSTP0_LDRSTR;
+	reg = 0x00031FC7; /* Enable all the options except cycle counting and branch broadcast. */
+	bus_write_4(sc->res, TRCCONFIGR, reg);
+
+	/* Disable all event tracing. */
+	bus_write_4(sc->res, TRCEVENTCTL0R, 0);
+	bus_write_4(sc->res, TRCEVENTCTL1R, 0);
+
+	/* Disable stalling, if implemented. */
+	bus_write_4(sc->res, TRCSTALLCTLR, 0);
+
+	/* Enable trace synchronization every 4096 bytes of trace. */
+	bus_write_4(sc->res, TRCSYNCPR, 0xC);
+
+	/* Set a value for the trace ID, with bit[0]=0. */
+	bus_write_4(sc->res, TRCTRACEIDR, 0x10);
+
+	/*
+	 * Disable the timestamp event. The trace unit still generates
+	 * timestamps due to other reasons such as trace synchronization.
+	 */
+	bus_write_4(sc->res, TRCTSCTLR, 0);
+
+	/* Enable ViewInst to trace everything, with the start/stop logic started. */
+	reg = 0x201;
+	//reg = TRCVICTLR_SSSTATUS;
+	//reg |= 1;
+
+	if (config->excp_level > 2)
+		return (-1);
+
+	//printf("%s: Configure exception level %d\n", __func__, config->excp_level);
 
 	reg |= TRCVICTLR_EXLEVEL_NS_M;
 	reg &= ~TRCVICTLR_EXLEVEL_NS(config->excp_level);
@@ -254,27 +359,29 @@ etm_configure(device_t dev, struct etm_config *config)
 }
 
 static int
-etm_enable(void *arg)
+etm_enable(struct coresight_device *out, struct coresight_event *config)
 {
-	struct etm_config *config;
-
-	config = arg;
 
 	printf("%s\n", __func__);
+
+	etm_start(out->dev);
 
 	return (0);
 }
 
 static int
-etm_disable(void)
+etm_disable(struct coresight_device *out)
 {
 
 	printf("%s\n", __func__);
+
+	etm_stop(out->dev);
 
 	return (0);
 }
 
 static struct coresight_ops_source ops = {
+	.prepare = &etm_prepare,
 	.enable = &etm_enable,
 	.disable = &etm_disable,
 };

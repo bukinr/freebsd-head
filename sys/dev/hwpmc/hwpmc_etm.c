@@ -131,6 +131,7 @@ struct etm_cpu {
 	device_t			dev_etr;
 	device_t			dev_etf;
 	device_t			dev_etm;
+	struct coresight_event		event;
 };
 
 static struct etm_cpu **etm_pcpu;
@@ -314,8 +315,11 @@ etm_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	uint32_t phys_lo;
 	uint32_t phys_hi;
 	int error;
+	struct coresight_event *event;
 
 	etm_pc = etm_pcpu[cpu];
+	event = &etm_pc->event;
+
 #if 0
 	if ((etm_pc->l0_ecx & CPUETM_TOPA) == 0)
 		return (ENXIO);	/* We rely on TOPA support */
@@ -335,14 +339,23 @@ etm_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	phys_lo = etm_buf->phys_base & 0xffffffff;
 	phys_hi = (etm_buf->phys_base >> 32) & 0xffffffff;
 	config.naddr = 0;
-	TMC_CONFIGURE_ETR(etm_pc->dev_etr, phys_lo, phys_hi, bufsize);
+	event->naddr = 0;
+
+	event->low = phys_lo;
+	event->high = phys_hi;
+	event->rrp = phys_lo;
+	event->rwp = phys_lo;
+
+	//TMC_CONFIGURE_ETR(etm_pc->dev_etr, phys_lo, phys_hi, bufsize);
 
 	mode = PMC_TO_MODE(pm);
-	if (mode == PMC_MODE_ST)
+	if (mode == PMC_MODE_ST) {
+		event->excp_level = 1;
 		config.excp_level = 1;
-	else if (mode == PMC_MODE_TT)
+	} else if (mode == PMC_MODE_TT) {
+		event->excp_level = 0;
 		config.excp_level = 0;
-	else {
+	} else {
 		dprintf("%s: unsupported mode %d\n", __func__, mode);
 		return (-1);
 	}
@@ -384,12 +397,15 @@ etm_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	 */
 #endif
 
-	struct coresight_event event;
-	event.src = CORESIGHT_ETMV4;
-	event.sink = CORESIGHT_ETR;
-	coresight_enable_etmv4(cpu, &event);
-	ETM_CONFIGURE(etm_pc->dev_etm, &config);
-	TMC_START(etm_pc->dev_etr);
+	event->src = CORESIGHT_ETMV4;
+	event->sink = CORESIGHT_ETR;
+	//coresight_enable(cpu, event);
+
+	coresight_prepare(cpu, event);
+	//coresight_enable(cpu, event);
+
+	//ETM_CONFIGURE(etm_pc->dev_etm, &config);
+	//TMC_START(etm_pc->dev_etr);
 
 	return (0);
 }
@@ -734,10 +750,12 @@ etm_trace_config(int cpu, int ri, struct pmc *pm,
     uint64_t *ranges, uint32_t nranges)
 {
 	struct etm_cpu *etm_pc;
+	struct coresight_event *event;
 
 	dprintf("%s\n", __func__);
 
 	etm_pc = etm_pcpu[cpu];
+	event = &etm_pc->event;
 
 	KASSERT(cpu == PCPU_GET(cpuid), ("Configuring wrong CPU\n"));
 
@@ -755,22 +773,29 @@ etm_trace_config(int cpu, int ri, struct pmc *pm,
 	int i;
 
 	for (i = 0; i < nranges * 2; i++) {
+		event->addr[i] = ranges[i];
 		config.addr[i] = ranges[i];
 	}
 	config.naddr = nranges;
+	event->naddr = nranges;
 
 	enum pmc_mode mode;
 	mode = PMC_TO_MODE(pm);
-	if (mode == PMC_MODE_ST)
+	if (mode == PMC_MODE_ST) {
+		event->excp_level = 1;
 		config.excp_level = 1;
-	else
+	} else {
+		event->excp_level = 0;
 		config.excp_level = 0;
+	}
 
-	struct coresight_event event;
-	event.src = CORESIGHT_ETMV4;
-	event.sink = CORESIGHT_ETR;
-	coresight_enable_etmv4(cpu, &event);
-	ETM_CONFIGURE(etm_pc->dev_etm, &config);
+	event->src = CORESIGHT_ETMV4;
+	event->sink = CORESIGHT_ETR;
+	//coresight_enable(cpu, event);
+	//ETM_CONFIGURE(etm_pc->dev_etm, &config);
+
+	coresight_prepare(cpu, event);
+	//coresight_enable(cpu, event);
 
 	return (0);
 }
@@ -794,8 +819,11 @@ etm_read_trace(int cpu, int ri, struct pmc *pm,
 	etm_pc = etm_pcpu[cpu];
 	etm_pc->pm_mmap = pm;
 
+	struct coresight_event *event;
+	event = &etm_pc->event;
+
 	TMC_READ_TRACE(etm_pc->dev_etr, &cycle, &offset);
-	TMC_READ_TRACE(etm_pc->dev_etf, NULL, NULL);
+	//TMC_READ_TRACE(etm_pc->dev_etf, NULL, NULL);
 
 	pm_etm = (struct pmc_md_etm_pmc *)&pm->pm_md;
 	etm_buf = &pm_etm->etm_buffers[cpu];
@@ -873,7 +901,11 @@ etm_release_pmc(int cpu, int ri, struct pmc *pm)
 	    __func__, cpu, rdmsr(MSR_IA32_RTIT_OUTPUT_MASK_ETMRS));
 #endif
 
-	TMC_STOP(etm_pc->dev_etr);
+	struct coresight_event *event;
+	event = &etm_pc->event;
+
+	coresight_disable(cpu, event);
+	//TMC_STOP(etm_pc->dev_etr);
 
 	mode = PMC_TO_MODE(pm);
 	if (mode == PMC_MODE_TT)
@@ -887,6 +919,8 @@ etm_release_pmc(int cpu, int ri, struct pmc *pm)
 
 	return (0);
 }
+
+//int flag = 0;
 
 static int
 etm_start_pmc(int cpu, int ri)
@@ -906,7 +940,12 @@ etm_start_pmc(int cpu, int ri)
 	KASSERT(ri == 0, ("[etm,%d] illegal row-index %d", __LINE__, ri));
 
 	etm_save_restore(etm_pc, false);
-	ETM_START(etm_pc->dev_etm);
+
+	struct coresight_event *event;
+	event = &etm_pc->event;
+	coresight_enable_source(cpu, event);
+
+	//ETM_START(etm_pc->dev_etm);
 
 	return (0);
 }
@@ -935,7 +974,12 @@ etm_stop_pmc(int cpu, int ri)
 	 * This operation will disable tracing.
 	 */
 	etm_save_restore(etm_pc, true);
-	ETM_STOP(etm_pc->dev_etm);
+
+	struct coresight_event *event;
+	event = &etm_pc->event;
+	coresight_disable_source(cpu, event);
+
+	//ETM_STOP(etm_pc->dev_etm);
 
 	return (0);
 }

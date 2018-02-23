@@ -394,7 +394,7 @@ etm_process_chunk(struct mtrace_data *mdata __unused, uint64_t base,
 	int dp_ret;
 	int ret;
 
-	dprintf("%s\n", __func__);
+	dprintf("%s: start %lx end %lx\n", __func__, start, end);
 
 	bytes_this_time = 0;
 	block_index = 0;
@@ -429,6 +429,8 @@ etm_process_chunk(struct mtrace_data *mdata __unused, uint64_t base,
 	return (0);
 }
 
+static int etm_init(struct trace_cpu *tc);
+
 static int
 etm_process(struct trace_cpu *tc, struct pmcstat_process *pp,
     uint32_t cpu, uint32_t cycle, uint64_t offset,
@@ -439,6 +441,8 @@ etm_process(struct trace_cpu *tc, struct pmcstat_process *pp,
 	mdata = &tc->mdata;
 	mdata->pp = pp;
 	mdata->flags = flags;
+
+	etm_init(tc);
 
 	dprintf("%s: cpu %d, cycle %d, offset %ld, tc->base %lx, *tc->base %lx\n",
 	    __func__, cpu, cycle, offset, (uint64_t)tc->base, *(uint64_t *)tc->base);
@@ -477,13 +481,15 @@ etm_init(struct trace_cpu *tc)
 	int ret;
 
 	ocsd_def_errlog_init(OCSD_ERR_SEV_INFO, 1);
+	//ocsd_def_errlog_init(0, 0);
 
 #ifdef PMCTRACE_ETM_DEBUG
+#if 0
 	ret = ocsd_def_errlog_config_output(C_API_MSGLOGOUT_FLG_FILE |
 	    C_API_MSGLOGOUT_FLG_STDOUT, "c_api_test.log");
 	if (ret != OCSD_OK)
 		return (-1);
-	}
+#endif
 #endif
 
 	dcdtree_handle = ocsd_create_dcd_tree(OCSD_TRC_SRC_FRAME_FORMATTED,

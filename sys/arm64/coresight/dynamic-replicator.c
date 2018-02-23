@@ -82,7 +82,7 @@ replicator_enable(struct coresight_device *out, struct endpoint *endp)
 	uint8_t val0, val1;
 	int outport;
 
-	printf("%s: port reg %d\n", __func__, endp->reg);
+	//printf("%s: port reg %d\n", __func__, endp->reg);
 
 	sc = device_get_softc(out->dev);
 
@@ -109,14 +109,24 @@ replicator_enable(struct coresight_device *out, struct endpoint *endp)
 	return (0);
 }
 
+static int
+replicator_prepare(struct coresight_device *out, struct endpoint *endp, struct coresight_event *event)
+{
+
+	replicator_enable(out, endp);
+
+	return (0);
+}
+
 static void
-replicator_disable(void)
+replicator_disable(struct coresight_device *out)
 {
 
 	printf("%s\n", __func__);
 }
 
 static struct coresight_ops_link ops = {
+	.prepare = &replicator_prepare,
 	.enable = &replicator_enable,
 	.disable = &replicator_disable,
 };
