@@ -38,8 +38,10 @@ local drawer = require("drawer")
 
 local menu = {}
 
-local function OnOff(str, b)
-	if b then
+local drawn_menu
+
+local function OnOff(str, value)
+	if value then
 		return str .. color.escapef(color.GREEN) .. "On" ..
 		    color.escapef(color.WHITE)
 	else
@@ -80,8 +82,7 @@ menu.handlers = {
 		end
 	end,
 	[core.MENU_SUBMENU] = function(_, entry)
-		-- recurse
-		return menu.run(entry.submenu)
+		menu.process(entry.submenu)
 	end,
 	[core.MENU_RETURN] = function(_, entry)
 		-- allow entry to have a function/side effect
@@ -159,7 +160,7 @@ menu.boot_options = {
 			name = "Load System " .. color.highlight("D") ..
 			    "efaults",
 			func = core.setDefaults,
-			alias = {"d", "D"}
+			alias = {"d", "D"},
 		},
 		{
 			entry_type = core.MENU_SEPARATOR,
@@ -177,7 +178,7 @@ menu.boot_options = {
 				    "CPI       :", core.acpi)
 			end,
 			func = core.setACPI,
-			alias = {"a", "A"}
+			alias = {"a", "A"},
 		},
 		-- safe mode
 		{
@@ -187,7 +188,7 @@ menu.boot_options = {
 				    "ode  :", core.sm)
 			end,
 			func = core.setSafeMode,
-			alias = {"m", "M"}
+			alias = {"m", "M"},
 		},
 		-- single user
 		{
@@ -197,7 +198,7 @@ menu.boot_options = {
 				    "ingle user:", core.su)
 			end,
 			func = core.setSingleUser,
-			alias = {"s", "S"}
+			alias = {"s", "S"},
 		},
 		-- verbose boot
 		{
@@ -207,7 +208,7 @@ menu.boot_options = {
 				    "erbose    :", core.verbose)
 			end,
 			func = core.setVerbose,
-			alias = {"v", "V"}
+			alias = {"v", "V"},
 		},
 	},
 }
@@ -249,7 +250,7 @@ menu.welcome = {
 				core.setSingleUser(false)
 				core.boot()
 			end,
-			alias = {"b", "B"}
+			alias = {"b", "B"},
 		},
 		-- boot single user
 		{
@@ -262,7 +263,7 @@ menu.welcome = {
 				core.setSingleUser(true)
 				core.boot()
 			end,
-			alias = {"s", "S"}
+			alias = {"s", "S"},
 		},
 		-- escape to interpreter
 		{
@@ -271,7 +272,7 @@ menu.welcome = {
 			func = function()
 				loader.setenv("autoboot_delay", "NO")
 			end,
-			alias = {core.KEYSTR_ESCAPE}
+			alias = {core.KEYSTR_ESCAPE},
 		},
 		-- reboot
 		{
@@ -280,7 +281,7 @@ menu.welcome = {
 			func = function()
 				loader.perform("reboot")
 			end,
-			alias = {"r", "R"}
+			alias = {"r", "R"},
 		},
 		{
 			entry_type = core.MENU_SEPARATOR,
@@ -315,16 +316,16 @@ menu.welcome = {
 				    #all_choices .. ")"
 			end,
 			func = function(_, choice, _)
-				config.selectkernel(choice)
+				config.selectKernel(choice)
 			end,
-			alias = {"k", "K"}
+			alias = {"k", "K"},
 		},
 		-- boot options
 		{
 			entry_type = core.MENU_SUBMENU,
 			name = "Boot " .. color.highlight("O") .. "ptions",
 			submenu = menu.boot_options,
-			alias = {"o", "O"}
+			alias = {"o", "O"},
 		},
 		-- boot environments
 		{
@@ -341,36 +342,35 @@ menu.welcome = {
 }
 
 menu.default = menu.welcome
+-- current_alias_table will be used to keep our alias table consistent across
+-- screen redraws, instead of relying on whatever triggered the redraw to update
+-- the local alias_table in menu.process.
+menu.current_alias_table = {}
 
-function menu.run(m)
-
-	if menu.skip() then
-		core.autoboot()
-		return false
-	end
-
-	if m == nil then
-		m = menu.default
-	end
-
-	-- redraw screen
+function menu.draw(menudef)
+	-- Clear the screen, reset the cursor, then draw
 	screen.clear()
 	screen.defcursor()
-	local alias_table = drawer.drawscreen(m)
+	menu.current_alias_table = drawer.drawscreen(menudef)
+	drawn_menu = menudef
+end
 
-	-- Might return nil, that's ok
-	local autoboot_key;
-	if m == menu.default then
-		autoboot_key = menu.autoboot()
+-- 'keypress' allows the caller to indicate that a key has been pressed that we
+-- should process as our initial input.
+function menu.process(menudef, keypress)
+	assert(menudef ~= nil)
+
+	if drawn_menu ~= menudef then
+		menu.draw(menudef)
 	end
-	local cont = true
-	while cont do
-		local key = autoboot_key or io.getchar()
-		autoboot_key = nil
+
+	while true do
+		local key = keypress or io.getchar()
+		keypress = nil
 
 		-- Special key behaviors
 		if (key == core.KEY_BACKSPACE or key == core.KEY_DELETE) and
-		    m ~= menu.default then
+		    menudef ~= menu.default then
 			break
 		elseif key == core.KEY_ENTER then
 			core.boot()
@@ -380,39 +380,44 @@ function menu.run(m)
 		key = string.char(key)
 		-- check to see if key is an alias
 		local sel_entry = nil
-		for k, v in pairs(alias_table) do
+		for k, v in pairs(menu.current_alias_table) do
 			if key == k then
 				sel_entry = v
+				break
 			end
 		end
 
 		-- if we have an alias do the assigned action:
 		if sel_entry ~= nil then
-			-- Get menu handler
 			local handler = menu.handlers[sel_entry.entry_type]
-			if handler ~= nil then
-				-- The handler's return value indicates whether
-				-- we need to exit this menu. An omitted return
-				-- value means "continue" by default.
-				cont = handler(m, sel_entry)
-				if cont == nil then
-					cont = true
-				end
+			assert(handler ~= nil)
+			-- The handler's return value indicates if we
+			-- need to exit this menu.  An omitted or true
+			-- return value means to continue.
+			if handler(menudef, sel_entry) == false then
+				return
 			end
-			-- if we got an alias key the screen is out of date:
-			screen.clear()
-			screen.defcursor()
-			alias_table = drawer.drawscreen(m)
+			-- If we got an alias key the screen is out of date...
+			-- redraw it.
+			menu.draw(menudef)
 		end
 	end
+end
 
-	if m == menu.default then
-		screen.defcursor()
-		print("Exiting menu!")
-		return false
+function menu.run()
+	if menu.skip() then
+		core.autoboot()
+		return
 	end
 
-	return true
+	menu.draw(menu.default)
+	local autoboot_key = menu.autoboot()
+
+	menu.process(menu.default, autoboot_key)
+	drawn_menu = nil
+
+	screen.defcursor()
+	print("Exiting menu!")
 end
 
 function menu.skip()

@@ -33,96 +33,154 @@ local config = {}
 
 local modules = {}
 
-local pattern_table
 local carousel_choices = {}
 
-pattern_table = {
-	[1] = {
+local pattern_table = {
+	{
 		str = "^%s*(#.*)",
-		process = function(_, _)  end
+		process = function(_, _)  end,
 	},
 	--  module_load="value"
-	[2] = {
+	{
 		str = "^%s*([%w_]+)_load%s*=%s*\"([%w%s%p]-)\"%s*(.*)",
 		process = function(k, v)
 			if modules[k] == nil then
 				modules[k] = {}
 			end
 			modules[k].load = v:upper()
-		end
+		end,
 	},
 	--  module_name="value"
-	[3] = {
+	{
 		str = "^%s*([%w_]+)_name%s*=%s*\"([%w%s%p]-)\"%s*(.*)",
 		process = function(k, v)
 			config.setKey(k, "name", v)
-		end
+		end,
 	},
 	--  module_type="value"
-	[4] = {
+	{
 		str = "^%s*([%w_]+)_type%s*=%s*\"([%w%s%p]-)\"%s*(.*)",
 		process = function(k, v)
 			config.setKey(k, "type", v)
-		end
+		end,
 	},
 	--  module_flags="value"
-	[5] = {
+	{
 		str = "^%s*([%w_]+)_flags%s*=%s*\"([%w%s%p]-)\"%s*(.*)",
 		process = function(k, v)
 			config.setKey(k, "flags", v)
-		end
+		end,
 	},
 	--  module_before="value"
-	[6] = {
+	{
 		str = "^%s*([%w_]+)_before%s*=%s*\"([%w%s%p]-)\"%s*(.*)",
 		process = function(k, v)
 			config.setKey(k, "before", v)
-		end
+		end,
 	},
 	--  module_after="value"
-	[7] = {
+	{
 		str = "^%s*([%w_]+)_after%s*=%s*\"([%w%s%p]-)\"%s*(.*)",
 		process = function(k, v)
 			config.setKey(k, "after", v)
-		end
+		end,
 	},
 	--  module_error="value"
-	[8] = {
+	{
 		str = "^%s*([%w_]+)_error%s*=%s*\"([%w%s%p]-)\"%s*(.*)",
 		process = function(k, v)
 			config.setKey(k, "error", v)
-		end
+		end,
 	},
 	--  exec="command"
-	[9] = {
+	{
 		str = "^%s*exec%s*=%s*\"([%w%s%p]-)\"%s*(.*)",
 		process = function(k, _)
 			if loader.perform(k) ~= 0 then
 				print("Failed to exec '" .. k .. "'")
 			end
-		end
+		end,
 	},
 	--  env_var="value"
-	[10] = {
+	{
 		str = "^%s*([%w%p]+)%s*=%s*\"([%w%s%p]-)\"%s*(.*)",
 		process = function(k, v)
 			if config.setenv(k, v) ~= 0 then
 				print("Failed to set '" .. k ..
 				    "' with value: " .. v .. "")
 			end
-		end
+		end,
 	},
 	--  env_var=num
-	[11] = {
+	{
 		str = "^%s*([%w%p]+)%s*=%s*(%d+)%s*(.*)",
 		process = function(k, v)
 			if config.setenv(k, v) ~= 0 then
 				print("Failed to set '" .. k ..
 				    "' with value: " .. v .. "")
 			end
-		end
-	}
+		end,
+	},
 }
+
+local function readFile(name, silent)
+	local f = io.open(name)
+	if f == nil then
+		if not silent then
+			print("Failed to open config: '" .. name .. "'")
+		end
+		return nil
+	end
+
+	local text, _ = io.read(f)
+	-- We might have read in the whole file, this won't be needed any more.
+	io.close(f)
+
+	if text == nil then
+		if not silent then
+			print("Failed to read config: '" .. name .. "'")
+		end
+		return nil
+	end
+	return text
+end
+
+local function checkNextboot()
+	local nextboot_file = loader.getenv("nextboot_file")
+	if nextboot_file == nil then
+		return
+	end
+
+	local text = readFile(nextboot_file, true)
+	if text == nil then
+		return
+	end
+
+	if text:match("^nextboot_enable=\"NO\"") ~= nil then
+		-- We're done; nextboot is not enabled
+		return
+	end
+
+	if not config.parse(text) then
+		print("Failed to parse nextboot configuration: '" ..
+		    nextboot_file .. "'")
+	end
+
+	-- Attempt to rewrite the first line and only the first line of the
+	-- nextboot_file. We overwrite it with nextboot_enable="NO", then
+	-- check for that on load.
+	-- It's worth noting that this won't work on every filesystem, so we
+	-- won't do anything notable if we have any errors in this process.
+	local nfile = io.open(nextboot_file, 'w')
+	if nfile ~= nil then
+		-- We need the trailing space here to account for the extra
+		-- character taken up by the string nextboot_enable="YES"
+		-- Or new end quotation mark lands on the S, and we want to
+		-- rewrite the entirety of the first line.
+		io.write(nfile, "nextboot_enable=\"NO\" ")
+		io.close(nfile)
+	end
+end
 
 -- Module exports
 -- Which variables we changed
@@ -170,22 +228,25 @@ function config.restoreEnv()
 	config.env_restore = {}
 end
 
-function config.setenv(k, v)
+function config.setenv(key, value)
 	-- Track the original value for this if we haven't already
-	if config.env_restore[k] == nil then
-		config.env_restore[k] = {value = loader.getenv(k)}
+	if config.env_restore[key] == nil then
+		config.env_restore[key] = {value = loader.getenv(key)}
 	end
 
-	config.env_changed[k] = v
+	config.env_changed[key] = value
 
-	return loader.setenv(k, v)
+	return loader.setenv(key, value)
 end
 
-function config.setKey(k, n, v)
-	if modules[k] == nil then
-		modules[k] = {}
+-- name here is one of 'name', 'type', flags', 'before', 'after', or 'error.'
+-- These are set from lines in loader.conf(5): ${key}_${name}="${value}" where
+-- ${key} is a module name.
+function config.setKey(key, name, value)
+	if modules[key] == nil then
+		modules[key] = {}
 	end
-	modules[k][n] = v
+	modules[key][name] = value
 end
 
 function config.lsModules()
@@ -197,11 +258,11 @@ function config.lsModules()
 end
 
 
-function config.isValidComment(c)
-	if c ~= nil then
-		local s = c:match("^%s*#.*")
+function config.isValidComment(line)
+	if line ~= nil then
+		local s = line:match("^%s*#.*")
 		if s == nil then
-			s = c:match("^%s*$")
+			s = line:match("^%s*$")
 		end
 		if s == nil then
 			return false
@@ -272,28 +333,23 @@ function config.loadmod(mod, silent)
 	return status
 end
 
--- silent runs will not return false if we fail to open the file
-function config.parse(name, silent)
+function config.processFile(name, silent)
 	if silent == nil then
 		silent = false
 	end
-	local f = io.open(name)
-	if f == nil then
-		if not silent then
-			print("Failed to open config: '" .. name .. "'")
-		end
-		return silent
-	end
 
-	local text, _ = io.read(f)
-
+	local text = readFile(name, silent)
 	if text == nil then
-		if not silent then
-			print("Failed to read config: '" .. name .. "'")
-		end
-		return silent
+		return not silent
 	end
 
+	return config.parse(text)
+end
+
+-- silent runs will not return false if we fail to open the file
+-- check_and_halt, if it's set, will be executed on the full text of the config
+-- file. If it returns false, we are to halt immediately.
+function config.parse(text)
 	local n = 1
 	local status = true
 
@@ -332,11 +388,11 @@ end
 
 -- other_kernel is optionally the name of a kernel to load, if not the default
 -- or autoloaded default from the module_path
-function config.loadkernel(other_kernel)
+function config.loadKernel(other_kernel)
 	local flags = loader.getenv("kernel_options") or ""
 	local kernel = other_kernel or loader.getenv("kernel")
 
-	local function try_load(names)
+	local function tryLoad(names)
 		for name in names:gmatch("([^;]+)%s*;?") do
 			local r = loader.perform("load " .. flags ..
 			    " " .. name)
@@ -347,7 +403,7 @@ function config.loadkernel(other_kernel)
 		return nil
 	end
 
-	local function load_bootfile()
+	local function loadBootfile()
 		local bootfile = loader.getenv("bootfile")
 
 		-- append default kernel name
@@ -357,12 +413,12 @@ function config.loadkernel(other_kernel)
 			bootfile = bootfile .. ";kernel"
 		end
 
-		return try_load(bootfile)
+		return tryLoad(bootfile)
 	end
 
 	-- kernel not set, try load from default module_path
 	if kernel == nil then
-		local res = load_bootfile()
+		local res = loadBootfile()
 
 		if res ~= nil then
 			-- Default kernel is loaded
@@ -387,7 +443,7 @@ function config.loadkernel(other_kernel)
 
 		for _, v in pairs(paths) do
 			loader.setenv("module_path", v)
-			res = load_bootfile()
+			res = loadBootfile()
 
 			-- succeeded, add path to module_path
 			if res ~= nil then
@@ -402,7 +458,7 @@ function config.loadkernel(other_kernel)
 
 		-- failed to load with ${kernel} as a directory
 		-- try as a file
-		res = try_load(kernel)
+		res = tryLoad(kernel)
 		if res ~= nil then
 			config.kernel_loaded = kernel
 			return true
@@ -413,7 +469,7 @@ function config.loadkernel(other_kernel)
 	end
 end
 
-function config.selectkernel(kernel)
+function config.selectKernel(kernel)
 	config.kernel_selected = kernel
 end
 
@@ -422,7 +478,7 @@ function config.load(file)
 		file = "/boot/defaults/loader.conf"
 	end
 
-	if not config.parse(file) then
+	if not config.processFile(file) then
 		print("Failed to parse configuration: '" .. file .. "'")
 	end
 
@@ -432,12 +488,14 @@ function config.load(file)
 			-- These may or may not exist, and that's ok. Do a
 			-- silent parse so that we complain on parse errors but
 			-- not for them simply not existing.
-			if not config.parse(name, true) then
+			if not config.processFile(name, true) then
 				print("Failed to parse configuration: '" ..
 				    name .. "'")
 			end
 		end
 	end
+
+	checkNextboot()
 
 	-- Cache the provided module_path at load time for later use
 	config.module_path = loader.getenv("module_path")
@@ -455,7 +513,7 @@ function config.loadelf()
 	local loaded
 
 	print("Loading kernel...")
-	loaded = config.loadkernel(kernel)
+	loaded = config.loadKernel(kernel)
 
 	if not loaded then
 		print("Failed to load any kernel")

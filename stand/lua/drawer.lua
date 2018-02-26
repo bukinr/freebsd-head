@@ -45,7 +45,7 @@ local orb
 local none
 local none_shifted = false
 
-local function menu_entry_name(drawing_menu, entry)
+local function menuEntryName(drawing_menu, entry)
 	local name_handler = drawer.menu_name_handlers[entry.entry_type]
 
 	if name_handler ~= nil then
@@ -57,7 +57,7 @@ local function menu_entry_name(drawing_menu, entry)
 	return entry.name
 end
 
-local function shift_brand_text(shift)
+local function shiftBrandText(shift)
 	drawer.brand_position.x = drawer.brand_position.x + shift.x
 	drawer.brand_position.y = drawer.brand_position.y + shift.y
 	drawer.menu_position.x = drawer.menu_position.x + shift.x
@@ -265,19 +265,19 @@ function drawer.drawscreen(menu_opts)
 	return drawer.drawmenu(menu_opts)
 end
 
-function drawer.drawmenu(m)
+function drawer.drawmenu(menudef)
 	local x = drawer.menu_position.x
 	local y = drawer.menu_position.y
 
 	-- print the menu and build the alias table
 	local alias_table = {}
 	local entry_num = 0
-	local menu_entries = m.entries
+	local menu_entries = menudef.entries
 	local effective_line_num = 0
 	if type(menu_entries) == "function" then
 		menu_entries = menu_entries()
 	end
-	for line_num, e in ipairs(menu_entries) do
+	for _, e in ipairs(menu_entries) do
 		-- Allow menu items to be conditionally visible by specifying
 		-- a visible function.
 		if e.visible ~= nil and not e.visible() then
@@ -288,7 +288,7 @@ function drawer.drawmenu(m)
 			entry_num = entry_num + 1
 			screen.setcursor(x, y + effective_line_num)
 
-			print(entry_num .. ". " .. menu_entry_name(m, e))
+			print(entry_num .. ". " .. menuEntryName(menudef, e))
 
 			-- fill the alias table
 			alias_table[tostring(entry_num)] = e
@@ -299,7 +299,7 @@ function drawer.drawmenu(m)
 			end
 		else
 			screen.setcursor(x, y + effective_line_num)
-			print(menu_entry_name(m, e))
+			print(menuEntryName(menudef, e))
 		end
 		::continue::
 	end
@@ -379,7 +379,7 @@ function drawer.drawlogo()
 	if logodef ~= nil and logodef.graphic == none then
 		-- centre brand and text if no logo
 		if not none_shifted then
-			shift_brand_text(logodef.shift)
+			shiftBrandText(logodef.shift)
 			none_shifted = true
 		end
 	elseif logodef == nil or logodef.graphic == nil or
