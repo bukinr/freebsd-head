@@ -44,7 +44,7 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus_subr.h>
 
 #include <arm64/coresight/coresight.h>
-#include <arm64/coresight/etm4x.h>
+#include <arm64/coresight/coresight-etm4x.h>
 
 #define CORESIGHT_LAR           0xfb0
 #define CORESIGHT_LSR           0xfb4

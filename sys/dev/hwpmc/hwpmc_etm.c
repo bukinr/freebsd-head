@@ -70,7 +70,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/rman.h>
 
 #include <arm64/coresight/coresight.h>
-#include <arm64/coresight/etm4x.h>
+//#include <arm64/coresight/coresight-etm4x.h>
 
 #include <dev/hwpmc/hwpmc_vm.h>
 
