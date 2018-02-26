@@ -139,7 +139,7 @@ coresight_disable(int cpu, struct coresight_event *event)
 	struct coresight_device *cs_dev;
 
 	TAILQ_FOREACH(cs_dev, &cs_devs, link) {
-		if (cs_dev->dev_type == CORESIGHT_ETMV4 &&
+		if (cs_dev->dev_type == event->src &&
 		    cs_dev->pdata->cpu == cpu) {
 
 			cs_dev->ops->source_ops->disable(cs_dev);
@@ -157,7 +157,7 @@ coresight_enable(int cpu, struct coresight_event *event)
 	struct coresight_device *cs_dev;
 
 	TAILQ_FOREACH(cs_dev, &cs_devs, link) {
-		if (cs_dev->dev_type == CORESIGHT_ETMV4 &&
+		if (cs_dev->dev_type == event->src &&
 		    cs_dev->pdata->cpu == cpu) {
 
 			coresight_build_path(cs_dev, event, CORESIGHT_ENABLE);
@@ -175,7 +175,7 @@ coresight_read(int cpu, struct coresight_event *event)
 	struct coresight_device *cs_dev;
 
 	TAILQ_FOREACH(cs_dev, &cs_devs, link) {
-		if (cs_dev->dev_type == CORESIGHT_ETMV4 &&
+		if (cs_dev->dev_type == event->src &&
 		    cs_dev->pdata->cpu == cpu) {
 
 			coresight_build_path(cs_dev, event, CORESIGHT_READ);
