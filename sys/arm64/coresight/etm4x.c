@@ -278,7 +278,6 @@ etm_disable(struct coresight_device *out)
 }
 
 static struct coresight_ops_source ops = {
-	.prepare = &etm_prepare,
 	.enable = &etm_enable,
 	.disable = &etm_disable,
 };

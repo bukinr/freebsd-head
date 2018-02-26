@@ -362,7 +362,6 @@ tmc_enable(struct coresight_device *out, struct endpoint *endp,
 
 static struct coresight_ops_sink ops = {
 	.read = &tmc_read,
-	.prepare = &tmc_prepare,
 	.enable = &tmc_enable,
 	.disable = &tmc_disable,
 };

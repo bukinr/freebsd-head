@@ -67,19 +67,16 @@ struct coresight_event {
 
 struct coresight_ops_sink {
 	int (*read)(struct coresight_device *out, struct endpoint *endp, struct coresight_event *event);
-	int (*prepare)(struct coresight_device *out, struct endpoint *endp, struct coresight_event *event);
 	int (*enable)(struct coresight_device *out, struct endpoint *endp, struct coresight_event *event);
 	void (*disable)(struct coresight_device *out, struct coresight_event *event);
 };
 
 struct coresight_ops_link {
-	int (*prepare)(struct coresight_device *out, struct endpoint *endp, struct coresight_event *event);
 	int (*enable)(struct coresight_device *out, struct endpoint *endp);
 	void (*disable)(struct coresight_device *out);
 };
 
 struct coresight_ops_source {
-	int (*prepare)(struct coresight_device *out, struct coresight_event *event);
 	int (*enable)(struct coresight_device *out, struct coresight_event *event);
 	int (*disable)(struct coresight_device *out);
 };
@@ -104,7 +101,6 @@ int coresight_enable_source(int cpu, struct coresight_event *);
 int coresight_disable_source(int cpu, struct coresight_event *);
 int coresight_enable(int cpu, struct coresight_event *event);
 int coresight_disable(int cpu, struct coresight_event *event);
-int coresight_prepare(int cpu, struct coresight_event *event);
 int coresight_read(int cpu, struct coresight_event *event);
 
 #endif /* !_ARM64_CORESIGHT_CORESIGHT_H_ */

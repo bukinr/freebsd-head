@@ -90,15 +90,6 @@ funnel_enable(struct coresight_device *out, struct endpoint *endp)
 	return (0);
 }
 
-static int
-funnel_prepare(struct coresight_device *out, struct endpoint *endp, struct coresight_event *event)
-{
-
-	funnel_enable(out, endp);
-
-	return (0);
-}
-
 static void
 funnel_disable(struct coresight_device *out)
 {
@@ -107,7 +98,6 @@ funnel_disable(struct coresight_device *out)
 }
 
 static struct coresight_ops_link ops = {
-	.prepare = &funnel_prepare,
 	.enable = &funnel_enable,
 	.disable = &funnel_disable,
 };

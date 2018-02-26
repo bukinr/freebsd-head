@@ -109,15 +109,6 @@ replicator_enable(struct coresight_device *out, struct endpoint *endp)
 	return (0);
 }
 
-static int
-replicator_prepare(struct coresight_device *out, struct endpoint *endp, struct coresight_event *event)
-{
-
-	replicator_enable(out, endp);
-
-	return (0);
-}
-
 static void
 replicator_disable(struct coresight_device *out)
 {
@@ -126,7 +117,6 @@ replicator_disable(struct coresight_device *out)
 }
 
 static struct coresight_ops_link ops = {
-	.prepare = &replicator_prepare,
 	.enable = &replicator_enable,
 	.disable = &replicator_disable,
 };
