@@ -97,8 +97,6 @@ struct coresight_platform_data * coresight_get_platform_data(device_t dev);
 struct endpoint * coresight_get_output_endpoint(struct coresight_platform_data *pdata);
 struct coresight_device * coresight_get_output_device(struct endpoint *endp, struct endpoint **);
 int coresight_register(struct coresight_desc *desc);
-int coresight_enable_source(int cpu, struct coresight_event *);
-int coresight_disable_source(int cpu, struct coresight_event *);
 int coresight_enable(int cpu, struct coresight_event *event);
 int coresight_disable(int cpu, struct coresight_event *event);
 int coresight_read(int cpu, struct coresight_event *event);
