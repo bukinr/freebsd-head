@@ -80,10 +80,9 @@ funnel_enable(struct coresight_device *out, struct endpoint *endp)
 
 	sc = device_get_softc(out->dev);
 
-	//printf("%s\n", __func__);
-	//printf("%s: enabling reg %d\n", __func__, endp->reg);
-
 	reg = bus_read_4(sc->res, FUNNEL_FUNCTL);
+	reg &= ~(FUNCTL_HOLDTIME_MASK);
+	reg |= (7 << FUNCTL_HOLDTIME_SHIFT);
 	reg |= (1 << endp->reg);
 	bus_write_4(sc->res, FUNNEL_FUNCTL, reg);
 
@@ -91,10 +90,16 @@ funnel_enable(struct coresight_device *out, struct endpoint *endp)
 }
 
 static void
-funnel_disable(struct coresight_device *out)
+funnel_disable(struct coresight_device *out, struct endpoint *endp)
 {
+	struct funnel_softc *sc;
+	uint32_t reg;
 
-	printf("%s\n", __func__);
+	sc = device_get_softc(out->dev);
+
+	reg = bus_read_4(sc->res, FUNNEL_FUNCTL);
+	reg &= ~(1 << endp->reg);
+	bus_write_4(sc->res, FUNNEL_FUNCTL, reg);
 }
 
 static struct coresight_ops_link ops = {
@@ -126,7 +131,6 @@ funnel_attach(device_t dev)
 {
 	struct coresight_desc desc;
 	struct funnel_softc *sc;
-	uint32_t reg;
 
 	sc = device_get_softc(dev);
 
@@ -149,16 +153,6 @@ funnel_attach(device_t dev)
 	wmb();
 
 	printf("Device ID: %x\n", bus_read_4(sc->res, FUNNEL_DEVICEID));
-
-	reg = 7 << FUNCTL_HOLDTIME_SHIFT;
-
-	/* XXX: enable all the ports */
-	//reg |= 0xff;
-
-	/* Enable port 0 */
-	//reg |= (1 << 0);
-	//reg |= (1 << 4);
-	bus_write_4(sc->res, FUNNEL_FUNCTL, reg);
 
 	return (0);
 }

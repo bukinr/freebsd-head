@@ -73,7 +73,7 @@ struct coresight_ops_sink {
 
 struct coresight_ops_link {
 	int (*enable)(struct coresight_device *out, struct endpoint *endp);
-	void (*disable)(struct coresight_device *out);
+	void (*disable)(struct coresight_device *out, struct endpoint *endp);
 };
 
 struct coresight_ops_source {

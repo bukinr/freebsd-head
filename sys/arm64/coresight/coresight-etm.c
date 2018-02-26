@@ -80,7 +80,7 @@ coresight_build_path_one(struct coresight_device *out,
 		//printf("enabling LINK ops\n");
 		switch (cmd) {
 		case CORESIGHT_DISABLE:
-			out->ops->link_ops->disable(out);
+			out->ops->link_ops->disable(out, out_endp);
 			break;
 		case CORESIGHT_ENABLE:
 			out->ops->link_ops->enable(out, out_endp);

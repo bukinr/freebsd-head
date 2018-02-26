@@ -110,7 +110,7 @@ replicator_enable(struct coresight_device *out, struct endpoint *endp)
 }
 
 static void
-replicator_disable(struct coresight_device *out)
+replicator_disable(struct coresight_device *out, struct endpoint *endp)
 {
 
 	printf("%s\n", __func__);
