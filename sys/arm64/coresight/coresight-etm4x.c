@@ -255,35 +255,31 @@ etm_prepare(struct coresight_device *out, struct coresight_event *config)
 }
 
 static int
-etm_enable(struct coresight_device *out, struct coresight_event *config)
+etm_enable(struct coresight_device *out, struct endpoint *endp,
+    struct coresight_event *event)
 {
 
 	printf("%s\n", __func__);
 
-	etm_prepare(out, config);
+	etm_prepare(out, event);
 	etm_start(out->dev);
 
 	return (0);
 }
 
-static int
-etm_disable(struct coresight_device *out)
+static void
+etm_disable(struct coresight_device *out, struct endpoint *endp,
+    struct coresight_event *event)
 {
 
 	printf("%s\n", __func__);
 
 	etm_stop(out->dev);
-
-	return (0);
 }
 
-static struct coresight_ops_source ops = {
+static struct coresight_ops ops = {
 	.enable = &etm_enable,
 	.disable = &etm_disable,
-};
-
-static struct coresight_ops etmv4_cs_ops = {
-	.source_ops = &ops,
 };
 
 static int
@@ -324,7 +320,7 @@ etm_attach(device_t dev)
 	desc.pdata = sc->pdata;
 	desc.dev = dev;
 	desc.dev_type = CORESIGHT_ETMV4;
-	desc.ops = &etmv4_cs_ops;
+	desc.ops = &ops;
 	coresight_register(&desc);
 
 	return (0);

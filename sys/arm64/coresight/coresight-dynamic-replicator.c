@@ -75,7 +75,8 @@ static struct resource_spec replicator_spec[] = {
 };
 
 static int
-replicator_enable(struct coresight_device *out, struct endpoint *endp)
+replicator_enable(struct coresight_device *out, struct endpoint *endp,
+    struct coresight_event *event)
 {
 	struct replicator_softc *sc;
 	uint8_t val0, val1;
@@ -110,19 +111,16 @@ replicator_enable(struct coresight_device *out, struct endpoint *endp)
 }
 
 static void
-replicator_disable(struct coresight_device *out, struct endpoint *endp)
+replicator_disable(struct coresight_device *out, struct endpoint *endp,
+    struct coresight_event *event)
 {
 
 	printf("%s\n", __func__);
 }
 
-static struct coresight_ops_link ops = {
+static struct coresight_ops ops = {
 	.enable = &replicator_enable,
 	.disable = &replicator_disable,
-};
-
-static struct coresight_ops replicator_cs_ops = {
-	.link_ops = &ops,
 };
 
 static int
@@ -158,7 +156,7 @@ replicator_attach(device_t dev)
 	desc.pdata = sc->pdata;
 	desc.dev = dev;
 	desc.dev_type = CORESIGHT_DYNAMIC_REPLICATOR;
-	desc.ops = &replicator_cs_ops;
+	desc.ops = &ops;
 	coresight_register(&desc);
 
 	/* Unlock Coresight */

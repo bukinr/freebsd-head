@@ -48,57 +48,6 @@ extern struct coresight_device_list cs_devs;
 #define	CORESIGHT_ENABLE	1
 #define	CORESIGHT_READ		2
 
-static int
-coresight_build_path_one(struct coresight_device *out,
-    struct endpoint *out_endp, struct coresight_event *event, uint8_t cmd)
-{
-
-	switch (out->dev_type) {
-	case CORESIGHT_ETMV4:
-		switch (cmd) {
-		case CORESIGHT_DISABLE:
-			out->ops->source_ops->disable(out);
-			break;
-		case CORESIGHT_ENABLE:
-			out->ops->source_ops->enable(out, event);
-			break;
-		};
-		break;
-	case CORESIGHT_ETF:
-		break;
-	case CORESIGHT_ETR:
-		//printf("enabling SINK ops\n");
-		switch (cmd) {
-		case CORESIGHT_DISABLE:
-			out->ops->sink_ops->disable(out, event);
-			break;
-		case CORESIGHT_ENABLE:
-			out->ops->sink_ops->enable(out, out_endp, event);
-			break;
-		case CORESIGHT_READ:
-			out->ops->sink_ops->read(out, out_endp, event);
-			break;
-		};
-		break;
-	case CORESIGHT_DYNAMIC_REPLICATOR:
-	case CORESIGHT_FUNNEL:
-		//printf("enabling LINK ops\n");
-		switch (cmd) {
-		case CORESIGHT_DISABLE:
-			out->ops->link_ops->disable(out, out_endp);
-			break;
-		case CORESIGHT_ENABLE:
-			out->ops->link_ops->enable(out, out_endp);
-			break;
-		};
-		break;
-	default:
-		break;
-	}
-
-	return (0);
-}
-
 static struct coresight_device *
 coresight_next_device(struct coresight_device *cs_dev,
     struct coresight_event *event)
@@ -161,13 +110,40 @@ coresight_init_event(int cpu, struct coresight_event *event)
 	return (0);
 }
 
+static int
+coresight_cmd_one(struct coresight_device *out,
+    struct endpoint *out_endp, struct coresight_event *event, uint8_t cmd)
+{
+
+	switch (cmd) {
+	case CORESIGHT_DISABLE:
+		if (out->ops->disable == NULL)
+			break;
+		out->ops->disable(out, out_endp, event);
+		break;
+	case CORESIGHT_ENABLE:
+		if (out->ops->enable == NULL)
+			break;
+		out->ops->enable(out, out_endp, event);
+		break;
+	case CORESIGHT_READ:
+		if (out->ops->read == NULL)
+			break;
+		out->ops->read(out, out_endp, event);
+		break;
+	};
+
+	return (0);
+}
+
+
 static void
 coresight_cmd(int cpu, struct coresight_event *event, uint8_t cmd)
 {
 	struct endpoint *endp;
 
 	LIST_FOREACH(endp, &event->endplist, endplink)
-		coresight_build_path_one(endp->cs_dev, endp, event, cmd);
+		coresight_cmd_one(endp->cs_dev, endp, event, cmd);
 }
 
 void

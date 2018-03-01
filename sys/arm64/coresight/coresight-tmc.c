@@ -329,7 +329,8 @@ tmc_prepare(struct coresight_device *out, struct endpoint *endp,
 }
 
 static void
-tmc_disable(struct coresight_device *out, struct coresight_event *event)
+tmc_disable(struct coresight_device *out, struct endpoint *endp,
+    struct coresight_event *event)
 {
 
 	printf("%s\n", __func__);
@@ -360,14 +361,10 @@ tmc_enable(struct coresight_device *out, struct endpoint *endp,
 	return (0);
 }
 
-static struct coresight_ops_sink ops = {
+static struct coresight_ops ops = {
 	.read = &tmc_read,
 	.enable = &tmc_enable,
 	.disable = &tmc_disable,
-};
-
-static struct coresight_ops tmc_cs_ops = {
-	.sink_ops = &ops,
 };
 
 static int
@@ -406,7 +403,7 @@ tmc_attach(device_t dev)
 	struct coresight_desc desc;
 	desc.pdata = sc->pdata;
 	desc.dev = dev;
-	desc.ops = &tmc_cs_ops;
+	desc.ops = &ops;
 
 	uint32_t reg;
 	reg = bus_read_4(sc->res, TMC_DEVID);

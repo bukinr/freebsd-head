@@ -73,7 +73,8 @@ static struct resource_spec funnel_spec[] = {
 };
 
 static int
-funnel_enable(struct coresight_device *out, struct endpoint *endp)
+funnel_enable(struct coresight_device *out, struct endpoint *endp,
+    struct coresight_event *event)
 {
 	struct funnel_softc *sc;
 	uint32_t reg;
@@ -91,7 +92,8 @@ funnel_enable(struct coresight_device *out, struct endpoint *endp)
 }
 
 static void
-funnel_disable(struct coresight_device *out, struct endpoint *endp)
+funnel_disable(struct coresight_device *out, struct endpoint *endp,
+    struct coresight_event *event)
 {
 	struct funnel_softc *sc;
 	uint32_t reg;
@@ -104,13 +106,9 @@ funnel_disable(struct coresight_device *out, struct endpoint *endp)
 	bus_write_4(sc->res, FUNNEL_FUNCTL, reg);
 }
 
-static struct coresight_ops_link ops = {
+static struct coresight_ops ops = {
 	.enable = &funnel_enable,
 	.disable = &funnel_disable,
-};
-
-static struct coresight_ops funnel_cs_ops = {
-	.link_ops = &ops,
 };
 
 static int
@@ -146,7 +144,7 @@ funnel_attach(device_t dev)
 	desc.pdata = sc->pdata;
 	desc.dev = dev;
 	desc.dev_type = CORESIGHT_FUNNEL;
-	desc.ops = &funnel_cs_ops;
+	desc.ops = &ops;
 	coresight_register(&desc);
 
 	/* Unlock Coresight */

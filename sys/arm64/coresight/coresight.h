@@ -69,26 +69,10 @@ struct coresight_event {
 	uint32_t rwp;
 };
 
-struct coresight_ops_sink {
+struct coresight_ops {
 	int (*read)(struct coresight_device *out, struct endpoint *endp, struct coresight_event *event);
 	int (*enable)(struct coresight_device *out, struct endpoint *endp, struct coresight_event *event);
-	void (*disable)(struct coresight_device *out, struct coresight_event *event);
-};
-
-struct coresight_ops_link {
-	int (*enable)(struct coresight_device *out, struct endpoint *endp);
-	void (*disable)(struct coresight_device *out, struct endpoint *endp);
-};
-
-struct coresight_ops_source {
-	int (*enable)(struct coresight_device *out, struct coresight_event *event);
-	int (*disable)(struct coresight_device *out);
-};
-
-struct coresight_ops {
-	struct coresight_ops_sink *sink_ops;
-	struct coresight_ops_link *link_ops;
-	struct coresight_ops_source *source_ops;
+	void (*disable)(struct coresight_device *out, struct endpoint *endp, struct coresight_event *event);
 };
 
 struct etm_config {
