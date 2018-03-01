@@ -82,6 +82,7 @@ replicator_enable(struct coresight_device *out, struct endpoint *endp)
 	int outport;
 
 	//printf("%s: port reg %d\n", __func__, endp->reg);
+	printf("%s\n", __func__);
 
 	sc = device_get_softc(out->dev);
 

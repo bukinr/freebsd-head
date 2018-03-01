@@ -56,9 +56,16 @@ coresight_build_path_one(struct coresight_device *out,
 	//printf("%s\n", __func__);
 
 	switch (out->dev_type) {
-	//case CORESIGHT_ETMV4:
-	//	out->ops->source_ops->enable(config);
-	//	break;
+	case CORESIGHT_ETMV4:
+		switch (cmd) {
+		case CORESIGHT_DISABLE:
+			out->ops->source_ops->disable(out);
+			break;
+		case CORESIGHT_ENABLE:
+			out->ops->source_ops->enable(out, event);
+			break;
+		};
+		break;
 	case CORESIGHT_ETF:
 		break;
 	case CORESIGHT_ETR:
@@ -185,4 +192,108 @@ coresight_read(int cpu, struct coresight_event *event)
 	}
 
 	return (0);
+}
+
+static struct coresight_device *
+coresight_next_device(struct coresight_device *cs_dev,
+    struct coresight_event *event)
+{
+	struct coresight_device *out;
+	struct endpoint *out_endp;
+	struct endpoint *endp;
+
+	TAILQ_FOREACH(endp, &cs_dev->pdata->endpoints, link) {
+		if (endp->slave != 0)
+			continue;
+
+		out = coresight_get_output_device(endp, &out_endp);
+		if (out) {
+			if (LIST_EMPTY(&event->endplist)) {
+				/* Add source device */
+				endp->cs_dev = cs_dev;
+				LIST_INSERT_HEAD(&event->endplist, endp, endplink);
+				printf("endpoint %lx added\n", (uint64_t)endp);
+			}
+
+			/* Add source device */
+			out_endp->cs_dev = out;
+			LIST_INSERT_HEAD(&event->endplist, out_endp, endplink);
+			printf("endpoint %lx added\n", (uint64_t)out_endp);
+
+			return (out);
+
+			//if ((out->dev_type2 == SINK) &&
+			//    (out->dev_type != event->sink)
+			//	continue;
+			//coresight_build_path_one(out, out_endp, event);
+			/* Sink device found, stop iteration */
+			//if (out->dev_type == event->sink)
+			//	return (NULL);
+		}
+	}
+
+	return (NULL);
+}
+
+static int
+coresight_build_list(struct coresight_device *cs_dev,
+    struct coresight_event *event)
+{
+	struct coresight_device *out;
+
+	out = cs_dev;
+	while (out)
+		out = coresight_next_device(out, event);
+
+	return (0);
+}
+
+int
+coresight_init_event(int cpu, struct coresight_event *event)
+{
+	struct coresight_device *cs_dev;
+
+	/* We start building path from source device */
+
+	TAILQ_FOREACH(cs_dev, &cs_devs, link) {
+		if (cs_dev->dev_type == event->src &&
+		    cs_dev->pdata->cpu == cpu) {
+
+			LIST_INIT(&event->endplist);
+			coresight_build_list(cs_dev, event);
+			break;
+		}
+	}
+
+	return (0);
+}
+
+static void
+coresight_cmd2(int cpu, struct coresight_event *event, uint8_t cmd)
+{
+	struct endpoint *endp;
+
+	LIST_FOREACH(endp, &event->endplist, endplink)
+		coresight_build_path_one(endp->cs_dev, endp, event, cmd);
+}
+
+void
+coresight_enable2(int cpu, struct coresight_event *event)
+{
+
+	coresight_cmd2(cpu, event, CORESIGHT_ENABLE);
+}
+
+void
+coresight_disable2(int cpu, struct coresight_event *event)
+{
+
+	coresight_cmd2(cpu, event, CORESIGHT_DISABLE);
+}
+
+void
+coresight_read2(int cpu, struct coresight_event *event)
+{
+
+	coresight_cmd2(cpu, event, CORESIGHT_READ);
 }

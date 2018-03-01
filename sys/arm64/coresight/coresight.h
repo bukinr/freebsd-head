@@ -3,36 +3,12 @@
 
 #include <dev/ofw/openfirm.h>
 
-struct endpoint {
-	TAILQ_ENTRY(endpoint) link;
-	phandle_t my_node;
-	phandle_t their_node;
-	phandle_t dev_node;
-	boolean_t slave;
-	int reg;
-};
-
-struct coresight_platform_data {
-	int cpu;
-	int in_ports;
-	int out_ports;
-	struct mtx mtx_lock;
-	TAILQ_HEAD(endpoint_list, endpoint) endpoints;
-};
-
 enum cs_dev_type {
 	CORESIGHT_ETMV4,
 	CORESIGHT_ETR,
 	CORESIGHT_ETF,
 	CORESIGHT_DYNAMIC_REPLICATOR,
 	CORESIGHT_FUNNEL,
-};
-
-struct coresight_desc {
-	struct coresight_platform_data *pdata;
-	device_t dev;
-	enum cs_dev_type dev_type;
-	struct coresight_ops *ops;
 };
 
 struct coresight_device {
@@ -44,11 +20,39 @@ struct coresight_device {
 	struct coresight_platform_data *pdata;
 };
 
+struct endpoint {
+	TAILQ_ENTRY(endpoint) link;
+	phandle_t my_node;
+	phandle_t their_node;
+	phandle_t dev_node;
+	boolean_t slave;
+	int reg;
+	struct coresight_device *cs_dev;
+	LIST_ENTRY(endpoint) endplink;
+};
+
+struct coresight_platform_data {
+	int cpu;
+	int in_ports;
+	int out_ports;
+	struct mtx mtx_lock;
+	TAILQ_HEAD(endpoint_list, endpoint) endpoints;
+};
+
+struct coresight_desc {
+	struct coresight_platform_data *pdata;
+	device_t dev;
+	enum cs_dev_type dev_type;
+	struct coresight_ops *ops;
+};
+
 TAILQ_HEAD(coresight_device_list, coresight_device);
 
 #define	ETM_N_COMPRATOR		16
 
 struct coresight_event {
+	LIST_HEAD(, endpoint) endplist;
+
 	uint64_t addr[ETM_N_COMPRATOR];
 	uint32_t naddr;
 	uint8_t excp_level;
@@ -100,5 +104,9 @@ int coresight_register(struct coresight_desc *desc);
 int coresight_enable(int cpu, struct coresight_event *event);
 int coresight_disable(int cpu, struct coresight_event *event);
 int coresight_read(int cpu, struct coresight_event *event);
+int coresight_init_event(int cpu, struct coresight_event *event);
+void coresight_enable2(int cpu, struct coresight_event *event);
+void coresight_disable2(int cpu, struct coresight_event *event);
+void coresight_read2(int cpu, struct coresight_event *event);
 
 #endif /* !_ARM64_CORESIGHT_CORESIGHT_H_ */
