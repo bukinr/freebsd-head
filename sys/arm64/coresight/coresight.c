@@ -51,38 +51,6 @@ static struct mtx cs_mtx;
 struct coresight_device_list cs_devs;
 
 static int
-coresight_port_find_endpoint(phandle_t node)
-{
-	char *name;
-	int ret;
-	phandle_t child;
-	phandle_t xref;
-
-	/* Port found, now find endpoint. */
-	for (child = OF_child(node); child != 0; child = OF_peer(child)) {
-		ret = OF_getprop_alloc(child, "name", sizeof(*name), (void **)&name);
-		if (ret == -1)
-			continue;
-		if (strcasecmp(name, "endpoint") == 0) {
-			printf("Endpoint found\n");
-			if (OF_getencprop(child, "remote-endpoint", &xref, sizeof(xref)) == -1) {
-				printf("failed\n");
-				continue;
-			}
-			if (OF_getproplen(child, "slave-mode") >= 0) {
-				printf("endpoint is slave-mode\n");
-			}
-
-			printf("remote-endpoint found\n");
-		}
-		free(name, M_OFWPROP);
-		break;
-	}
-
-	return (0);
-}
-
-static int
 coresight_get_ports(phandle_t dev_node,
     struct coresight_platform_data *pdata)
 {
@@ -105,23 +73,11 @@ coresight_get_ports(phandle_t dev_node,
 		if (ret == -1)
 			continue;
 
-		//printf("name %s, ret %d\n", name, ret);
-
 		if (strcasecmp(name, "port") ||
 		    strncasecmp(name, "port@", 6)) {
 
 			port_reg = -1;
-			if (OF_getencprop(child, "reg", (void *)&port_reg,
-				sizeof(port_reg)) > 0) {
-				printf("reg found\n");
-			} else {
-				printf("reg not found\n");
-			}
-			printf("%s: port_reg %d\n", __func__, port_reg);
-
-			/* Port found */
-			if (1 == 0)
-				coresight_port_find_endpoint(child);
+			OF_getencprop(child, "reg", (void *)&port_reg, sizeof(port_reg));
 
 			endpoint_child = ofw_bus_find_child(child, "endpoint");
 			if (endpoint_child) {
@@ -137,7 +93,6 @@ coresight_get_ports(phandle_t dev_node,
 				endp->their_node = OF_node_from_xref(xref);
 				endp->dev_node = dev_node;
 				endp->reg = port_reg;
-				//endp->cs_dev = 
 				if (OF_getproplen(endpoint_child, "slave-mode") >= 0) {
 					pdata->in_ports++;
 					endp->slave = 1;
@@ -199,10 +154,7 @@ coresight_get_output_device(struct endpoint *endp, struct endpoint **out_endp)
 
 	TAILQ_FOREACH(cs_dev, &cs_devs, link) {
 		TAILQ_FOREACH(endp2, &cs_dev->pdata->endpoints, link) {
-			//printf("endp->node %lx endp2->node %lx\n",
-			//    (uint64_t)endp->node, (uint64_t)endp2->node);
 			if (endp->their_node == endp2->my_node) {
-				//printf("found\n");
 				*out_endp = endp2;
 				return (cs_dev);
 			}
@@ -221,11 +173,9 @@ coresight_get_cpu(phandle_t node,
 	pcell_t cpu_reg;
 
 	if (OF_getencprop(node, "cpu", &xref, sizeof(xref)) != -1) {
-		//printf("cpu xref found\n");
 		cpu_node = OF_node_from_xref(xref);
 		if (OF_getencprop(cpu_node, "reg", (void *)&cpu_reg,
 			sizeof(cpu_reg)) > 0) {
-			//printf("cpu reg found: %d\n", cpu_reg);
 			pdata->cpu = cpu_reg;
 
 			return (0);

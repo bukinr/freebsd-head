@@ -79,7 +79,6 @@ funnel_enable(struct coresight_device *out, struct endpoint *endp,
 	struct funnel_softc *sc;
 	uint32_t reg;
 
-	printf("%s\n", __func__);
 	sc = device_get_softc(out->dev);
 
 	reg = bus_read_4(sc->res, FUNNEL_FUNCTL);
@@ -98,7 +97,6 @@ funnel_disable(struct coresight_device *out, struct endpoint *endp,
 	struct funnel_softc *sc;
 	uint32_t reg;
 
-	printf("%s\n", __func__);
 	sc = device_get_softc(out->dev);
 
 	reg = bus_read_4(sc->res, FUNNEL_FUNCTL);

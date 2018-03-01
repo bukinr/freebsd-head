@@ -190,60 +190,6 @@ tmc_configure_etf(device_t dev)
 }
 
 static int
-tmc_configure_etr(device_t dev, uint32_t low, uint32_t high,
-    uint32_t bufsize)
-{
-	struct tmc_softc *sc;
-	uint32_t reg;
- 
-	sc = device_get_softc(dev);
-
-	printf("%s unit %d\n", __func__, device_get_unit(dev));
-
-	tmc_unlock(sc);
-
-	do {
-		reg = bus_read_4(sc->res, TMC_STS);
-	} while ((reg & STS_TMCREADY) == 0);
-
-	/* Configure TMC */
-	bus_write_4(sc->res, TMC_MODE, MODE_CIRCULAR_BUFFER);
-
-	reg = AXICTL_PROT_CTRL_BIT1;
-	reg |= AXICTL_WRBURSTLEN_16;
-
-	/*
-	 * SG operation is broken on DragonBoard 410c
-	 * reg |= AXICTL_SG_MODE;
-	 */
-
-	reg |= AXICTL_AXCACHE_OS;
-	bus_write_4(sc->res, TMC_AXICTL, reg);
-
-	reg = FFCR_EN_FMT | FFCR_EN_TI | FFCR_FON_FLIN |
-	    FFCR_FON_TRIG_EVT | FFCR_TRIGON_TRIGIN;
-	bus_write_4(sc->res, TMC_FFCR, reg);
-
-	bus_write_4(sc->res, TMC_TRG, 8);
-
-	bus_write_4(sc->res, TMC_DBALO, low);
-	bus_write_4(sc->res, TMC_DBAHI, high);
-
-	//?
-	bus_write_4(sc->res, TMC_RSZ, bufsize / 4); // size in 32bit words
-	//bus_write_4(sc->res, TMC_RRP, low);
-	//bus_write_4(sc->res, TMC_RWP, low);
-
-	reg = bus_read_4(sc->res, TMC_STS);
-	reg &= ~STS_FULL;
-	bus_write_4(sc->res, TMC_STS, reg);
-
-	sc->cycle = 0;
-
-	return (0);
-}
-
-static int
 tmc_read(struct coresight_device *out, struct endpoint *endp,
     struct coresight_event *event)
 {
@@ -423,54 +369,6 @@ tmc_attach(device_t dev)
 	default:
 		break;
 	}
-
-	return (0);
-}
-
-static int
-tmc_read_trace(device_t dev, uint64_t *cycle, uint64_t *offset)
-{
-	struct tmc_softc *sc;
- 
-	sc = device_get_softc(dev);
-
-	printf("%s%d: STS %x, CTL %x, RSZ %x, RRP %x, RWP %x, LBUFLEVEL %x, CBUFLEVEL %x, \n", __func__,
-	    device_get_unit(dev),
-	    bus_read_4(sc->res, TMC_STS),
-	    bus_read_4(sc->res, TMC_CTL),
-	    bus_read_4(sc->res, TMC_RSZ),
-	    bus_read_4(sc->res, TMC_RRP),
-	    bus_read_4(sc->res, TMC_RWP),
-	    bus_read_4(sc->res, TMC_CBUFLEVEL),
-	    bus_read_4(sc->res, TMC_LBUFLEVEL));
-
-	uint32_t base_ptr;
-	uint32_t cur_ptr;
-	base_ptr = bus_read_4(sc->res, TMC_RRP);
-	cur_ptr = bus_read_4(sc->res, TMC_RWP);
-
-	if (bus_read_4(sc->res, TMC_STS) & STS_FULL) {
-		sc->cycle++;
-		if (offset != NULL)
-			*offset = 0;
-		tmc_stop(dev);
-		tmc_start(dev);
-		printf("%s1: STS %x, CTL %x, RSZ %x, RRP %x, RWP %x, LBUFLEVEL %x, CBUFLEVEL %x, \n", __func__,
-		    bus_read_4(sc->res, TMC_STS),
-		    bus_read_4(sc->res, TMC_CTL),
-		    bus_read_4(sc->res, TMC_RSZ),
-		    bus_read_4(sc->res, TMC_RRP),
-		    bus_read_4(sc->res, TMC_RWP),
-		    bus_read_4(sc->res, TMC_CBUFLEVEL),
-		    bus_read_4(sc->res, TMC_LBUFLEVEL));
-	} else {
-		if (offset != NULL) {
-			*offset = (cur_ptr - base_ptr);
-		}
-	}
-
-	if (cycle != NULL)
-		*cycle = sc->cycle;
 
 	return (0);
 }
