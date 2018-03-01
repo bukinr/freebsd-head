@@ -279,8 +279,6 @@ tmc_disable(struct coresight_device *out, struct endpoint *endp,
     struct coresight_event *event)
 {
 
-	printf("%s\n", __func__);
-
 }
 
 static int
@@ -291,10 +289,9 @@ tmc_enable(struct coresight_device *out, struct endpoint *endp,
  
 	sc = device_get_softc(out->dev);
 
-	printf("%s\n", __func__);
-
-	//event->rrp = bus_read_4(sc->res, TMC_RRP);
-	//event->rwp = bus_read_4(sc->res, TMC_RWP);
+	/* ETF configuration is static */
+	if (out->dev_type == CORESIGHT_ETF)
+		return (0);
 
 	if (event->started == 0) {
 		tmc_unlock(sc);
