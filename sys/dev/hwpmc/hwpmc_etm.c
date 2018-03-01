@@ -808,7 +808,7 @@ etm_read_trace(int cpu, int ri, struct pmc *pm,
 	struct coresight_event *event;
 	event = &etm_pc->event;
 
-	coresight_read2(cpu, event);
+	coresight_read(cpu, event);
 	cycle = event->cycle;
 	offset = event->offset;
 
@@ -891,7 +891,7 @@ etm_release_pmc(int cpu, int ri, struct pmc *pm)
 	struct coresight_event *event;
 	event = &etm_pc->event;
 
-	coresight_disable2(cpu, event);
+	coresight_disable(cpu, event);
 
 	mode = PMC_TO_MODE(pm);
 	if (mode == PMC_MODE_TT)
@@ -929,7 +929,7 @@ etm_start_pmc(int cpu, int ri)
 
 	struct coresight_event *event;
 	event = &etm_pc->event;
-	coresight_enable2(cpu, event);
+	coresight_enable(cpu, event);
 
 	return (0);
 }
@@ -961,7 +961,7 @@ etm_stop_pmc(int cpu, int ri)
 
 	struct coresight_event *event;
 	event = &etm_pc->event;
-	coresight_disable2(cpu, event);
+	coresight_disable(cpu, event);
 
 	return (0);
 }
