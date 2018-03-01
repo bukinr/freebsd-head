@@ -92,16 +92,16 @@ tmc_unlock(struct tmc_softc *sc)
 }
 
 static int
-tmc_enable0(struct tmc_softc *sc)
+tmc_start(device_t dev)
 {
+	struct tmc_softc *sc;
 	uint32_t reg;
+ 
+	sc = device_get_softc(dev);
 
 	if (bus_read_4(sc->res, TMC_CTL) & CTL_TRACECAPTEN)
 		return (-1);
 		
-	printf("%s: enabling. RRP %x, RWP %x\n", __func__,
-	    bus_read_4(sc->res, TMC_RRP), bus_read_4(sc->res, TMC_RWP));
-
 	/* Enable TMC */
 	bus_write_4(sc->res, TMC_CTL, CTL_TRACECAPTEN);
 	if ((bus_read_4(sc->res, TMC_CTL) & CTL_TRACECAPTEN) == 0)
@@ -113,23 +113,6 @@ tmc_enable0(struct tmc_softc *sc)
 
 	if ((bus_read_4(sc->res, TMC_CTL) & CTL_TRACECAPTEN) == 0)
 		panic("not enabled1\n");
-
-	printf("%s: enabled. RRP %x, RWP %x\n", __func__,
-	    bus_read_4(sc->res, TMC_RRP), bus_read_4(sc->res, TMC_RWP));
-
-	return (0);
-}
-
-static int
-tmc_start(device_t dev)
-{
-	struct tmc_softc *sc;
- 
-	printf("%s\n", __func__);
-
-	sc = device_get_softc(dev);
-
-	tmc_enable0(sc);
 
 	return (0);
 }
@@ -175,7 +158,7 @@ tmc_configure_etf(device_t dev)
 	bus_write_4(sc->res, TMC_FFCR, FFCR_EN_FMT | FFCR_EN_TI);
 	bus_write_4(sc->res, TMC_BUFWM, 0x800-1);
 
-	tmc_enable0(sc);
+	tmc_start(dev);
 
 	printf("%s: STS %x, CTL %x, RSZ %x, RRP %x, RWP %x, LBUFLEVEL %x, CBUFLEVEL %x, \n", __func__,
 	    bus_read_4(sc->res, TMC_STS),
@@ -197,8 +180,6 @@ tmc_read(struct coresight_device *out, struct endpoint *endp,
 	uint32_t cur_ptr;
 
 	sc = device_get_softc(out->dev);
-
-	printf("%s\n", __func__);
 
 	if (bus_read_4(sc->res, TMC_STS) & STS_FULL) {
 		event->offset = 0;
@@ -328,7 +309,9 @@ tmc_probe(device_t dev)
 static int
 tmc_attach(device_t dev)
 {
+	struct coresight_desc desc;
 	struct tmc_softc *sc;
+	uint32_t reg;
 
 	sc = device_get_softc(dev);
 
@@ -341,27 +324,23 @@ tmc_attach(device_t dev)
 
 	sc->pdata = coresight_get_platform_data(dev);
 
-	printf("%s: DEVID %x\n", __func__, bus_read_4(sc->res, TMC_DEVID));
-
-	struct coresight_desc desc;
 	desc.pdata = sc->pdata;
 	desc.dev = dev;
 	desc.ops = &ops;
 
-	uint32_t reg;
 	reg = bus_read_4(sc->res, TMC_DEVID);
 	reg &= DEVID_CONFIGTYPE_M;
 	switch (reg) {
 	case DEVID_CONFIGTYPE_ETR:
 		desc.dev_type = CORESIGHT_ETR;
 		coresight_register(&desc);
-		printf("ETR configuration found, unit %d\n", device_get_unit(dev));
+		device_printf(dev, "ETR configuration found\n");
 		break;
 	case DEVID_CONFIGTYPE_ETF:
 		desc.dev_type = CORESIGHT_ETF;
 		coresight_register(&desc);
 		tmc_configure_etf(dev);
-		printf("ETF configuration found, unit %d\n", device_get_unit(dev));
+		device_printf(dev, "ETF configuration found\n");
 		break;
 	default:
 		break;
