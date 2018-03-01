@@ -42,7 +42,7 @@ struct pmc_mdep;
  * ARMV8	ARM Cortex-A53/57/72 processors
  */
 #include <dev/hwpmc/hwpmc_arm64.h>
-#include <dev/hwpmc/hwpmc_etm.h>
+#include <dev/hwpmc/hwpmc_cs.h>
 
 union pmc_md_op_pmcallocate {
 	struct pmc_md_etm_op_pmcallocate		pm_etm;

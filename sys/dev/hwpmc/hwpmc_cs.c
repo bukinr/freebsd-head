@@ -48,7 +48,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/proc.h>
 #include <sys/vmem.h>
 #include <sys/vmmeter.h>
-#include <sys/bus.h>
 #include <sys/kthread.h>
 #include <sys/pmclog.h>
 
@@ -64,13 +63,7 @@ __FBSDID("$FreeBSD$");
 #include <vm/vm_radix.h>
 #include <vm/pmap.h>
 
-#include <machine/bus.h>
-#include <machine/resource.h>
-#include <sys/bus.h>
-#include <sys/rman.h>
-
 #include <arm64/coresight/coresight.h>
-//#include <arm64/coresight/coresight-etm4x.h>
 
 #include <dev/hwpmc/hwpmc_vm.h>
 
@@ -125,9 +118,6 @@ struct etm_cpu {
 	uint32_t			flags;
 #define	FLAG_ETM_ALLOCATED		(1 << 0)
 	struct etm_save_area		save_area;
-	device_t			dev_etr;
-	device_t			dev_etf;
-	device_t			dev_etm;
 	struct coresight_event		event;
 };
 
@@ -623,29 +613,6 @@ etm_pcpu_init(struct pmc_mdep *md, int cpu)
 
 	dprintf("%s: cpu %d\n", __func__, cpu);
 
-	devclass_t etm_devclass, tmc_devclass;
-	device_t dev_etm, dev_etr, dev_etf;
-
-	/* Find our ETM device */
-	etm_devclass = devclass_find("etm");
-	if (etm_devclass == NULL)
-		return (ENXIO);
-	dev_etm = devclass_get_device(etm_devclass, cpu);
-	if (dev_etm == NULL)
-		return (ENXIO);
-
-	/* Find our TMC device */
-	tmc_devclass = devclass_find("tmc");
-	if (tmc_devclass == NULL)
-		return (ENXIO);
-
-	dev_etf = devclass_get_device(tmc_devclass, 0);
-	if (dev_etf == NULL)
-		return (ENXIO);
-	dev_etr = devclass_get_device(tmc_devclass, 1);
-	if (dev_etr == NULL)
-		return (ENXIO);
-
 #if 0
 	u_int cp[4];
 	/* We rely on XSAVE support */
@@ -684,10 +651,6 @@ etm_pcpu_init(struct pmc_mdep *md, int cpu)
 	    __LINE__));
 
 	etm_pc = malloc(sizeof(struct etm_cpu), M_ETM, M_WAITOK | M_ZERO);
-	etm_pc->dev_etm = dev_etm;
-	etm_pc->dev_etr = dev_etr;
-	etm_pc->dev_etf = dev_etf;
-
 	etm_pc->tc_hw.phw_state = PMC_PHW_FLAG_IS_ENABLED |
 	    PMC_PHW_CPU_TO_STATE(cpu) | PMC_PHW_INDEX_TO_STATE(0) |
 	    PMC_PHW_FLAG_IS_SHAREABLE;
