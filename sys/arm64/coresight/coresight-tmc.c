@@ -139,6 +139,28 @@ tmc_stop(device_t dev)
 }
 
 static int
+tmc_read(struct coresight_device *out, struct endpoint *endp,
+    struct coresight_event *event)
+{
+	struct tmc_softc *sc;
+	uint32_t cur_ptr;
+
+	sc = device_get_softc(out->dev);
+
+	if (bus_read_4(sc->res, TMC_STS) & STS_FULL) {
+		event->offset = 0;
+		event->cycle++;
+		tmc_stop(out->dev);
+		tmc_start(out->dev);
+	} else {
+		cur_ptr = bus_read_4(sc->res, TMC_RWP);
+		event->offset = (cur_ptr - event->low);
+	}
+
+	return (0);
+}
+
+static int
 tmc_configure_etf(device_t dev)
 {
 	struct tmc_softc *sc;
@@ -173,29 +195,7 @@ tmc_configure_etf(device_t dev)
 }
 
 static int
-tmc_read(struct coresight_device *out, struct endpoint *endp,
-    struct coresight_event *event)
-{
-	struct tmc_softc *sc;
-	uint32_t cur_ptr;
-
-	sc = device_get_softc(out->dev);
-
-	if (bus_read_4(sc->res, TMC_STS) & STS_FULL) {
-		event->offset = 0;
-		event->cycle++;
-		tmc_stop(out->dev);
-		tmc_start(out->dev);
-	} else {
-		cur_ptr = bus_read_4(sc->res, TMC_RWP);
-		event->offset = (cur_ptr - event->low);
-	}
-
-	return (0);
-}
-
-static int
-tmc_prepare(struct coresight_device *out, struct endpoint *endp,
+tmc_configure_etr(struct coresight_device *out, struct endpoint *endp,
     struct coresight_event *event)
 {
 	struct tmc_softc *sc;
@@ -255,13 +255,6 @@ tmc_prepare(struct coresight_device *out, struct endpoint *endp,
 	return (0);
 }
 
-static void
-tmc_disable(struct coresight_device *out, struct endpoint *endp,
-    struct coresight_event *event)
-{
-
-}
-
 static int
 tmc_enable(struct coresight_device *out, struct endpoint *endp,
     struct coresight_event *event)
@@ -271,18 +264,29 @@ tmc_enable(struct coresight_device *out, struct endpoint *endp,
 	sc = device_get_softc(out->dev);
 
 	/* ETF configuration is static */
-	if (out->dev_type == CORESIGHT_ETF)
+	switch (out->dev_type) {
+	case CORESIGHT_ETF:
 		return (0);
-
-	if (event->started == 0) {
+	case CORESIGHT_ETR:
+		if (event->started)
+			return (0);
 		tmc_unlock(sc);
 		tmc_stop(out->dev);
-		tmc_prepare(out, endp, event);
+		tmc_configure_etr(out, endp, event);
 		tmc_start(out->dev);
 		event->started = 1;
+	default:
+		break;
 	}
 
 	return (0);
+}
+
+static void
+tmc_disable(struct coresight_device *out, struct endpoint *endp,
+    struct coresight_event *event)
+{
+
 }
 
 static struct coresight_ops ops = {
