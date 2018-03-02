@@ -291,6 +291,7 @@ etm_probe(device_t dev)
 static int
 etm_attach(device_t dev)
 {
+	struct coresight_desc desc;
 	struct etm_softc *sc;
 
 	sc = device_get_softc(dev);
@@ -308,7 +309,6 @@ etm_attach(device_t dev)
 
 	sc->pdata = coresight_get_platform_data(dev);
 
-	struct coresight_desc desc;
 	desc.pdata = sc->pdata;
 	desc.dev = dev;
 	desc.dev_type = CORESIGHT_ETMV4;

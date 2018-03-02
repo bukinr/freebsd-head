@@ -68,30 +68,18 @@ replicator_enable(struct coresight_device *out, struct endpoint *endp,
     struct coresight_event *event)
 {
 	struct replicator_softc *sc;
-	uint8_t val0, val1;
-	int outport;
 
 	sc = device_get_softc(out->dev);
 
-	outport = endp->reg;
+	/* Enable the port. Keep the other port disabled */
 
-	/* Enable the port. The other port should be disabled */
-
-	if (outport == 0) {
-		val0 = 0x00;
-		val1 = 0xff;
+	if (endp->reg == 0) {
+		bus_write_4(sc->res, REPLICATOR_IDFILTER0, 0x00);
+		bus_write_4(sc->res, REPLICATOR_IDFILTER1, 0xff);
 	} else {
-		val0 = 0xff;
-		val1 = 0x00;
+		bus_write_4(sc->res, REPLICATOR_IDFILTER0, 0xff);
+		bus_write_4(sc->res, REPLICATOR_IDFILTER1, 0x00);
 	}
-
-	bus_write_4(sc->res, REPLICATOR_IDFILTER0, val0);
-	if (bus_read_4(sc->res, REPLICATOR_IDFILTER0) != val0)
-		panic("Unable to setup replicator.");
-
-	bus_write_4(sc->res, REPLICATOR_IDFILTER1, val1);
-	if (bus_read_4(sc->res, REPLICATOR_IDFILTER1) != val1)
-		panic("Unable to setup replicator.");
 
 	return (0);
 }
@@ -100,7 +88,12 @@ static void
 replicator_disable(struct coresight_device *out, struct endpoint *endp,
     struct coresight_event *event)
 {
+	struct replicator_softc *sc;
 
+	sc = device_get_softc(out->dev);
+
+	bus_write_4(sc->res, REPLICATOR_IDFILTER0, 0xff);
+	bus_write_4(sc->res, REPLICATOR_IDFILTER1, 0xff);
 }
 
 static struct coresight_ops ops = {
@@ -127,6 +120,7 @@ static int
 replicator_attach(device_t dev)
 {
 	struct replicator_softc *sc;
+	struct coresight_desc desc;
 
 	sc = device_get_softc(dev);
 
@@ -137,7 +131,6 @@ replicator_attach(device_t dev)
 
 	sc->pdata = coresight_get_platform_data(dev);
 
-	struct coresight_desc desc;
 	desc.pdata = sc->pdata;
 	desc.dev = dev;
 	desc.dev_type = CORESIGHT_DYNAMIC_REPLICATOR;
