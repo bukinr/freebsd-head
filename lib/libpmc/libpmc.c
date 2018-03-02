@@ -2709,8 +2709,6 @@ etm_allocate_pmc(enum pmc_event pe, char *ctrspec,
 	uint32_t addrn;
 	char *p, *q, *e;
 
-	printf("%s\n", __func__);
-
 	if (pe != PMC_EV_ETM_ETM)
 		return (-1);
 

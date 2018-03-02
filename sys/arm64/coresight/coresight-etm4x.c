@@ -101,15 +101,12 @@ etm_start(device_t dev)
 
 	sc = device_get_softc(dev);
 
-	printf("%s\n", __func__);
-
 	/* Enable the trace unit */
 	bus_write_4(sc->res, TRCPRGCTLR, 1);
 
 	/* Wait for an IDLE bit to be LOW */
 	do {
 		reg = bus_read_4(sc->res, TRCSTATR);
-		//printf(".");
 	} while ((reg & TRCSTATR_IDLE) == 1);
 
 	if ((bus_read_4(sc->res, TRCPRGCTLR) & 1) == 0)
@@ -125,8 +122,6 @@ etm_stop(device_t dev)
 	uint32_t reg;
 
 	sc = device_get_softc(dev);
-
-	printf("%s\n", __func__);
 
 	/* Disable the trace unit */
 	bus_write_4(sc->res, TRCPRGCTLR, 0);
@@ -144,8 +139,6 @@ etm_prepare(struct coresight_device *out, struct coresight_event *config)
 {
 	struct etm_softc *sc;
 	uint32_t reg;
-
-	printf("%s\n", __func__);
 
 	sc = device_get_softc(out->dev);
 
@@ -251,8 +244,6 @@ etm_enable(struct coresight_device *out, struct endpoint *endp,
     struct coresight_event *event)
 {
 
-	printf("%s\n", __func__);
-
 	etm_prepare(out, event);
 	etm_start(out->dev);
 
@@ -263,8 +254,6 @@ static void
 etm_disable(struct coresight_device *out, struct endpoint *endp,
     struct coresight_event *event)
 {
-
-	printf("%s\n", __func__);
 
 	etm_stop(out->dev);
 }

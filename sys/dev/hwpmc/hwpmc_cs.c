@@ -135,7 +135,7 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf,
 	int npages;
 	int i;
 
-	printf("%s\n", __func__);
+	dprintf("%s\n", __func__);
 
 	etm_pc = etm_pcpu[cpu];
 
@@ -184,7 +184,7 @@ etm_buffer_deallocate(uint32_t cpu, struct etm_buffer *etm_buf)
 
 	cc = pmc_cdev[cpu]->si_drv1;
 
-	printf("%s\n", __func__);
+	dprintf("%s\n", __func__);
 
 	mtx_lock(&cc->vm_mtx);
 	TAILQ_FOREACH_SAFE(map, &cc->pmc_maplist, map_next, map_tmp) {

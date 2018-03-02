@@ -245,7 +245,7 @@ create_test_memory_acc(dcd_tree_handle_t handle, uint64_t base, uint64_t start, 
 	uint32_t mem_length;
 	int ret;
 
-	printf("%s: base %lx start %lx end %lx\n", __func__, base, start, end);
+	dprintf("%s: base %lx start %lx end %lx\n", __func__, base, start, end);
 
 	address = (ocsd_vaddr_t)base;
 	p_mem_buffer = (uint8_t *)(base + start);

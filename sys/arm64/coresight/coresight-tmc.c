@@ -110,8 +110,6 @@ tmc_stop(device_t dev)
 	struct tmc_softc *sc;
 	uint32_t reg;
  
-	printf("%s\n", __func__);
-
 	sc = device_get_softc(dev);
 
 	reg = bus_read_4(sc->res, TMC_CTL);
@@ -155,8 +153,6 @@ tmc_configure_etf(device_t dev)
  
 	sc = device_get_softc(dev);
 
-	printf("%s\n", __func__);
-
 	tmc_unlock(sc);
 
 	do {
@@ -189,8 +185,6 @@ tmc_configure_etr(struct coresight_device *out, struct endpoint *endp,
 	uint32_t reg;
 
 	sc = device_get_softc(out->dev);
-
-	printf("%s unit %d\n", __func__, device_get_unit(out->dev));
 
 	tmc_unlock(sc);
 	tmc_stop(out->dev);
