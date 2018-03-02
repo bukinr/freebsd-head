@@ -132,13 +132,13 @@ tmc_read(struct coresight_device *out, struct endpoint *endp,
 	sc = device_get_softc(out->dev);
 
 	if (bus_read_4(sc->res, TMC_STS) & STS_FULL) {
-		event->offset = 0;
-		event->cycle++;
+		event->etr.offset = 0;
+		event->etr.cycle++;
 		tmc_stop(out->dev);
 		tmc_start(out->dev);
 	} else {
 		cur_ptr = bus_read_4(sc->res, TMC_RWP);
-		event->offset = (cur_ptr - event->low);
+		event->etr.offset = (cur_ptr - event->etr.low);
 	}
 
 	return (0);
@@ -212,23 +212,16 @@ tmc_configure_etr(struct coresight_device *out, struct endpoint *endp,
 
 	bus_write_4(sc->res, TMC_TRG, 8);
 
-	bus_write_4(sc->res, TMC_DBALO, event->low);
-	bus_write_4(sc->res, TMC_DBAHI, event->high);
-	bus_write_4(sc->res, TMC_RSZ, event->bufsize / 4); // size in 32bit words
+	bus_write_4(sc->res, TMC_DBALO, event->etr.low);
+	bus_write_4(sc->res, TMC_DBAHI, event->etr.high);
+	bus_write_4(sc->res, TMC_RSZ, event->etr.bufsize / 4); // size in 32bit words
 
-	bus_write_4(sc->res, TMC_RRP, event->low);
-	bus_write_4(sc->res, TMC_RWP, event->low);
-
-	//printf("Writing to TMC_RRP %x TMC_RWP %x\n", event->rrp, event->rwp);
-	//bus_write_4(sc->res, TMC_RRP, event->rwp);
-	//bus_write_4(sc->res, TMC_RWP, event->rwp);
-	//printf("Reading TMC_RRP %x TMC_RWP %x\n", bus_read_4(sc->res, TMC_RRP), bus_read_4(sc->res, TMC_RWP));
+	bus_write_4(sc->res, TMC_RRP, event->etr.low);
+	bus_write_4(sc->res, TMC_RWP, event->etr.low);
 
 	reg = bus_read_4(sc->res, TMC_STS);
 	reg &= ~STS_FULL;
 	bus_write_4(sc->res, TMC_STS, reg);
-
-	//event->cycle = 0;
 
 	tmc_start(out->dev);
 
@@ -248,13 +241,13 @@ tmc_enable(struct coresight_device *out, struct endpoint *endp,
 	case CORESIGHT_ETF:
 		return (0);
 	case CORESIGHT_ETR:
-		if (event->started)
+		if (event->etr.started)
 			return (0);
 		tmc_unlock(sc);
 		tmc_stop(out->dev);
 		tmc_configure_etr(out, endp, event);
 		tmc_start(out->dev);
-		event->started = 1;
+		event->etr.started = 1;
 	default:
 		break;
 	}
@@ -267,6 +260,10 @@ tmc_disable(struct coresight_device *out, struct endpoint *endp,
     struct coresight_event *event)
 {
 
+	/*
+	 * Can't restore the state: can't specify buffer offset 
+	 * to continue operation from. So we do not disable TMC here.
+	 */
 }
 
 static struct coresight_ops ops = {

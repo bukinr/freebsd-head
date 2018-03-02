@@ -234,9 +234,9 @@ coresight_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	phys_hi = (coresight_buf->phys_base >> 32) & 0xffffffff;
 	event->naddr = 0;
 
-	event->started = 0;
-	event->low = phys_lo;
-	event->high = phys_hi;
+	event->etr.started = 0;
+	event->etr.low = phys_lo;
+	event->etr.high = phys_hi;
 
 	mode = PMC_TO_MODE(pm);
 	if (mode == PMC_MODE_ST)
@@ -506,8 +506,8 @@ coresight_read_trace(int cpu, int ri, struct pmc *pm,
 
 	coresight_read(cpu, event);
 
-	cycle = event->cycle;
-	offset = event->offset;
+	cycle = event->etr.cycle;
+	offset = event->etr.offset;
 
 	pm_coresight = (struct pmc_md_coresight_pmc *)&pm->pm_md;
 	coresight_buf = &pm_coresight->coresight_buffers[cpu];

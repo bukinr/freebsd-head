@@ -92,6 +92,15 @@ TAILQ_HEAD(coresight_device_list, coresight_device);
 
 #define	ETM_N_COMPRATOR		16
 
+struct etr_status {
+	boolean_t started;
+	uint32_t cycle;
+	uint32_t offset;
+	uint32_t low;
+	uint32_t high;
+	uint32_t bufsize;
+};
+
 struct coresight_event {
 	LIST_HEAD(, endpoint) endplist;
 
@@ -101,12 +110,7 @@ struct coresight_event {
 	enum cs_dev_type src;
 	enum cs_dev_type sink;
 
-	boolean_t started;
-	uint32_t cycle;
-	uint32_t offset;
-	uint32_t low;
-	uint32_t high;
-	uint32_t bufsize;
+	struct etr_status etr;
 };
 
 struct coresight_ops {
