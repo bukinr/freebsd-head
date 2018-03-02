@@ -152,7 +152,8 @@ bool X86TargetInfo::initFeatureMap(
     setFeatureEnabledImpl(Features, "avx512bw", true);
     setFeatureEnabledImpl(Features, "avx512vl", true);
     setFeatureEnabledImpl(Features, "pku", true);
-    setFeatureEnabledImpl(Features, "clwb", true);
+    if (Kind != CK_Cannonlake) // CNL inherits all SKX features, except CLWB
+      setFeatureEnabledImpl(Features, "clwb", true);
     LLVM_FALLTHROUGH;
   case CK_SkylakeClient:
     setFeatureEnabledImpl(Features, "xsavec", true);
@@ -763,6 +764,10 @@ bool X86TargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
       HasPREFETCHWT1 = true;
     } else if (Feature == "+clzero") {
       HasCLZERO = true;
+    } else if (Feature == "+retpoline") {
+      HasRetpoline = true;
+    } else if (Feature == "+retpoline-external-thunk") {
+      HasRetpolineExternalThunk = true;
     }
 
     X86SSEEnum Level = llvm::StringSwitch<X86SSEEnum>(Feature)
@@ -1305,6 +1310,8 @@ bool X86TargetInfo::hasFeature(StringRef Feature) const {
       .Case("prfchw", HasPRFCHW)
       .Case("rdrnd", HasRDRND)
       .Case("rdseed", HasRDSEED)
+      .Case("retpoline", HasRetpoline)
+      .Case("retpoline-external-thunk", HasRetpolineExternalThunk)
       .Case("rtm", HasRTM)
       .Case("sgx", HasSGX)
       .Case("sha", HasSHA)

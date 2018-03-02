@@ -75,9 +75,14 @@ g_label_ufs_taste_common(struct g_consumer *cp, char *label, size_t size, int wh
 	pp = cp->provider;
 	label[0] = '\0';
 
+	fs = NULL;
 	if (SBLOCKSIZE % pp->sectorsize != 0 ||
-	    ffs_sbget(cp, &fs, -1, NULL, g_use_g_read_data) != 0)
+	    ffs_sbget(cp, &fs, -1, M_GEOM, g_use_g_read_data) != 0) {
+		KASSERT(fs == NULL,
+		    ("g_label_ufs_taste_common: non-NULL fs %p\n", fs));
 		return;
+	}
+
 	/*
 	 * Check for magic. We also need to check if file system size
 	 * is almost equal to providers size, because sysinstall(8)
@@ -146,3 +151,5 @@ struct g_label_desc g_label_ufs_id = {
 
 G_LABEL_INIT(ufsid, g_label_ufs_id, "Create device nodes for UFS file system IDs");
 G_LABEL_INIT(ufs, g_label_ufs_volume, "Create device nodes for UFS volume names");
+
+MODULE_DEPEND(g_label, ufs, 1, 1, 1);

@@ -59,6 +59,7 @@ __FBSDID("$FreeBSD$");
 #include <netinet6/scope6_var.h>
 #define TCPSTATES
 #include <netinet/tcp_fsm.h>
+#include <netinet/tcp_timer.h>
 #include <netinet/tcp_var.h>
 #include <netinet/toecore.h>
 
@@ -172,7 +173,6 @@ alloc_toepcb(struct vi_info *vi, int txqid, int rxqid, int flags)
 	toep->txsd_pidx = 0;
 	toep->txsd_cidx = 0;
 	aiotx_init_toep(toep);
-	ddp_init_toep(toep);
 
 	return (toep);
 }
@@ -197,7 +197,8 @@ free_toepcb(struct toepcb *toep)
 	KASSERT(!(toep->flags & TPF_CPL_PENDING),
 	    ("%s: CPL pending", __func__));
 
-	ddp_uninit_toep(toep);
+	if (toep->ulp_mode == ULP_MODE_TCPDDP)
+		ddp_uninit_toep(toep);
 	free(toep, M_CXGBE);
 }
 
@@ -302,7 +303,8 @@ release_offload_resources(struct toepcb *toep)
 	MPASS(mbufq_len(&toep->ulp_pduq) == 0);
 	MPASS(mbufq_len(&toep->ulp_pdu_reclaimq) == 0);
 #ifdef INVARIANTS
-	ddp_assert_empty(toep);
+	if (toep->ulp_mode == ULP_MODE_TCPDDP)
+		ddp_assert_empty(toep);
 #endif
 
 	if (toep->l2te)
@@ -545,8 +547,6 @@ select_rcv_wscale(void)
 	return (wscale);
 }
 
-extern int always_keepalive;
-
 /*
  * socket so could be a listening socket too.
  */
@@ -565,7 +565,7 @@ calc_opt0(struct socket *so, struct vi_info *vi, struct l2t_entry *e,
 	if (so != NULL) {
 		struct inpcb *inp = sotoinpcb(so);
 		struct tcpcb *tp = intotcpcb(inp);
-		int keepalive = always_keepalive ||
+		int keepalive = tcp_always_keepalive ||
 		    so_options_get(so) & SO_KEEPALIVE;
 
 		opt0 |= V_NAGLE((tp->t_flags & TF_NODELAY) == 0);
@@ -624,7 +624,7 @@ set_tcpddp_ulp_mode(struct toepcb *toep)
 {
 
 	toep->ulp_mode = ULP_MODE_TCPDDP;
-	toep->ddp_flags = DDP_OK;
+	ddp_init_toep(toep);
 }
 
 int
