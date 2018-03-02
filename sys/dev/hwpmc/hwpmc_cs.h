@@ -38,33 +38,16 @@
 
 #include <machine/frame.h>
 
-#define	CORESIGHT_CPUID	0x14
 #define	CORESIGHT_NADDR	4
 #define	CORESIGHT_NPMCS	1
 
 struct pmc_md_coresight_op_pmcallocate {
 	uint32_t		flags;
-#define	INTEL_PT_FLAG_BRANCHES	(1 << 0)
-#define	INTEL_PT_FLAG_TSC	(1 << 1)
-#define	INTEL_PT_FLAG_MTC	(1 << 2)
-#define	INTEL_PT_FLAG_DISRETC	(1 << 3)
 	uint64_t		ranges[2 * CORESIGHT_NADDR];
 	int			nranges;
 };
 
 #ifdef	_KERNEL
-struct xsave_header {
-	uint64_t	xsave_bv;
-	uint64_t	xcomp_bv;
-	uint8_t		reserved[48];
-};
-
-struct topa_entry {
-	uint64_t base;
-	uint64_t size;
-	uint64_t offset;
-};
-
 struct coresight_buffer {
 	uint64_t		cycle;
 	uint64_t		phys_base;
