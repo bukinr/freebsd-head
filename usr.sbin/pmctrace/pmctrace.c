@@ -511,6 +511,17 @@ pmctrace_run(bool user_mode, char *func_name, char *func_image)
 	return (0);
 }
 
+static void
+usage(void)
+{
+
+	errx(EX_USAGE,
+		"[options] [commandline]\n"
+		"\t -s device\t\tTrace kernel\n"
+		"\t -u device\t\tTrace userspace\n"
+	);
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -543,7 +554,7 @@ main(int argc, char *argv[])
 	pmctrace_setup_cpumask(&cpumask);
 
 	while ((option = getopt(argc, argv,
-	    "tu:s:i:f:")) != -1)
+	    "htu:s:i:f:")) != -1)
 		switch (option) {
 		case 'i':
 			func_image = strdup(optarg);
@@ -553,8 +564,8 @@ main(int argc, char *argv[])
 			break;
 		case 'u':
 		case 's':
-			//if (ev != NULL)
-			//	usage();
+			if (ev != NULL)
+				usage();
 
 			if ((ev = malloc(sizeof(struct pmcstat_ev))) == NULL)
 				errx(EX_SOFTWARE, "ERROR: Out of memory.");
@@ -583,12 +594,14 @@ main(int argc, char *argv[])
 				errx(EX_SOFTWARE, "ERROR: trace device not found");
 			break;
 		case 't':
-			//if (ev == NULL)
-			//	usage();
+			if (ev == NULL)
+				usage();
 
 			if (pmctrace_cfg.trace_dev->methods->option != NULL)
 				pmctrace_cfg.trace_dev->methods->option(option);
 			break;
+		case 'h':
+			usage();
 		default:
 			break;
 		};
