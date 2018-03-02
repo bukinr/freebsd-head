@@ -76,9 +76,6 @@ __FBSDID("$FreeBSD$");
 #include "hwpmc_soft.h"
 #include "hwpmc_vm.h"
 
-/* Bitmask of CPUs requiring servicing at hardclock time */
-static volatile cpuset_t pmc_cpumask;
-
 /*
  * Types
  */
@@ -2022,8 +2019,6 @@ pmc_hook_handler(struct thread *td, int function, void *arg)
 	 * are being processed.
 	 */
 	case PMC_FN_DO_SAMPLES:
-		if (!PMC_CPU_HAS_SAMPLES(PCPU_GET(cpuid)))
-			return (0);
 
 		/*
 		 * Clear the cpu specific bit in the CPU mask before

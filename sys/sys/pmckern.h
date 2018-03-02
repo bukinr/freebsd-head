@@ -164,6 +164,9 @@ extern int (*pmc_intr)(int _cpu, struct trapframe *_frame);
 /* SX lock protecting the hook */
 extern struct sx pmc_sx;
 
+/* Per-cpu flags indicating availability of sampling data */
+extern volatile cpuset_t pmc_cpumask;
+
 /* Count of system-wide sampling PMCs in existence */
 extern volatile int pmc_ss_count;
 
