@@ -84,6 +84,8 @@
 #define	 TRCVICTLR_EXLEVEL_S_S	16
 #define	 TRCVICTLR_EXLEVEL_S_M	(0xf << TRCVICTLR_EXLEVEL_S_S)
 #define	 TRCVICTLR_EXLEVEL_S(n)	(0x1 << ((n) + TRCVICTLR_EXLEVEL_S_S))
+#define	 EVENT_SEL_S		0
+#define	 EVENT_SEL_M		(0x1f << EVENT_SEL_S)
 #define	TRCVIIECTLR		0x084 /* Trace ViewInst Include/Exclude Control Register */
 #define	TRCVISSCTLR		0x088 /* Trace ViewInst Start/Stop Control Register */
 #define	TRCVIPCSSCTLR		0x08C /* Trace ViewInst Start/Stop PE Comparator Control Register */

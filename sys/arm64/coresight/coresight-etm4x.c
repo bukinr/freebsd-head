@@ -173,7 +173,9 @@ etm_prepare(struct coresight_device *out, struct coresight_event *config)
 
 	/* Enable ViewInst to trace everything, with the start/stop logic started. */
 	reg = TRCVICTLR_SSSTATUS;
-	reg |= 1;
+
+	/* The number of the single resource used to activate the event. */
+	reg |= (1 << EVENT_SEL_S);
 
 	if (config->excp_level > 2)
 		return (-1);
