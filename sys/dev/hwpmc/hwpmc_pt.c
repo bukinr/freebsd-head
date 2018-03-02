@@ -228,12 +228,12 @@ pt_buffer_allocate(uint32_t cpu, struct pt_buffer *pt_buf)
 
 	pt_pc = pt_pcpu[cpu];
 
-	bufsize = 128 * 1024 * 1024;
+	bufsize = 16 * 1024 * 1024;
 
 	if (pt_pc->l0_ecx & CPUPT_TOPA_MULTI)
 		topa_size = TOPA_SIZE_4K;
 	else
-		topa_size = TOPA_SIZE_128M;
+		topa_size = TOPA_SIZE_16M;
 
 	segsize = PAGE_SIZE << (topa_size >> TOPA_SIZE_S);
 	ntopa = bufsize / segsize;

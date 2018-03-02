@@ -7172,7 +7172,7 @@ __PMC_EV_ALIAS("IMPC_C0H_TRK_REQUEST.ALL", UCP_EVENT_84H_01H)
  * 0x13300	0x00FF		Freescale e500 events
  * 0x14000	0x0100		ARMv7 events
  * 0x14100	0x0100		ARMv8 events
- * 0x14200	0x0001		ARM Embedded Trace Macrocell
+ * 0x14200	0x0001		ARM Coresight
  * 0x20000	0x1000		Software events
  */
 #define	__PMC_EVENTS()				\
