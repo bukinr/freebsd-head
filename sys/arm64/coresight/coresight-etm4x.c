@@ -46,14 +46,6 @@ __FBSDID("$FreeBSD$");
 #include <arm64/coresight/coresight.h>
 #include <arm64/coresight/coresight-etm4x.h>
 
-#define CORESIGHT_LAR           0xfb0
-#define CORESIGHT_LSR           0xfb4
-#define CORESIGHT_AUTHSTATUS    0xfb8
-#define CORESIGHT_DEVID         0xfc8
-#define CORESIGHT_DEVTYPE       0xfcc
-   
-#define CORESIGHT_UNLOCK        0xc5acce55
-
 /*
  * Typical trace flow:
  *

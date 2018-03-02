@@ -48,17 +48,6 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
 
-#define CORESIGHT_ITCTRL        0xf00
-#define CORESIGHT_CLAIMSET      0xfa0
-#define CORESIGHT_CLAIMCLR      0xfa4
-#define CORESIGHT_LAR           0xfb0
-#define CORESIGHT_LSR           0xfb4
-#define CORESIGHT_AUTHSTATUS    0xfb8
-#define CORESIGHT_DEVID         0xfc8
-#define CORESIGHT_DEVTYPE       0xfcc
-
-#define CORESIGHT_UNLOCK        0xc5acce55
-
 static struct ofw_compat_data compat_data[] = {
 	{ "arm,coresight-dynamic-replicator",	1 },
 	{ NULL,					0 }
