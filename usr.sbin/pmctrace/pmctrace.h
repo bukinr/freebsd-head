@@ -52,7 +52,7 @@ struct trace_cpu {
 
 struct trace_dev_methods {
 	int (*process)(struct trace_cpu *, struct pmcstat_process *,
-	    uint32_t cpu, uint32_t cycle, uint64_t offset, uint32_t flags);
+	    uint32_t cpu, uint32_t cycle, uint64_t offset);
 	int (*init)(struct trace_cpu *tc);
 	int (*option)(int option);
 };
@@ -65,7 +65,6 @@ struct trace_dev {
 struct pmctrace_config {
 	struct trace_dev *trace_dev;
 	uint32_t flags;
-#define	FLAG_BRANCH_TNT		(1 << 0)	/* Taken/Not Taken */
 };
 
 #endif /* !_PMCTRACE_H_ */

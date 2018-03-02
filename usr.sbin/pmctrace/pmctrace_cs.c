@@ -429,14 +429,12 @@ static int cs_init(struct trace_cpu *tc);
 
 static int
 cs_process(struct trace_cpu *tc, struct pmcstat_process *pp,
-    uint32_t cpu, uint32_t cycle, uint64_t offset,
-    uint32_t flags)
+    uint32_t cpu, uint32_t cycle, uint64_t offset)
 {
 	struct mtrace_data *mdata;
 
 	mdata = &tc->mdata;
 	mdata->pp = pp;
-	mdata->flags = flags;
 
 	cs_init(tc);
 

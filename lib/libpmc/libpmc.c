@@ -2693,10 +2693,6 @@ arm64_allocate_pmc(enum pmc_event pe, char *ctrspec __unused,
 	return (0);
 }
 
-#define	ARM_CORESIGHT_KW_BRANCHES	"branches"
-#define	ARM_CORESIGHT_KW_TSC		"tsc"
-#define	ARM_CORESIGHT_KW_MTC		"mtc"
-#define	ARM_CORESIGHT_KW_DISRETC	"disretc"
 #define	ARM_CORESIGHT_KW_ADDRA	"addra"
 #define	ARM_CORESIGHT_KW_ADDRB	"addrb"
 
@@ -2716,22 +2712,6 @@ coresight_allocate_pmc(enum pmc_event pe, char *ctrspec,
 
 	addrn = 0;
 	while ((p = strsep(&ctrspec, ",")) != NULL) {
-		if (KWMATCH(p, ARM_CORESIGHT_KW_BRANCHES)) {
-			//pm_coresight->flags |= ARM_CORESIGHT_FLAG_BRANCHES;
-		}
-
-		if (KWMATCH(p, ARM_CORESIGHT_KW_TSC)) {
-			//pm_coresight->flags |= ARM_CORESIGHT_FLAG_TSC;
-		}
-
-		if (KWMATCH(p, ARM_CORESIGHT_KW_MTC)) {
-			//pm_coresight->flags |= ARM_CORESIGHT_FLAG_MTC;
-		}
-
-		if (KWMATCH(p, ARM_CORESIGHT_KW_DISRETC)) {
-			//pm_coresight->flags |= ARM_CORESIGHT_FLAG_DISRETC;
-		}
-
 		if (KWPREFIXMATCH(p, ARM_CORESIGHT_KW_ADDRA "=")) {
 			q = strchr(p, '=');
 			if (*++q == '\0') /* skip '=' */

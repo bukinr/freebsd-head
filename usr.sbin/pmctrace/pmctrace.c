@@ -192,8 +192,7 @@ pmctrace_process_cpu(int cpu, struct pmcstat_ev *ev)
 		pp = pmcstat_kernproc;
 
 	if (pp)
-		trace_dev->methods->process(tc, pp, cpu, cycle,
-		    offset, pmctrace_cfg.flags);
+		trace_dev->methods->process(tc, pp, cpu, cycle, offset);
 	else
 		dprintf("pp not found\n");
 

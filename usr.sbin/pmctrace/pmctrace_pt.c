@@ -90,6 +90,7 @@ __FBSDID("$FreeBSD$");
 #endif
 
 static int ipt_flags;
+#define	FLAG_BRANCH_TNT		(1 << 0)	/* Taken/Not Taken */
 
 static struct pmcstat_symbol *
 symbol_lookup(struct mtrace_data *mdata)
@@ -312,14 +313,12 @@ ipt_process_chunk(struct mtrace_data *mdata, uint64_t base,
 
 static int
 ipt_process(struct trace_cpu *tc, struct pmcstat_process *pp,
-    uint32_t cpu, uint32_t cycle, uint64_t offset,
-    uint32_t flags)
+    uint32_t cpu, uint32_t cycle, uint64_t offset)
 {
 	struct mtrace_data *mdata;
 
 	mdata = &tc->mdata;
 	mdata->pp = pp;
-	mdata->flags = flags;
 
 	dprintf("%s: cpu %d, cycle %d, offset %ld\n",
 	    __func__, cpu, cycle, offset);
