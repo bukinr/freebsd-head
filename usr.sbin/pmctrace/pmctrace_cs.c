@@ -77,10 +77,10 @@ __FBSDID("$FreeBSD$");
 #include <opencsd/c_api/ocsd_c_api_types.h>
 #include <opencsd/c_api/opencsd_c_api.h>
 
-#define	PMCTRACE_ETM_DEBUG
-#undef	PMCTRACE_ETM_DEBUG
+#define	PMCTRACE_CS_DEBUG
+#undef	PMCTRACE_CS_DEBUG
 
-#ifdef	PMCTRACE_ETM_DEBUG
+#ifdef	PMCTRACE_CS_DEBUG
 #define	dprintf(fmt, ...)	printf(fmt, ##__VA_ARGS__)
 #else
 #define	dprintf(fmt, ...)
@@ -483,7 +483,7 @@ cs_init(struct trace_cpu *tc)
 	ocsd_def_errlog_init(OCSD_ERR_SEV_INFO, 1);
 	ocsd_def_errlog_init(0, 0);
 
-#ifdef PMCTRACE_ETM_DEBUG
+#ifdef PMCTRACE_CS_DEBUG
 #if 0
 	ret = ocsd_def_errlog_config_output(C_API_MSGLOGOUT_FLG_FILE |
 	    C_API_MSGLOGOUT_FLG_STDOUT, "c_api_test.log");
@@ -509,7 +509,7 @@ cs_init(struct trace_cpu *tc)
 		return (-2);
 	}
 
-#ifdef PMCTRACE_ETM_DEBUG
+#ifdef PMCTRACE_CS_DEBUG
 	ocsd_tl_log_mapped_mem_ranges(dcdtree_handle);
 #endif
 
