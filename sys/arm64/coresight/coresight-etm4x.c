@@ -71,9 +71,8 @@ static struct resource_spec etm_spec[] = {
 };
 
 static void
-etm_print_version(struct etm_softc *sc)
+etm_unlock(struct etm_softc *sc)
 {
-	uint32_t reg;
 
 	/* Unlocking Coresight */
 	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
@@ -84,13 +83,6 @@ etm_print_version(struct etm_softc *sc)
 	bus_write_4(sc->res, TRCOSLAR, 0);
 
 	isb();
-
-	return;
-
-	reg = bus_read_4(sc->res, TRCIDR(1));
-	printf("ETM Version: %d.%d\n",
-	    (reg & TRCIDR1_TRCARCHMAJ_M) >> TRCIDR1_TRCARCHMAJ_S,
-	    (reg & TRCIDR1_TRCARCHMIN_M) >> TRCIDR1_TRCARCHMIN_S);
 }
 
 static int
@@ -141,8 +133,6 @@ etm_prepare(struct coresight_device *out, struct coresight_event *config)
 	uint32_t reg;
 
 	sc = device_get_softc(out->dev);
-
-	etm_print_version(sc);
 
 	/* Configure ETM */
 
@@ -270,6 +260,7 @@ etm_attach(device_t dev)
 {
 	struct coresight_desc desc;
 	struct etm_softc *sc;
+	uint32_t reg;
 
 	sc = device_get_softc(dev);
 
@@ -279,9 +270,12 @@ etm_attach(device_t dev)
 	}
 
 	if (device_get_unit(dev) == 0) {
-		int i;
-		for (i = 0; i < 14; i++)
-			printf("TRCIDR%d: %x\n", i, bus_read_4(sc->res, TRCIDR(i)));
+		/* TODO */
+		etm_unlock(sc);
+		reg = bus_read_4(sc->res, TRCIDR(1));
+		printf("ETM Version: %d.%d\n",
+		    (reg & TRCIDR1_TRCARCHMAJ_M) >> TRCIDR1_TRCARCHMAJ_S,
+		    (reg & TRCIDR1_TRCARCHMIN_M) >> TRCIDR1_TRCARCHMIN_S);
 	}
 
 	sc->pdata = coresight_get_platform_data(dev);

@@ -80,7 +80,6 @@ coresight_get_ports(phandle_t dev_node,
 
 			endpoint_child = ofw_bus_find_child(child, "endpoint");
 			if (endpoint_child) {
-				printf("endpoint found\n");
 				if (OF_getencprop(endpoint_child, "remote-endpoint", &xref,
 				    sizeof(xref)) == -1) {
 					printf("failed\n");
