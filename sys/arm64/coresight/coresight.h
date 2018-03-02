@@ -3,16 +3,15 @@
 
 #include <dev/ofw/openfirm.h>
 
-#define CORESIGHT_ITCTRL        0xf00
-#define CORESIGHT_CLAIMSET      0xfa0
-#define CORESIGHT_CLAIMCLR      0xfa4
-#define CORESIGHT_LAR           0xfb0
-#define CORESIGHT_LSR           0xfb4
-#define CORESIGHT_AUTHSTATUS    0xfb8
-#define CORESIGHT_DEVID         0xfc8
-#define CORESIGHT_DEVTYPE       0xfcc
-
-#define CORESIGHT_UNLOCK        0xc5acce55
+#define	CORESIGHT_ITCTRL	0xf00
+#define	CORESIGHT_CLAIMSET	0xfa0
+#define	CORESIGHT_CLAIMCLR	0xfa4
+#define	CORESIGHT_LAR		0xfb0
+#define	 CORESIGHT_UNLOCK	0xc5acce55
+#define	CORESIGHT_LSR		0xfb4
+#define	CORESIGHT_AUTHSTATUS	0xfb8
+#define	CORESIGHT_DEVID		0xfc8
+#define	CORESIGHT_DEVTYPE	0xfcc
 
 enum cs_dev_type {
 	CORESIGHT_ETMV4,
@@ -70,14 +69,12 @@ struct coresight_event {
 	enum cs_dev_type src;
 	enum cs_dev_type sink;
 
-	int started;
-	int cycle;
+	boolean_t started;
+	uint32_t cycle;
 	uint32_t offset;
 	uint32_t low;
 	uint32_t high;
 	uint32_t bufsize;
-	uint32_t rrp;
-	uint32_t rwp;
 };
 
 struct coresight_ops {
