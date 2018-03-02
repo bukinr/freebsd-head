@@ -295,7 +295,6 @@ create_generic_decoder(dcd_tree_handle_t handle, const char *p_name, const void 
 	return (ret);
 }
 
-/* ETMv4 settings */
 static ocsd_err_t
 create_decoder_etmv4(dcd_tree_handle_t dcd_tree_h, uint64_t base,
     uint64_t start, uint64_t end)
@@ -330,6 +329,8 @@ gen_trace_elem_print_lookup(const void *p_context, const ocsd_trc_index_t index_
 { 
 	const struct mtrace_data *mdata;
 	ocsd_datapath_resp_t resp;
+	struct pmcstat_symbol *sym;
+	struct pmcstat_image *image;
 
 	mdata = (const struct mtrace_data *)p_context;
 
@@ -339,11 +340,6 @@ gen_trace_elem_print_lookup(const void *p_context, const ocsd_trc_index_t index_
 	dprintf("%s: Idx:%d ELEM TYPE %d, st_addr %lx, en_addr %lx\n",
 	    __func__, index_sop, elem->elem_type, elem->st_addr, elem->en_addr);
 #endif
-
-	//mdata->ip = (elem->st_addr);
-
-	struct pmcstat_symbol *sym;
-	struct pmcstat_image *image;
 
 	if (elem->st_addr == 0)
 		return (0);
@@ -483,13 +479,11 @@ cs_init(struct trace_cpu *tc)
 	ocsd_def_errlog_init(OCSD_ERR_SEV_INFO, 1);
 	ocsd_def_errlog_init(0, 0);
 
-#ifdef PMCTRACE_CS_DEBUG
 #if 0
 	ret = ocsd_def_errlog_config_output(C_API_MSGLOGOUT_FLG_FILE |
 	    C_API_MSGLOGOUT_FLG_STDOUT, "c_api_test.log");
 	if (ret != OCSD_OK)
 		return (-1);
-#endif
 #endif
 
 	dcdtree_handle = ocsd_create_dcd_tree(OCSD_TRC_SRC_FRAME_FORMATTED,
