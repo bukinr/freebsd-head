@@ -29,8 +29,8 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _DEV_HWPMC_CORESIGHT_H_
-#define _DEV_HWPMC_CORESIGHT_H_
+#ifndef _DEV_HWPMC_CS_H_
+#define _DEV_HWPMC_CS_H_
 
 #include <sys/types.h>
 #include <sys/malloc.h>
@@ -68,4 +68,4 @@ void	pmc_coresight_finalize(struct pmc_mdep *_md);
 int	pmc_coresight_intr(int cpu, struct trapframe *tf);
 
 #endif /* !_KERNEL */
-#endif /* !_DEV_HWPMC_CORESIGHT_H */
+#endif /* !_DEV_HWPMC_CS_H_ */
