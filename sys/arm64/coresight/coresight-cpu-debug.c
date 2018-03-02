@@ -45,19 +45,17 @@ __FBSDID("$FreeBSD$");
 
 #include <arm64/coresight/coresight.h>
 
-#define EDPCSR                          0x0A0
-#define EDCIDSR                         0x0A4
-#define EDVIDSR                         0x0A8
-#define EDPCSR_HI                       0x0AC
-#define EDOSLAR                         0x300
-#define EDPRCR                          0x310
-/* bits definition for EDPRCR */
-#define EDPRCR_COREPURQ                 (1 << 3)
-#define EDPRCR_CORENPDRQ                (1 << 0)
-
-#define EDPRSR                          0x314
-#define EDDEVID1                        0xFC4
-#define EDDEVID                         0xFC8
+#define	EDPCSR				0x0a0
+#define	EDCIDSR				0x0a4
+#define	EDVIDSR				0x0a8
+#define	EDPCSR_HI			0x0ac
+#define	EDOSLAR				0x300
+#define	EDPRCR				0x310
+#define	 EDPRCR_COREPURQ		(1 << 3)
+#define	 EDPRCR_CORENPDRQ		(1 << 0)
+#define	EDPRSR				0x314
+#define	EDDEVID1			0xfc4
+#define	EDDEVID				0xfc8
 
 static struct ofw_compat_data compat_data[] = {
 	{ "arm,coresight-cpu-debug",		1 },
@@ -67,8 +65,6 @@ static struct ofw_compat_data compat_data[] = {
 struct debug_softc {
 	struct resource		*res;
 };
-
-struct debug_softc *debug_sc;
 
 static struct resource_spec debug_spec[] = {
 	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },
@@ -102,11 +98,6 @@ debug_attach(device_t dev)
 		device_printf(dev, "cannot allocate resources for device\n");
 		return (ENXIO);
 	}
-
-	if (debug_sc != NULL)
-		return (0);
-
-	debug_sc = sc;
 
 	/* Unlock Coresight */
 	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
