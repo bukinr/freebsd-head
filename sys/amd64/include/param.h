@@ -65,7 +65,7 @@
 #define	MACHINE_ARCH32	"i386"
 #endif
 
-#if defined(SMP) || defined(KLD_MODULE)
+#if defined(SMP)
 #ifndef MAXCPU
 #define MAXCPU		256
 #endif
