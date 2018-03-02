@@ -99,6 +99,10 @@ debug_attach(device_t dev)
 		return (ENXIO);
 	}
 
+	/* Enable CPU debug for current CPU only */
+	if (device_get_unit(dev) != 0)
+		return (0);
+
 	/* Unlock Coresight */
 	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
 
