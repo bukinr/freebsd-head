@@ -142,25 +142,14 @@ etm_prepare(struct coresight_device *out, struct coresight_event *config)
 
 	sc = device_get_softc(out->dev);
 
-	//device_t out_dev;
-	//out_dev = coresight_get_output_device(sc->pdata);
-	//printf("out_dev %lx\n", (uint64_t)out_dev);
-
 	etm_print_version(sc);
-
-	//etm_stop(out->dev);
 
 	/* Configure ETM */
 
 	/* Enable the return stack, global timestamping, Context ID, and Virtual context identifier tracing. */
-	//reg = TRCCONFIGR_RS | TRCCONFIGR_TS | TRCCONFIGR_CID | TRCCONFIGR_VMID;
-	//reg = 0x18C1;
-	//reg = 0x00031FC7; /* Enable all the options except cycle counting and branch broadcast. */
-
-	reg = TRCCONFIGR_RS | TRCCONFIGR_CID | TRCCONFIGR_VMID;
-	reg |= TRCCONFIGR_COND_ALL;
+	reg = TRCCONFIGR_RS | TRCCONFIGR_TS | TRCCONFIGR_CID | TRCCONFIGR_VMID;
 	reg |= TRCCONFIGR_INSTP0_LDRSTR;
-	reg = 0x00031FC7; /* Enable all the options except cycle counting and branch broadcast. */
+	reg |= TRCCONFIGR_COND_ALL;
 	bus_write_4(sc->res, TRCCONFIGR, reg);
 
 	/* Disable all event tracing. */
@@ -183,14 +172,11 @@ etm_prepare(struct coresight_device *out, struct coresight_event *config)
 	bus_write_4(sc->res, TRCTSCTLR, 0);
 
 	/* Enable ViewInst to trace everything, with the start/stop logic started. */
-	reg = 0x201;
-	//reg = TRCVICTLR_SSSTATUS;
-	//reg |= 1;
+	reg = TRCVICTLR_SSSTATUS;
+	reg |= 1;
 
 	if (config->excp_level > 2)
 		return (-1);
-
-	//printf("%s: Configure exception level %d\n", __func__, config->excp_level);
 
 	reg |= TRCVICTLR_EXLEVEL_NS_M;
 	reg &= ~TRCVICTLR_EXLEVEL_NS(config->excp_level);
