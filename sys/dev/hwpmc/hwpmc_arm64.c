@@ -536,7 +536,7 @@ pmc_arm64_initialize()
 	pmc_mdep->pmd_npmc   += arm64_npmcs;
 
 	ncpus = pmc_cpu_max();
-	pmc_etm_initialize(pmc_mdep, ncpus);
+	pmc_coresight_initialize(pmc_mdep, ncpus);
 
 	return (pmc_mdep);
 }
@@ -545,5 +545,5 @@ void
 pmc_arm64_finalize(struct pmc_mdep *md)
 {
 
-	pmc_etm_finalize(md);
+	pmc_coresight_finalize(md);
 }

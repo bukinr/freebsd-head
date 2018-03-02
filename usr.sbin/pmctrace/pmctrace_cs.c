@@ -72,7 +72,7 @@ __FBSDID("$FreeBSD$");
 #include <libpmcstat.h>
 
 #include "pmctrace.h"
-#include "pmctrace_etm.h"
+#include "pmctrace_cs.h"
 
 #include <opencsd/c_api/ocsd_c_api_types.h>
 #include <opencsd/c_api/opencsd_c_api.h>
@@ -91,7 +91,7 @@ static char packet_str[PACKET_STR_LEN];
 
 static dcd_tree_handle_t dcdtree_handle;
 
-static int etm_flags;
+static int cs_flags;
 #define	FLAG_FORMAT			(1 << 0)
 #define	FLAG_FRAME_RAW_UNPACKED		(1 << 1)
 #define	FLAG_FRAME_RAW_PACKED		(1 << 2)
@@ -134,10 +134,10 @@ attach_raw_printers(dcd_tree_handle_t dcd_tree_h)
 	flags = 0;
 	err = OCSD_OK;
 
-	if (etm_flags & FLAG_FRAME_RAW_UNPACKED)
+	if (cs_flags & FLAG_FRAME_RAW_UNPACKED)
 		flags |= OCSD_DFRMTR_UNPACKED_RAW_OUT;
 
-	if (etm_flags & FLAG_FRAME_RAW_PACKED)
+	if (cs_flags & FLAG_FRAME_RAW_PACKED)
 		flags |= OCSD_DFRMTR_PACKED_RAW_OUT;
 
 	if (flags)
@@ -227,7 +227,7 @@ packet_monitor(void *context __unused,
 }
 
 static uint32_t
-cs_etm_decoder__mem_access(const void *context __unused,
+cs_cs_decoder__mem_access(const void *context __unused,
     const ocsd_vaddr_t address __unused, const ocsd_mem_space_acc_t mem_space __unused,
     const uint32_t req_size __unused, uint8_t *buffer __unused)
 {
@@ -251,9 +251,9 @@ create_test_memory_acc(dcd_tree_handle_t handle, uint64_t base, uint64_t start, 
 	p_mem_buffer = (uint8_t *)(base + start);
 	mem_length = (end-start);
 
-	if (etm_flags & FLAG_CALLBACK_MEM_ACC)
+	if (cs_flags & FLAG_CALLBACK_MEM_ACC)
 		ret = ocsd_dt_add_callback_mem_acc(handle, base+start, base+end-1,
-		    OCSD_MEM_SPACE_ANY, cs_etm_decoder__mem_access, NULL);
+		    OCSD_MEM_SPACE_ANY, cs_cs_decoder__mem_access, NULL);
 	else
 		ret = ocsd_dt_add_buffer_mem_acc(handle, address, OCSD_MEM_SPACE_ANY,
 		    p_mem_buffer, mem_length);
@@ -280,7 +280,7 @@ create_generic_decoder(dcd_tree_handle_t handle, const char *p_name, const void 
 	if(ret != OCSD_OK)
 		return (-1);
 
-	if (etm_flags & FLAG_FORMAT) {
+	if (cs_flags & FLAG_FORMAT) {
 		ret = ocsd_dt_attach_packet_callback(handle, CSID,
 		    OCSD_C_API_CB_PKT_MON, packet_monitor, p_context);
 		if (ret != OCSD_OK)
@@ -383,7 +383,7 @@ gen_trace_elem_print_lookup(const void *p_context, const ocsd_trc_index_t index_
 }
 
 static int
-etm_process_chunk(struct mtrace_data *mdata __unused, uint64_t base,
+cs_process_chunk(struct mtrace_data *mdata __unused, uint64_t base,
     uint64_t start, uint64_t end)
 {
 	uint32_t bytes_done;
@@ -429,10 +429,10 @@ etm_process_chunk(struct mtrace_data *mdata __unused, uint64_t base,
 	return (0);
 }
 
-static int etm_init(struct trace_cpu *tc);
+static int cs_init(struct trace_cpu *tc);
 
 static int
-etm_process(struct trace_cpu *tc, struct pmcstat_process *pp,
+cs_process(struct trace_cpu *tc, struct pmcstat_process *pp,
     uint32_t cpu, uint32_t cycle, uint64_t offset,
     uint32_t flags)
 {
@@ -442,7 +442,7 @@ etm_process(struct trace_cpu *tc, struct pmcstat_process *pp,
 	mdata->pp = pp;
 	mdata->flags = flags;
 
-	etm_init(tc);
+	cs_init(tc);
 
 	dprintf("%s: cpu %d, cycle %d, offset %ld, tc->base %lx, *tc->base %lx\n",
 	    __func__, cpu, cycle, offset, (uint64_t)tc->base, *(uint64_t *)tc->base);
@@ -452,7 +452,7 @@ etm_process(struct trace_cpu *tc, struct pmcstat_process *pp,
 
 	if (cycle == tc->cycle) {
 		if (offset > tc->offset) {
-			etm_process_chunk(mdata, (uint64_t)tc->base, tc->offset, offset);
+			cs_process_chunk(mdata, (uint64_t)tc->base, tc->offset, offset);
 			tc->offset = offset;
 		} else if (offset < tc->offset) {
 			err(EXIT_FAILURE, "cpu%d: offset already processed %lx %lx",
@@ -463,10 +463,10 @@ etm_process(struct trace_cpu *tc, struct pmcstat_process *pp,
 			err(EXIT_FAILURE, "cpu%d: trace buffers fills up faster than"
 			    " we can process it (%d/%d). Consider setting trace filters",
 			    cpu, cycle, tc->cycle);
-		etm_process_chunk(mdata, (uint64_t)tc->base, tc->offset, tc->bufsize);
+		cs_process_chunk(mdata, (uint64_t)tc->base, tc->offset, tc->bufsize);
 		tc->offset = 0;
 		tc->cycle += 1;
-		//etm_process_chunk(mdata, (uint64_t)tc->base, tc->offset, offset);
+		//cs_process_chunk(mdata, (uint64_t)tc->base, tc->offset, offset);
 		tc->offset = offset;
 	}
 
@@ -474,7 +474,7 @@ etm_process(struct trace_cpu *tc, struct pmcstat_process *pp,
 }
 
 static int
-etm_init(struct trace_cpu *tc)
+cs_init(struct trace_cpu *tc)
 {
 	uint64_t start;
 	uint64_t end;
@@ -513,7 +513,7 @@ etm_init(struct trace_cpu *tc)
 	ocsd_tl_log_mapped_mem_ranges(dcdtree_handle);
 #endif
 
-	if (etm_flags & FLAG_FORMAT)
+	if (cs_flags & FLAG_FORMAT)
 		ocsd_dt_set_gen_elem_printer(dcdtree_handle);
 	else
 		ocsd_dt_set_gen_elem_outfn(dcdtree_handle, gen_trace_elem_print_lookup,
@@ -525,12 +525,12 @@ etm_init(struct trace_cpu *tc)
 }
 
 static int
-etm_option(int option)
+cs_option(int option)
 {
 
 	switch (option) {
 	case 't':
-		etm_flags |= FLAG_FORMAT;
+		cs_flags |= FLAG_FORMAT;
 		break;
 	default:
 		break;
@@ -539,8 +539,8 @@ etm_option(int option)
 	return (0);
 }
 
-struct trace_dev_methods etm_methods = {
-	.init = etm_init,
-	.process = etm_process,
-	.option = etm_option,
+struct trace_dev_methods cs_methods = {
+	.init = cs_init,
+	.process = cs_process,
+	.option = cs_option,
 };

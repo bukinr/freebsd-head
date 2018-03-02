@@ -67,37 +67,37 @@ __FBSDID("$FreeBSD$");
 
 #include <dev/hwpmc/hwpmc_vm.h>
 
-static MALLOC_DEFINE(M_ETM, "etm", "ETM driver");
+static MALLOC_DEFINE(M_CORESIGHT, "coresight", "CORESIGHT driver");
 
 extern struct cdev *pmc_cdev[MAXCPU];
 
 /*
- * ARM ETM support.
+ * ARM CORESIGHT support.
  */
 
-#define	ETM_CAPS	(PMC_CAP_READ | PMC_CAP_INTERRUPT | PMC_CAP_SYSTEM | PMC_CAP_USER)
+#define	CORESIGHT_CAPS	(PMC_CAP_READ | PMC_CAP_INTERRUPT | PMC_CAP_SYSTEM | PMC_CAP_USER)
 
-#define	PMC_ETM_DEBUG
-#undef	PMC_ETM_DEBUG
+#define	PMC_CORESIGHT_DEBUG
+#undef	PMC_CORESIGHT_DEBUG
 
-#ifdef	PMC_ETM_DEBUG
+#ifdef	PMC_CORESIGHT_DEBUG
 #define	dprintf(fmt, ...)	printf(fmt, ##__VA_ARGS__)
 #else
 #define	dprintf(fmt, ...)
 #endif
 
-struct etm_descr {
+struct coresight_descr {
 	struct pmc_descr pm_descr;  /* "base class" */
 };
 
-static struct etm_descr etm_pmcdesc[ETM_NPMCS] =
+static struct coresight_descr coresight_pmcdesc[CORESIGHT_NPMCS] =
 {
     {
 	.pm_descr =
 	{
-		.pd_name  = "ETM",
-		.pd_class = PMC_CLASS_ETM,
-		.pd_caps  = ETM_CAPS,
+		.pd_name  = "CORESIGHT",
+		.pd_class = PMC_CLASS_CORESIGHT,
+		.pd_caps  = CORESIGHT_CAPS,
 		.pd_width = 64
 	}
     }
@@ -107,7 +107,7 @@ static struct etm_descr etm_pmcdesc[ETM_NPMCS] =
  * Per-CPU data structure for PTs.
  */
 
-struct etm_cpu {
+struct coresight_cpu {
 	struct pmc_hw			tc_hw;
 	uint32_t			l0_eax;
 	uint32_t			l0_ebx;
@@ -116,18 +116,18 @@ struct etm_cpu {
 	uint32_t			l1_ebx;
 	struct pmc			*pm_mmap;
 	uint32_t			flags;
-#define	FLAG_ETM_ALLOCATED		(1 << 0)
+#define	FLAG_CORESIGHT_ALLOCATED		(1 << 0)
 	struct coresight_event		event;
 };
 
-static struct etm_cpu **etm_pcpu;
+static struct coresight_cpu **coresight_pcpu;
 
 static int
-etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf,
+coresight_buffer_allocate(uint32_t cpu, struct coresight_buffer *coresight_buf,
     uint32_t bufsize)
 {
 	struct pmc_vm_map *map;
-	struct etm_cpu *etm_pc;
+	struct coresight_cpu *coresight_pc;
 	uint64_t phys_base;
 	struct cdev_cpu *cc;
 	vm_object_t obj;
@@ -137,9 +137,9 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf,
 
 	dprintf("%s\n", __func__);
 
-	etm_pc = etm_pcpu[cpu];
+	coresight_pc = coresight_pcpu[cpu];
 
-	etm_buf->obj = obj = vm_pager_allocate(OBJT_PHYS, 0, bufsize,
+	coresight_buf->obj = obj = vm_pager_allocate(OBJT_PHYS, 0, bufsize,
 	    PROT_READ, 0, curthread->td_ucred);
 
 	npages = bufsize / PAGE_SIZE;
@@ -159,10 +159,10 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf,
 	phys_base = VM_PAGE_TO_PHYS(m);
 	VM_OBJECT_WUNLOCK(obj);
 
-	map = malloc(sizeof(struct pmc_vm_map), M_ETM, M_WAITOK | M_ZERO);
+	map = malloc(sizeof(struct pmc_vm_map), M_CORESIGHT, M_WAITOK | M_ZERO);
 	map->t = curthread;
 	map->obj = obj;
-	map->buf = (void *)etm_buf;
+	map->buf = (void *)coresight_buf;
 
 	cc = pmc_cdev[cpu]->si_drv1;
 
@@ -170,14 +170,14 @@ etm_buffer_allocate(uint32_t cpu, struct etm_buffer *etm_buf,
 	TAILQ_INSERT_HEAD(&cc->pmc_maplist, map, map_next);
 	mtx_unlock(&cc->vm_mtx);
 
-	etm_buf->phys_base = phys_base;
-	etm_buf->cycle = 0;
+	coresight_buf->phys_base = phys_base;
+	coresight_buf->cycle = 0;
 
 	return (0);
 }
 
 static int
-etm_buffer_deallocate(uint32_t cpu, struct etm_buffer *etm_buf)
+coresight_buffer_deallocate(uint32_t cpu, struct coresight_buffer *coresight_buf)
 {
 	struct pmc_vm_map *map, *map_tmp;
 	struct cdev_cpu *cc;
@@ -188,27 +188,27 @@ etm_buffer_deallocate(uint32_t cpu, struct etm_buffer *etm_buf)
 
 	mtx_lock(&cc->vm_mtx);
 	TAILQ_FOREACH_SAFE(map, &cc->pmc_maplist, map_next, map_tmp) {
-		if (map->buf == (void *)etm_buf) {
+		if (map->buf == (void *)coresight_buf) {
 			TAILQ_REMOVE(&cc->pmc_maplist, map, map_next);
-			free(map, M_ETM);
+			free(map, M_CORESIGHT);
 			break;
 		}
 	}
 	mtx_unlock(&cc->vm_mtx);
 
-	vm_object_deallocate(etm_buf->obj);
+	vm_object_deallocate(coresight_buf->obj);
 
 	return (0);
 }
 
 static int
-etm_buffer_prepare(uint32_t cpu, struct pmc *pm,
+coresight_buffer_prepare(uint32_t cpu, struct pmc *pm,
     const struct pmc_op_pmcallocate *a)
 {
-	const struct pmc_md_etm_op_pmcallocate *pm_etma;
-	struct etm_cpu *etm_pc;
-	struct pmc_md_etm_pmc *pm_etm;
-	struct etm_buffer *etm_buf;
+	const struct pmc_md_coresight_op_pmcallocate *pm_coresighta;
+	struct coresight_cpu *coresight_pc;
+	struct pmc_md_coresight_pmc *pm_coresight;
+	struct coresight_buffer *coresight_buf;
 	uint32_t bufsize;
 	enum pmc_mode mode;
 	uint32_t phys_lo;
@@ -216,22 +216,22 @@ etm_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	int error;
 	struct coresight_event *event;
 
-	etm_pc = etm_pcpu[cpu];
-	event = &etm_pc->event;
+	coresight_pc = coresight_pcpu[cpu];
+	event = &coresight_pc->event;
 
-	pm_etma = (const struct pmc_md_etm_op_pmcallocate *)&a->pm_md.pm_etm;
-	pm_etm = (struct pmc_md_etm_pmc *)&pm->pm_md;
-	etm_buf = &pm_etm->etm_buffers[cpu];
+	pm_coresighta = (const struct pmc_md_coresight_op_pmcallocate *)&a->pm_md.pm_coresight;
+	pm_coresight = (struct pmc_md_coresight_pmc *)&pm->pm_md;
+	coresight_buf = &pm_coresight->coresight_buffers[cpu];
 
 	bufsize = 16 * 1024 * 1024;
-	error = etm_buffer_allocate(cpu, etm_buf, bufsize);
+	error = coresight_buffer_allocate(cpu, coresight_buf, bufsize);
 	if (error != 0) {
 		dprintf("%s: can't allocate buffers\n", __func__);
 		return (EINVAL);
 	}
 
-	phys_lo = etm_buf->phys_base & 0xffffffff;
-	phys_hi = (etm_buf->phys_base >> 32) & 0xffffffff;
+	phys_lo = coresight_buf->phys_base & 0xffffffff;
+	phys_hi = (coresight_buf->phys_base >> 32) & 0xffffffff;
 	event->naddr = 0;
 
 	event->started = 0;
@@ -257,13 +257,13 @@ etm_buffer_prepare(uint32_t cpu, struct pmc *pm,
 }
 
 static int
-etm_allocate_pmc(int cpu, int ri, struct pmc *pm,
+coresight_allocate_pmc(int cpu, int ri, struct pmc *pm,
     const struct pmc_op_pmcallocate *a)
 {
-	struct etm_cpu *etm_pc;
+	struct coresight_cpu *coresight_pc;
 	int i;
 
-	etm_pc = etm_pcpu[cpu];
+	coresight_pc = coresight_pcpu[cpu];
 
 	dprintf("%s: curthread %lx, cpu %d (curcpu %d)\n", __func__,
 	    (uint64_t)curthread, cpu, PCPU_GET(cpuid));
@@ -271,20 +271,20 @@ etm_allocate_pmc(int cpu, int ri, struct pmc *pm,
 	    cpu, PCPU_GET(cpuid));
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
-	    ("[etm,%d] illegal CPU value %d", __LINE__, cpu));
-	KASSERT(ri >= 0 && ri < ETM_NPMCS,
-	    ("[etm,%d] illegal row index %d", __LINE__, ri));
+	    ("[coresight,%d] illegal CPU value %d", __LINE__, cpu));
+	KASSERT(ri >= 0 && ri < CORESIGHT_NPMCS,
+	    ("[coresight,%d] illegal row index %d", __LINE__, ri));
 
-	if (a->pm_class != PMC_CLASS_ETM)
+	if (a->pm_class != PMC_CLASS_CORESIGHT)
 		return (EINVAL);
 
-	if (a->pm_ev != PMC_EV_ETM_ETM)
+	if (a->pm_ev != PMC_EV_CORESIGHT_CORESIGHT)
 		return (EINVAL);
 
-	if ((pm->pm_caps & ETM_CAPS) == 0)
+	if ((pm->pm_caps & CORESIGHT_CAPS) == 0)
 		return (EINVAL);
 
-	if ((pm->pm_caps & ~ETM_CAPS) != 0)
+	if ((pm->pm_caps & ~CORESIGHT_CAPS) != 0)
 		return (EPERM);
 
 	if (a->pm_mode != PMC_MODE_ST &&
@@ -293,30 +293,30 @@ etm_allocate_pmc(int cpu, int ri, struct pmc *pm,
 
 	/* Can't allocate multiple ST */
 	if (a->pm_mode == PMC_MODE_ST &&
-	    etm_pc->flags & FLAG_ETM_ALLOCATED) {
-		dprintf("error: etm is already allocated for CPU %d\n", cpu);
+	    coresight_pc->flags & FLAG_CORESIGHT_ALLOCATED) {
+		dprintf("error: coresight is already allocated for CPU %d\n", cpu);
 		return (EUSERS);
 	}
 
 	if (a->pm_mode == PMC_MODE_TT)
 		for (i = 0; i < pmc_cpu_max(); i++) {
-			if (etm_buffer_prepare(i, pm, a))
+			if (coresight_buffer_prepare(i, pm, a))
 				return (EINVAL);
 		}
 	else
-		if (etm_buffer_prepare(cpu, pm, a))
+		if (coresight_buffer_prepare(cpu, pm, a))
 			return (EINVAL);
 
 	if (a->pm_mode == PMC_MODE_ST)
-		etm_pc->flags |= FLAG_ETM_ALLOCATED;
+		coresight_pc->flags |= FLAG_CORESIGHT_ALLOCATED;
 
 	return (0);
 }
 
 static int
-etm_config_pmc(int cpu, int ri, struct pmc *pm)
+coresight_config_pmc(int cpu, int ri, struct pmc *pm)
 {
-	struct etm_cpu *etm_pc;
+	struct coresight_cpu *coresight_pc;
 	struct pmc_hw *phw;
 
 	dprintf("%s: cpu %d (pm %lx)\n", __func__, cpu, (uint64_t)pm);
@@ -324,14 +324,14 @@ etm_config_pmc(int cpu, int ri, struct pmc *pm)
 	PMCDBG3(MDP,CFG,1, "cpu=%d ri=%d pm=%p", cpu, ri, pm);
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
-	    ("[etm,%d] illegal CPU value %d", __LINE__, cpu));
-	KASSERT(ri == 0, ("[etm,%d] illegal row-index %d", __LINE__, ri));
+	    ("[coresight,%d] illegal CPU value %d", __LINE__, cpu));
+	KASSERT(ri == 0, ("[coresight,%d] illegal row-index %d", __LINE__, ri));
 
-	etm_pc = etm_pcpu[cpu];
-	phw = &etm_pc->tc_hw;
+	coresight_pc = coresight_pcpu[cpu];
+	phw = &coresight_pc->tc_hw;
 
 	KASSERT(pm == NULL || phw->phw_pmc == NULL,
-	    ("[etm,%d] pm=%p phw->pm=%p hwpmc not unconfigured", __LINE__,
+	    ("[coresight,%d] pm=%p phw->pm=%p hwpmc not unconfigured", __LINE__,
 	    pm, phw->phw_pmc));
 
 	phw->phw_pmc = pm;
@@ -340,9 +340,9 @@ etm_config_pmc(int cpu, int ri, struct pmc *pm)
 }
 
 static int
-etm_describe(int cpu, int ri, struct pmc_info *pi, struct pmc **ppmc)
+coresight_describe(int cpu, int ri, struct pmc_info *pi, struct pmc **ppmc)
 {
-	const struct etm_descr *pd;
+	const struct coresight_descr *pd;
 	struct pmc_hw *phw;
 	size_t copied;
 	int error;
@@ -350,11 +350,11 @@ etm_describe(int cpu, int ri, struct pmc_info *pi, struct pmc **ppmc)
 	dprintf("%s\n", __func__);
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
-	    ("[etm,%d] illegal CPU %d", __LINE__, cpu));
-	KASSERT(ri == 0, ("[etm,%d] illegal row-index %d", __LINE__, ri));
+	    ("[coresight,%d] illegal CPU %d", __LINE__, cpu));
+	KASSERT(ri == 0, ("[coresight,%d] illegal row-index %d", __LINE__, ri));
 
-	phw = &etm_pcpu[cpu]->tc_hw;
-	pd = &etm_pmcdesc[ri];
+	phw = &coresight_pcpu[cpu]->tc_hw;
+	pd = &coresight_pmcdesc[ri];
 
 	if ((error = copystr(pd->pm_descr.pd_name, pi->pm_name,
 	    PMC_NAME_MAX, &copied)) != 0)
@@ -374,17 +374,17 @@ etm_describe(int cpu, int ri, struct pmc_info *pi, struct pmc **ppmc)
 }
 
 static int
-etm_get_config(int cpu, int ri, struct pmc **ppm)
+coresight_get_config(int cpu, int ri, struct pmc **ppm)
 {
-	struct etm_cpu *etm_pc;
+	struct coresight_cpu *coresight_pc;
 	struct pmc_hw *phw;
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
-	    ("[etm,%d] illegal CPU %d", __LINE__, cpu));
-	KASSERT(ri == 0, ("[etm,%d] illegal row-index %d", __LINE__, ri));
+	    ("[coresight,%d] illegal CPU %d", __LINE__, cpu));
+	KASSERT(ri == 0, ("[coresight,%d] illegal row-index %d", __LINE__, ri));
 
-	etm_pc = etm_pcpu[cpu];
-	phw = &etm_pc->tc_hw;
+	coresight_pc = coresight_pcpu[cpu];
+	phw = &coresight_pc->tc_hw;
 
 	*ppm = phw->phw_pmc;
 
@@ -392,10 +392,10 @@ etm_get_config(int cpu, int ri, struct pmc **ppm)
 }
 
 static int
-etm_pcpu_init(struct pmc_mdep *md, int cpu)
+coresight_pcpu_init(struct pmc_mdep *md, int cpu)
 {
 	struct pmc_cpu *pc;
-	struct etm_cpu *etm_pc;
+	struct coresight_cpu *coresight_pc;
 	int ri;
 
 	dprintf("%s: cpu %d\n", __func__, cpu);
@@ -403,50 +403,50 @@ etm_pcpu_init(struct pmc_mdep *md, int cpu)
 	KASSERT(cpu == PCPU_GET(cpuid), ("Init on wrong CPU\n"));
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
-	    ("[etm,%d] illegal cpu %d", __LINE__, cpu));
-	KASSERT(etm_pcpu, ("[etm,%d] null pcpu", __LINE__));
-	KASSERT(etm_pcpu[cpu] == NULL, ("[etm,%d] non-null per-cpu",
+	    ("[coresight,%d] illegal cpu %d", __LINE__, cpu));
+	KASSERT(coresight_pcpu, ("[coresight,%d] null pcpu", __LINE__));
+	KASSERT(coresight_pcpu[cpu] == NULL, ("[coresight,%d] non-null per-cpu",
 	    __LINE__));
 
-	etm_pc = malloc(sizeof(struct etm_cpu), M_ETM, M_WAITOK | M_ZERO);
-	etm_pc->tc_hw.phw_state = PMC_PHW_FLAG_IS_ENABLED |
+	coresight_pc = malloc(sizeof(struct coresight_cpu), M_CORESIGHT, M_WAITOK | M_ZERO);
+	coresight_pc->tc_hw.phw_state = PMC_PHW_FLAG_IS_ENABLED |
 	    PMC_PHW_CPU_TO_STATE(cpu) | PMC_PHW_INDEX_TO_STATE(0) |
 	    PMC_PHW_FLAG_IS_SHAREABLE;
 
-	etm_pcpu[cpu] = etm_pc;
+	coresight_pcpu[cpu] = coresight_pc;
 
-	ri = md->pmd_classdep[PMC_MDEP_CLASS_INDEX_ETM].pcd_ri;
+	ri = md->pmd_classdep[PMC_MDEP_CLASS_INDEX_CORESIGHT].pcd_ri;
 
-	KASSERT(pmc_pcpu, ("[etm,%d] null generic pcpu", __LINE__));
+	KASSERT(pmc_pcpu, ("[coresight,%d] null generic pcpu", __LINE__));
 
 	pc = pmc_pcpu[cpu];
 
-	KASSERT(pc, ("[etm,%d] null generic per-cpu", __LINE__));
+	KASSERT(pc, ("[coresight,%d] null generic per-cpu", __LINE__));
 
-	pc->pc_hwpmcs[ri] = &etm_pc->tc_hw;
+	pc->pc_hwpmcs[ri] = &coresight_pc->tc_hw;
 
 	return (0);
 }
 
 static int
-etm_pcpu_fini(struct pmc_mdep *md, int cpu)
+coresight_pcpu_fini(struct pmc_mdep *md, int cpu)
 {
 	int ri;
 	struct pmc_cpu *pc;
-	struct etm_cpu *etm_pc;
+	struct coresight_cpu *coresight_pc;
 
 	dprintf("%s: cpu %d\n", __func__, cpu);
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
-	    ("[etm,%d] illegal cpu %d", __LINE__, cpu));
-	KASSERT(etm_pcpu[cpu] != NULL, ("[etm,%d] null pcpu", __LINE__));
+	    ("[coresight,%d] illegal cpu %d", __LINE__, cpu));
+	KASSERT(coresight_pcpu[cpu] != NULL, ("[coresight,%d] null pcpu", __LINE__));
 
-	etm_pc = etm_pcpu[cpu];
+	coresight_pc = coresight_pcpu[cpu];
 
-	free(etm_pcpu[cpu], M_ETM);
-	etm_pcpu[cpu] = NULL;
+	free(coresight_pcpu[cpu], M_CORESIGHT);
+	coresight_pcpu[cpu] = NULL;
 
-	ri = md->pmd_classdep[PMC_MDEP_CLASS_INDEX_ETM].pcd_ri;
+	ri = md->pmd_classdep[PMC_MDEP_CLASS_INDEX_CORESIGHT].pcd_ri;
 
 	pc = pmc_pcpu[cpu];
 	pc->pc_hwpmcs[ri] = NULL;
@@ -455,17 +455,17 @@ etm_pcpu_fini(struct pmc_mdep *md, int cpu)
 }
 
 static int
-etm_trace_config(int cpu, int ri, struct pmc *pm,
+coresight_trace_config(int cpu, int ri, struct pmc *pm,
     uint64_t *ranges, uint32_t nranges)
 {
 	struct coresight_event *event;
-	struct etm_cpu *etm_pc;
+	struct coresight_cpu *coresight_pc;
 	int i;
 
 	dprintf("%s\n", __func__);
 
-	etm_pc = etm_pcpu[cpu];
-	event = &etm_pc->event;
+	coresight_pc = coresight_pcpu[cpu];
+	event = &coresight_pc->event;
 
 	KASSERT(cpu == PCPU_GET(cpuid), ("Configuring wrong CPU\n"));
 
@@ -488,29 +488,29 @@ etm_trace_config(int cpu, int ri, struct pmc *pm,
 }
 
 static int
-etm_read_trace(int cpu, int ri, struct pmc *pm,
+coresight_read_trace(int cpu, int ri, struct pmc *pm,
     pmc_value_t *vcycle, pmc_value_t *voffset)
 {
-	struct pmc_md_etm_pmc *pm_etm;
+	struct pmc_md_coresight_pmc *pm_coresight;
 	struct coresight_event *event;
-	struct etm_buffer *etm_buf;
-	struct etm_cpu *etm_pc;
+	struct coresight_buffer *coresight_buf;
+	struct coresight_cpu *coresight_pc;
 	uint64_t offset;
 	uint64_t cycle;
 
 	dprintf("%s\n", __func__);
 
-	etm_pc = etm_pcpu[cpu];
-	etm_pc->pm_mmap = pm;
-	event = &etm_pc->event;
+	coresight_pc = coresight_pcpu[cpu];
+	coresight_pc->pm_mmap = pm;
+	event = &coresight_pc->event;
 
 	coresight_read(cpu, event);
 
 	cycle = event->cycle;
 	offset = event->offset;
 
-	pm_etm = (struct pmc_md_etm_pmc *)&pm->pm_md;
-	etm_buf = &pm_etm->etm_buffers[cpu];
+	pm_coresight = (struct pmc_md_coresight_pmc *)&pm->pm_md;
+	coresight_buf = &pm_coresight->coresight_buffers[cpu];
 
 	*vcycle = cycle;
 	*voffset = offset;
@@ -519,14 +519,14 @@ etm_read_trace(int cpu, int ri, struct pmc *pm,
 }
 
 static int
-etm_read_pmc(int cpu, int ri, pmc_value_t *v)
+coresight_read_pmc(int cpu, int ri, pmc_value_t *v)
 {
 
 	dprintf("%s\n", __func__);
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
-	    ("[etm,%d] illegal CPU value %d", __LINE__, cpu));
-	KASSERT(ri == 0, ("[etm,%d] illegal ri %d", __LINE__, ri));
+	    ("[coresight,%d] illegal CPU value %d", __LINE__, cpu));
+	KASSERT(ri == 0, ("[coresight,%d] illegal ri %d", __LINE__, ri));
 
 	*v = 0;
 
@@ -534,65 +534,65 @@ etm_read_pmc(int cpu, int ri, pmc_value_t *v)
 }
 
 static int
-etm_release_pmc(int cpu, int ri, struct pmc *pm)
+coresight_release_pmc(int cpu, int ri, struct pmc *pm)
 {
-	struct pmc_md_etm_pmc *pm_etm;
+	struct pmc_md_coresight_pmc *pm_coresight;
 	struct coresight_event *event;
-	struct etm_cpu *etm_pc;
+	struct coresight_cpu *coresight_pc;
 	enum pmc_mode mode;
 	struct pmc_hw *phw;
 	int i;
 
-	pm_etm = (struct pmc_md_etm_pmc *)&pm->pm_md;
-	etm_pc = etm_pcpu[cpu];
-	event = &etm_pc->event;
+	pm_coresight = (struct pmc_md_coresight_pmc *)&pm->pm_md;
+	coresight_pc = coresight_pcpu[cpu];
+	event = &coresight_pc->event;
 
 	dprintf("%s: cpu %d (curcpu %d)\n", __func__, cpu, PCPU_GET(cpuid));
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
-	    ("[etm,%d] illegal CPU value %d", __LINE__, cpu));
+	    ("[coresight,%d] illegal CPU value %d", __LINE__, cpu));
 	KASSERT(ri == 0,
-	    ("[etm,%d] illegal row-index %d", __LINE__, ri));
+	    ("[coresight,%d] illegal row-index %d", __LINE__, ri));
 
-	phw = &etm_pcpu[cpu]->tc_hw;
+	phw = &coresight_pcpu[cpu]->tc_hw;
 	phw->phw_pmc = NULL;
 
 	KASSERT(phw->phw_pmc == NULL,
-	    ("[etm,%d] PHW pmc %p non-NULL", __LINE__, phw->phw_pmc));
+	    ("[coresight,%d] PHW pmc %p non-NULL", __LINE__, phw->phw_pmc));
 
 	coresight_disable(cpu, event);
 
 	mode = PMC_TO_MODE(pm);
 	if (mode == PMC_MODE_TT)
 		for (i = 0; i < pmc_cpu_max(); i++)
-			etm_buffer_deallocate(i, &pm_etm->etm_buffers[i]);
+			coresight_buffer_deallocate(i, &pm_coresight->coresight_buffers[i]);
 	else
-		etm_buffer_deallocate(cpu, &pm_etm->etm_buffers[cpu]);
+		coresight_buffer_deallocate(cpu, &pm_coresight->coresight_buffers[cpu]);
 
 	if (mode == PMC_MODE_ST)
-		etm_pc->flags &= ~FLAG_ETM_ALLOCATED;
+		coresight_pc->flags &= ~FLAG_CORESIGHT_ALLOCATED;
 
 	return (0);
 }
 
 static int
-etm_start_pmc(int cpu, int ri)
+coresight_start_pmc(int cpu, int ri)
 {
 	struct coresight_event *event;
-	struct etm_cpu *etm_pc;
+	struct coresight_cpu *coresight_pc;
 	struct pmc_hw *phw;
 
 	dprintf("%s: cpu %d (curcpu %d)\n", __func__, cpu, PCPU_GET(cpuid));
 
-	etm_pc = etm_pcpu[cpu];
-	event = &etm_pc->event;
-	phw = &etm_pc->tc_hw;
+	coresight_pc = coresight_pcpu[cpu];
+	event = &coresight_pc->event;
+	phw = &coresight_pc->tc_hw;
 	if (phw == NULL || phw->phw_pmc == NULL)
 		return (-1);
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
-	    ("[etm,%d] illegal CPU value %d", __LINE__, cpu));
-	KASSERT(ri == 0, ("[etm,%d] illegal row-index %d", __LINE__, ri));
+	    ("[coresight,%d] illegal CPU value %d", __LINE__, cpu));
+	KASSERT(ri == 0, ("[coresight,%d] illegal row-index %d", __LINE__, ri));
 
 	coresight_enable(cpu, event);
 
@@ -600,19 +600,19 @@ etm_start_pmc(int cpu, int ri)
 }
 
 static int
-etm_stop_pmc(int cpu, int ri)
+coresight_stop_pmc(int cpu, int ri)
 {
 	struct coresight_event *event;
-	struct etm_cpu *etm_pc;
+	struct coresight_cpu *coresight_pc;
 
 	dprintf("%s\n", __func__);
 
-	etm_pc = etm_pcpu[cpu];
-	event = &etm_pc->event;
+	coresight_pc = coresight_pcpu[cpu];
+	event = &coresight_pc->event;
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
-	    ("[etm,%d] illegal CPU value %d", __LINE__, cpu));
-	KASSERT(ri == 0, ("[etm,%d] illegal row-index %d", __LINE__, ri));
+	    ("[coresight,%d] illegal CPU value %d", __LINE__, cpu));
+	KASSERT(ri == 0, ("[coresight,%d] illegal row-index %d", __LINE__, ri));
 
 	coresight_disable(cpu, event);
 
@@ -620,61 +620,61 @@ etm_stop_pmc(int cpu, int ri)
 }
 
 static int
-etm_write_pmc(int cpu, int ri, pmc_value_t v)
+coresight_write_pmc(int cpu, int ri, pmc_value_t v)
 {
 
 	dprintf("%s\n", __func__);
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
-	    ("[etm,%d] illegal CPU value %d", __LINE__, cpu));
-	KASSERT(ri == 0, ("[etm,%d] illegal row-index %d", __LINE__, ri));
+	    ("[coresight,%d] illegal CPU value %d", __LINE__, cpu));
+	KASSERT(ri == 0, ("[coresight,%d] illegal row-index %d", __LINE__, ri));
 
 	return (0);
 }
 
 int
-pmc_etm_initialize(struct pmc_mdep *md, int maxcpu)
+pmc_coresight_initialize(struct pmc_mdep *md, int maxcpu)
 {
 	struct pmc_classdep *pcd;
 
 	dprintf("%s\n", __func__);
 
-	KASSERT(md != NULL, ("[etm,%d] md is NULL", __LINE__));
-	KASSERT(md->pmd_nclass >= 1, ("[etm,%d] dubious md->nclass %d",
+	KASSERT(md != NULL, ("[coresight,%d] md is NULL", __LINE__));
+	KASSERT(md->pmd_nclass >= 1, ("[coresight,%d] dubious md->nclass %d",
 	    __LINE__, md->pmd_nclass));
 
-	etm_pcpu = malloc(sizeof(struct etm_cpu *) * maxcpu, M_ETM,
+	coresight_pcpu = malloc(sizeof(struct coresight_cpu *) * maxcpu, M_CORESIGHT,
 	    M_WAITOK | M_ZERO);
 
-	pcd = &md->pmd_classdep[PMC_MDEP_CLASS_INDEX_ETM];
+	pcd = &md->pmd_classdep[PMC_MDEP_CLASS_INDEX_CORESIGHT];
 
-	pcd->pcd_caps	= ETM_CAPS;
-	pcd->pcd_class	= PMC_CLASS_ETM;
-	pcd->pcd_num	= ETM_NPMCS;
+	pcd->pcd_caps	= CORESIGHT_CAPS;
+	pcd->pcd_class	= PMC_CLASS_CORESIGHT;
+	pcd->pcd_num	= CORESIGHT_NPMCS;
 	pcd->pcd_ri	= md->pmd_npmc;
 	pcd->pcd_width	= 64;
 
-	pcd->pcd_allocate_pmc = etm_allocate_pmc;
-	pcd->pcd_config_pmc   = etm_config_pmc;
-	pcd->pcd_describe     = etm_describe;
-	pcd->pcd_get_config   = etm_get_config;
-	pcd->pcd_pcpu_init    = etm_pcpu_init;
-	pcd->pcd_pcpu_fini    = etm_pcpu_fini;
-	pcd->pcd_read_pmc     = etm_read_pmc;
-	pcd->pcd_read_trace   = etm_read_trace;
-	pcd->pcd_trace_config = etm_trace_config;
-	pcd->pcd_release_pmc  = etm_release_pmc;
-	pcd->pcd_start_pmc    = etm_start_pmc;
-	pcd->pcd_stop_pmc     = etm_stop_pmc;
-	pcd->pcd_write_pmc    = etm_write_pmc;
+	pcd->pcd_allocate_pmc = coresight_allocate_pmc;
+	pcd->pcd_config_pmc   = coresight_config_pmc;
+	pcd->pcd_describe     = coresight_describe;
+	pcd->pcd_get_config   = coresight_get_config;
+	pcd->pcd_pcpu_init    = coresight_pcpu_init;
+	pcd->pcd_pcpu_fini    = coresight_pcpu_fini;
+	pcd->pcd_read_pmc     = coresight_read_pmc;
+	pcd->pcd_read_trace   = coresight_read_trace;
+	pcd->pcd_trace_config = coresight_trace_config;
+	pcd->pcd_release_pmc  = coresight_release_pmc;
+	pcd->pcd_start_pmc    = coresight_start_pmc;
+	pcd->pcd_stop_pmc     = coresight_stop_pmc;
+	pcd->pcd_write_pmc    = coresight_write_pmc;
 
-	md->pmd_npmc += ETM_NPMCS;
+	md->pmd_npmc += CORESIGHT_NPMCS;
 
 	return (0);
 }
 
 void
-pmc_etm_finalize(struct pmc_mdep *md)
+pmc_coresight_finalize(struct pmc_mdep *md)
 {
 
 	dprintf("%s\n", __func__);
@@ -684,13 +684,13 @@ pmc_etm_finalize(struct pmc_mdep *md)
 
 	ncpus = pmc_cpu_max();
 	for (i = 0; i < ncpus; i++)
-		KASSERT(etm_pcpu[i] == NULL, ("[etm,%d] non-null pcpu cpu %d",
+		KASSERT(coresight_pcpu[i] == NULL, ("[coresight,%d] non-null pcpu cpu %d",
 		    __LINE__, i));
 
-	KASSERT(md->pmd_classdep[PMC_MDEP_CLASS_INDEX_ETM].pcd_class ==
-	    PMC_CLASS_ETM, ("[etm,%d] class mismatch", __LINE__));
+	KASSERT(md->pmd_classdep[PMC_MDEP_CLASS_INDEX_CORESIGHT].pcd_class ==
+	    PMC_CLASS_CORESIGHT, ("[coresight,%d] class mismatch", __LINE__));
 #endif
 
-	free(etm_pcpu, M_ETM);
-	etm_pcpu = NULL;
+	free(coresight_pcpu, M_CORESIGHT);
+	coresight_pcpu = NULL;
 }

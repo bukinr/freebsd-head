@@ -31,9 +31,9 @@
  * $FreeBSD$
  */
 
-#ifndef _PMCTRACE_ETM_H_
-#define _PMCTRACE_ETM_H_
+#ifndef _PMCTRACE_CS_H_
+#define _PMCTRACE_CS_H_
 
-extern struct trace_dev_methods etm_methods;
+extern struct trace_dev_methods cs_methods;
 
-#endif /* !_PMCTRACE_ETM_H_ */
+#endif /* !_PMCTRACE_CS_H_ */

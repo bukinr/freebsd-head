@@ -73,7 +73,7 @@ __FBSDID("$FreeBSD$");
 #include "pmctrace_pt.h"
 #endif
 #if defined(__aarch64__)
-#include "pmctrace_etm.h"
+#include "pmctrace_cs.h"
 #endif
 
 #define	MAX_CPU	4096
@@ -108,7 +108,7 @@ static struct trace_dev trace_devs[] = {
 #if defined(__amd64__)
 	{ "pt",		&ipt_methods },
 #elif defined(__aarch64__)
-	{ "etm",	&etm_methods },
+	{ "coresight",	&cs_methods },
 #endif
 	{ NULL,	NULL }
 };

@@ -29,8 +29,8 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _DEV_HWPMC_ETM_H_
-#define _DEV_HWPMC_ETM_H_
+#ifndef _DEV_HWPMC_CORESIGHT_H_
+#define _DEV_HWPMC_CORESIGHT_H_
 
 #include <sys/types.h>
 #include <sys/malloc.h>
@@ -38,17 +38,17 @@
 
 #include <machine/frame.h>
 
-#define	ETM_CPUID	0x14
-#define	ETM_NADDR	4
-#define	ETM_NPMCS	1
+#define	CORESIGHT_CPUID	0x14
+#define	CORESIGHT_NADDR	4
+#define	CORESIGHT_NPMCS	1
 
-struct pmc_md_etm_op_pmcallocate {
+struct pmc_md_coresight_op_pmcallocate {
 	uint32_t		flags;
 #define	INTEL_PT_FLAG_BRANCHES	(1 << 0)
 #define	INTEL_PT_FLAG_TSC	(1 << 1)
 #define	INTEL_PT_FLAG_MTC	(1 << 2)
 #define	INTEL_PT_FLAG_DISRETC	(1 << 3)
-	uint64_t		ranges[2 * ETM_NADDR];
+	uint64_t		ranges[2 * CORESIGHT_NADDR];
 	int			nranges;
 };
 
@@ -59,48 +59,30 @@ struct xsave_header {
 	uint8_t		reserved[48];
 };
 
-struct etm_ext_area {
-	uint64_t	rtit_ctl;
-	uint64_t	rtit_output_base;
-	uint64_t	rtit_output_mask_etmrs;
-	uint64_t	rtit_status;
-	uint64_t	rtit_cr3_match;
-	uint64_t	rtit_addr0_a;
-	uint64_t	rtit_addr0_b;
-	uint64_t	rtit_addr1_a;
-	uint64_t	rtit_addr1_b;
-};
-
-struct etm_save_area {
-	uint8_t			legacy_state[512];
-	struct xsave_header	header;
-	struct etm_ext_area	etm_ext_area;
-} __aligned(64);
-
 struct topa_entry {
 	uint64_t base;
 	uint64_t size;
 	uint64_t offset;
 };
 
-struct etm_buffer {
+struct coresight_buffer {
 	uint64_t		cycle;
 	uint64_t		phys_base;
 	vm_object_t		obj;
 };
 
 /* MD extension for 'struct pmc' */
-struct pmc_md_etm_pmc {
-	struct etm_buffer	etm_buffers[MAXCPU];
+struct pmc_md_coresight_pmc {
+	struct coresight_buffer	coresight_buffers[MAXCPU];
 };
 
 /*
  * Prototypes.
  */
 
-int	pmc_etm_initialize(struct pmc_mdep *_md, int _maxcpu);
-void	pmc_etm_finalize(struct pmc_mdep *_md);
-int	pmc_etm_intr(int cpu, struct trapframe *tf);
+int	pmc_coresight_initialize(struct pmc_mdep *_md, int _maxcpu);
+void	pmc_coresight_finalize(struct pmc_mdep *_md);
+int	pmc_coresight_intr(int cpu, struct trapframe *tf);
 
 #endif /* !_KERNEL */
-#endif /* !_DEV_HWPMC_ETM_H */
+#endif /* !_DEV_HWPMC_CORESIGHT_H */

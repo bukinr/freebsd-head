@@ -14,8 +14,8 @@ LIBADD+= ipt
 .endif
 
 .if ${MACHINE_CPUARCH} == "aarch64"
-SRCS+=	pmctrace_etm.c		\
-	pmctrace_etm.h
+SRCS+=	pmctrace_cs.c		\
+	pmctrace_cs.h
 LIBADD+= opencsd
 .endif
 

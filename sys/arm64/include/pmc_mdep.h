@@ -34,7 +34,7 @@ struct pmc_mdep;
 #endif
 
 #define	PMC_MDEP_CLASS_INDEX_ARMV8	1
-#define	PMC_MDEP_CLASS_INDEX_ETM	2
+#define	PMC_MDEP_CLASS_INDEX_CORESIGHT	2
 
 /*
  * On the ARMv8 platform we support the following PMCs.
@@ -45,7 +45,7 @@ struct pmc_mdep;
 #include <dev/hwpmc/hwpmc_cs.h>
 
 union pmc_md_op_pmcallocate {
-	struct pmc_md_etm_op_pmcallocate		pm_etm;
+	struct pmc_md_coresight_op_pmcallocate		pm_coresight;
 	uint64_t		__pad[4];
 };
 
@@ -56,7 +56,7 @@ union pmc_md_op_pmcallocate {
 #ifdef	_KERNEL
 union pmc_md_pmc {
 	struct pmc_md_arm64_pmc		pm_arm64;
-	struct pmc_md_etm_pmc		pm_etm;
+	struct pmc_md_coresight_pmc	pm_coresight;
 };
 
 #define	PMC_IN_KERNEL_STACK(S,START,END)		\
