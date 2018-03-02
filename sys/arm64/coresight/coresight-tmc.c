@@ -214,7 +214,7 @@ tmc_configure_etr(struct coresight_device *out, struct endpoint *endp,
 
 	bus_write_4(sc->res, TMC_DBALO, event->etr.low);
 	bus_write_4(sc->res, TMC_DBAHI, event->etr.high);
-	bus_write_4(sc->res, TMC_RSZ, event->etr.bufsize / 4); // size in 32bit words
+	bus_write_4(sc->res, TMC_RSZ, event->etr.bufsize / 4);
 
 	bus_write_4(sc->res, TMC_RRP, event->etr.low);
 	bus_write_4(sc->res, TMC_RWP, event->etr.low);

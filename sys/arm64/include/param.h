@@ -54,7 +54,7 @@
 #define	MACHINE_ARCH32	"armv7"
 #endif
 
-#if defined(SMP) || defined(KLD_MODULE)
+#if defined(SMP)
 #ifndef MAXCPU
 #define	MAXCPU		96
 #endif
