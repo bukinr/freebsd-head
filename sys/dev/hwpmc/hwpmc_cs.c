@@ -181,7 +181,6 @@ coresight_buffer_allocate(uint32_t cpu, struct coresight_buffer *coresight_buf,
 	mtx_unlock(&cc->vm_mtx);
 
 	coresight_buf->phys_base = phys_base;
-	coresight_buf->cycle = 0;
 
 	return (0);
 }

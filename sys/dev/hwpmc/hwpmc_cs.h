@@ -49,7 +49,6 @@ struct pmc_md_coresight_op_pmcallocate {
 
 #ifdef	_KERNEL
 struct coresight_buffer {
-	uint64_t		cycle;
 	uint64_t		phys_base;
 	vm_object_t		obj;
 };
