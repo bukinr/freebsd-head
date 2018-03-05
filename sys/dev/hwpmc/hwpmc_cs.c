@@ -73,6 +73,14 @@ extern struct cdev *pmc_cdev[MAXCPU];
 
 /*
  * ARM CORESIGHT support.
+ *
+ * Limitation of hardware:
+ * - Scatter-gather operation is broken in hardware on Qualcomm Snapdragon 410e processor.
+ * - None of coresight interconnect devices provides an interrupt line.
+ * - Circular-buffer is the only mode of operation for TMC(ETR).
+ *
+ * I.e. once buffer filled the operation will not be halted, instead the buffer will be
+ * overwritten from start and none of interrupt provided.
  */
 
 #define	CORESIGHT_CAPS	(PMC_CAP_READ | PMC_CAP_INTERRUPT | PMC_CAP_SYSTEM | PMC_CAP_USER)
