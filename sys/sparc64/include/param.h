@@ -51,7 +51,7 @@
 #endif
 #define MID_MACHINE	MID_SPARC64
 
-#if defined(SMP) || defined(KLD_MODULE)
+#if defined(SMP)
 #ifndef MAXCPU
 #define MAXCPU		64
 #endif

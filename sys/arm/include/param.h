@@ -75,7 +75,7 @@
 #define	MACHINE_ARCH	"arm" _V_SUFFIX _EB_SUFFIX
 #endif
 
-#if defined(SMP) || defined(KLD_MODULE)
+#if defined(SMP)
 #ifndef MAXCPU
 #define	MAXCPU		4
 #endif
