@@ -141,7 +141,6 @@ coresight_buffer_allocate(uint32_t cpu, struct coresight_buffer *coresight_buf,
 	vm_object_t obj;
 	vm_page_t m;
 	int npages;
-	int i;
 
 	dprintf("%s\n", __func__);
 
@@ -153,7 +152,6 @@ coresight_buffer_allocate(uint32_t cpu, struct coresight_buffer *coresight_buf,
 	npages = bufsize / PAGE_SIZE;
 
 	VM_OBJECT_WLOCK(obj);
-	vm_object_reference_locked(obj);
 	m = vm_page_alloc_contig(obj, 0, VM_ALLOC_NOBUSY | VM_ALLOC_ZERO,
 	    npages, 0, ~0, PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
 	if (m == NULL) {
@@ -162,9 +160,10 @@ coresight_buffer_allocate(uint32_t cpu, struct coresight_buffer *coresight_buf,
 		vm_object_deallocate(obj);
 		return (-1);
 	}
-	for (i = 0; i < npages; i++)
-		m[i].valid = VM_PAGE_BITS_ALL;
 	phys_base = VM_PAGE_TO_PHYS(m);
+	for (; m != NULL; m = vm_page_next(m))
+		m->valid = VM_PAGE_BITS_ALL;
+	vm_object_reference_locked(obj);
 	VM_OBJECT_WUNLOCK(obj);
 
 	map = malloc(sizeof(struct pmc_vm_map), M_CORESIGHT, M_WAITOK | M_ZERO);
