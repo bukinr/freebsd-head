@@ -161,8 +161,11 @@ coresight_buffer_allocate(uint32_t cpu, struct coresight_buffer *coresight_buf,
 		return (-1);
 	}
 	phys_base = VM_PAGE_TO_PHYS(m);
-	for (; m != NULL; m = vm_page_next(m))
+	for (; m != NULL; m = vm_page_next(m)) {
+		if ((m->flags & PG_ZERO) == 0)
+			pmap_zero_page(m);
 		m->valid = VM_PAGE_BITS_ALL;
+	}
 	vm_object_reference_locked(obj);
 	VM_OBJECT_WUNLOCK(obj);
 
