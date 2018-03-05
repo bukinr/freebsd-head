@@ -82,12 +82,12 @@ tmc_start(device_t dev)
 {
 	struct tmc_softc *sc;
 	uint32_t reg;
- 
+
 	sc = device_get_softc(dev);
 
 	if (bus_read_4(sc->res, TMC_CTL) & CTL_TRACECAPTEN)
 		return (-1);
-		
+
 	/* Enable TMC */
 	bus_write_4(sc->res, TMC_CTL, CTL_TRACECAPTEN);
 	if ((bus_read_4(sc->res, TMC_CTL) & CTL_TRACECAPTEN) == 0)
@@ -108,7 +108,7 @@ tmc_stop(device_t dev)
 {
 	struct tmc_softc *sc;
 	uint32_t reg;
- 
+
 	sc = device_get_softc(dev);
 
 	reg = bus_read_4(sc->res, TMC_CTL);
@@ -149,7 +149,7 @@ tmc_configure_etf(device_t dev)
 {
 	struct tmc_softc *sc;
 	uint32_t reg;
- 
+
 	sc = device_get_softc(dev);
 
 	tmc_unlock(sc);
@@ -233,7 +233,7 @@ tmc_enable(struct coresight_device *out, struct endpoint *endp,
     struct coresight_event *event)
 {
 	struct tmc_softc *sc;
- 
+
 	sc = device_get_softc(out->dev);
 
 	/* ETF configuration is static */
