@@ -197,6 +197,8 @@ coresight_buffer_deallocate(uint32_t cpu, struct coresight_buffer *coresight_buf
 
 	mtx_lock(&cc->vm_mtx);
 	TAILQ_FOREACH_SAFE(map, &cc->pmc_maplist, map_next, map_tmp) {
+		KASSERT(map->t == curthread,
+		    ("Deallocation should be done in same thread as allocation"));
 		if (map->buf == (void *)coresight_buf) {
 			TAILQ_REMOVE(&cc->pmc_maplist, map, map_next);
 			free(map, M_CORESIGHT);
