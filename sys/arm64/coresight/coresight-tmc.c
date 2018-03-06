@@ -131,6 +131,9 @@ tmc_read(struct coresight_device *out, struct endpoint *endp,
 
 	sc = device_get_softc(out->dev);
 
+	if (out->dev_type == CORESIGHT_ETF)
+		return (0);
+
 	if (bus_read_4(sc->res, TMC_STS) & STS_FULL) {
 		event->etr.offset = 0;
 		event->etr.cycle++;
