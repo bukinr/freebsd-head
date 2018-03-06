@@ -91,6 +91,7 @@ static char packet_str[PACKET_STR_LEN];
 
 static dcd_tree_handle_t dcdtree_handle;
 
+static int cs_init(struct trace_cpu *tc);
 static int cs_flags;
 #define	FLAG_FORMAT			(1 << 0)
 #define	FLAG_FRAME_RAW_UNPACKED		(1 << 1)
@@ -390,7 +391,7 @@ cs_process_chunk(struct mtrace_data *mdata __unused, uint64_t base,
 	int dp_ret;
 	int ret;
 
-	dprintf("%s: start %lx end %lx\n", __func__, start, end);
+	dprintf("%s: base %lx start %lx end %lx\n", __func__, base, start, end);
 
 	bytes_this_time = 0;
 	block_index = 0;
@@ -404,7 +405,7 @@ cs_process_chunk(struct mtrace_data *mdata __unused, uint64_t base,
 	while (bytes_done < (uint32_t)block_size && (ret == OCSD_OK)) {
 
 		if (OCSD_DATA_RESP_IS_CONT(dp_ret)) {
-			dprintf("process data, block_size %d\n", block_size - bytes_done);
+			dprintf("process data, block_size %d, bytes_done %d\n", block_size, bytes_done);
 			dp_ret = ocsd_dt_process_data(dcdtree_handle, OCSD_OP_DATA,
 			    block_index + bytes_done,
 			    block_size - bytes_done,
@@ -425,8 +426,6 @@ cs_process_chunk(struct mtrace_data *mdata __unused, uint64_t base,
 	return (0);
 }
 
-static int cs_init(struct trace_cpu *tc);
-
 static int
 cs_process(struct trace_cpu *tc, struct pmcstat_process *pp,
     uint32_t cpu, uint32_t cycle, uint64_t offset)
@@ -438,8 +437,8 @@ cs_process(struct trace_cpu *tc, struct pmcstat_process *pp,
 
 	cs_init(tc);
 
-	dprintf("%s: cpu %d, cycle %d, offset %ld, tc->base %lx, *tc->base %lx\n",
-	    __func__, cpu, cycle, offset, (uint64_t)tc->base, *(uint64_t *)tc->base);
+	dprintf("%s: cpu %d, cycle %d, tc->base %lx, tc->offset %lx, offset %lx, *tc->base %lx\n",
+	    __func__, cpu, cycle, (uint64_t)tc->base, (uint64_t)tc->offset, offset, *(uint64_t *)tc->base);
 
 	if (offset == tc->offset)
 		return (0);
@@ -460,7 +459,6 @@ cs_process(struct trace_cpu *tc, struct pmcstat_process *pp,
 		cs_process_chunk(mdata, (uint64_t)tc->base, tc->offset, tc->bufsize);
 		tc->offset = 0;
 		tc->cycle += 1;
-		tc->offset = offset;
 	}
 
 	return (0);
