@@ -166,7 +166,6 @@ coresight_buffer_allocate(uint32_t cpu, struct coresight_buffer *coresight_buf,
 			pmap_zero_page(m);
 		m->valid = VM_PAGE_BITS_ALL;
 	}
-	vm_object_reference_locked(obj);
 	VM_OBJECT_WUNLOCK(obj);
 
 	map = malloc(sizeof(struct pmc_vm_map), M_CORESIGHT, M_WAITOK | M_ZERO);
@@ -206,8 +205,6 @@ coresight_buffer_deallocate(uint32_t cpu, struct coresight_buffer *coresight_buf
 		}
 	}
 	mtx_unlock(&cc->vm_mtx);
-
-	vm_object_deallocate(coresight_buf->obj);
 
 	return (0);
 }
