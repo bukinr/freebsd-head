@@ -83,16 +83,8 @@ arm/broadcom/bcm2835/bcm2835_vcio.c		optional soc_brcm_bcm2837 fdt
 arm/broadcom/bcm2835/bcm2835_wdog.c		optional soc_brcm_bcm2837 fdt
 arm/broadcom/bcm2835/bcm2836.c			optional soc_brcm_bcm2837 fdt
 arm/broadcom/bcm2835/bcm283x_dwc_fdt.c		optional dwcotg fdt soc_brcm_bcm2837
-arm/qualcomm/qcom_gcc.c		standard
-#arm/qualcomm/qcom_smem.c	standard
-#arm/qualcomm/qcom_smd.c	standard
-#arm/qualcomm/qcom_rpm.c	standard
-#arm/qualcomm/qcom_rpm_if.m	standard
-#arm/qualcomm/qcom_rpmcc.c	standard
-#arm/qualcomm/qcom_rpmcc_if.m	standard
-#arm/arm/syscon.c		standard
-#arm/arm/syscon_if.m		standard
 arm/mv/armada38x/armada38x_rtc.c		optional mv_rtc fdt
+arm/qualcomm/qcom_gcc.c		standard
 arm64/acpica/acpi_machdep.c	optional	acpi
 arm64/acpica/OsdEnvironment.c	optional	acpi
 arm64/acpica/acpi_wakeup.c	optional	acpi
