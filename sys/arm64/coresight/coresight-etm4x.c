@@ -223,31 +223,7 @@ etm_prepare(struct coresight_device *out, struct coresight_event *config)
 }
 
 static int
-etm_enable(struct coresight_device *out, struct endpoint *endp,
-    struct coresight_event *event)
-{
-
-	etm_prepare(out, event);
-	etm_start(out->dev);
-
-	return (0);
-}
-
-static void
-etm_disable(struct coresight_device *out, struct endpoint *endp,
-    struct coresight_event *event)
-{
-
-	etm_stop(out->dev);
-}
-
-static struct coresight_ops ops = {
-	.enable = &etm_enable,
-	.disable = &etm_disable,
-};
-
-static int
-etm_enable1(device_t dev, struct coresight_device *out,
+etm_enable(device_t dev, struct coresight_device *out,
     struct endpoint *endp, struct coresight_event *event)
 {
 
@@ -258,7 +234,7 @@ etm_enable1(device_t dev, struct coresight_device *out,
 }
 
 static void
-etm_disable1(device_t dev, struct coresight_device *out,
+etm_disable(device_t dev, struct coresight_device *out,
     struct endpoint *endp, struct coresight_event *event)
 {
 
@@ -307,7 +283,6 @@ etm_attach(device_t dev)
 	desc.pdata = sc->pdata;
 	desc.dev = dev;
 	desc.dev_type = CORESIGHT_ETMV4;
-	desc.ops = &ops;
 	coresight_register(&desc);
 
 	return (0);
@@ -319,8 +294,8 @@ static device_method_t etm_methods[] = {
 	DEVMETHOD(device_attach,	etm_attach),
 
 	/* Coresight interface */
-	DEVMETHOD(coresight_enable,	etm_enable1),
-	DEVMETHOD(coresight_disable,	etm_disable1),
+	DEVMETHOD(coresight_enable,	etm_enable),
+	DEVMETHOD(coresight_disable,	etm_disable),
 	DEVMETHOD_END
 };
 

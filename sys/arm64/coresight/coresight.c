@@ -119,7 +119,6 @@ coresight_register(struct coresight_desc *desc)
 	cs_dev->node = ofw_bus_get_node(desc->dev);
 	cs_dev->pdata = desc->pdata;
 	cs_dev->dev_type = desc->dev_type;
-	cs_dev->ops = desc->ops;
 
 	mtx_lock(&cs_mtx);
 	TAILQ_INSERT_TAIL(&cs_devs, cs_dev, link);

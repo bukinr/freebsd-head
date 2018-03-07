@@ -66,7 +66,7 @@ static struct resource_spec replicator_spec[] = {
 };
 
 static int
-replicator_enable(struct coresight_device *out, struct endpoint *endp,
+replicator_enable(device_t dev, struct coresight_device *out, struct endpoint *endp,
     struct coresight_event *event)
 {
 	struct replicator_softc *sc;
@@ -87,45 +87,7 @@ replicator_enable(struct coresight_device *out, struct endpoint *endp,
 }
 
 static void
-replicator_disable(struct coresight_device *out, struct endpoint *endp,
-    struct coresight_event *event)
-{
-	struct replicator_softc *sc;
-
-	sc = device_get_softc(out->dev);
-
-	bus_write_4(sc->res, REPLICATOR_IDFILTER0, 0xff);
-	bus_write_4(sc->res, REPLICATOR_IDFILTER1, 0xff);
-}
-
-static struct coresight_ops ops = {
-	.enable = &replicator_enable,
-	.disable = &replicator_disable,
-};
-
-static int
-replicator_enable1(device_t dev, struct coresight_device *out, struct endpoint *endp,
-    struct coresight_event *event)
-{
-	struct replicator_softc *sc;
-
-	sc = device_get_softc(out->dev);
-
-	/* Enable the port. Keep the other port disabled */
-
-	if (endp->reg == 0) {
-		bus_write_4(sc->res, REPLICATOR_IDFILTER0, 0x00);
-		bus_write_4(sc->res, REPLICATOR_IDFILTER1, 0xff);
-	} else {
-		bus_write_4(sc->res, REPLICATOR_IDFILTER0, 0xff);
-		bus_write_4(sc->res, REPLICATOR_IDFILTER1, 0x00);
-	}
-
-	return (0);
-}
-
-static void
-replicator_disable1(device_t dev, struct coresight_device *out, struct endpoint *endp,
+replicator_disable(device_t dev, struct coresight_device *out, struct endpoint *endp,
     struct coresight_event *event)
 {
 	struct replicator_softc *sc;
@@ -169,7 +131,6 @@ replicator_attach(device_t dev)
 	desc.pdata = sc->pdata;
 	desc.dev = dev;
 	desc.dev_type = CORESIGHT_DYNAMIC_REPLICATOR;
-	desc.ops = &ops;
 	coresight_register(&desc);
 
 	/* Unlock Coresight */
@@ -186,8 +147,8 @@ static device_method_t replicator_methods[] = {
 	DEVMETHOD(device_attach,	replicator_attach),
 
 	/* Coresight interface */
-	DEVMETHOD(coresight_enable,	replicator_enable1),
-	DEVMETHOD(coresight_disable,	replicator_disable1),
+	DEVMETHOD(coresight_enable,	replicator_enable),
+	DEVMETHOD(coresight_disable,	replicator_disable),
 	DEVMETHOD_END
 };
 

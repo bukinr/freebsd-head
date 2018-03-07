@@ -58,7 +58,6 @@ struct coresight_device {
 	device_t dev;
 	phandle_t node;
 	enum cs_dev_type dev_type;
-	struct coresight_ops *ops;
 	struct coresight_platform_data *pdata;
 };
 
@@ -85,7 +84,6 @@ struct coresight_desc {
 	struct coresight_platform_data *pdata;
 	device_t dev;
 	enum cs_dev_type dev_type;
-	struct coresight_ops *ops;
 };
 
 TAILQ_HEAD(coresight_device_list, coresight_device);
@@ -111,12 +109,6 @@ struct coresight_event {
 	enum cs_dev_type sink;
 
 	struct etr_status etr;
-};
-
-struct coresight_ops {
-	int (*read)(struct coresight_device *out, struct endpoint *endp, struct coresight_event *event);
-	int (*enable)(struct coresight_device *out, struct endpoint *endp, struct coresight_event *event);
-	void (*disable)(struct coresight_device *out, struct endpoint *endp, struct coresight_event *event);
 };
 
 struct etm_config {
