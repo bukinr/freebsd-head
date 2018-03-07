@@ -51,7 +51,7 @@ __FBSDID("$FreeBSD$");
 /*
  * Typical trace flow:
  *
- * CPU0 -> ETM0 -> funnel1 -> funnel0 -> TMC(ETF) -> replicator -> TMC(ETR) -> DRAM
+ * CPU0 -> ETM0 -> funnel1 -> funnel0 -> ETF -> replicator -> ETR -> DRAM
  * CPU1 -> ETM1 -> funnel1 -^
  * CPU2 -> ETM2 -> funnel1 -^
  * CPU3 -> ETM3 -> funnel1 -^
@@ -168,7 +168,10 @@ etm_prepare(device_t dev, struct coresight_event *config)
 	 */
 	bus_write_4(sc->res, TRCTSCTLR, 0);
 
-	/* Enable ViewInst to trace everything, with the start/stop logic started. */
+	/*
+	 * Enable ViewInst to trace everything, with the start/stop
+	 * logic started.
+	 */
 	reg = TRCVICTLR_SSSTATUS;
 
 	/* The number of the single resource used to activate the event. */

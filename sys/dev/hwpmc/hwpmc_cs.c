@@ -75,15 +75,17 @@ extern struct cdev *pmc_cdev[MAXCPU];
  * ARM CORESIGHT support.
  *
  * Limitation of hardware:
- * - Scatter-gather operation is broken in hardware on Qualcomm Snapdragon 410e processor.
+ * - Scatter-gather operation is broken in hardware on
+ *   Qualcomm Snapdragon 410e processor.
  * - None of coresight interconnect devices provides an interrupt line.
  * - Circular-buffer is the only mode of operation for TMC(ETR).
  *
- * I.e. once buffer filled the operation will not be halted, instead the buffer will be
- * overwritten from start and none of interrupt provided.
+ * I.e. once buffer filled the operation will not be halted,
+ * instead the buffer will be overwritten from start and none of
+ * interrupt provided.
  */
 
-#define	CORESIGHT_CAPS	(PMC_CAP_READ | PMC_CAP_INTERRUPT | PMC_CAP_SYSTEM | PMC_CAP_USER)
+#define	CORESIGHT_CAPS (PMC_CAP_READ | PMC_CAP_INTERRUPT | PMC_CAP_SYSTEM | PMC_CAP_USER)
 
 #define	PMC_CORESIGHT_DEBUG
 #undef	PMC_CORESIGHT_DEBUG
@@ -131,8 +133,8 @@ struct coresight_cpu {
 static struct coresight_cpu **coresight_pcpu;
 
 static int
-coresight_buffer_allocate(uint32_t cpu, struct coresight_buffer *coresight_buf,
-    uint32_t bufsize)
+coresight_buffer_allocate(uint32_t cpu,
+    struct coresight_buffer *coresight_buf, uint32_t bufsize)
 {
 	struct pmc_vm_map *map;
 	struct coresight_cpu *coresight_pc;
@@ -185,7 +187,8 @@ coresight_buffer_allocate(uint32_t cpu, struct coresight_buffer *coresight_buf,
 }
 
 static int
-coresight_buffer_deallocate(uint32_t cpu, struct coresight_buffer *coresight_buf)
+coresight_buffer_deallocate(uint32_t cpu,
+    struct coresight_buffer *coresight_buf)
 {
 	struct pmc_vm_map *map, *map_tmp;
 	struct cdev_cpu *cc;
@@ -197,7 +200,8 @@ coresight_buffer_deallocate(uint32_t cpu, struct coresight_buffer *coresight_buf
 	mtx_lock(&cc->vm_mtx);
 	TAILQ_FOREACH_SAFE(map, &cc->pmc_maplist, map_next, map_tmp) {
 		KASSERT(map->t == curthread,
-		    ("Deallocation should be done in same thread as allocation"));
+		    ("Deallocation must be done in the same"
+		    "thread as allocation"));
 		if (map->buf == (void *)coresight_buf) {
 			TAILQ_REMOVE(&cc->pmc_maplist, map, map_next);
 			free(map, M_CORESIGHT);
@@ -227,7 +231,8 @@ coresight_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	coresight_pc = coresight_pcpu[cpu];
 	event = &coresight_pc->event;
 
-	pm_coresighta = (const struct pmc_md_coresight_op_pmcallocate *)&a->pm_md.pm_coresight;
+	pm_coresighta = (const struct pmc_md_coresight_op_pmcallocate *)
+	    &a->pm_md.pm_coresight;
 	pm_coresight = (struct pmc_md_coresight_pmc *)&pm->pm_md;
 	coresight_buf = &pm_coresight->coresight_buffers[cpu];
 
@@ -302,7 +307,8 @@ coresight_allocate_pmc(int cpu, int ri, struct pmc *pm,
 	/* Can't allocate multiple ST */
 	if (a->pm_mode == PMC_MODE_ST &&
 	    coresight_pc->flags & FLAG_CORESIGHT_ALLOCATED) {
-		dprintf("error: coresight is already allocated for CPU %d\n", cpu);
+		dprintf("error: coresight is already allocated for CPU %d\n",
+		    cpu);
 		return (EUSERS);
 	}
 
@@ -416,7 +422,8 @@ coresight_pcpu_init(struct pmc_mdep *md, int cpu)
 	KASSERT(coresight_pcpu[cpu] == NULL, ("[coresight,%d] non-null per-cpu",
 	    __LINE__));
 
-	coresight_pc = malloc(sizeof(struct coresight_cpu), M_CORESIGHT, M_WAITOK | M_ZERO);
+	coresight_pc = malloc(sizeof(struct coresight_cpu),
+	    M_CORESIGHT, M_WAITOK | M_ZERO);
 	coresight_pc->tc_hw.phw_state = PMC_PHW_FLAG_IS_ENABLED |
 	    PMC_PHW_CPU_TO_STATE(cpu) | PMC_PHW_INDEX_TO_STATE(0) |
 	    PMC_PHW_FLAG_IS_SHAREABLE;
@@ -447,7 +454,8 @@ coresight_pcpu_fini(struct pmc_mdep *md, int cpu)
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
 	    ("[coresight,%d] illegal cpu %d", __LINE__, cpu));
-	KASSERT(coresight_pcpu[cpu] != NULL, ("[coresight,%d] null pcpu", __LINE__));
+	KASSERT(coresight_pcpu[cpu] != NULL, ("[coresight,%d] null pcpu",
+	    __LINE__));
 
 	coresight_pc = coresight_pcpu[cpu];
 
@@ -573,9 +581,11 @@ coresight_release_pmc(int cpu, int ri, struct pmc *pm)
 	mode = PMC_TO_MODE(pm);
 	if (mode == PMC_MODE_TT)
 		for (i = 0; i < pmc_cpu_max(); i++)
-			coresight_buffer_deallocate(i, &pm_coresight->coresight_buffers[i]);
+			coresight_buffer_deallocate(i,
+			    &pm_coresight->coresight_buffers[i]);
 	else
-		coresight_buffer_deallocate(cpu, &pm_coresight->coresight_buffers[cpu]);
+		coresight_buffer_deallocate(cpu,
+		    &pm_coresight->coresight_buffers[cpu]);
 
 	if (mode == PMC_MODE_ST)
 		coresight_pc->flags &= ~FLAG_CORESIGHT_ALLOCATED;
@@ -651,8 +661,8 @@ pmc_coresight_initialize(struct pmc_mdep *md, int maxcpu)
 	KASSERT(md->pmd_nclass >= 1, ("[coresight,%d] dubious md->nclass %d",
 	    __LINE__, md->pmd_nclass));
 
-	coresight_pcpu = malloc(sizeof(struct coresight_cpu *) * maxcpu, M_CORESIGHT,
-	    M_WAITOK | M_ZERO);
+	coresight_pcpu = malloc(sizeof(struct coresight_cpu *) * maxcpu,
+	    M_CORESIGHT, M_WAITOK | M_ZERO);
 
 	pcd = &md->pmd_classdep[PMC_MDEP_CLASS_INDEX_CORESIGHT];
 
@@ -692,8 +702,8 @@ pmc_coresight_finalize(struct pmc_mdep *md)
 
 	ncpus = pmc_cpu_max();
 	for (i = 0; i < ncpus; i++)
-		KASSERT(coresight_pcpu[i] == NULL, ("[coresight,%d] non-null pcpu cpu %d",
-		    __LINE__, i));
+		KASSERT(coresight_pcpu[i] == NULL,
+		    ("[coresight,%d] non-null pcpu cpu %d", __LINE__, i));
 
 	KASSERT(md->pmd_classdep[PMC_MDEP_CLASS_INDEX_CORESIGHT].pcd_class ==
 	    PMC_CLASS_CORESIGHT, ("[coresight,%d] class mismatch", __LINE__));

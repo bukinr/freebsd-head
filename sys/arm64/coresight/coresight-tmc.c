@@ -145,8 +145,9 @@ tmc_configure_etf(device_t dev)
 
 	tmc_start(dev);
 
-#if 0
-	printf("%s: STS %x, CTL %x, RSZ %x, RRP %x, RWP %x, LBUFLEVEL %x, CBUFLEVEL %x, \n", __func__,
+#if 1
+	printf("%s: STS %x, CTL %x, RSZ %x, RRP %x, RWP %x,"
+	    "LBUFLEVEL %x, CBUFLEVEL %x, \n", __func__,
 	    bus_read_4(sc->res, TMC_STS),
 	    bus_read_4(sc->res, TMC_CTL),
 	    bus_read_4(sc->res, TMC_RSZ),

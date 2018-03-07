@@ -62,7 +62,8 @@ coresight_next_device(struct coresight_device *cs_dev,
 			if (LIST_EMPTY(&event->endplist)) {
 				/* Add source device */
 				endp->cs_dev = cs_dev;
-				LIST_INSERT_HEAD(&event->endplist, endp, endplink);
+				LIST_INSERT_HEAD(&event->endplist, endp,
+				    endplink);
 			}
 
 			/* Add output device */

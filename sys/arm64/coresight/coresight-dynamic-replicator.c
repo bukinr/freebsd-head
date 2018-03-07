@@ -160,5 +160,6 @@ static driver_t replicator_driver = {
 
 static devclass_t replicator_devclass;
 
-DRIVER_MODULE(replicator, simplebus, replicator_driver, replicator_devclass, 0, 0);
+DRIVER_MODULE(replicator, simplebus, replicator_driver, replicator_devclass,
+    0, 0);
 MODULE_VERSION(replicator, 1);
