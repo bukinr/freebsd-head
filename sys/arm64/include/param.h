@@ -56,7 +56,7 @@
 
 #if defined(SMP)
 #ifndef MAXCPU
-#define	MAXCPU		96
+#define	MAXCPU		256
 #endif
 #else
 #define	MAXCPU		1
