@@ -198,7 +198,9 @@ coresight_get_platform_data(device_t dev)
 	coresight_get_cpu(node, pdata);
 	coresight_get_ports(node, pdata);
 
-	printf("Total ports: in %d out %d\n", pdata->in_ports, pdata->out_ports);
+	if (bootverbose)
+		printf("Total ports: in %d out %d\n",
+		    pdata->in_ports, pdata->out_ports);
 
 	return (pdata);
 }

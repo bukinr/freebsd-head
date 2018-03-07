@@ -288,9 +288,10 @@ etm_attach(device_t dev)
 		/* TODO */
 		etm_unlock(sc);
 		reg = bus_read_4(sc->res, TRCIDR(1));
-		printf("ETM Version: %d.%d\n",
-		    (reg & TRCIDR1_TRCARCHMAJ_M) >> TRCIDR1_TRCARCHMAJ_S,
-		    (reg & TRCIDR1_TRCARCHMIN_M) >> TRCIDR1_TRCARCHMIN_S);
+		if (bootverbose)
+			printf("ETM Version: %d.%d\n",
+			    (reg & TRCIDR1_TRCARCHMAJ_M) >> TRCIDR1_TRCARCHMAJ_S,
+			    (reg & TRCIDR1_TRCARCHMIN_M) >> TRCIDR1_TRCARCHMIN_S);
 	}
 
 	sc->pdata = coresight_get_platform_data(dev);
