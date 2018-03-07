@@ -186,8 +186,6 @@ etm_prepare(device_t dev, struct coresight_event *config)
 	reg &= ~TRCVICTLR_EXLEVEL_S(config->excp_level);
 	bus_write_4(sc->res, TRCVICTLR, reg);
 
-	bus_write_4(sc->res, TRCRSCTLR(0), (5 << 16) | (1 << 0));
-
 	for (i = 0; i < config->naddr * 2; i++) {
 		bus_write_8(sc->res, TRCACVR(i), config->addr[i]);
 
