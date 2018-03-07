@@ -88,12 +88,8 @@ etm_unlock(struct etm_softc *sc)
 	/* Unlocking Coresight */
 	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
 
-	isb();
-
 	/* Unlocking ETM */
 	bus_write_4(sc->res, TRCOSLAR, 0);
-
-	isb();
 }
 
 static int
