@@ -48,6 +48,15 @@ __FBSDID("$FreeBSD$");
 
 #include "coresight_if.h"
 
+#define	ETM_DEBUG
+#undef ETM_DEBUG
+   
+#ifdef ETM_DEBUG
+#define	dprintf(fmt, ...)	printf(fmt, ##__VA_ARGS__)
+#else
+#define	dprintf(fmt, ...)
+#endif
+
 /*
  * Typical trace flow:
  *
@@ -187,6 +196,7 @@ etm_prepare(device_t dev, struct coresight_event *config)
 	bus_write_4(sc->res, TRCVICTLR, reg);
 
 	for (i = 0; i < config->naddr * 2; i++) {
+		dprintf("configure range %d, address %lx\n", i, config->addr[i]);
 		bus_write_8(sc->res, TRCACVR(i), config->addr[i]);
 
 		reg = 0;
