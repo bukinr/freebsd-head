@@ -114,7 +114,7 @@ coresight_enable(int cpu, struct coresight_event *event)
 	struct endpoint *endp;
 
 	LIST_FOREACH(endp, &event->endplist, endplink)
-		CORESIGHT_ENABLE(endp->cs_dev->dev, endp->cs_dev, endp, event);
+		CORESIGHT_ENABLE(endp->cs_dev->dev, endp, event);
 }
 
 void
@@ -123,7 +123,7 @@ coresight_disable(int cpu, struct coresight_event *event)
 	struct endpoint *endp;
 
 	LIST_FOREACH(endp, &event->endplist, endplink)
-		CORESIGHT_DISABLE(endp->cs_dev->dev, endp->cs_dev, endp, event);
+		CORESIGHT_DISABLE(endp->cs_dev->dev, endp, event);
 }
 
 void
@@ -132,5 +132,5 @@ coresight_read(int cpu, struct coresight_event *event)
 	struct endpoint *endp;
 
 	LIST_FOREACH(endp, &event->endplist, endplink)
-		CORESIGHT_READ(endp->cs_dev->dev, endp->cs_dev, endp, event);
+		CORESIGHT_READ(endp->cs_dev->dev, endp, event);
 }

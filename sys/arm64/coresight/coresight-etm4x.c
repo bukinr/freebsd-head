@@ -129,13 +129,13 @@ etm_stop(device_t dev)
 }
 
 static int
-etm_prepare(struct coresight_device *out, struct coresight_event *config)
+etm_prepare(device_t dev, struct coresight_event *config)
 {
 	struct etm_softc *sc;
 	uint32_t reg;
 	int i;
 
-	sc = device_get_softc(out->dev);
+	sc = device_get_softc(dev);
 
 	/* Configure ETM */
 
@@ -223,22 +223,22 @@ etm_prepare(struct coresight_device *out, struct coresight_event *config)
 }
 
 static int
-etm_enable(device_t dev, struct coresight_device *out,
-    struct endpoint *endp, struct coresight_event *event)
+etm_enable(device_t dev, struct endpoint *endp,
+    struct coresight_event *event)
 {
 
-	etm_prepare(out, event);
-	etm_start(out->dev);
+	etm_prepare(dev, event);
+	etm_start(dev);
 
 	return (0);
 }
 
 static void
-etm_disable(device_t dev, struct coresight_device *out,
-    struct endpoint *endp, struct coresight_event *event)
+etm_disable(device_t dev, struct endpoint *endp,
+    struct coresight_event *event)
 {
 
-	etm_stop(out->dev);
+	etm_stop(dev);
 }
 
 static int

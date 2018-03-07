@@ -57,6 +57,7 @@ struct tmc_softc {
 	device_t			dev;
 	uint64_t			cycle;
 	struct coresight_platform_data	*pdata;
+	uint32_t			dev_type;
 };
 
 static struct resource_spec tmc_spec[] = {
@@ -159,16 +160,16 @@ tmc_configure_etf(device_t dev)
 }
 
 static int
-tmc_configure_etr(struct coresight_device *out, struct endpoint *endp,
+tmc_configure_etr(device_t dev, struct endpoint *endp,
     struct coresight_event *event)
 {
 	struct tmc_softc *sc;
 	uint32_t reg;
 
-	sc = device_get_softc(out->dev);
+	sc = device_get_softc(dev);
 
 	tmc_unlock(sc);
-	tmc_stop(out->dev);
+	tmc_stop(dev);
 
 	do {
 		reg = bus_read_4(sc->res, TMC_STS);
@@ -205,30 +206,30 @@ tmc_configure_etr(struct coresight_device *out, struct endpoint *endp,
 	reg &= ~STS_FULL;
 	bus_write_4(sc->res, TMC_STS, reg);
 
-	tmc_start(out->dev);
+	tmc_start(dev);
 
 	return (0);
 }
 
 static int
-tmc_enable(device_t dev, struct coresight_device *out, struct endpoint *endp,
+tmc_enable(device_t dev, struct endpoint *endp,
     struct coresight_event *event)
 {
 	struct tmc_softc *sc;
 
-	sc = device_get_softc(out->dev);
+	sc = device_get_softc(dev);
 
 	/* ETF configuration is static */
-	switch (out->dev_type) {
+	switch (sc->dev_type) {
 	case CORESIGHT_ETF:
 		return (0);
 	case CORESIGHT_ETR:
 		if (event->etr.started)
 			return (0);
 		tmc_unlock(sc);
-		tmc_stop(out->dev);
-		tmc_configure_etr(out, endp, event);
-		tmc_start(out->dev);
+		tmc_stop(dev);
+		tmc_configure_etr(dev, endp, event);
+		tmc_start(dev);
 		event->etr.started = 1;
 	default:
 		break;
@@ -238,7 +239,7 @@ tmc_enable(device_t dev, struct coresight_device *out, struct endpoint *endp,
 }
 
 static void
-tmc_disable(device_t dev, struct coresight_device *out, struct endpoint *endp,
+tmc_disable(device_t dev, struct endpoint *endp,
     struct coresight_event *event)
 {
 
@@ -249,22 +250,22 @@ tmc_disable(device_t dev, struct coresight_device *out, struct endpoint *endp,
 }
 
 static int
-tmc_read(device_t dev, struct coresight_device *out, struct endpoint *endp,
+tmc_read(device_t dev, struct endpoint *endp,
     struct coresight_event *event)
 {
 	struct tmc_softc *sc;
 	uint32_t cur_ptr;
 
-	sc = device_get_softc(out->dev);
+	sc = device_get_softc(dev);
 
-	if (out->dev_type == CORESIGHT_ETF)
+	if (sc->dev_type == CORESIGHT_ETF)
 		return (0);
 
 	if (bus_read_4(sc->res, TMC_STS) & STS_FULL) {
 		event->etr.offset = 0;
 		event->etr.cycle++;
-		tmc_stop(out->dev);
-		tmc_start(out->dev);
+		tmc_stop(dev);
+		tmc_start(dev);
 	} else {
 		cur_ptr = bus_read_4(sc->res, TMC_RWP);
 		event->etr.offset = (cur_ptr - event->etr.low);
@@ -314,11 +315,13 @@ tmc_attach(device_t dev)
 	switch (reg) {
 	case DEVID_CONFIGTYPE_ETR:
 		desc.dev_type = CORESIGHT_ETR;
+		sc->dev_type = CORESIGHT_ETR;
 		coresight_register(&desc);
 		device_printf(dev, "ETR configuration found\n");
 		break;
 	case DEVID_CONFIGTYPE_ETF:
 		desc.dev_type = CORESIGHT_ETF;
+		sc->dev_type = CORESIGHT_ETF;
 		coresight_register(&desc);
 		tmc_configure_etf(dev);
 		device_printf(dev, "ETF configuration found\n");

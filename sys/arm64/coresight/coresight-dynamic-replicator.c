@@ -66,12 +66,12 @@ static struct resource_spec replicator_spec[] = {
 };
 
 static int
-replicator_enable(device_t dev, struct coresight_device *out, struct endpoint *endp,
+replicator_enable(device_t dev, struct endpoint *endp,
     struct coresight_event *event)
 {
 	struct replicator_softc *sc;
 
-	sc = device_get_softc(out->dev);
+	sc = device_get_softc(dev);
 
 	/* Enable the port. Keep the other port disabled */
 
@@ -87,12 +87,12 @@ replicator_enable(device_t dev, struct coresight_device *out, struct endpoint *e
 }
 
 static void
-replicator_disable(device_t dev, struct coresight_device *out, struct endpoint *endp,
+replicator_disable(device_t dev, struct endpoint *endp,
     struct coresight_event *event)
 {
 	struct replicator_softc *sc;
 
-	sc = device_get_softc(out->dev);
+	sc = device_get_softc(dev);
 
 	bus_write_4(sc->res, REPLICATOR_IDFILTER0, 0xff);
 	bus_write_4(sc->res, REPLICATOR_IDFILTER1, 0xff);
