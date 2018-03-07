@@ -42,11 +42,13 @@ __FBSDID("$FreeBSD$");
 
 #include <arm64/coresight/coresight.h>
 
-#define	REPLICATOR_IDFILTER0	0x00
-#define	REPLICATOR_IDFILTER1	0x04
-
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
+
+#include "coresight_if.h"
+
+#define	REPLICATOR_IDFILTER0	0x00
+#define	REPLICATOR_IDFILTER1	0x04
 
 static struct ofw_compat_data compat_data[] = {
 	{ "arm,coresight-dynamic-replicator",	1 },
@@ -102,6 +104,39 @@ static struct coresight_ops ops = {
 };
 
 static int
+replicator_enable1(device_t dev, struct coresight_device *out, struct endpoint *endp,
+    struct coresight_event *event)
+{
+	struct replicator_softc *sc;
+
+	sc = device_get_softc(out->dev);
+
+	/* Enable the port. Keep the other port disabled */
+
+	if (endp->reg == 0) {
+		bus_write_4(sc->res, REPLICATOR_IDFILTER0, 0x00);
+		bus_write_4(sc->res, REPLICATOR_IDFILTER1, 0xff);
+	} else {
+		bus_write_4(sc->res, REPLICATOR_IDFILTER0, 0xff);
+		bus_write_4(sc->res, REPLICATOR_IDFILTER1, 0x00);
+	}
+
+	return (0);
+}
+
+static void
+replicator_disable1(device_t dev, struct coresight_device *out, struct endpoint *endp,
+    struct coresight_event *event)
+{
+	struct replicator_softc *sc;
+
+	sc = device_get_softc(out->dev);
+
+	bus_write_4(sc->res, REPLICATOR_IDFILTER0, 0xff);
+	bus_write_4(sc->res, REPLICATOR_IDFILTER1, 0xff);
+}
+
+static int
 replicator_probe(device_t dev)
 {
 
@@ -149,6 +184,10 @@ static device_method_t replicator_methods[] = {
 	/* Device interface */
 	DEVMETHOD(device_probe,		replicator_probe),
 	DEVMETHOD(device_attach,	replicator_attach),
+
+	/* Coresight interface */
+	DEVMETHOD(coresight_enable,	replicator_enable1),
+	DEVMETHOD(coresight_disable,	replicator_disable1),
 	DEVMETHOD_END
 };
 

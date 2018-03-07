@@ -45,6 +45,8 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
 
+#include "coresight_if.h"
+
 static struct ofw_compat_data compat_data[] = {
 	{ "arm,coresight-tmc",			1 },
 	{ NULL,					0 }
@@ -278,6 +280,69 @@ static struct coresight_ops ops = {
 };
 
 static int
+tmc_enable1(device_t dev, struct coresight_device *out, struct endpoint *endp,
+    struct coresight_event *event)
+{
+	struct tmc_softc *sc;
+
+	sc = device_get_softc(out->dev);
+
+	/* ETF configuration is static */
+	switch (out->dev_type) {
+	case CORESIGHT_ETF:
+		return (0);
+	case CORESIGHT_ETR:
+		if (event->etr.started)
+			return (0);
+		tmc_unlock(sc);
+		tmc_stop(out->dev);
+		tmc_configure_etr(out, endp, event);
+		tmc_start(out->dev);
+		event->etr.started = 1;
+	default:
+		break;
+	}
+
+	return (0);
+}
+
+static void
+tmc_disable1(device_t dev, struct coresight_device *out, struct endpoint *endp,
+    struct coresight_event *event)
+{
+
+	/*
+	 * Can't restore the state: can't specify buffer offset 
+	 * to continue operation from. So we do not disable TMC here.
+	 */
+}
+
+static int
+tmc_read1(device_t dev, struct coresight_device *out, struct endpoint *endp,
+    struct coresight_event *event)
+{
+	struct tmc_softc *sc;
+	uint32_t cur_ptr;
+
+	sc = device_get_softc(out->dev);
+
+	if (out->dev_type == CORESIGHT_ETF)
+		return (0);
+
+	if (bus_read_4(sc->res, TMC_STS) & STS_FULL) {
+		event->etr.offset = 0;
+		event->etr.cycle++;
+		tmc_stop(out->dev);
+		tmc_start(out->dev);
+	} else {
+		cur_ptr = bus_read_4(sc->res, TMC_RWP);
+		event->etr.offset = (cur_ptr - event->etr.low);
+	}
+
+	return (0);
+}
+
+static int
 tmc_probe(device_t dev)
 {
 
@@ -337,8 +402,13 @@ tmc_attach(device_t dev)
 
 static device_method_t tmc_methods[] = {
 	/* Device interface */
-	DEVMETHOD(device_probe,			tmc_probe),
-	DEVMETHOD(device_attach,		tmc_attach),
+	DEVMETHOD(device_probe,		tmc_probe),
+	DEVMETHOD(device_attach,	tmc_attach),
+
+	/* Coresight interface */
+	DEVMETHOD(coresight_enable,	tmc_enable1),
+	DEVMETHOD(coresight_disable,	tmc_disable1),
+	DEVMETHOD(coresight_read,	tmc_read1),
 	DEVMETHOD_END
 };
 

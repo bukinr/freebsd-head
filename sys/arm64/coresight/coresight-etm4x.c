@@ -46,6 +46,8 @@ __FBSDID("$FreeBSD$");
 #include <arm64/coresight/coresight.h>
 #include <arm64/coresight/coresight-etm4x.h>
 
+#include "coresight_if.h"
+
 /*
  * Typical trace flow:
  *
@@ -245,6 +247,25 @@ static struct coresight_ops ops = {
 };
 
 static int
+etm_enable1(device_t dev, struct coresight_device *out,
+    struct endpoint *endp, struct coresight_event *event)
+{
+
+	etm_prepare(out, event);
+	etm_start(out->dev);
+
+	return (0);
+}
+
+static void
+etm_disable1(device_t dev, struct coresight_device *out,
+    struct endpoint *endp, struct coresight_event *event)
+{
+
+	etm_stop(out->dev);
+}
+
+static int
 etm_probe(device_t dev)
 {
 	if (!ofw_bus_status_okay(dev))
@@ -296,6 +317,10 @@ static device_method_t etm_methods[] = {
 	/* Device interface */
 	DEVMETHOD(device_probe,		etm_probe),
 	DEVMETHOD(device_attach,	etm_attach),
+
+	/* Coresight interface */
+	DEVMETHOD(coresight_enable,	etm_enable1),
+	DEVMETHOD(coresight_disable,	etm_disable1),
 	DEVMETHOD_END
 };
 

@@ -46,6 +46,8 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
 
+#include "coresight_if.h"
+
 static struct ofw_compat_data compat_data[] = {
 	{ "arm,coresight-funnel",		1 },
 	{ NULL,					0 }
@@ -99,6 +101,38 @@ static struct coresight_ops ops = {
 };
 
 static int
+funnel_enable1(device_t dev, struct coresight_device *out, struct endpoint *endp,
+    struct coresight_event *event)
+{
+	struct funnel_softc *sc;
+	uint32_t reg;
+
+	sc = device_get_softc(out->dev);
+
+	reg = bus_read_4(sc->res, FUNNEL_FUNCTL);
+	reg &= ~(FUNCTL_HOLDTIME_MASK);
+	reg |= (7 << FUNCTL_HOLDTIME_SHIFT);
+	reg |= (1 << endp->reg);
+	bus_write_4(sc->res, FUNNEL_FUNCTL, reg);
+
+	return (0);
+}
+
+static void
+funnel_disable1(device_t dev, struct coresight_device *out, struct endpoint *endp,
+    struct coresight_event *event)
+{
+	struct funnel_softc *sc;
+	uint32_t reg;
+
+	sc = device_get_softc(out->dev);
+
+	reg = bus_read_4(sc->res, FUNNEL_FUNCTL);
+	reg &= ~(1 << endp->reg);
+	bus_write_4(sc->res, FUNNEL_FUNCTL, reg);
+}
+
+static int
 funnel_probe(device_t dev)
 {
 
@@ -148,6 +182,10 @@ static device_method_t funnel_methods[] = {
 	/* Device interface */
 	DEVMETHOD(device_probe,		funnel_probe),
 	DEVMETHOD(device_attach,	funnel_attach),
+
+	/* Coresight interface */
+	DEVMETHOD(coresight_enable,	funnel_enable1),
+	DEVMETHOD(coresight_disable,	funnel_disable1),
 	DEVMETHOD_END
 };
 

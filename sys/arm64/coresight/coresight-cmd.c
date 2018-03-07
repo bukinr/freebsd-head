@@ -41,11 +41,9 @@ __FBSDID("$FreeBSD$");
 
 #include <arm64/coresight/coresight.h>
 
-extern struct coresight_device_list cs_devs;
+#include "coresight_if.h"
 
-#define	CORESIGHT_DISABLE	0
-#define	CORESIGHT_ENABLE	1
-#define	CORESIGHT_READ		2
+extern struct coresight_device_list cs_devs;
 
 static struct coresight_device *
 coresight_next_device(struct coresight_device *cs_dev,
@@ -109,59 +107,30 @@ coresight_init_event(int cpu, struct coresight_event *event)
 	return (0);
 }
 
-static int
-coresight_cmd_one(struct coresight_device *out,
-    struct endpoint *out_endp, struct coresight_event *event, uint8_t cmd)
-{
-
-	switch (cmd) {
-	case CORESIGHT_DISABLE:
-		if (out->ops->disable == NULL)
-			break;
-		out->ops->disable(out, out_endp, event);
-		break;
-	case CORESIGHT_ENABLE:
-		if (out->ops->enable == NULL)
-			break;
-		out->ops->enable(out, out_endp, event);
-		break;
-	case CORESIGHT_READ:
-		if (out->ops->read == NULL)
-			break;
-		out->ops->read(out, out_endp, event);
-		break;
-	};
-
-	return (0);
-}
-
-
-static void
-coresight_cmd(int cpu, struct coresight_event *event, uint8_t cmd)
-{
-	struct endpoint *endp;
-
-	LIST_FOREACH(endp, &event->endplist, endplink)
-		coresight_cmd_one(endp->cs_dev, endp, event, cmd);
-}
-
 void
 coresight_enable(int cpu, struct coresight_event *event)
 {
 
-	coresight_cmd(cpu, event, CORESIGHT_ENABLE);
+	struct endpoint *endp;
+
+	LIST_FOREACH(endp, &event->endplist, endplink)
+		CORESIGHT_ENABLE(endp->cs_dev->dev, endp->cs_dev, endp, event);
 }
 
 void
 coresight_disable(int cpu, struct coresight_event *event)
 {
+	struct endpoint *endp;
 
-	coresight_cmd(cpu, event, CORESIGHT_DISABLE);
+	LIST_FOREACH(endp, &event->endplist, endplink)
+		CORESIGHT_DISABLE(endp->cs_dev->dev, endp->cs_dev, endp, event);
 }
 
 void
 coresight_read(int cpu, struct coresight_event *event)
 {
+	struct endpoint *endp;
 
-	coresight_cmd(cpu, event, CORESIGHT_READ);
+	LIST_FOREACH(endp, &event->endplist, endplink)
+		CORESIGHT_READ(endp->cs_dev->dev, endp->cs_dev, endp, event);
 }
