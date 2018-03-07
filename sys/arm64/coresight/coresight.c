@@ -113,7 +113,8 @@ coresight_register(struct coresight_desc *desc)
 {
 	struct coresight_device *cs_dev;
 
-	cs_dev = malloc(sizeof(struct coresight_device), M_CORESIGHT, M_WAITOK | M_ZERO);
+	cs_dev = malloc(sizeof(struct coresight_device),
+	    M_CORESIGHT, M_WAITOK | M_ZERO);
 	cs_dev->dev = desc->dev;
 	cs_dev->node = ofw_bus_get_node(desc->dev);
 	cs_dev->pdata = desc->pdata;
@@ -132,9 +133,8 @@ coresight_get_output_endpoint(struct coresight_platform_data *pdata)
 {
 	struct endpoint *endp;
 
-	if (pdata->out_ports != 1) {
+	if (pdata->out_ports != 1)
 		return (NULL);
-	}
 
 	TAILQ_FOREACH(endp, &pdata->endpoints, link) {
 		if (endp->slave == 0)

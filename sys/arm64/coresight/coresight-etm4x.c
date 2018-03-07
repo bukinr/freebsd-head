@@ -131,13 +131,18 @@ etm_prepare(struct coresight_device *out, struct coresight_event *config)
 {
 	struct etm_softc *sc;
 	uint32_t reg;
+	int i;
 
 	sc = device_get_softc(out->dev);
 
 	/* Configure ETM */
 
-	/* Enable the return stack, global timestamping, Context ID, and Virtual context identifier tracing. */
-	reg = TRCCONFIGR_RS | TRCCONFIGR_TS | TRCCONFIGR_CID | TRCCONFIGR_VMID;
+	/*
+	 * Enable the return stack, global timestamping,
+	 * Context ID, and Virtual context identifier tracing.
+	 */
+	reg = TRCCONFIGR_RS | TRCCONFIGR_TS;
+	reg |= TRCCONFIGR_CID | TRCCONFIGR_VMID;
 	reg |= TRCCONFIGR_INSTP0_LDRSTR;
 	reg |= TRCCONFIGR_COND_ALL;
 	bus_write_4(sc->res, TRCCONFIGR, reg);
@@ -178,9 +183,7 @@ etm_prepare(struct coresight_device *out, struct coresight_event *config)
 
 	bus_write_4(sc->res, TRCRSCTLR(0), (5 << 16) | (1 << 0));
 
-	int i;
 	for (i = 0; i < config->naddr * 2; i++) {
-		printf("configure range %d, address %lx\n", i, config->addr[i]);
 		bus_write_8(sc->res, TRCACVR(i), config->addr[i]);
 
 		reg = 0;
