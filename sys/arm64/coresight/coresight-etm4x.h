@@ -87,6 +87,7 @@
 #define	 EVENT_SEL_S		0
 #define	 EVENT_SEL_M		(0x1f << EVENT_SEL_S)
 #define	TRCVIIECTLR		0x084 /* Trace ViewInst Include/Exclude Control Register */
+#define	 TRCVIIECTLR_INCLUDE_S	0
 #define	TRCVISSCTLR		0x088 /* Trace ViewInst Start/Stop Control Register */
 #define	TRCVIPCSSCTLR		0x08C /* Trace ViewInst Start/Stop PE Comparator Control Register */
 #define	TRCVDCTLR		0x0A0 /* Trace ViewData Main Control Register */

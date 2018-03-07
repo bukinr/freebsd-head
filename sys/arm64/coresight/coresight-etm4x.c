@@ -199,6 +199,11 @@ etm_prepare(device_t dev, struct coresight_event *config)
 		reg |= TRCACATR_EXLEVEL_NS_M;
 		reg &= ~TRCACATR_EXLEVEL_NS(config->excp_level);
 		bus_write_4(sc->res, TRCACATR(i), reg);
+
+		/* Address range is included */
+		reg = bus_read_4(sc->res, TRCVIIECTLR);
+		reg |= (1 << (TRCVIIECTLR_INCLUDE_S + i / 2));
+		bus_write_4(sc->res, TRCVIIECTLR, reg);
 	}
 
 	/* No address filtering for ViewData. */
@@ -207,11 +212,10 @@ etm_prepare(device_t dev, struct coresight_event *config)
 	/* Clear the STATUS bit to zero */
 	bus_write_4(sc->res, TRCSSCSR(0), 0);
 
-	/* No address range filtering for ViewInst. */
-	if (config->naddr == 0)
+	if (config->naddr == 0) {
+		/* No address range filtering for ViewInst. */
 		bus_write_4(sc->res, TRCVIIECTLR, 0);
-	else
-		bus_write_4(sc->res, TRCVIIECTLR, (1 << 0));
+	}
 
 	/* No start or stop points for ViewInst. */
 	bus_write_4(sc->res, TRCVISSCTLR, 0);
