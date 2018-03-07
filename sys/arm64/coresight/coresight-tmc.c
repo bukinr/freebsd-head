@@ -145,17 +145,16 @@ tmc_configure_etf(device_t dev)
 
 	tmc_start(dev);
 
-#if 1
-	printf("%s: STS %x, CTL %x, RSZ %x, RRP %x, RWP %x,"
-	    "LBUFLEVEL %x, CBUFLEVEL %x, \n", __func__,
-	    bus_read_4(sc->res, TMC_STS),
-	    bus_read_4(sc->res, TMC_CTL),
-	    bus_read_4(sc->res, TMC_RSZ),
-	    bus_read_4(sc->res, TMC_RRP),
-	    bus_read_4(sc->res, TMC_RWP),
-	    bus_read_4(sc->res, TMC_CBUFLEVEL),
-	    bus_read_4(sc->res, TMC_LBUFLEVEL));
-#endif
+	if (bootverbose)
+		printf("%s: STS %x, CTL %x, RSZ %x, RRP %x, RWP %x, "
+		    "LBUFLEVEL %x, CBUFLEVEL %x\n", __func__,
+		    bus_read_4(sc->res, TMC_STS),
+		    bus_read_4(sc->res, TMC_CTL),
+		    bus_read_4(sc->res, TMC_RSZ),
+		    bus_read_4(sc->res, TMC_RRP),
+		    bus_read_4(sc->res, TMC_RWP),
+		    bus_read_4(sc->res, TMC_CBUFLEVEL),
+		    bus_read_4(sc->res, TMC_LBUFLEVEL));
 
 	return (0);
 }
@@ -318,14 +317,16 @@ tmc_attach(device_t dev)
 		desc.dev_type = CORESIGHT_ETR;
 		sc->dev_type = CORESIGHT_ETR;
 		coresight_register(&desc);
-		device_printf(dev, "ETR configuration found\n");
+		if (bootverbose)
+			device_printf(dev, "ETR configuration found\n");
 		break;
 	case DEVID_CONFIGTYPE_ETF:
 		desc.dev_type = CORESIGHT_ETF;
 		sc->dev_type = CORESIGHT_ETF;
 		coresight_register(&desc);
 		tmc_configure_etf(dev);
-		device_printf(dev, "ETF configuration found\n");
+		if (bootverbose)
+			device_printf(dev, "ETF configuration found\n");
 		break;
 	default:
 		break;

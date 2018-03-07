@@ -135,7 +135,8 @@ funnel_attach(device_t dev)
 
 	wmb();
 
-	printf("Device ID: %x\n", bus_read_4(sc->res, FUNNEL_DEVICEID));
+	if (bootverbose)
+		printf("Device ID: %x\n", bus_read_4(sc->res, FUNNEL_DEVICEID));
 
 	return (0);
 }
