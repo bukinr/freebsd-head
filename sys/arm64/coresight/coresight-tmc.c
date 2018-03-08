@@ -259,6 +259,8 @@ tmc_read(device_t dev, struct endpoint *endp,
 	if (sc->dev_type == CORESIGHT_ETF)
 		return (0);
 
+	/* TODO: check if event we are reading infortmation for is currently configured one */
+
 	if (bus_read_4(sc->res, TMC_STS) & STS_FULL) {
 		event->etr.offset = 0;
 		event->etr.cycle++;
