@@ -58,7 +58,7 @@ coresight_next_device(struct coresight_device *cs_dev,
 			continue;
 
 		out = coresight_get_output_device(endp, &out_endp);
-		if (out) {
+		if (out != NULL) {
 			if (LIST_EMPTY(&event->endplist)) {
 				/* Add source device */
 				endp->cs_dev = cs_dev;
@@ -84,7 +84,7 @@ coresight_build_list(struct coresight_device *cs_dev,
 	struct coresight_device *out;
 
 	out = cs_dev;
-	while (out)
+	while (out != NULL)
 		out = coresight_next_device(out, event);
 
 	return (0);

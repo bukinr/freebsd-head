@@ -133,8 +133,6 @@ funnel_attach(device_t dev)
 	/* Unlock Coresight */
 	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
 
-	wmb();
-
 	if (bootverbose)
 		printf("Device ID: %x\n", bus_read_4(sc->res, FUNNEL_DEVICEID));
 

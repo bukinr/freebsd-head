@@ -106,12 +106,8 @@ debug_attach(device_t dev)
 	/* Unlock Coresight */
 	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
 
-	wmb();
-
 	/* Unlock Debug */
 	bus_write_4(sc->res, EDOSLAR, 0);
-
-	wmb();
 
 	/* Enable power */
 	reg = bus_read_4(sc->res, EDPRCR);

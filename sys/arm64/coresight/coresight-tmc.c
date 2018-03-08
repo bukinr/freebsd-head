@@ -71,11 +71,9 @@ tmc_unlock(struct tmc_softc *sc)
 
 	/* Unlock Coresight */
 	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
-	wmb();
 
 	/* Unlock TMC */
 	bus_write_4(sc->res, TMC_LAR, CORESIGHT_UNLOCK);
-	wmb();
 
 	return (0);
 }
