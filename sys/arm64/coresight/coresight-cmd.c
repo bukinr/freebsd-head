@@ -99,6 +99,7 @@ coresight_init_event(int cpu, struct coresight_event *event)
 	TAILQ_FOREACH(cs_dev, &cs_devs, link) {
 		if (cs_dev->dev_type == event->src &&
 		    cs_dev->pdata->cpu == cpu) {
+			cs_dev->enabled = false;
 			LIST_INIT(&event->endplist);
 			coresight_build_list(cs_dev, event);
 			break;
@@ -111,20 +112,31 @@ coresight_init_event(int cpu, struct coresight_event *event)
 void
 coresight_enable(int cpu, struct coresight_event *event)
 {
-
+	struct coresight_device *cs_dev;
 	struct endpoint *endp;
 
-	LIST_FOREACH(endp, &event->endplist, endplink)
-		CORESIGHT_ENABLE(endp->cs_dev->dev, endp, event);
+	LIST_FOREACH(endp, &event->endplist, endplink) {
+		cs_dev = endp->cs_dev;
+		if (cs_dev->enabled == false) {
+			CORESIGHT_ENABLE(cs_dev->dev, endp, event);
+			cs_dev->enabled = true;
+		}
+	}
 }
 
 void
 coresight_disable(int cpu, struct coresight_event *event)
 {
+	struct coresight_device *cs_dev;
 	struct endpoint *endp;
 
-	LIST_FOREACH(endp, &event->endplist, endplink)
-		CORESIGHT_DISABLE(endp->cs_dev->dev, endp, event);
+	LIST_FOREACH(endp, &event->endplist, endplink) {
+		cs_dev = endp->cs_dev;
+		if (cs_dev->enabled == true) {
+			CORESIGHT_DISABLE(cs_dev->dev, endp, event);
+			cs_dev->enabled = false;
+		}
+	}
 }
 
 void

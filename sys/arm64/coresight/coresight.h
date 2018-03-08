@@ -59,6 +59,7 @@ struct coresight_device {
 	phandle_t node;
 	enum cs_dev_type dev_type;
 	struct coresight_platform_data *pdata;
+	boolean_t enabled;
 };
 
 struct endpoint {
