@@ -68,17 +68,6 @@ static struct resource_spec tmc_spec[] = {
 	{ -1, 0 }
 };
 
-static void
-tmc_unlock(struct tmc_softc *sc)
-{
-
-	/* Unlock Coresight */
-	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
-
-	/* Unlock TMC */
-	bus_write_4(sc->res, TMC_LAR, CORESIGHT_UNLOCK);
-}
-
 static int
 tmc_start(device_t dev)
 {
@@ -132,8 +121,6 @@ tmc_configure_etf(device_t dev)
 
 	sc = device_get_softc(dev);
 
-	tmc_unlock(sc);
-
 	do {
 		reg = bus_read_4(sc->res, TMC_STS);
 	} while ((reg & STS_TMCREADY) == 0);
@@ -166,7 +153,6 @@ tmc_configure_etr(device_t dev, struct endpoint *endp,
 
 	sc = device_get_softc(dev);
 
-	tmc_unlock(sc);
 	tmc_stop(dev);
 
 	do {
@@ -210,6 +196,29 @@ tmc_configure_etr(device_t dev, struct endpoint *endp,
 }
 
 static int
+tmc_init(device_t dev)
+{
+	struct tmc_softc *sc;
+
+	sc = device_get_softc(dev);
+
+	/* Unlock Coresight */
+	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
+
+	/* Unlock TMC */
+	bus_write_4(sc->res, TMC_LAR, CORESIGHT_UNLOCK);
+
+	if (sc->dev_type == CORESIGHT_ETF) {
+		if (sc->etf_configured == false) {
+			tmc_configure_etf(dev);
+			sc->etf_configured = true;
+		}
+	}
+
+	return (0);
+}
+
+static int
 tmc_enable(device_t dev, struct endpoint *endp,
     struct coresight_event *event)
 {
@@ -218,13 +227,8 @@ tmc_enable(device_t dev, struct endpoint *endp,
 
 	sc = device_get_softc(dev);
 
-	if (sc->dev_type == CORESIGHT_ETF) {
-		if (sc->etf_configured == false) {
-			tmc_configure_etf(dev);
-			sc->etf_configured = true;
-		}
+	if (sc->dev_type == CORESIGHT_ETF)
 		return (0);
-	}
 
 	KASSERT(sc->dev_type == CORESIGHT_ETR, ("Wrong dev_type"));
 
@@ -238,7 +242,6 @@ tmc_enable(device_t dev, struct endpoint *endp,
 		nev = atomic_fetchadd_int(&sc->nev, 1);
 		if (nev == 0) {
 			sc->event = event;
-			tmc_unlock(sc);
 			tmc_stop(dev);
 			tmc_configure_etr(dev, endp, event);
 			tmc_start(dev);
@@ -371,6 +374,7 @@ static device_method_t tmc_methods[] = {
 	DEVMETHOD(device_attach,	tmc_attach),
 
 	/* Coresight interface */
+	DEVMETHOD(coresight_init,	tmc_init),
 	DEVMETHOD(coresight_enable,	tmc_enable),
 	DEVMETHOD(coresight_disable,	tmc_disable),
 	DEVMETHOD(coresight_read,	tmc_read),

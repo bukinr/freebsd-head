@@ -66,8 +66,7 @@ static struct resource_spec replicator_spec[] = {
 };
 
 static int
-replicator_enable(device_t dev, struct endpoint *endp,
-    struct coresight_event *event)
+replicator_init(device_t dev)
 {
 	struct replicator_softc *sc;
 
@@ -75,6 +74,17 @@ replicator_enable(device_t dev, struct endpoint *endp,
 
 	/* Unlock Coresight */
 	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
+
+	return (0);
+}
+
+static int
+replicator_enable(device_t dev, struct endpoint *endp,
+    struct coresight_event *event)
+{
+	struct replicator_softc *sc;
+
+	sc = device_get_softc(dev);
 
 	/* Enable the port. Keep the other port disabled */
 	if (endp->reg == 0) {
@@ -129,7 +139,6 @@ replicator_attach(device_t dev)
 	}
 
 	sc->pdata = coresight_get_platform_data(dev);
-
 	desc.pdata = sc->pdata;
 	desc.dev = dev;
 	desc.dev_type = CORESIGHT_DYNAMIC_REPLICATOR;
@@ -144,6 +153,7 @@ static device_method_t replicator_methods[] = {
 	DEVMETHOD(device_attach,	replicator_attach),
 
 	/* Coresight interface */
+	DEVMETHOD(coresight_init,	replicator_init),
 	DEVMETHOD(coresight_enable,	replicator_enable),
 	DEVMETHOD(coresight_disable,	replicator_disable),
 	DEVMETHOD_END

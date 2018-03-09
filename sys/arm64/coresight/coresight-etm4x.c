@@ -81,58 +81,6 @@ static struct resource_spec etm_spec[] = {
 	{ -1, 0 }
 };
 
-static void
-etm_unlock(struct etm_softc *sc)
-{
-
-	/* Unlocking Coresight */
-	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
-
-	/* Unlocking ETM */
-	bus_write_4(sc->res, TRCOSLAR, 0);
-}
-
-static int
-etm_start(device_t dev)
-{
-	struct etm_softc *sc;
-	uint32_t reg;
-
-	sc = device_get_softc(dev);
-
-	/* Enable the trace unit */
-	bus_write_4(sc->res, TRCPRGCTLR, TRCPRGCTLR_EN);
-
-	/* Wait for an IDLE bit to be LOW */
-	do {
-		reg = bus_read_4(sc->res, TRCSTATR);
-	} while ((reg & TRCSTATR_IDLE) == 1);
-
-	if ((bus_read_4(sc->res, TRCPRGCTLR) & TRCPRGCTLR_EN) == 0)
-		panic("etm is not enabled\n");
-
-	return (0);
-}
-
-static int
-etm_stop(device_t dev)
-{
-	struct etm_softc *sc;
-	uint32_t reg;
-
-	sc = device_get_softc(dev);
-
-	/* Disable the trace unit */
-	bus_write_4(sc->res, TRCPRGCTLR, 0);
-
-	/* Wait for an IDLE bit */
-	do {
-		reg = bus_read_4(sc->res, TRCSTATR);
-	} while ((reg & TRCSTATR_IDLE) == 0);
-
-	return (0);
-}
-
 static int
 etm_prepare(device_t dev, struct coresight_event *event)
 {
@@ -234,16 +182,48 @@ etm_prepare(device_t dev, struct coresight_event *event)
 }
 
 static int
+etm_init(device_t dev)
+{
+	struct etm_softc *sc;
+	uint32_t reg;
+
+	sc = device_get_softc(dev);
+
+	/* Unlocking Coresight */
+	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
+
+	/* Unlocking ETM */
+	bus_write_4(sc->res, TRCOSLAR, 0);
+
+	reg = bus_read_4(sc->res, TRCIDR(1));
+	dprintf("ETM Version: %d.%d\n",
+	    (reg & TRCIDR1_TRCARCHMAJ_M) >> TRCIDR1_TRCARCHMAJ_S,
+	    (reg & TRCIDR1_TRCARCHMIN_M) >> TRCIDR1_TRCARCHMIN_S);
+
+	return (0);
+}
+
+static int
 etm_enable(device_t dev, struct endpoint *endp,
     struct coresight_event *event)
 {
 	struct etm_softc *sc;
+	uint32_t reg;
 
 	sc = device_get_softc(dev);
 
-	etm_unlock(sc);
 	etm_prepare(dev, event);
-	etm_start(dev);
+
+	/* Enable the trace unit */
+	bus_write_4(sc->res, TRCPRGCTLR, TRCPRGCTLR_EN);
+
+	/* Wait for an IDLE bit to be LOW */
+	do {
+		reg = bus_read_4(sc->res, TRCSTATR);
+	} while ((reg & TRCSTATR_IDLE) == 1);
+
+	if ((bus_read_4(sc->res, TRCPRGCTLR) & TRCPRGCTLR_EN) == 0)
+		panic("etm is not enabled\n");
 
 	return (0);
 }
@@ -252,8 +232,18 @@ static void
 etm_disable(device_t dev, struct endpoint *endp,
     struct coresight_event *event)
 {
+	struct etm_softc *sc;
+	uint32_t reg;
 
-	etm_stop(dev);
+	sc = device_get_softc(dev);
+
+	/* Disable the trace unit */
+	bus_write_4(sc->res, TRCPRGCTLR, 0);
+
+	/* Wait for an IDLE bit */
+	do {
+		reg = bus_read_4(sc->res, TRCSTATR);
+	} while ((reg & TRCSTATR_IDLE) == 0);
 }
 
 static int
@@ -298,6 +288,7 @@ static device_method_t etm_methods[] = {
 	DEVMETHOD(device_attach,	etm_attach),
 
 	/* Coresight interface */
+	DEVMETHOD(coresight_init,	etm_init),
 	DEVMETHOD(coresight_enable,	etm_enable),
 	DEVMETHOD(coresight_disable,	etm_disable),
 	DEVMETHOD_END

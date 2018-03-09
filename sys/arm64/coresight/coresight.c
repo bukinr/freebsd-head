@@ -174,7 +174,6 @@ coresight_get_cpu(phandle_t node,
 		if (OF_getencprop(cpu_node, "reg", (void *)&cpu_reg,
 			sizeof(cpu_reg)) > 0) {
 			pdata->cpu = cpu_reg;
-
 			return (0);
 		}
 	}

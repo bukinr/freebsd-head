@@ -48,6 +48,15 @@ __FBSDID("$FreeBSD$");
 
 #include "coresight_if.h"
 
+#define	FUNNEL_DEBUG
+#undef FUNNEL_DEBUG
+        
+#ifdef FUNNEL_DEBUG
+#define	dprintf(fmt, ...)	printf(fmt, ##__VA_ARGS__)
+#else
+#define	dprintf(fmt, ...)
+#endif
+
 static struct ofw_compat_data compat_data[] = {
 	{ "arm,coresight-funnel",		1 },
 	{ NULL,					0 }
@@ -64,6 +73,21 @@ static struct resource_spec funnel_spec[] = {
 };
 
 static int
+funnel_init(device_t dev)
+{
+	struct funnel_softc *sc;
+
+	sc = device_get_softc(dev);
+
+	/* Unlock Coresight */
+	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
+
+	dprintf("Device ID: %x\n", bus_read_4(sc->res, FUNNEL_DEVICEID));
+
+	return (0);
+}
+
+static int
 funnel_enable(device_t dev, struct endpoint *endp,
     struct coresight_event *event)
 {
@@ -71,9 +95,6 @@ funnel_enable(device_t dev, struct endpoint *endp,
 	uint32_t reg;
 
 	sc = device_get_softc(dev);
-
-	/* Unlock Coresight */
-	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
 
 	reg = bus_read_4(sc->res, FUNNEL_FUNCTL);
 	reg &= ~(FUNCTL_HOLDTIME_MASK);
@@ -127,7 +148,6 @@ funnel_attach(device_t dev)
 	}
 
 	sc->pdata = coresight_get_platform_data(dev);
-
 	desc.pdata = sc->pdata;
 	desc.dev = dev;
 	desc.dev_type = CORESIGHT_FUNNEL;
@@ -142,6 +162,7 @@ static device_method_t funnel_methods[] = {
 	DEVMETHOD(device_attach,	funnel_attach),
 
 	/* Coresight interface */
+	DEVMETHOD(coresight_init,	funnel_init),
 	DEVMETHOD(coresight_enable,	funnel_enable),
 	DEVMETHOD(coresight_disable,	funnel_disable),
 	DEVMETHOD_END
