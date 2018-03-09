@@ -265,6 +265,7 @@ coresight_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	event->sink = CORESIGHT_ETR;
 
 	coresight_init_event(cpu, event);
+	event->etr.flags = ETR_FLAG_ALLOCATE;
 
 	return (0);
 }
@@ -576,6 +577,7 @@ coresight_release_pmc(int cpu, int ri, struct pmc *pm)
 	KASSERT(phw->phw_pmc == NULL,
 	    ("[coresight,%d] PHW pmc %p non-NULL", __LINE__, phw->phw_pmc));
 
+	event->etr.flags = ETR_FLAG_RELEASE;
 	coresight_disable(cpu, event);
 
 	mode = PMC_TO_MODE(pm);

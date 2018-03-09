@@ -59,7 +59,6 @@ struct coresight_device {
 	phandle_t node;
 	enum cs_dev_type dev_type;
 	struct coresight_platform_data *pdata;
-	boolean_t enabled;
 };
 
 struct endpoint {
@@ -91,13 +90,16 @@ TAILQ_HEAD(coresight_device_list, coresight_device);
 
 #define	ETM_N_COMPRATOR		16
 
-struct etr_status {
+struct etr_state {
 	boolean_t started;
 	uint32_t cycle;
 	uint32_t offset;
 	uint32_t low;
 	uint32_t high;
 	uint32_t bufsize;
+	uint32_t flags;
+#define	ETR_FLAG_ALLOCATE	(1 << 0)
+#define	ETR_FLAG_RELEASE	(1 << 1)
 };
 
 struct coresight_event {
@@ -109,7 +111,7 @@ struct coresight_event {
 	enum cs_dev_type src;
 	enum cs_dev_type sink;
 
-	struct etr_status etr;
+	struct etr_state etr;
 };
 
 struct etm_config {

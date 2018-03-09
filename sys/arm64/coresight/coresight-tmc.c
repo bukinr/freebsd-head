@@ -58,6 +58,7 @@ struct tmc_softc {
 	uint64_t			cycle;
 	struct coresight_platform_data	*pdata;
 	uint32_t			dev_type;
+	uint32_t			nev;
 };
 
 static struct resource_spec tmc_spec[] = {
@@ -214,23 +215,30 @@ tmc_enable(device_t dev, struct endpoint *endp,
     struct coresight_event *event)
 {
 	struct tmc_softc *sc;
+	uint32_t nev;
 
 	sc = device_get_softc(dev);
 
 	/* ETF configuration is static */
-	switch (sc->dev_type) {
-	case CORESIGHT_ETF:
+	if (sc->dev_type == CORESIGHT_ETF)
 		return (0);
-	case CORESIGHT_ETR:
-		if (event->etr.started)
-			return (0);
-		tmc_unlock(sc);
-		tmc_stop(dev);
-		tmc_configure_etr(dev, endp, event);
-		tmc_start(dev);
-		event->etr.started = 1;
-	default:
-		break;
+
+	KASSERT(sc->dev_type == CORESIGHT_ETR, ("Wrong dev_type"));
+
+	/*
+	 * Multiple CPUs can call this same time.
+	 * We allow only one running configuration.
+	 */
+
+	if (event->etr.flags & ETR_FLAG_ALLOCATE) {
+		event->etr.flags &= ~ETR_FLAG_ALLOCATE;
+		nev = atomic_fetchadd_int(&sc->nev, 1);
+		if (nev == 0) {
+			tmc_unlock(sc);
+			tmc_stop(dev);
+			tmc_configure_etr(dev, endp, event);
+			tmc_start(dev);
+		}
 	}
 
 	return (0);
@@ -240,11 +248,23 @@ static void
 tmc_disable(device_t dev, struct endpoint *endp,
     struct coresight_event *event)
 {
+	struct tmc_softc *sc;
+	uint32_t nev;
 
-	/*
-	 * Can't restore the state: can't specify buffer offset 
-	 * to continue operation from. So we do not disable TMC here.
-	 */
+	sc = device_get_softc(dev);
+
+	/* ETF configuration is static */
+	if (sc->dev_type == CORESIGHT_ETF)
+		return;
+
+	KASSERT(sc->dev_type == CORESIGHT_ETR, ("Wrong dev_type"));
+
+	if (event->etr.flags & ETR_FLAG_RELEASE) {
+		event->etr.flags &= ~ETR_FLAG_RELEASE;
+		nev = atomic_fetchadd_int(&sc->nev, -1);
+		if (nev == 1)
+			tmc_stop(dev);
+	}
 }
 
 static int
