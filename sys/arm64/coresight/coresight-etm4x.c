@@ -164,9 +164,6 @@ etm_prepare(device_t dev, struct coresight_event *event)
 	/* Enable trace synchronization every 4096 bytes of trace. */
 	bus_write_4(sc->res, TRCSYNCPR, TRCSYNCPR_4K);
 
-	/* Set a value for the trace ID, with bit[0]=0. */
-	//bus_write_4(sc->res, TRCTRACEIDR, 0x10);
-
 	/* Set a value for the trace ID */
 	bus_write_4(sc->res, TRCTRACEIDR, event->etm.trace_id);
 
