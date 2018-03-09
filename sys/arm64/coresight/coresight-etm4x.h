@@ -71,6 +71,11 @@
 #define	TRCSTALLCTLR		0x02C /* Trace Stall Control Register */
 #define	TRCTSCTLR		0x030 /* Trace Global Timestamp Control Register */
 #define	TRCSYNCPR		0x034 /* Trace Synchronization Period Register */
+#define	 TRCSYNCPR_PERIOD_S	0
+#define	 TRCSYNCPR_PERIOD_M	0x1f
+#define	 TRCSYNCPR_1K		(10 << TRCSYNCPR_PERIOD_S)
+#define	 TRCSYNCPR_2K		(11 << TRCSYNCPR_PERIOD_S)
+#define	 TRCSYNCPR_4K		(12 << TRCSYNCPR_PERIOD_S)
 #define	TRCCCCTLR		0x038 /* Trace Cycle Count Control Register */
 #define	TRCBBCTLR		0x03C /* Trace Branch Broadcast Control Register */
 #define	TRCTRACEIDR		0x040 /* Trace Trace ID Register */

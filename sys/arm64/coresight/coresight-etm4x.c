@@ -101,14 +101,14 @@ etm_start(device_t dev)
 	sc = device_get_softc(dev);
 
 	/* Enable the trace unit */
-	bus_write_4(sc->res, TRCPRGCTLR, 1);
+	bus_write_4(sc->res, TRCPRGCTLR, TRCPRGCTLR_EN);
 
 	/* Wait for an IDLE bit to be LOW */
 	do {
 		reg = bus_read_4(sc->res, TRCSTATR);
 	} while ((reg & TRCSTATR_IDLE) == 1);
 
-	if ((bus_read_4(sc->res, TRCPRGCTLR) & 1) == 0)
+	if ((bus_read_4(sc->res, TRCPRGCTLR) & TRCPRGCTLR_EN) == 0)
 		panic("etm is not enabled\n");
 
 	return (0);
@@ -134,7 +134,7 @@ etm_stop(device_t dev)
 }
 
 static int
-etm_prepare(device_t dev, struct coresight_event *config)
+etm_prepare(device_t dev, struct coresight_event *event)
 {
 	struct etm_softc *sc;
 	uint32_t reg;
@@ -162,10 +162,13 @@ etm_prepare(device_t dev, struct coresight_event *config)
 	bus_write_4(sc->res, TRCSTALLCTLR, 0);
 
 	/* Enable trace synchronization every 4096 bytes of trace. */
-	bus_write_4(sc->res, TRCSYNCPR, 0xC);
+	bus_write_4(sc->res, TRCSYNCPR, TRCSYNCPR_4K);
 
 	/* Set a value for the trace ID, with bit[0]=0. */
-	bus_write_4(sc->res, TRCTRACEIDR, 0x10);
+	//bus_write_4(sc->res, TRCTRACEIDR, 0x10);
+
+	/* Set a value for the trace ID */
+	bus_write_4(sc->res, TRCTRACEIDR, event->etm.trace_id);
 
 	/*
 	 * Disable the timestamp event. The trace unit still generates
@@ -182,26 +185,26 @@ etm_prepare(device_t dev, struct coresight_event *config)
 	/* The number of the single resource used to activate the event. */
 	reg |= (1 << EVENT_SEL_S);
 
-	if (config->excp_level > 2)
+	if (event->excp_level > 2)
 		return (-1);
 
 	reg |= TRCVICTLR_EXLEVEL_NS_M;
-	reg &= ~TRCVICTLR_EXLEVEL_NS(config->excp_level);
+	reg &= ~TRCVICTLR_EXLEVEL_NS(event->excp_level);
 	reg |= TRCVICTLR_EXLEVEL_S_M;
-	reg &= ~TRCVICTLR_EXLEVEL_S(config->excp_level);
+	reg &= ~TRCVICTLR_EXLEVEL_S(event->excp_level);
 	bus_write_4(sc->res, TRCVICTLR, reg);
 
-	for (i = 0; i < config->naddr * 2; i++) {
-		dprintf("configure range %d, address %lx\n", i, config->addr[i]);
-		bus_write_8(sc->res, TRCACVR(i), config->addr[i]);
+	for (i = 0; i < event->naddr * 2; i++) {
+		dprintf("configure range %d, address %lx\n", i, event->addr[i]);
+		bus_write_8(sc->res, TRCACVR(i), event->addr[i]);
 
 		reg = 0;
 		/* Secure state */
 		reg |= TRCACATR_EXLEVEL_S_M;
-		reg &= ~TRCACATR_EXLEVEL_S(config->excp_level);
+		reg &= ~TRCACATR_EXLEVEL_S(event->excp_level);
 		/* Non-secure state */
 		reg |= TRCACATR_EXLEVEL_NS_M;
-		reg &= ~TRCACATR_EXLEVEL_NS(config->excp_level);
+		reg &= ~TRCACATR_EXLEVEL_NS(event->excp_level);
 		bus_write_4(sc->res, TRCACATR(i), reg);
 
 		/* Address range is included */
@@ -216,7 +219,7 @@ etm_prepare(device_t dev, struct coresight_event *config)
 	/* Clear the STATUS bit to zero */
 	bus_write_4(sc->res, TRCSSCSR(0), 0);
 
-	if (config->naddr == 0) {
+	if (event->naddr == 0) {
 		/* No address range filtering for ViewInst. */
 		bus_write_4(sc->res, TRCVIIECTLR, 0);
 	}

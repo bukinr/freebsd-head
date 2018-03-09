@@ -263,8 +263,10 @@ coresight_buffer_prepare(uint32_t cpu, struct pmc *pm,
 
 	event->src = CORESIGHT_ETMV4;
 	event->sink = CORESIGHT_ETR;
-
 	coresight_init_event(cpu, event);
+
+	/* Set some trace ID */
+	event->etm.trace_id = 0x10;
 	event->etr.flags = ETR_FLAG_ALLOCATE;
 
 	return (0);

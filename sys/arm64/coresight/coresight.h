@@ -90,6 +90,10 @@ TAILQ_HEAD(coresight_device_list, coresight_device);
 
 #define	ETM_N_COMPRATOR		16
 
+struct etm_state {
+	uint32_t trace_id;
+};
+
 struct etr_state {
 	boolean_t started;
 	uint32_t cycle;
@@ -112,6 +116,7 @@ struct coresight_event {
 	enum cs_dev_type sink;
 
 	struct etr_state etr;
+	struct etm_state etm;
 };
 
 struct etm_config {

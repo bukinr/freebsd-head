@@ -66,7 +66,7 @@ static struct resource_spec tmc_spec[] = {
 	{ -1, 0 }
 };
 
-static int
+static void
 tmc_unlock(struct tmc_softc *sc)
 {
 
@@ -75,8 +75,6 @@ tmc_unlock(struct tmc_softc *sc)
 
 	/* Unlock TMC */
 	bus_write_4(sc->res, TMC_LAR, CORESIGHT_UNLOCK);
-
-	return (0);
 }
 
 static int
