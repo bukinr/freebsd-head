@@ -45,6 +45,8 @@ __FBSDID("$FreeBSD$");
 
 #include <arm64/coresight/coresight.h>
 
+#include "coresight_if.h"
+
 #define	EDPCSR				0x0a0
 #define	EDCIDSR				0x0a4
 #define	EDVIDSR				0x0a8
@@ -63,7 +65,8 @@ static struct ofw_compat_data compat_data[] = {
 };
 
 struct debug_softc {
-	struct resource		*res;
+	struct resource			*res;
+	struct coresight_platform_data	*pdata;
 };
 
 static struct resource_spec debug_spec[] = {
@@ -71,13 +74,13 @@ static struct resource_spec debug_spec[] = {
 	{ -1, 0 }
 };
 
-static void
-debug_enable(void *arg)
+static int
+debug_init(device_t dev)
 {
 	struct debug_softc *sc;
 	uint32_t reg;
 
-	sc = (struct debug_softc *)arg;
+	sc = device_get_softc(dev);
 
 	/* Unlock Coresight */
 	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
@@ -85,14 +88,20 @@ debug_enable(void *arg)
 	/* Unlock Debug */
 	bus_write_4(sc->res, EDOSLAR, 0);
 
-	/* Enable power */
+	/* Already initialized? */
 	reg = bus_read_4(sc->res, EDPRCR);
+	if (reg & EDPRCR_CORENPDRQ)
+		return (0);
+
+	/* Enable power */
 	reg |= EDPRCR_COREPURQ;
 	bus_write_4(sc->res, EDPRCR, reg);
 
 	do {
 		reg = bus_read_4(sc->res, EDPRSR);
 	} while ((reg & EDPRCR_CORENPDRQ) == 0);
+
+	return (0);
 }
 
 static int
@@ -113,11 +122,8 @@ debug_probe(device_t dev)
 static int
 debug_attach(device_t dev)
 {
+	struct coresight_desc desc;
 	struct debug_softc *sc;
-	phandle_t node;
-	phandle_t cpu_node;
-	pcell_t xref;
-	pcell_t cpu;
 
 	sc = device_get_softc(dev);
 
@@ -126,21 +132,11 @@ debug_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	node = ofw_bus_get_node(dev);
-
-	/*
-	 * TODO
-	 * Enable CPU debug for current cpu only
-	 */
-
-	if (OF_getencprop(node, "cpu", &xref, sizeof(xref)) != -1) {
-		cpu_node = OF_node_from_xref(xref);
-		if (OF_getencprop(cpu_node, "reg", (void *)&cpu,
-		    sizeof(cpu)) > 0) {
-			if (PCPU_GET(cpuid) == cpu)
-				debug_enable(sc);
-		}
-	}
+	sc->pdata = coresight_get_platform_data(dev);
+	desc.pdata = sc->pdata;
+	desc.dev = dev;
+	desc.dev_type = CORESIGHT_CPU_DEBUG;
+	coresight_register(&desc);
 
 	return (0);
 }
@@ -149,6 +145,9 @@ static device_method_t debug_methods[] = {
 	/* Device interface */
 	DEVMETHOD(device_probe,		debug_probe),
 	DEVMETHOD(device_attach,	debug_attach),
+
+	/* Coresight interface */
+	DEVMETHOD(coresight_init,	debug_init),
 	DEVMETHOD_END
 };
 

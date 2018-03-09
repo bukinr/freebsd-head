@@ -51,6 +51,7 @@ enum cs_dev_type {
 	CORESIGHT_ETF,
 	CORESIGHT_DYNAMIC_REPLICATOR,
 	CORESIGHT_FUNNEL,
+	CORESIGHT_CPU_DEBUG,
 };
 
 struct coresight_device {

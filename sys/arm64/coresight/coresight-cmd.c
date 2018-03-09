@@ -105,6 +105,13 @@ coresight_init_event(int cpu, struct coresight_event *event)
 		}
 	}
 
+	/* Ensure Coresight is initialized for the CPU */
+	TAILQ_FOREACH(cs_dev, &cs_devs, link) {
+		if (cs_dev->dev_type == CORESIGHT_CPU_DEBUG &&
+		    cs_dev->pdata->cpu == cpu)
+		CORESIGHT_INIT(cs_dev->dev);
+	}
+
 	return (0);
 }
 

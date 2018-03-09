@@ -60,6 +60,7 @@ struct tmc_softc {
 	uint32_t			dev_type;
 	uint32_t			nev;
 	struct coresight_event		*event;
+	boolean_t			etf_configured;
 };
 
 static struct resource_spec tmc_spec[] = {
@@ -92,14 +93,14 @@ tmc_start(device_t dev)
 	/* Enable TMC */
 	bus_write_4(sc->res, TMC_CTL, CTL_TRACECAPTEN);
 	if ((bus_read_4(sc->res, TMC_CTL) & CTL_TRACECAPTEN) == 0)
-		panic("not enabled0\n");
+		panic("Not enabled\n");
 
 	do {
 		reg = bus_read_4(sc->res, TMC_STS);
 	} while ((reg & STS_TMCREADY) == 1);
 
 	if ((bus_read_4(sc->res, TMC_CTL) & CTL_TRACECAPTEN) == 0)
-		panic("not enabled1\n");
+		panic("Not enabled\n");
 
 	return (0);
 }
@@ -217,9 +218,13 @@ tmc_enable(device_t dev, struct endpoint *endp,
 
 	sc = device_get_softc(dev);
 
-	/* ETF configuration is static */
-	if (sc->dev_type == CORESIGHT_ETF)
+	if (sc->dev_type == CORESIGHT_ETF) {
+		if (sc->etf_configured == false) {
+			tmc_configure_etf(dev);
+			sc->etf_configured = true;
+		}
 		return (0);
+	}
 
 	KASSERT(sc->dev_type == CORESIGHT_ETR, ("Wrong dev_type"));
 
@@ -350,7 +355,6 @@ tmc_attach(device_t dev)
 		desc.dev_type = CORESIGHT_ETF;
 		sc->dev_type = CORESIGHT_ETF;
 		coresight_register(&desc);
-		tmc_configure_etf(dev);
 		if (bootverbose)
 			device_printf(dev, "ETF configuration found\n");
 		break;
