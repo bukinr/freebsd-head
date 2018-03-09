@@ -71,6 +71,30 @@ static struct resource_spec debug_spec[] = {
 	{ -1, 0 }
 };
 
+static void
+debug_enable(void *arg)
+{
+	struct debug_softc *sc;
+	uint32_t reg;
+
+	sc = (struct debug_softc *)arg;
+
+	/* Unlock Coresight */
+	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
+
+	/* Unlock Debug */
+	bus_write_4(sc->res, EDOSLAR, 0);
+
+	/* Enable power */
+	reg = bus_read_4(sc->res, EDPRCR);
+	reg |= EDPRCR_COREPURQ;
+	bus_write_4(sc->res, EDPRCR, reg);
+
+	do {
+		reg = bus_read_4(sc->res, EDPRSR);
+	} while ((reg & EDPRCR_CORENPDRQ) == 0);
+}
+
 static int
 debug_probe(device_t dev)
 {
@@ -90,7 +114,10 @@ static int
 debug_attach(device_t dev)
 {
 	struct debug_softc *sc;
-	uint32_t reg;
+	phandle_t node;
+	phandle_t cpu_node;
+	pcell_t xref;
+	pcell_t cpu;
 
 	sc = device_get_softc(dev);
 
@@ -99,24 +126,21 @@ debug_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	/* Enable CPU debug for current CPU only */
-	if (device_get_unit(dev) != 0)
-		return (0);
+	node = ofw_bus_get_node(dev);
 
-	/* Unlock Coresight */
-	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
+	/*
+	 * TODO
+	 * Enable CPU debug for current cpu only
+	 */
 
-	/* Unlock Debug */
-	bus_write_4(sc->res, EDOSLAR, 0);
-
-	/* Enable power */
-	reg = bus_read_4(sc->res, EDPRCR);
-	reg |= EDPRCR_COREPURQ;
-	bus_write_4(sc->res, EDPRCR, reg);
-
-	do {
-		reg = bus_read_4(sc->res, EDPRSR);
-	} while ((reg & EDPRCR_CORENPDRQ) == 0);
+	if (OF_getencprop(node, "cpu", &xref, sizeof(xref)) != -1) {
+		cpu_node = OF_node_from_xref(xref);
+		if (OF_getencprop(cpu_node, "reg", (void *)&cpu,
+		    sizeof(cpu)) > 0) {
+			if (PCPU_GET(cpuid) == cpu)
+				debug_enable(sc);
+		}
+	}
 
 	return (0);
 }
