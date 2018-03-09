@@ -280,6 +280,10 @@ tmc_read(device_t dev, struct endpoint *endp,
 	if (sc->dev_type == CORESIGHT_ETF)
 		return (0);
 
+	/*
+	 * Ensure the event we are reading information for
+	 * is currently configured one.
+	 */
 	if (sc->event != event)
 		return (0);
 
