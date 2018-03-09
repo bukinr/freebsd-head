@@ -140,7 +140,8 @@ etm_prepare(device_t dev, struct coresight_event *event)
 	bus_write_4(sc->res, TRCVICTLR, reg);
 
 	for (i = 0; i < event->naddr * 2; i++) {
-		dprintf("configure range %d, address %lx\n", i, event->addr[i]);
+		dprintf("configure range %d, address %lx\n",
+		    i, event->addr[i]);
 		bus_write_8(sc->res, TRCACVR(i), event->addr[i]);
 
 		reg = 0;
