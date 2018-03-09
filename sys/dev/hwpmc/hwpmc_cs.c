@@ -262,7 +262,7 @@ coresight_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	}
 
 	event->src = CORESIGHT_ETMV4;
-	event->sink = CORESIGHT_ETR;
+	event->sink = CORESIGHT_TMC;
 	coresight_init_event(cpu, event);
 
 	/*
@@ -504,7 +504,7 @@ coresight_trace_config(int cpu, int ri, struct pmc *pm,
 		event->excp_level = 0;
 
 	event->src = CORESIGHT_ETMV4;
-	event->sink = CORESIGHT_ETR;
+	event->sink = CORESIGHT_TMC;
 
 	return (0);
 }

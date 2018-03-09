@@ -47,6 +47,15 @@ __FBSDID("$FreeBSD$");
 
 #include "coresight_if.h"
 
+#define	TMC_DEBUG
+#undef TMC_DEBUG
+        
+#ifdef TMC_DEBUG
+#define	dprintf(fmt, ...)	printf(fmt, ##__VA_ARGS__)
+#else
+#define	dprintf(fmt, ...)
+#endif
+
 static struct ofw_compat_data compat_data[] = {
 	{ "arm,coresight-tmc",			1 },
 	{ NULL,					0 }
@@ -58,6 +67,9 @@ struct tmc_softc {
 	uint64_t			cycle;
 	struct coresight_platform_data	*pdata;
 	uint32_t			dev_type;
+#define	CORESIGHT_UNKNOWN		0
+#define	CORESIGHT_ETR			1
+#define	CORESIGHT_ETF			2
 	uint32_t			nev;
 	struct coresight_event		*event;
 	boolean_t			etf_configured;
@@ -130,16 +142,15 @@ tmc_configure_etf(device_t dev)
 
 	tmc_start(dev);
 
-	if (bootverbose)
-		printf("%s: STS %x, CTL %x, RSZ %x, RRP %x, RWP %x, "
-		    "LBUFLEVEL %x, CBUFLEVEL %x\n", __func__,
-		    bus_read_4(sc->res, TMC_STS),
-		    bus_read_4(sc->res, TMC_CTL),
-		    bus_read_4(sc->res, TMC_RSZ),
-		    bus_read_4(sc->res, TMC_RRP),
-		    bus_read_4(sc->res, TMC_RWP),
-		    bus_read_4(sc->res, TMC_CBUFLEVEL),
-		    bus_read_4(sc->res, TMC_LBUFLEVEL));
+	dprintf("%s: STS %x, CTL %x, RSZ %x, RRP %x, RWP %x, "
+	    "LBUFLEVEL %x, CBUFLEVEL %x\n", __func__,
+	    bus_read_4(sc->res, TMC_STS),
+	    bus_read_4(sc->res, TMC_CTL),
+	    bus_read_4(sc->res, TMC_RSZ),
+	    bus_read_4(sc->res, TMC_RRP),
+	    bus_read_4(sc->res, TMC_RWP),
+	    bus_read_4(sc->res, TMC_CBUFLEVEL),
+	    bus_read_4(sc->res, TMC_LBUFLEVEL));
 
 	return (0);
 }
@@ -199,6 +210,7 @@ static int
 tmc_init(device_t dev)
 {
 	struct tmc_softc *sc;
+	uint32_t reg;
 
 	sc = device_get_softc(dev);
 
@@ -208,11 +220,24 @@ tmc_init(device_t dev)
 	/* Unlock TMC */
 	bus_write_4(sc->res, TMC_LAR, CORESIGHT_UNLOCK);
 
-	if (sc->dev_type == CORESIGHT_ETF) {
+	reg = bus_read_4(sc->res, TMC_DEVID);
+	reg &= DEVID_CONFIGTYPE_M;
+	switch (reg) {
+	case DEVID_CONFIGTYPE_ETR:
+		sc->dev_type = CORESIGHT_ETR;
+		dprintf(dev, "ETR configuration found\n");
+		break;
+	case DEVID_CONFIGTYPE_ETF:
+		sc->dev_type = CORESIGHT_ETF;
+		dprintf(dev, "ETF configuration found\n");
 		if (sc->etf_configured == false) {
 			tmc_configure_etf(dev);
 			sc->etf_configured = true;
 		}
+		break;
+	default:
+		sc->dev_type = CORESIGHT_UNKNOWN;
+		break;
 	}
 
 	return (0);
@@ -230,7 +255,8 @@ tmc_enable(device_t dev, struct endpoint *endp,
 	if (sc->dev_type == CORESIGHT_ETF)
 		return (0);
 
-	KASSERT(sc->dev_type == CORESIGHT_ETR, ("Wrong dev_type"));
+	KASSERT(sc->dev_type == CORESIGHT_ETR,
+	    ("Wrong dev_type"));
 
 	/*
 	 * Multiple CPUs can call this same time.
@@ -328,7 +354,6 @@ tmc_attach(device_t dev)
 {
 	struct coresight_desc desc;
 	struct tmc_softc *sc;
-	uint32_t reg;
 
 	sc = device_get_softc(dev);
 
@@ -340,30 +365,10 @@ tmc_attach(device_t dev)
 	}
 
 	sc->pdata = coresight_get_platform_data(dev);
-
 	desc.pdata = sc->pdata;
 	desc.dev = dev;
-
-	reg = bus_read_4(sc->res, TMC_DEVID);
-	reg &= DEVID_CONFIGTYPE_M;
-	switch (reg) {
-	case DEVID_CONFIGTYPE_ETR:
-		desc.dev_type = CORESIGHT_ETR;
-		sc->dev_type = CORESIGHT_ETR;
-		coresight_register(&desc);
-		if (bootverbose)
-			device_printf(dev, "ETR configuration found\n");
-		break;
-	case DEVID_CONFIGTYPE_ETF:
-		desc.dev_type = CORESIGHT_ETF;
-		sc->dev_type = CORESIGHT_ETF;
-		coresight_register(&desc);
-		if (bootverbose)
-			device_printf(dev, "ETF configuration found\n");
-		break;
-	default:
-		break;
-	}
+	desc.dev_type = CORESIGHT_TMC;
+	coresight_register(&desc);
 
 	return (0);
 }
