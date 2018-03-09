@@ -59,6 +59,7 @@ struct tmc_softc {
 	struct coresight_platform_data	*pdata;
 	uint32_t			dev_type;
 	uint32_t			nev;
+	struct coresight_event		*event;
 };
 
 static struct resource_spec tmc_spec[] = {
@@ -231,6 +232,7 @@ tmc_enable(device_t dev, struct endpoint *endp,
 		event->etr.flags &= ~ETR_FLAG_ALLOCATE;
 		nev = atomic_fetchadd_int(&sc->nev, 1);
 		if (nev == 0) {
+			sc->event = event;
 			tmc_unlock(sc);
 			tmc_stop(dev);
 			tmc_configure_etr(dev, endp, event);
@@ -259,8 +261,10 @@ tmc_disable(device_t dev, struct endpoint *endp,
 	if (event->etr.flags & ETR_FLAG_RELEASE) {
 		event->etr.flags &= ~ETR_FLAG_RELEASE;
 		nev = atomic_fetchadd_int(&sc->nev, -1);
-		if (nev == 1)
+		if (nev == 1) {
 			tmc_stop(dev);
+			sc->event = NULL;
+		}
 	}
 }
 
@@ -276,7 +280,8 @@ tmc_read(device_t dev, struct endpoint *endp,
 	if (sc->dev_type == CORESIGHT_ETF)
 		return (0);
 
-	/* TODO: check if event we are reading infortmation for is currently configured one */
+	if (sc->event != event)
+		return (0);
 
 	if (bus_read_4(sc->res, TMC_STS) & STS_FULL) {
 		event->etr.offset = 0;
