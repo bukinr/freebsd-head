@@ -237,7 +237,11 @@ static int
 etm_enable(device_t dev, struct endpoint *endp,
     struct coresight_event *event)
 {
+	struct etm_softc *sc;
 
+	sc = device_get_softc(dev);
+
+	etm_unlock(sc);
 	etm_prepare(dev, event);
 	etm_start(dev);
 
@@ -271,7 +275,6 @@ etm_attach(device_t dev)
 {
 	struct coresight_desc desc;
 	struct etm_softc *sc;
-	uint32_t reg;
 
 	sc = device_get_softc(dev);
 
@@ -280,18 +283,7 @@ etm_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	if (device_get_unit(dev) == 0) {
-		/* TODO */
-		etm_unlock(sc);
-		reg = bus_read_4(sc->res, TRCIDR(1));
-		if (bootverbose)
-			printf("ETM Version: %d.%d\n",
-			    (reg & TRCIDR1_TRCARCHMAJ_M) >> TRCIDR1_TRCARCHMAJ_S,
-			    (reg & TRCIDR1_TRCARCHMIN_M) >> TRCIDR1_TRCARCHMIN_S);
-	}
-
 	sc->pdata = coresight_get_platform_data(dev);
-
 	desc.pdata = sc->pdata;
 	desc.dev = dev;
 	desc.dev_type = CORESIGHT_ETMV4;

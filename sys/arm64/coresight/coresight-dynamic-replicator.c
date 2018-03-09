@@ -73,8 +73,10 @@ replicator_enable(device_t dev, struct endpoint *endp,
 
 	sc = device_get_softc(dev);
 
-	/* Enable the port. Keep the other port disabled */
+	/* Unlock Coresight */
+	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
 
+	/* Enable the port. Keep the other port disabled */
 	if (endp->reg == 0) {
 		bus_write_4(sc->res, REPLICATOR_IDFILTER0, 0x00);
 		bus_write_4(sc->res, REPLICATOR_IDFILTER1, 0xff);
@@ -132,9 +134,6 @@ replicator_attach(device_t dev)
 	desc.dev = dev;
 	desc.dev_type = CORESIGHT_DYNAMIC_REPLICATOR;
 	coresight_register(&desc);
-
-	/* Unlock Coresight */
-	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
 
 	return (0);
 }

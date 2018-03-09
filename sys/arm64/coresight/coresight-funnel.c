@@ -72,6 +72,9 @@ funnel_enable(device_t dev, struct endpoint *endp,
 
 	sc = device_get_softc(dev);
 
+	/* Unlock Coresight */
+	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
+
 	reg = bus_read_4(sc->res, FUNNEL_FUNCTL);
 	reg &= ~(FUNCTL_HOLDTIME_MASK);
 	reg |= (7 << FUNCTL_HOLDTIME_SHIFT);
@@ -129,12 +132,6 @@ funnel_attach(device_t dev)
 	desc.dev = dev;
 	desc.dev_type = CORESIGHT_FUNNEL;
 	coresight_register(&desc);
-
-	/* Unlock Coresight */
-	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
-
-	if (bootverbose)
-		printf("Device ID: %x\n", bus_read_4(sc->res, FUNNEL_DEVICEID));
 
 	return (0);
 }
