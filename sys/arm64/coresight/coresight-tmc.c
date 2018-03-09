@@ -140,7 +140,6 @@ tmc_configure_etf(device_t dev)
 
 	bus_write_4(sc->res, TMC_MODE, MODE_HW_FIFO);
 	bus_write_4(sc->res, TMC_FFCR, FFCR_EN_FMT | FFCR_EN_TI);
-	bus_write_4(sc->res, TMC_BUFWM, 0x800-1);
 
 	tmc_start(dev);
 
