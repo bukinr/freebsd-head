@@ -265,7 +265,10 @@ coresight_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	event->sink = CORESIGHT_ETR;
 	coresight_init_event(cpu, event);
 
-	/* Set some trace ID */
+	/*
+	 * Set a trace ID
+	 * TODO: should be delivered from pmctrace
+	 */
 	event->etm.trace_id = 0x10;
 	event->etr.flags = ETR_FLAG_ALLOCATE;
 
