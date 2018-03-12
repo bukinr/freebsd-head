@@ -630,10 +630,10 @@ main(int argc, char *argv[])
 	ev->ev_name = strdup("pmctrace");
 	ev->ev_flags = 0;
 
-	if (!user_mode)
-		ev->ev_cpu = CPU_FFS(&cpumask) - 1;
-	else
+	if (user_mode)
 		ev->ev_cpu = PMC_CPU_ANY;
+	else
+		ev->ev_cpu = CPU_FFS(&cpumask) - 1;
 
 	STAILQ_INSERT_TAIL(&args.pa_events, ev, ev_next);
 
