@@ -1,14 +1,13 @@
 #
-# IMX6-MMCCAM
+# GEMERIC-MMCCAM
 #
-# Custom kernel for IMX6 plus MMCCAM as opposed to the prior MMC stack. It is
-# present to keep it building in tree since it wouldn't work in LINT.
+# Custom kernel for GENERIC plus MMCCAM as opposed to the prior MMC stack.
 #
 # $FreeBSD$
 
-#NO_UNIVERSE
+include		GENERIC
 
-include		IMX6
+ident		GENERIC-MMCCAM
 
 options		MMCCAM
 

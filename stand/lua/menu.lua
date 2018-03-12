@@ -346,9 +346,9 @@ menu.current_alias_table = {}
 function menu.draw(menudef)
 	-- Clear the screen, reset the cursor, then draw
 	screen.clear()
-	screen.defcursor()
 	menu.current_alias_table = drawer.drawscreen(menudef)
 	drawn_menu = menudef
+	screen.defcursor()
 end
 
 -- 'keypress' allows the caller to indicate that a key has been pressed that we
@@ -420,19 +420,22 @@ function menu.autoboot()
 	end
 	ab = tonumber(ab) or 10
 
-	local x = loader.getenv("loader_menu_timeout_x") or 5
-	local y = loader.getenv("loader_menu_timeout_y") or 22
+	local x = loader.getenv("loader_menu_timeout_x") or 4
+	local y = loader.getenv("loader_menu_timeout_y") or 23
 
 	local endtime = loader.time() + ab
 	local time
-
+	local last
 	repeat
 		time = endtime - loader.time()
-		screen.setcursor(x, y)
-		print("Autoboot in " .. time ..
-		    " seconds, hit [Enter] to boot" ..
-		    " or any other key to stop     ")
-		screen.defcursor()
+		if last == nil or last ~= time then
+			last = time
+			screen.setcursor(x, y)
+			print("Autoboot in " .. time ..
+			    " seconds, hit [Enter] to boot" ..
+			    " or any other key to stop     ")
+			screen.defcursor()
+		end
 		if io.ischar() then
 			local ch = io.getchar()
 			if ch == core.KEY_ENTER then
@@ -448,8 +451,9 @@ function menu.autoboot()
 
 		loader.delay(50000)
 	until time <= 0
-	core.boot()
 
+	local cmd = loader.getenv("menu_timeout_command") or "boot"
+	cli_execute_unparsed(cmd)
 end
 
 return menu
