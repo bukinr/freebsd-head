@@ -184,7 +184,6 @@ SUBDIR.${MK_PMC}+=	pmcannotate
 SUBDIR.${MK_PMC}+=	pmccontrol
 SUBDIR.${MK_PMC}+=	pmcstat
 SUBDIR.${MK_PMC}+=	pmcstudy
-SUBDIR.${MK_PMC}+=	pmctrace
 SUBDIR.${MK_PORTSNAP}+=	portsnap
 SUBDIR.${MK_PPP}+=	ppp
 SUBDIR.${MK_QUOTAS}+=	edquota

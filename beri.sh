@@ -3,6 +3,8 @@ if [ "$1" = "fast" ]; then
     A=FAST
 fi
 
+export MAKEOBJDIRPREFIX=/home/br/obj/
+
 KERNEL=BERI_DE4_USBROOT
 
 if [ "$2" = "dma" ]; then
