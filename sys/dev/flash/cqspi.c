@@ -65,10 +65,10 @@ __FBSDID("$FreeBSD$");
 
 #include "qspi_if.h"
 
-#define DEBUG
-#undef DEBUG
+#define CQSPI_DEBUG
+#undef CQSPI_DEBUG
 
-#ifdef DEBUG
+#ifdef CQSPI_DEBUG
 #define dprintf(fmt, ...)  printf(fmt, ##__VA_ARGS__)
 #else
 #define dprintf(fmt, ...)
@@ -454,11 +454,8 @@ cqspi_write(device_t dev, device_t child, struct bio *bp,
 
 	WRITE4(sc, CQSPI_INDWR, INDRD_START);
 
-	CQSPI_LOCK(sc);
-	while (sc->write_op_done == 0) {
+	while (sc->write_op_done == 0)
 		tsleep(&sc->xdma_tx, PCATCH | PZERO, "spi", hz/2);
-	}
-	CQSPI_UNLOCK(sc);
 
 	cqspi_wait_idle(sc);
 
@@ -507,11 +504,8 @@ cqspi_read(device_t dev, device_t child, struct bio *bp,
 
 	WRITE4(sc, CQSPI_INDRD, INDRD_START);
 
-	CQSPI_LOCK(sc);
-	while (sc->read_op_done == 0) {
+	while (sc->read_op_done == 0)
 		tsleep(&sc->xdma_rx, PCATCH | PZERO, "spi", hz/2);
-	}
-	CQSPI_UNLOCK(sc);
 
 	cqspi_wait_idle(sc);
 
