@@ -479,8 +479,9 @@ main(int argc, CHAR16 *argv[])
 
 	printf("\n%s", bootprog_info);
 
-	//setenv("currdev", "disk1s1", 1);
+	setenv("currdev", "disk1s1", 1);
 
+#if 0
 	text = efi_devpath_name(img->FilePath);
 	if (text != NULL) {
 		printf("   Load Path: %S\n", text);
@@ -510,6 +511,7 @@ main(int argc, CHAR16 *argv[])
 		printf(" %04x%s", boot_order[i],
 		    boot_order[i] == boot_current ? "[*]" : "");
 	printf("\n");
+#endif
 
 	/*
 	 * Disable the watchdog timer. By default the boot manager sets
