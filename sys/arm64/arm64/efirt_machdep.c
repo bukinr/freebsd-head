@@ -215,6 +215,7 @@ efi_create_1t1_map(struct efi_md *map, int ndesc, int descsz)
 		VM_OBJECT_WUNLOCK(obj_1t1_pt);
 	}
 
+#if 0
 	/* va is address of efi_runtime->rt_gettime */
 	va = 0xbd986000;
 	VM_OBJECT_WLOCK(obj_1t1_pt);
@@ -222,6 +223,7 @@ efi_create_1t1_map(struct efi_md *map, int ndesc, int descsz)
 	*l3 = va | ATTR_DEFAULT | ATTR_IDX(mode) |
 	    ATTR_AP(ATTR_AP_RW) | L3_PAGE;
 	VM_OBJECT_WUNLOCK(obj_1t1_pt);
+#endif
 
 	return (true);
 fail:
