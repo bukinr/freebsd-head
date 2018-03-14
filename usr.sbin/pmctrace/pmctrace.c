@@ -540,6 +540,7 @@ main(int argc, char *argv[])
 
 	func_name = NULL;
 	func_image = NULL;
+	ev = NULL;
 
 	user_mode = 0;
 	supervisor_mode = 0;

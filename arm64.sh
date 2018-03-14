@@ -3,6 +3,8 @@ if [ "$1" = "fast" ]; then
     A=FAST
 fi
 
+export MAKEOBJDIRPREFIX=/home/br/obj/
+
 make -j6 TARGET=arm64 KERN${A}=GENERIC buildkernel || exit 1
 cp /home/br/obj/usr/home/br/dev/freebsd-head/arm64.aarch64/sys/GENERIC/kernel /tftpboot/
 

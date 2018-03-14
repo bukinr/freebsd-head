@@ -319,20 +319,12 @@ coresight_allocate_pmc(int cpu, int ri, struct pmc *pm,
 	}
 
 	if (a->pm_mode == PMC_MODE_TT) {
-		/*
-		 * We are not sure how many TMCs are in the system.
-		 * It can be that all streams funneled to a single TMC
-		 * or to multiple TMCs (TMC per each CPU), so allocate
-		 * MAX_CPU buffers here.
-		 */
-		for (i = 0; i < pmc_cpu_max(); i++) {
+		for (i = 0; i < pmc_cpu_max(); i++)
 			if (coresight_buffer_prepare(i, pm, a))
 				return (EINVAL);
-		}
-	} else {
+	} else
 		if (coresight_buffer_prepare(cpu, pm, a))
 			return (EINVAL);
-	}
 
 	if (a->pm_mode == PMC_MODE_ST)
 		coresight_pc->flags |= FLAG_CORESIGHT_ALLOCATED;
