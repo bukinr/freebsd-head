@@ -120,6 +120,8 @@ efi_init(void)
 		return (0);
 	}
 	efi_systbl = (struct efi_systbl *)PHYS_TO_DMAP(efi_systbl_phys);
+	printf("efi_systbl %lx efi_systbl->st_rt %lx\n", (uint64_t)efi_systbl, (uint64_t)efi_systbl->st_rt);
+
 	if (efi_systbl->st_hdr.th_sig != EFI_SYSTBL_SIG) {
 		efi_systbl = NULL;
 		if (bootverbose)
@@ -246,6 +248,7 @@ efi_get_time_locked(struct efi_tm *tm, struct efi_tmcap *tmcap)
 	efi_status status;
 	int error;
 
+	printf("%s: %p %p\n", __func__, efi_runtime, efi_runtime->rt_gettime);
 	EFI_TIME_OWNED()
 	error = efi_enter();
 	if (error != 0)
