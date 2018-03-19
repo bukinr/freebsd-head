@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2017, Intel Corporation
+ * Copyright (c) 2014-2018, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -45,20 +45,35 @@ struct pt_mapped_section {
 
 	/* The virtual address at which the section is mapped. */
 	uint64_t vaddr;
+
+	/* The offset into the section.
+	 *
+	 * This is normally zero but when @section is split, @offset is added to
+	 * the section/file offset when accessing @section.
+	 */
+	uint64_t offset;
+
+	/* The size of the section.
+	 *
+	 * This is normally @section->size but when @section is split, this is
+	 * used to determine the size of the sub-section.
+	 */
+	uint64_t size;
 };
 
 
-/* Initialize a mapped section - @section may be NULL. */
 static inline void pt_msec_init(struct pt_mapped_section *msec,
 				struct pt_section *section,
 				const struct pt_asid *asid,
-				uint64_t vaddr)
+				uint64_t vaddr, uint64_t offset, uint64_t size)
 {
 	if (!msec)
 		return;
 
 	msec->section = section;
 	msec->vaddr = vaddr;
+	msec->offset = offset;
+	msec->size = size;
 
 	if (asid)
 		msec->asid = *asid;
@@ -86,16 +101,28 @@ static inline uint64_t pt_msec_begin(const struct pt_mapped_section *msec)
 /* Return the virtual address one byte past the end of the memory region. */
 static inline uint64_t pt_msec_end(const struct pt_mapped_section *msec)
 {
-	uint64_t size;
-
 	if (!msec)
 		return 0ull;
 
-	size = pt_section_size(msec->section);
-	if (size)
-		size += msec->vaddr;
+	return msec->vaddr + msec->size;
+}
 
-	return size;
+/* Return the section/file offset. */
+static inline uint64_t pt_msec_offset(const struct pt_mapped_section *msec)
+{
+	if (!msec)
+		return 0ull;
+
+	return msec->offset;
+}
+
+/* Return the section size. */
+static inline uint64_t pt_msec_size(const struct pt_mapped_section *msec)
+{
+	if (!msec)
+		return 0ull;
+
+	return msec->size;
 }
 
 /* Return the underlying section. */
@@ -119,14 +146,54 @@ pt_msec_asid(const struct pt_mapped_section *msec)
 static inline uint64_t pt_msec_map(const struct pt_mapped_section *msec,
 				   uint64_t offset)
 {
-	return offset + msec->vaddr;
+	return (offset - msec->offset) + msec->vaddr;
 }
 
 /* Translate a virtual address into a section/file offset. */
 static inline uint64_t pt_msec_unmap(const struct pt_mapped_section *msec,
 				     uint64_t vaddr)
 {
-	return vaddr - msec->vaddr;
+	return (vaddr - msec->vaddr) + msec->offset;
+}
+
+/* Read memory from a mapped section.
+ *
+ * The caller must check @msec->asid.
+ * The caller must ensure that @msec->section is mapped.
+ *
+ * Returns the number of bytes read on success.
+ * Returns a negative error code otherwise.
+ */
+static inline int pt_msec_read(const struct pt_mapped_section *msec,
+			       uint8_t *buffer, uint16_t size,
+			       uint64_t vaddr)
+{
+	struct pt_section *section;
+	uint64_t begin, end, mbegin, mend, offset;
+
+	if (!msec)
+		return -pte_internal;
+
+	begin = vaddr;
+	end = begin + size;
+	if (end < begin)
+		end = UINT64_MAX;
+
+	mbegin = pt_msec_begin(msec);
+	mend = pt_msec_end(msec);
+
+	if (begin < mbegin || mend <= begin)
+		return -pte_nomap;
+
+	if (mend < end)
+		end = mend;
+
+	size = (uint16_t) (end - begin);
+
+	section = pt_msec_section(msec);
+	offset = pt_msec_unmap(msec, begin);
+
+	return pt_section_read(section, buffer, size, offset);
 }
 
 #endif /* PT_MAPPED_SECTION_H */

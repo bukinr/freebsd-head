@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017, Intel Corporation
+ * Copyright (c) 2013-2018, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -46,9 +46,6 @@ struct pt_section_list {
 
 	/* The image section identifier. */
 	int isid;
-
-	/* A flag saying whether @section is already mapped. */
-	uint32_t mapped:1;
 };
 
 /* A traced image consisting of a collection of sections. */
@@ -67,12 +64,6 @@ struct pt_image {
 		/* The callback context. */
 		void *context;
 	} readmem;
-
-	/* The cache size as number of to-keep-mapped sections. */
-	uint16_t cache;
-
-	/* The number of permanently mapped sections. */
-	uint16_t mapped;
 };
 
 /* Initialize an image with an optional @name. */
@@ -120,33 +111,30 @@ extern int pt_image_read(struct pt_image *image, int *isid, uint8_t *buffer,
 
 /* Find an image section.
  *
- * Find the section containing @vaddr in @asid and provide a reference to it in
- * @section and its load address in @laddr.  The caller needs to put the
- * reference to @section after use.
+ * Find the section containing @vaddr in @asid and provide it in @msec.  On
+ * success, takes a reference of @msec->section that the caller needs to put
+ * after use.
  *
  * Returns the section's identifier on success, a negative error code otherwise.
- * Returns -pte_internal if @image, @section, @laddr, or @asid is NULL.
+ * Returns -pte_internal if @image, @msec, or @asid is NULL.
  * Returns -pte_nomap if there is no such section in @image.
  */
-extern int pt_image_find(struct pt_image *image, struct pt_section **section,
-			 uint64_t *laddr, const struct pt_asid *asid,
-			 uint64_t vaddr);
+extern int pt_image_find(struct pt_image *image, struct pt_mapped_section *msec,
+			 const struct pt_asid *asid, uint64_t vaddr);
 
 /* Validate an image section.
  *
- * Validate that a lookup by @asid and @vaddr in @image would result in @section
- * loaded at @laddr identified by @isid.
+ * Validate that a lookup of @vaddr in @msec->asid in @image would result in
+ * @msec identified by @isid.
  *
- * Validation may fail sporadically, e.g. if @section has been evicted from
- * @image's LRU cache.
+ * Validation may fail sporadically.
  *
  * Returns zero on success, a negative error code otherwise.
- * Returns -pte_invalid if @image or @asid is NULL.
+ * Returns -pte_invalid if @image or @msec is NULL.
  * Returns -pte_nomap if validation failed.
  */
 extern int pt_image_validate(const struct pt_image *image,
-			     const struct pt_asid *asid, uint64_t vaddr,
-			     const struct pt_section *section, uint64_t laddr,
-			     int isid);
+			     const struct pt_mapped_section *msec,
+			     uint64_t vaddr, int isid);
 
 #endif /* PT_IMAGE_H */

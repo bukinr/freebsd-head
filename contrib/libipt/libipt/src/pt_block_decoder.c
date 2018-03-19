@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017, Intel Corporation
+ * Copyright (c) 2016-2018, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -72,99 +72,6 @@ static int pt_blk_status(const struct pt_block_decoder *decoder, int flags)
 	return flags;
 }
 
-/* Release a cached section.
- *
- * If @scache does not contain a section, this does noting.
- *
- * Returns zero on success, a negative error code otherwise.
- * Returns -pte_internal, if @scache is NULL.
- */
-static int pt_blk_scache_invalidate(struct pt_cached_section *scache)
-{
-	struct pt_section *section;
-	int errcode;
-
-	if (!scache)
-		return -pte_internal;
-
-	section = scache->section;
-	if (!section)
-		return 0;
-
-	errcode = pt_section_unmap(section);
-	if (errcode < 0)
-		return errcode;
-
-	scache->section = NULL;
-
-	return pt_section_put(section);
-}
-
-/* Cache @section loaded at @laddr identified by @isid in @scache.
- *
- * The caller transfers its use- and map-count to @scache.
- *
- * Returns zero on success, a negative error code otherwise.
- * Returns -pte_internal if @scache or @section is NULL.
- * Returns -pte_internal if another section is already cached.
- */
-static int pt_blk_cache_section(struct pt_cached_section *scache,
-				struct pt_section *section, uint64_t laddr,
-				int isid)
-{
-	if (!scache || !section)
-		return -pte_internal;
-
-	if (scache->section)
-		return -pte_internal;
-
-	scache->section = section;
-	scache->laddr = laddr;
-	scache->isid = isid;
-
-	return 0;
-}
-
-/* Get @scache's cached section.
- *
- * Check whether @scache contains a section that an image lookup of @ip in @asid
- * would return.  On success, provides the cached section in @psection and its
- * load address in @pladdr.
- *
- * Returns the section's identifier on success, a negative error code otherwise.
- * Returns -pte_internal if @scache, @psection, or @pladdr is NULL.
- * Returns -pte_nomap if @scache does not have a section cached.
- * Returns -pte_nomap if @scache's cached section does not contain @ip.
- */
-static int pt_blk_cached_section(struct pt_cached_section *scache,
-				 struct pt_section **psection, uint64_t *pladdr,
-				 struct pt_image *image, struct pt_asid *asid,
-				 uint64_t ip)
-{
-	struct pt_section *section;
-	uint64_t laddr;
-	int isid, errcode;
-
-	if (!scache || !psection || !pladdr)
-		return -pte_internal;
-
-
-	section = scache->section;
-	laddr = scache->laddr;
-	isid = scache->isid;
-	if (!section)
-		return -pte_nomap;
-
-	errcode = pt_image_validate(image, asid, ip, section, laddr, isid);
-	if (errcode < 0)
-		return errcode;
-
-	*psection = section;
-	*pladdr = laddr;
-
-	return isid;
-}
-
 static void pt_blk_reset(struct pt_block_decoder *decoder)
 {
 	if (!decoder)
@@ -227,7 +134,9 @@ int pt_blk_decoder_init(struct pt_block_decoder *decoder,
 	pt_image_init(&decoder->default_image, NULL);
 	decoder->image = &decoder->default_image;
 
-	memset(&decoder->scache, 0, sizeof(decoder->scache));
+	errcode = pt_msec_cache_init(&decoder->scache);
+	if (errcode < 0)
+		return errcode;
 
 	pt_blk_reset(decoder);
 
@@ -239,9 +148,7 @@ void pt_blk_decoder_fini(struct pt_block_decoder *decoder)
 	if (!decoder)
 		return;
 
-	/* Release the cached section so we don't leak it. */
-	(void) pt_blk_scache_invalidate(&decoder->scache);
-
+	pt_msec_cache_fini(&decoder->scache);
 	pt_image_fini(&decoder->default_image);
 	pt_qry_decoder_fini(&decoder->query);
 }
@@ -755,15 +662,14 @@ static int pt_blk_proceed_with_trace(struct pt_block_decoder *decoder,
 
 /* Decode one instruction in a known section.
  *
- * Decode the instruction at @insn->ip in @section loaded at @laddr assuming
- * execution mode @insn->mode.
+ * Decode the instruction at @insn->ip in @msec assuming execution mode
+ * @insn->mode.
  *
  * Returns zero on success, a negative error code otherwise.
  */
 static int pt_blk_decode_in_section(struct pt_insn *insn,
 				    struct pt_insn_ext *iext,
-				    const struct pt_section *section,
-				    uint64_t laddr)
+				    const struct pt_mapped_section *msec)
 {
 	int status;
 
@@ -774,8 +680,7 @@ static int pt_blk_decode_in_section(struct pt_insn *insn,
 	 *
 	 * Note that we need to translate @ip into a section offset.
 	 */
-	status = pt_section_read(section, insn->raw, sizeof(insn->raw),
-				 insn->ip - laddr);
+	status = pt_msec_read(msec, insn->raw, sizeof(insn->raw), insn->ip);
 	if (status < 0)
 		return status;
 
@@ -944,11 +849,14 @@ static int pt_blk_proceed_to_insn(struct pt_block_decoder *decoder,
 
 		/* End the block if the user asked us to.
 		 *
-		 * We only need to take care about direct near calls.  Indirect
-		 * and far calls require trace and will naturally end a block.
+		 * We only need to take care about direct near branches.
+		 * Indirect and far branches require trace and will naturally
+		 * end a block.
 		 */
-		if (decoder->flags.variant.block.end_on_call &&
-		    (insn->iclass == ptic_call))
+		if ((decoder->flags.variant.block.end_on_call &&
+		     (insn->iclass == ptic_call)) ||
+		    (decoder->flags.variant.block.end_on_jump &&
+		     (insn->iclass == ptic_jump)))
 			return 0;
 	}
 }
@@ -999,14 +907,17 @@ static int pt_blk_proceed_to_ip(struct pt_block_decoder *decoder,
 
 		/* End the block if the user asked us to.
 		 *
-		 * We only need to take care about direct near calls.  Indirect
-		 * and far calls require trace and will naturally end a block.
+		 * We only need to take care about direct near branches.
+		 * Indirect and far branches require trace and will naturally
+		 * end a block.
 		 *
 		 * The call at the end of the block may have reached @ip; make
 		 * sure to indicate that.
 		 */
-		if (decoder->flags.variant.block.end_on_call &&
-		    (insn->iclass == ptic_call)) {
+		if ((decoder->flags.variant.block.end_on_call &&
+		     (insn->iclass == ptic_call)) ||
+		    (decoder->flags.variant.block.end_on_jump &&
+		     (insn->iclass == ptic_jump))) {
 			return (decoder->ip == ip ? 1 : 0);
 		}
 	}
@@ -1078,8 +989,8 @@ static int pt_insn_skl014(const struct pt_insn *insn,
  *
  * With SKL014 a TIP.PGD with suppressed IP may also be generated by a direct
  * unconditional branch that clears FilterEn by jumping out of a filter region
- * or into a TraceStop region.  Use the filter configuration, if available, to
- * determine the exact branch the event binds to.
+ * or into a TraceStop region.  Use the filter configuration to determine the
+ * exact branch the event binds to.
  *
  * The last instruction that was reached is stored in @insn/@iext.
  *
@@ -1112,13 +1023,7 @@ static int pt_blk_proceed_skl014(struct pt_block_decoder *decoder,
 		if (pt_insn_changes_cr3(insn, iext))
 			break;
 
-		/* If we don't have the filter configuration, we bind the event
-		 * to the first direct branch.
-		 */
-		if (!addr_filter->config.addr_cfg)
-			break;
-
-		/* Otherwise we check the filter against the branch target. */
+		/* Check the filter against the branch target. */
 		status = pt_insn_next_ip(&ip, insn, iext);
 		if (status < 0)
 			break;
@@ -1143,11 +1048,14 @@ static int pt_blk_proceed_skl014(struct pt_block_decoder *decoder,
 
 		/* End the block if the user asked us to.
 		 *
-		 * We only need to take care about direct near calls.  Indirect
-		 * and far calls require trace and will naturally end a block.
+		 * We only need to take care about direct near branches.
+		 * Indirect and far branches require trace and will naturally
+		 * end a block.
 		 */
-		if (decoder->flags.variant.block.end_on_call &&
-		    (insn->iclass == ptic_call))
+		if ((decoder->flags.variant.block.end_on_call &&
+		    (insn->iclass == ptic_call)) ||
+		    (decoder->flags.variant.block.end_on_jump &&
+		    (insn->iclass == ptic_jump)))
 			break;
 	}
 
@@ -1177,8 +1085,14 @@ static int pt_blk_proceed_to_disabled(struct pt_block_decoder *decoder,
 	if (ev->ip_suppressed) {
 		/* Due to SKL014 the TIP.PGD payload may be suppressed also for
 		 * direct branches.
+		 *
+		 * If we don't have a filter configuration we assume that no
+		 * address filters were used and the erratum does not apply.
+		 *
+		 * We might otherwise disable tracing too early.
 		 */
-		if (decoder->query.config.errata.skl014)
+		if (decoder->query.config.addr_filter.config.addr_cfg &&
+		    decoder->query.config.errata.skl014)
 			return pt_blk_proceed_skl014(decoder, block, insn,
 						     iext);
 
@@ -1766,14 +1680,13 @@ static int pt_blk_proceed_no_event_uncached(struct pt_block_decoder *decoder,
  * Returns non-zero if it is.
  * Returns zero if it isn't or of @section is NULL.
  */
-static inline int pt_blk_is_in_section(uint64_t ip,
-				       const struct pt_section *section,
-				       uint64_t laddr)
+static inline int pt_blk_is_in_section(const struct pt_mapped_section *msec,
+				       uint64_t ip)
 {
 	uint64_t begin, end;
 
-	begin = laddr;
-	end = begin + pt_section_size(section);
+	begin = pt_msec_begin(msec);
+	end = pt_msec_end(msec);
 
 	return (begin <= ip && ip < end);
 }
@@ -1817,6 +1730,25 @@ static inline int pt_blk_add_trampoline(struct pt_block_cache *bcache,
 	return pt_bcache_add(bcache, ip, bce);
 }
 
+/* Insert a decode block cache entry.
+ *
+ * Add a decode block cache entry at @ioff.
+ *
+ * Returns zero on success, a negative error code otherwise.
+ */
+static inline int pt_blk_add_decode(struct pt_block_cache *bcache,
+				    uint64_t ioff, enum pt_exec_mode mode)
+{
+	struct pt_bcache_entry bce;
+
+	memset(&bce, 0, sizeof(bce));
+	bce.ninsn = 1;
+	bce.mode = mode;
+	bce.qualifier = ptbq_decode;
+
+	return pt_bcache_add(bcache, ioff, bce);
+}
+
 enum {
 	/* The maximum number of steps when filling the block cache. */
 	bcache_fill_steps	= 0x400
@@ -1836,17 +1768,18 @@ enum {
  *
  * Returns zero on success, a negative error code otherwise.
  */
-static int pt_blk_proceed_no_event_fill_cache(struct pt_block_decoder *decoder,
-					      struct pt_block *block,
-					      struct pt_block_cache *bcache,
-					      struct pt_section *section,
-					      uint64_t laddr, size_t steps)
+static int
+pt_blk_proceed_no_event_fill_cache(struct pt_block_decoder *decoder,
+				   struct pt_block *block,
+				   struct pt_block_cache *bcache,
+				   const struct pt_mapped_section *msec,
+				   size_t steps)
 {
 	struct pt_bcache_entry bce;
 	struct pt_insn_ext iext;
 	struct pt_insn insn;
 	uint64_t nip, dip;
-	int64_t disp;
+	int64_t disp, ioff, noff;
 	int status;
 
 	if (!decoder || !steps)
@@ -1860,6 +1793,8 @@ static int pt_blk_proceed_no_event_fill_cache(struct pt_block_decoder *decoder,
 	status = pt_blk_proceed_one_insn(decoder, block, &insn, &iext);
 	if (status <= 0)
 		return status;
+
+	ioff = pt_msec_unmap(msec, insn.ip);
 
 	/* Let's see if we can proceed to the next IP without trace.
 	 *
@@ -1926,7 +1861,7 @@ static int pt_blk_proceed_no_event_fill_cache(struct pt_block_decoder *decoder,
 		if (block->truncated)
 			bce.qualifier = ptbq_decode;
 
-		status = pt_bcache_add(bcache, insn.ip - laddr, bce);
+		status = pt_bcache_add(bcache, ioff, bce);
 		if (status < 0)
 			return status;
 
@@ -1935,6 +1870,7 @@ static int pt_blk_proceed_no_event_fill_cache(struct pt_block_decoder *decoder,
 
 	/* The next instruction's IP. */
 	nip = decoder->ip;
+	noff = pt_msec_unmap(msec, nip);
 
 	/* Even if we were able to proceed without trace, we might have to stop
 	 * here for various reasons:
@@ -1952,6 +1888,25 @@ static int pt_blk_proceed_no_event_fill_cache(struct pt_block_decoder *decoder,
 	 *     We could proceed after a near direct call but we migh as well
 	 *     postpone it to the next iteration.  Make sure to end the block if
 	 *     @decoder->flags.variant.block.end_on_call is set, though.
+	 *
+	 *   - at near direct backwards jumps to detect section splits
+	 *
+	 *     In case the current section is split underneath us, we must take
+	 *     care to detect that split.
+	 *
+	 *     There is one corner case where the split is in the middle of a
+	 *     linear sequence of instructions that branches back into the
+	 *     originating section.
+	 *
+	 *     Calls, indirect branches, and far branches are already covered
+	 *     since they either require trace or already require us to stop
+	 *     (i.e. near direct calls) for other reasons.  That leaves near
+	 *     direct backward jumps.
+	 *
+	 *     Instead of the decode stop at the jump instruction we're using we
+	 *     could have made sure that other block cache entries that extend
+	 *     this one insert a trampoline to the jump's entry.  This would
+	 *     have been a bit more complicated.
 	 *
 	 *   - if we switched sections
 	 *
@@ -1972,21 +1927,33 @@ static int pt_blk_proceed_no_event_fill_cache(struct pt_block_decoder *decoder,
 	 *     route it through the decode flow, where we already have
 	 *     everything in place.
 	 */
-	if (insn.iclass == ptic_call ||
-	    !pt_blk_is_in_section(nip, section, laddr) || block->truncated) {
+	switch (insn.iclass) {
+	case ptic_call:
+		return pt_blk_add_decode(bcache, ioff, insn.mode);
 
-		memset(&bce, 0, sizeof(bce));
-		bce.ninsn = 1;
-		bce.mode = insn.mode;
-		bce.qualifier = ptbq_decode;
+	case ptic_jump:
+		/* An indirect branch requires trace and should have been
+		 * handled above.
+		 */
+		if (!iext.variant.branch.is_direct)
+			return -pte_internal;
 
-		return pt_bcache_add(bcache, insn.ip - laddr, bce);
+		if (iext.variant.branch.displacement < 0 ||
+		    decoder->flags.variant.block.end_on_jump)
+			return pt_blk_add_decode(bcache, ioff, insn.mode);
+
+		fallthrough;
+	default:
+		if (!pt_blk_is_in_section(msec, nip) || block->truncated)
+			return pt_blk_add_decode(bcache, ioff, insn.mode);
+
+		break;
 	}
 
 	/* We proceeded one instruction.  Let's see if we have a cache entry for
 	 * the next instruction.
 	 */
-	status = pt_bcache_lookup(&bce, bcache, nip - laddr);
+	status = pt_bcache_lookup(&bce, bcache, noff);
 	if (status < 0)
 		return status;
 
@@ -2005,17 +1972,17 @@ static int pt_blk_proceed_no_event_fill_cache(struct pt_block_decoder *decoder,
 		 */
 		steps -= 1;
 		if (!steps)
-			return pt_blk_add_trampoline(bcache, insn.ip - laddr,
-						     nip - laddr, insn.mode);
+			return pt_blk_add_trampoline(bcache, ioff, noff,
+						     insn.mode);
 
 		status = pt_blk_proceed_no_event_fill_cache(decoder, block,
-							    bcache, section,
-							    laddr, steps);
+							    bcache, msec,
+							    steps);
 		if (status < 0)
 			return status;
 
 		/* Let's see if we have more luck this time. */
-		status = pt_bcache_lookup(&bce, bcache, nip - laddr);
+		status = pt_bcache_lookup(&bce, bcache, noff);
 		if (status < 0)
 			return status;
 
@@ -2038,11 +2005,16 @@ static int pt_blk_proceed_no_event_fill_cache(struct pt_block_decoder *decoder,
 	dip = nip + bce.displacement;
 	disp = (int64_t) (dip - insn.ip);
 
-	/* We must not have switched sections between @nip and @dip since the
-	 * cache entry at @nip brought us to @dip.
+	/* We may have switched sections if the section was split.  See
+	 * pt_blk_proceed_no_event_cached() for a more elaborate comment.
+	 *
+	 * We're not adding a block cache entry since this won't apply to the
+	 * original section which may be shared with other decoders.
+	 *
+	 * We will instead take the slow path until the end of the section.
 	 */
-	if (!pt_blk_is_in_section(dip, section, laddr))
-		return -pte_internal;
+	if (!pt_blk_is_in_section(msec, dip))
+		return 0;
 
 	/* Let's try to reach @nip's decision point from @insn.ip.
 	 *
@@ -2058,8 +2030,7 @@ static int pt_blk_proceed_no_event_fill_cache(struct pt_block_decoder *decoder,
 	 * try to reach @dip via a ptbq_again entry to @nip.
 	 */
 	if (!bce.ninsn || ((int64_t) bce.displacement != disp))
-		return pt_blk_add_trampoline(bcache, insn.ip - laddr,
-					     nip - laddr, insn.mode);
+		return pt_blk_add_trampoline(bcache, ioff, noff, insn.mode);
 
 	/* We're done.  Add the cache entry.
 	 *
@@ -2070,7 +2041,7 @@ static int pt_blk_proceed_no_event_fill_cache(struct pt_block_decoder *decoder,
 	 * Cache updates are atomic so even if the two versions were not
 	 * identical, we wouldn't care because they are both correct.
 	 */
-	return pt_bcache_add(bcache, insn.ip - laddr, bce);
+	return pt_bcache_add(bcache, ioff, bce);
 }
 
 /* Proceed at a potentially truncated instruction.
@@ -2138,7 +2109,7 @@ static int pt_blk_proceed_truncated(struct pt_block_decoder *decoder,
 /* Proceed to the next decision point using the block cache.
  *
  * Tracing is enabled and we don't have an event pending.  We already set
- * @block's isid.  All reads are done within @section as we're not switching
+ * @block's isid.  All reads are done within @msec as we're not switching
  * sections between blocks.
  *
  * Proceed as far as we get without trace.  Stop when we either:
@@ -2154,26 +2125,50 @@ static int pt_blk_proceed_truncated(struct pt_block_decoder *decoder,
 static int pt_blk_proceed_no_event_cached(struct pt_block_decoder *decoder,
 					  struct pt_block *block,
 					  struct pt_block_cache *bcache,
-					  struct pt_section *section,
-					  uint64_t laddr)
+					  const struct pt_mapped_section *msec)
 {
 	struct pt_bcache_entry bce;
 	uint16_t binsn, ninsn;
+	uint64_t offset, nip;
 	int status;
 
 	if (!decoder || !block)
 		return -pte_internal;
 
-	status = pt_bcache_lookup(&bce, bcache, decoder->ip - laddr);
+	offset = pt_msec_unmap(msec, decoder->ip);
+	status = pt_bcache_lookup(&bce, bcache, offset);
 	if (status < 0)
 		return status;
 
 	/* If we don't find a valid cache entry, fill the cache. */
 	if (!pt_bce_is_valid(bce))
 		return pt_blk_proceed_no_event_fill_cache(decoder, block,
-							  bcache, section,
-							  laddr,
+							  bcache, msec,
 							  bcache_fill_steps);
+
+	/* If we switched sections, the origianl section must have been split
+	 * underneath us.  A split preserves the block cache of the original
+	 * section.
+	 *
+	 * Crossing sections requires ending the block so we can indicate the
+	 * proper isid for the entire block.
+	 *
+	 * Plus there's the chance that the new section that caused the original
+	 * section to split changed instructions.
+	 *
+	 * This check will also cover changes to a linear sequence of code we
+	 * would otherwise have jumped over as long as the start and end are in
+	 * different sub-sections.
+	 *
+	 * Since we stop on every (backwards) branch (through an artificial stop
+	 * in the case of a near direct backward branch) we will detect all
+	 * section splits.
+	 *
+	 * Switch to the slow path until we reach the end of this section.
+	 */
+	nip = decoder->ip + bce.displacement;
+	if (!pt_blk_is_in_section(msec, nip))
+		return pt_blk_proceed_no_event_uncached(decoder, block);
 
 	/* We have a valid cache entry.  Let's first check if the way to the
 	 * decision point still fits into @block.
@@ -2194,13 +2189,13 @@ static int pt_blk_proceed_no_event_cached(struct pt_block_decoder *decoder,
 	 * We're not switching execution modes so even if @block already has an
 	 * execution mode, it will be the one we're going to set.
 	 */
-	decoder->ip += bce.displacement;
+	decoder->ip = nip;
 
 	/* We don't know the instruction class so we should be setting it to
 	 * ptic_error.  Since we will be able to fill it back in later in most
 	 * cases, we move the clearing to the switch cases that don't.
 	 */
-	block->end_ip = decoder->ip;
+	block->end_ip = nip;
 	block->ninsn = ninsn;
 	block->mode = pt_bce_exec_mode(bce);
 
@@ -2218,7 +2213,7 @@ static int pt_blk_proceed_no_event_cached(struct pt_block_decoder *decoder,
 		block->iclass = ptic_error;
 
 		return pt_blk_proceed_no_event_cached(decoder, block, bcache,
-						      section, laddr);
+						      msec);
 
 	case ptbq_cond:
 		/* We're at a conditional branch. */
@@ -2263,8 +2258,7 @@ static int pt_blk_proceed_no_event_cached(struct pt_block_decoder *decoder,
 				insn.ip = ip;
 
 				status = pt_blk_decode_in_section(&insn, &iext,
-								  section,
-								  laddr);
+								  msec);
 				if (status < 0)
 					return status;
 
@@ -2293,7 +2287,7 @@ static int pt_blk_proceed_no_event_cached(struct pt_block_decoder *decoder,
 		insn.mode = pt_bce_exec_mode(bce);
 		insn.ip = decoder->ip;
 
-		status = pt_blk_decode_in_section(&insn, &iext, section, laddr);
+		status = pt_blk_decode_in_section(&insn, &iext, msec);
 		if (status < 0) {
 			if (status != -pte_bad_insn)
 				return status;
@@ -2327,23 +2321,26 @@ static int pt_blk_proceed_no_event_cached(struct pt_block_decoder *decoder,
 
 		/* End the block if the user asked us to.
 		 *
-		 * We only need to take care about direct near calls.  Indirect
-		 * and far calls require trace and will naturally end a block.
+		 * We only need to take care about direct near branches.
+		 * Indirect and far branches require trace and will naturally
+		 * end a block.
 		 */
-		if (decoder->flags.variant.block.end_on_call &&
-		    (insn.iclass == ptic_call))
+		if ((decoder->flags.variant.block.end_on_call &&
+		     (insn.iclass == ptic_call)) ||
+		    (decoder->flags.variant.block.end_on_jump &&
+		     (insn.iclass == ptic_jump)))
 			break;
 
-		/* If we can proceed without trace and we stay in @section we
-		 * may proceed further.
+		/* If we can proceed without trace and we stay in @msec we may
+		 * proceed further.
 		 *
 		 * We're done if we switch sections, though.
 		 */
-		if (!pt_blk_is_in_section(decoder->ip, section, laddr))
+		if (!pt_blk_is_in_section(msec, decoder->ip))
 			break;
 
 		return pt_blk_proceed_no_event_cached(decoder, block, bcache,
-						      section, laddr);
+						      msec);
 	}
 
 	case ptbq_ind_call: {
@@ -2372,8 +2369,7 @@ static int pt_blk_proceed_no_event_cached(struct pt_block_decoder *decoder,
 			insn.mode = pt_bce_exec_mode(bce);
 			insn.ip = ip;
 
-			status = pt_blk_decode_in_section(&insn, &iext, section,
-							  laddr);
+			status = pt_blk_decode_in_section(&insn, &iext, msec);
 			if (status < 0)
 				return status;
 
@@ -2465,6 +2461,54 @@ static int pt_blk_proceed_no_event_cached(struct pt_block_decoder *decoder,
 	return 0;
 }
 
+static int pt_blk_msec_fill(struct pt_block_decoder *decoder,
+			    const struct pt_mapped_section **pmsec)
+{
+	const struct pt_mapped_section *msec;
+	struct pt_section *section;
+	int isid, errcode;
+
+	if (!decoder || !pmsec)
+		return -pte_internal;
+
+	isid = pt_msec_cache_fill(&decoder->scache, &msec,  decoder->image,
+				  &decoder->asid, decoder->ip);
+	if (isid < 0)
+		return isid;
+
+	section = pt_msec_section(msec);
+	if (!section)
+		return -pte_internal;
+
+	*pmsec = msec;
+
+	errcode = pt_section_request_bcache(section);
+	if (errcode < 0)
+		return errcode;
+
+	return isid;
+}
+
+static inline int pt_blk_msec_lookup(struct pt_block_decoder *decoder,
+				     const struct pt_mapped_section **pmsec)
+{
+	int isid;
+
+	if (!decoder)
+		return -pte_internal;
+
+	isid = pt_msec_cache_read(&decoder->scache, pmsec, decoder->image,
+				  decoder->ip);
+	if (isid < 0) {
+		if (isid != -pte_nomap)
+			return isid;
+
+		return pt_blk_msec_fill(decoder, pmsec);
+	}
+
+	return isid;
+}
+
 /* Proceed to the next decision point - try using the cache.
  *
  * Tracing is enabled and we don't have an event pending.  Proceed as far as
@@ -2481,45 +2525,23 @@ static int pt_blk_proceed_no_event_cached(struct pt_block_decoder *decoder,
 static int pt_blk_proceed_no_event(struct pt_block_decoder *decoder,
 				   struct pt_block *block)
 {
+	const struct pt_mapped_section *msec;
 	struct pt_block_cache *bcache;
 	struct pt_section *section;
-	uint64_t laddr;
-	int isid, errcode;
+	int isid;
 
 	if (!decoder || !block)
 		return -pte_internal;
 
-	isid = pt_blk_cached_section(&decoder->scache, &section, &laddr,
-				     decoder->image, &decoder->asid,
-				     decoder->ip);
+	isid = pt_blk_msec_lookup(decoder, &msec);
 	if (isid < 0) {
 		if (isid != -pte_nomap)
 			return isid;
 
-		errcode = pt_blk_scache_invalidate(&decoder->scache);
-		if (errcode < 0)
-			return errcode;
-
-		isid = pt_image_find(decoder->image, &section, &laddr,
-				     &decoder->asid, decoder->ip);
-		if (isid < 0) {
-			if (isid != -pte_nomap)
-				return isid;
-
-			/* Even if there is no such section in the image, we may
-			 * still read the memory via the callback function.
-			 */
-			return pt_blk_proceed_no_event_uncached(decoder, block);
-		}
-
-		errcode = pt_section_map(section);
-		if (errcode < 0)
-			goto out_put;
-
-		errcode = pt_blk_cache_section(&decoder->scache, section, laddr,
-					       isid);
-		if (errcode < 0)
-			goto out_unmap;
+		/* Even if there is no such section in the image, we may still
+		 * read the memory via the callback function.
+		 */
+		return pt_blk_proceed_no_event_uncached(decoder, block);
 	}
 
 	/* We do not switch sections inside a block. */
@@ -2530,19 +2552,15 @@ static int pt_blk_proceed_no_event(struct pt_block_decoder *decoder,
 		block->isid = isid;
 	}
 
+	section = pt_msec_section(msec);
+	if (!section)
+		return -pte_internal;
+
 	bcache = pt_section_bcache(section);
 	if (!bcache)
 		return pt_blk_proceed_no_event_uncached(decoder, block);
 
-	return pt_blk_proceed_no_event_cached(decoder, block, bcache, section,
-					      laddr);
-
-out_unmap:
-	(void) pt_section_unmap(section);
-
-out_put:
-	(void) pt_section_put(section);
-	return errcode;
+	return pt_blk_proceed_no_event_cached(decoder, block, bcache, msec);
 }
 
 /* Proceed to the next event or decision point.
@@ -3141,10 +3159,21 @@ static int pt_blk_process_async_branch(struct pt_block_decoder *decoder,
 static int pt_blk_process_paging(struct pt_block_decoder *decoder,
 				 const struct pt_event *ev)
 {
+	uint64_t cr3;
+	int errcode;
+
 	if (!decoder || !ev)
 		return -pte_internal;
 
-	decoder->asid.cr3 = ev->variant.paging.cr3;
+	cr3 = ev->variant.paging.cr3;
+	if (decoder->asid.cr3 != cr3) {
+		errcode = pt_msec_cache_invalidate(&decoder->scache);
+		if (errcode < 0)
+			return errcode;
+
+		decoder->asid.cr3 = cr3;
+	}
+
 	decoder->process_event = 0;
 
 	return 0;
@@ -3157,10 +3186,21 @@ static int pt_blk_process_paging(struct pt_block_decoder *decoder,
 static int pt_blk_process_vmcs(struct pt_block_decoder *decoder,
 			       const struct pt_event *ev)
 {
+	uint64_t vmcs;
+	int errcode;
+
 	if (!decoder || !ev)
 		return -pte_internal;
 
-	decoder->asid.vmcs = ev->variant.vmcs.base;
+	vmcs = ev->variant.vmcs.base;
+	if (decoder->asid.vmcs != vmcs) {
+		errcode = pt_msec_cache_invalidate(&decoder->scache);
+		if (errcode < 0)
+			return errcode;
+
+		decoder->asid.vmcs = vmcs;
+	}
+
 	decoder->process_event = 0;
 
 	return 0;

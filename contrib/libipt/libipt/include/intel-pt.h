@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017, Intel Corporation
+ * Copyright (c) 2013-2018, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -78,8 +78,8 @@ struct pt_block_decoder;
 
 
 /** The header version. */
-#define LIBIPT_VERSION_MAJOR 1
-#define LIBIPT_VERSION_MINOR 6
+#define LIBIPT_VERSION_MAJOR ${PT_VERSION_MAJOR}
+#define LIBIPT_VERSION_MINOR ${PT_VERSION_MINOR}
 
 #define LIBIPT_VERSION ((LIBIPT_VERSION_MAJOR << 8) + LIBIPT_VERSION_MINOR)
 
@@ -193,7 +193,10 @@ enum pt_error_code {
 	pte_overflow,
 
 	/* A file handling error. */
-	pte_bad_file
+	pte_bad_file,
+
+	/* Unknown cpu. */
+	pte_bad_cpu
 };
 
 
@@ -342,6 +345,9 @@ struct pt_conf_flags {
 
 			/** Enable tick events for timing updates. */
 			uint32_t enable_tick_events:1;
+
+			/** End a block after a jump instruction. */
+			uint32_t end_on_jump:1;
 		} block;
 
 		/** Flags for the instruction flow decoder. */
@@ -479,6 +485,7 @@ static inline void pt_config_init(struct pt_config *config)
  *
  * Returns 0 on success, a negative error code otherwise.
  * Returns -pte_invalid if \@errata or \@cpu is NULL.
+ * Returns -pte_bad_cpu if \@cpu is not known.
  */
 extern pt_export int pt_cpu_errata(struct pt_errata *errata,
 				   const struct pt_cpu *cpu);
@@ -1674,6 +1681,18 @@ pt_iscache_alloc(const char *name);
  * The \@iscache must not be used after a successful return.
  */
 extern pt_export void pt_iscache_free(struct pt_image_section_cache *iscache);
+
+/** Set the image section cache limit.
+ *
+ * Set the limit for a section cache in bytes.  A non-zero limit will keep the
+ * least recently used sections mapped until the limit is reached.  A limit of
+ * zero disables caching.
+ *
+ * Returns zero on success, a negative pt_error_code otherwise.
+ * Returns -pte_invalid if \@iscache is NULL.
+ */
+extern pt_export int
+pt_iscache_set_limit(struct pt_image_section_cache *iscache, uint64_t limit);
 
 /** Get the image section cache name.
  *

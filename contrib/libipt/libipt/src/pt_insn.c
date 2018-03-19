@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017, Intel Corporation
+ * Copyright (c) 2016-2018, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -251,6 +251,10 @@ static int pt_insn_decode_retry(struct pt_insn *insn, struct pt_insn_ext *iext,
 		 */
 		if (!size)
 			return -pte_internal;
+
+		/* Preserve the original error if there are no more bytes. */
+		if (size == -pte_nomap)
+			size = -pte_bad_insn;
 
 		return size;
 	}

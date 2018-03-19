@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2018, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -95,5 +95,17 @@ extern int pt_sec_windows_unmap(struct pt_section *section);
 extern int pt_sec_windows_read(const struct pt_section *section,
 			       uint8_t *buffer, uint16_t size,
 			       uint64_t offset);
+
+/* Compute the memory size of a section.
+ *
+ * On success, provides the amount of memory used for mapping @section in bytes
+ * in @size.
+ *
+ * Returns zero on success, a negative error code otherwise.
+ * Returns -pte_internal if @section or @size is NULL.
+ * Returns -pte_internal if @section has not been mapped.
+ */
+extern int pt_sec_windows_memsize(const struct pt_section *section,
+				  uint64_t *size);
 
 #endif /* PT_SECTION_WINDOWS_H */

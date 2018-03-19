@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017, Intel Corporation
+ * Copyright (c) 2013-2018, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -184,65 +184,6 @@ static int ifix_cache_section(struct image_fixture *ifix,
 	return index;
 }
 
-int pt_section_clone(struct pt_section **clone,
-		     const struct pt_section *section, uint64_t offset,
-		     uint64_t size)
-{
-	struct image_fixture *ifix;
-	struct ifix_mapping *mapping, *smapping;
-	struct ifix_status *status;
-	uint64_t begin, end, sbegin, send, start;
-	int index;
-
-	if (!clone || !section)
-		return -pte_internal;
-
-	status = section->status;
-	if (!status || status->deleted)
-		return -pte_internal;
-
-	begin = offset;
-	end = begin + size;
-
-	if (end <= begin)
-		return -pte_bad_image;
-
-	sbegin = pt_section_offset(section);
-	send = sbegin + pt_section_size(section);
-
-	if (send <= sbegin)
-		return -pte_internal;
-
-	if ((begin < sbegin) || (send < end))
-		return -pte_invalid;
-
-	start = begin - sbegin;
-
-	ifix = status->ifix;
-	if (!ifix)
-		return -pte_internal;
-
-	index = ifix_add_section(ifix, section->filename);
-	if (index < 0)
-		return index;
-
-	mapping = &ifix->mapping[index];
-	mapping->size = size;
-
-	smapping = status->mapping;
-	if (!smapping)
-		return -pte_internal;
-
-	memset(mapping->content, 0xcd, sizeof(mapping->content));
-	memcpy(mapping->content, &smapping->content[start], (size_t) size);
-
-	ifix->section[index].size = size;
-	ifix->section[index].offset = offset;
-	ifix->section[index].ucount = 1;
-	*clone = &ifix->section[index];
-	return 0;
-}
-
 const char *pt_section_filename(const struct pt_section *section)
 {
 	if (!section)
@@ -412,6 +353,14 @@ int pt_section_map(struct pt_section *section)
 	section->mapping = status->mapping;
 	section->unmap = ifix_unmap;
 	section->read = ifix_read;
+
+	return 0;
+}
+
+int pt_section_on_map_lock(struct pt_section *section)
+{
+	if (!section)
+		return -pte_internal;
 
 	return 0;
 }
@@ -1951,23 +1900,18 @@ static struct ptunit_result add_cached_bad_isid(struct image_fixture *ifix)
 
 static struct ptunit_result find_null(struct image_fixture *ifix)
 {
-	struct pt_section *section;
-	uint64_t laddr;
+	struct pt_mapped_section msec;
 	int status;
 
-	status = pt_image_find(NULL, &section, &laddr, &ifix->asid[0],
+	status = pt_image_find(NULL, &msec, &ifix->asid[0],
 			       0x1000ull);
 	ptu_int_eq(status, -pte_internal);
 
-	status = pt_image_find(&ifix->image, NULL, &laddr, &ifix->asid[0],
+	status = pt_image_find(&ifix->image, NULL, &ifix->asid[0],
 			       0x1000ull);
 	ptu_int_eq(status, -pte_internal);
 
-	status = pt_image_find(&ifix->image, &section, NULL, &ifix->asid[0],
-			       0x1000ull);
-	ptu_int_eq(status, -pte_internal);
-
-	status = pt_image_find(&ifix->image, &section, &laddr, NULL, 0x1000ull);
+	status = pt_image_find(&ifix->image, &msec, NULL, 0x1000ull);
 	ptu_int_eq(status, -pte_internal);
 
 	return ptu_passed();
@@ -1975,17 +1919,15 @@ static struct ptunit_result find_null(struct image_fixture *ifix)
 
 static struct ptunit_result find(struct image_fixture *ifix)
 {
-	struct pt_section *section;
-	uint64_t laddr;
+	struct pt_mapped_section msec;
 	int status;
 
-	status = pt_image_find(&ifix->image, &section, &laddr, &ifix->asid[1],
-			       0x2003ull);
+	status = pt_image_find(&ifix->image, &msec, &ifix->asid[1], 0x2003ull);
 	ptu_int_eq(status, 11);
-	ptu_ptr_eq(section, &ifix->section[1]);
-	ptu_uint_eq(laddr, 0x2000ull);
+	ptu_ptr_eq(msec.section, &ifix->section[1]);
+	ptu_uint_eq(msec.vaddr, 0x2000ull);
 
-	status = pt_section_put(section);
+	status = pt_section_put(msec.section);
 	ptu_int_eq(status, 0);
 
 	return ptu_passed();
@@ -1993,8 +1935,7 @@ static struct ptunit_result find(struct image_fixture *ifix)
 
 static struct ptunit_result find_asid(struct image_fixture *ifix)
 {
-	struct pt_section *section;
-	uint64_t laddr;
+	struct pt_mapped_section msec;
 	int status;
 
 	status = pt_image_add(&ifix->image, &ifix->section[0], &ifix->asid[0],
@@ -2005,22 +1946,20 @@ static struct ptunit_result find_asid(struct image_fixture *ifix)
 			      0x1008ull, 2);
 	ptu_int_eq(status, 0);
 
-	status = pt_image_find(&ifix->image, &section, &laddr, &ifix->asid[0],
-			       0x1009ull);
+	status = pt_image_find(&ifix->image, &msec, &ifix->asid[0], 0x1009ull);
 	ptu_int_eq(status, 1);
-	ptu_ptr_eq(section, &ifix->section[0]);
-	ptu_uint_eq(laddr, 0x1000ull);
+	ptu_ptr_eq(msec.section, &ifix->section[0]);
+	ptu_uint_eq(msec.vaddr, 0x1000ull);
 
-	status = pt_section_put(section);
+	status = pt_section_put(msec.section);
 	ptu_int_eq(status, 0);
 
-	status = pt_image_find(&ifix->image, &section, &laddr, &ifix->asid[1],
-			       0x1009ull);
+	status = pt_image_find(&ifix->image, &msec, &ifix->asid[1], 0x1009ull);
 	ptu_int_eq(status, 2);
-	ptu_ptr_eq(section, &ifix->section[0]);
-	ptu_uint_eq(laddr, 0x1008ull);
+	ptu_ptr_eq(msec.section, &ifix->section[0]);
+	ptu_uint_eq(msec.vaddr, 0x1008ull);
 
-	status = pt_section_put(section);
+	status = pt_section_put(msec.section);
 	ptu_int_eq(status, 0);
 
 	return ptu_passed();
@@ -2028,12 +1967,10 @@ static struct ptunit_result find_asid(struct image_fixture *ifix)
 
 static struct ptunit_result find_bad_asid(struct image_fixture *ifix)
 {
-	struct pt_section *section;
-	uint64_t laddr;
+	struct pt_mapped_section msec;
 	int status;
 
-	status = pt_image_find(&ifix->image, &section, &laddr, &ifix->asid[0],
-			       0x2003ull);
+	status = pt_image_find(&ifix->image, &msec, &ifix->asid[0], 0x2003ull);
 	ptu_int_eq(status, -pte_nomap);
 
 	return ptu_passed();
@@ -2041,12 +1978,10 @@ static struct ptunit_result find_bad_asid(struct image_fixture *ifix)
 
 static struct ptunit_result find_nomem(struct image_fixture *ifix)
 {
-	struct pt_section *section;
-	uint64_t laddr;
+	struct pt_mapped_section msec;
 	int status;
 
-	status = pt_image_find(&ifix->image, &section, &laddr, &ifix->asid[1],
-			       0x1010ull);
+	status = pt_image_find(&ifix->image, &msec, &ifix->asid[1], 0x1010ull);
 	ptu_int_eq(status, -pte_nomap);
 
 	return ptu_passed();
@@ -2054,14 +1989,13 @@ static struct ptunit_result find_nomem(struct image_fixture *ifix)
 
 static struct ptunit_result validate_null(struct image_fixture *ifix)
 {
+	struct pt_mapped_section msec;
 	int status;
 
-	status = pt_image_validate(NULL, &ifix->asid[0], 0x1004ull,
-				   &ifix->section[0], 0x1000ull, 10);
+	status = pt_image_validate(NULL, &msec, 0x1004ull, 10);
 	ptu_int_eq(status, -pte_internal);
 
-	status = pt_image_validate(&ifix->image, NULL, 0x1004ull,
-				   &ifix->section[0], 0x1000ull, 10);
+	status = pt_image_validate(&ifix->image, NULL, 0x1004ull, 10);
 	ptu_int_eq(status, -pte_internal);
 
 	return ptu_passed();
@@ -2069,16 +2003,16 @@ static struct ptunit_result validate_null(struct image_fixture *ifix)
 
 static struct ptunit_result validate(struct image_fixture *ifix)
 {
-	int status;
+	struct pt_mapped_section msec;
+	int isid, status;
 
-	/* This test depends on the order in which sections are stored when
-	 * added to the image.
-	 *
-	 * Since pt_image_validate() only looks at the top of the LRU stack we
-	 * can only validate that section - i.e. the one that was added first.
-	 */
-	status = pt_image_validate(&ifix->image, &ifix->asid[0], 0x1004ull,
-				   &ifix->section[0], 0x1000ull, 10);
+	isid = pt_image_find(&ifix->image, &msec, &ifix->asid[0], 0x1003ull);
+	ptu_int_ge(isid, 0);
+
+	status = pt_section_put(msec.section);
+	ptu_int_eq(status, 0);
+
+	status = pt_image_validate(&ifix->image, &msec, 0x1004ull, isid);
 	ptu_int_eq(status, 0);
 
 	return ptu_passed();
@@ -2086,21 +2020,75 @@ static struct ptunit_result validate(struct image_fixture *ifix)
 
 static struct ptunit_result validate_bad_asid(struct image_fixture *ifix)
 {
-	int status;
+	struct pt_mapped_section msec;
+	int isid, status;
 
-	status = pt_image_validate(&ifix->image, &ifix->asid[1], 0x1004ull,
-				   &ifix->section[0], 0x1000ull, 10);
+	isid = pt_image_find(&ifix->image, &msec, &ifix->asid[0], 0x1003ull);
+	ptu_int_ge(isid, 0);
+
+	status = pt_section_put(msec.section);
+	ptu_int_eq(status, 0);
+
+	msec.asid = ifix->asid[1];
+
+	status = pt_image_validate(&ifix->image, &msec, 0x1004ull, isid);
 	ptu_int_eq(status, -pte_nomap);
 
 	return ptu_passed();
 }
 
-static struct ptunit_result validate_bad_laddr(struct image_fixture *ifix)
+static struct ptunit_result validate_bad_vaddr(struct image_fixture *ifix)
 {
-	int status;
+	struct pt_mapped_section msec;
+	int isid, status;
 
-	status = pt_image_validate(&ifix->image, &ifix->asid[0], 0x1004ull,
-				   &ifix->section[0], 0x2000ull, 10);
+	isid = pt_image_find(&ifix->image, &msec, &ifix->asid[0], 0x1003ull);
+	ptu_int_ge(isid, 0);
+
+	status = pt_section_put(msec.section);
+	ptu_int_eq(status, 0);
+
+	msec.vaddr = 0x2000ull;
+
+	status = pt_image_validate(&ifix->image, &msec, 0x1004ull, isid);
+	ptu_int_eq(status, -pte_nomap);
+
+	return ptu_passed();
+}
+
+static struct ptunit_result validate_bad_offset(struct image_fixture *ifix)
+{
+	struct pt_mapped_section msec;
+	int isid, status;
+
+	isid = pt_image_find(&ifix->image, &msec, &ifix->asid[0], 0x1003ull);
+	ptu_int_ge(isid, 0);
+
+	status = pt_section_put(msec.section);
+	ptu_int_eq(status, 0);
+
+	msec.offset = 0x8ull;
+
+	status = pt_image_validate(&ifix->image, &msec, 0x1004ull, isid);
+	ptu_int_eq(status, -pte_nomap);
+
+	return ptu_passed();
+}
+
+static struct ptunit_result validate_bad_size(struct image_fixture *ifix)
+{
+	struct pt_mapped_section msec;
+	int isid, status;
+
+	isid = pt_image_find(&ifix->image, &msec, &ifix->asid[0], 0x1003ull);
+	ptu_int_ge(isid, 0);
+
+	status = pt_section_put(msec.section);
+	ptu_int_eq(status, 0);
+
+	msec.size = 0x8ull;
+
+	status = pt_image_validate(&ifix->image, &msec, 0x1004ull, isid);
 	ptu_int_eq(status, -pte_nomap);
 
 	return ptu_passed();
@@ -2108,10 +2096,16 @@ static struct ptunit_result validate_bad_laddr(struct image_fixture *ifix)
 
 static struct ptunit_result validate_bad_isid(struct image_fixture *ifix)
 {
-	int status;
+	struct pt_mapped_section msec;
+	int isid, status;
 
-	status = pt_image_validate(&ifix->image, &ifix->asid[0], 0x1004ull,
-				   &ifix->section[0], 0x1000ull, 11);
+	isid = pt_image_find(&ifix->image, &msec, &ifix->asid[0], 0x1003ull);
+	ptu_int_ge(isid, 0);
+
+	status = pt_section_put(msec.section);
+	ptu_int_eq(status, 0);
+
+	status = pt_image_validate(&ifix->image, &msec, 0x1004ull, isid + 1);
 	ptu_int_eq(status, -pte_nomap);
 
 	return ptu_passed();
@@ -2283,7 +2277,9 @@ int main(int argc, char **argv)
 	ptu_run_f(suite, validate_null, rfix);
 	ptu_run_f(suite, validate, rfix);
 	ptu_run_f(suite, validate_bad_asid, rfix);
-	ptu_run_f(suite, validate_bad_laddr, rfix);
+	ptu_run_f(suite, validate_bad_vaddr, rfix);
+	ptu_run_f(suite, validate_bad_offset, rfix);
+	ptu_run_f(suite, validate_bad_size, rfix);
 	ptu_run_f(suite, validate_bad_isid, rfix);
 
 	return ptunit_report(&suite);

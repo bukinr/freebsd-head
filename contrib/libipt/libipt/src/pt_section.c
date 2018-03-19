@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017, Intel Corporation
+ * Copyright (c) 2013-2018, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -28,6 +28,7 @@
 
 #include "pt_section.h"
 #include "pt_block_cache.h"
+#include "pt_image_section_cache.h"
 
 #include "intel-pt.h"
 
@@ -94,6 +95,14 @@ struct pt_section *pt_mk_section(const char *filename, uint64_t offset,
 		goto out_status;
 	}
 
+	errcode = mtx_init(&section->alock, mtx_plain);
+	if (errcode != thrd_success) {
+		mtx_destroy(&section->lock);
+		free(section->filename);
+		free(section);
+		goto out_status;
+	}
+
 #endif /* defined(FEATURE_THREADS) */
 
 	return section;
@@ -101,33 +110,6 @@ struct pt_section *pt_mk_section(const char *filename, uint64_t offset,
 out_status:
 	free(status);
 	return NULL;
-}
-
-int pt_section_clone(struct pt_section **pclone,
-		     const struct pt_section *section, uint64_t offset,
-		     uint64_t size)
-{
-	struct pt_section *clone;
-	uint64_t begin, end, sbegin, send;
-
-	if (!pclone || !section)
-		return -pte_internal;
-
-	begin = offset;
-	end = begin + size;
-
-	sbegin = pt_section_offset(section);
-	send = sbegin + pt_section_size(section);
-
-	if (begin < sbegin || send < end)
-		return -pte_internal;
-
-	clone = pt_mk_section(pt_section_filename(section), offset, size);
-	if (!clone)
-		return -pte_nomem;
-
-	*pclone = clone;
-	return 0;
 }
 
 int pt_section_lock(struct pt_section *section)
@@ -173,6 +155,7 @@ static void pt_section_free(struct pt_section *section)
 
 #if defined(FEATURE_THREADS)
 
+	mtx_destroy(&section->alock);
 	mtx_destroy(&section->lock);
 
 #endif /* defined(FEATURE_THREADS) */
@@ -235,6 +218,124 @@ int pt_section_put(struct pt_section *section)
 	return 0;
 }
 
+static int pt_section_lock_attach(struct pt_section *section)
+{
+	if (!section)
+		return -pte_internal;
+
+#if defined(FEATURE_THREADS)
+	{
+		int errcode;
+
+		errcode = mtx_lock(&section->alock);
+		if (errcode != thrd_success)
+			return -pte_bad_lock;
+	}
+#endif /* defined(FEATURE_THREADS) */
+
+	return 0;
+}
+
+static int pt_section_unlock_attach(struct pt_section *section)
+{
+	if (!section)
+		return -pte_internal;
+
+#if defined(FEATURE_THREADS)
+	{
+		int errcode;
+
+		errcode = mtx_unlock(&section->alock);
+		if (errcode != thrd_success)
+			return -pte_bad_lock;
+	}
+#endif /* defined(FEATURE_THREADS) */
+
+	return 0;
+}
+
+int pt_section_attach(struct pt_section *section,
+		      struct pt_image_section_cache *iscache)
+{
+	uint16_t acount, ucount;
+	int errcode;
+
+	if (!section || !iscache)
+		return -pte_internal;
+
+	errcode = pt_section_lock_attach(section);
+	if (errcode < 0)
+		return errcode;
+
+	ucount = section->ucount;
+	acount = section->acount;
+	if (!acount) {
+		if (section->iscache || !ucount)
+			goto out_unlock;
+
+		section->iscache = iscache;
+		section->acount = 1;
+
+		return pt_section_unlock_attach(section);
+	}
+
+	acount += 1;
+	if (!acount) {
+		(void) pt_section_unlock_attach(section);
+		return -pte_overflow;
+	}
+
+	if (ucount < acount)
+		goto out_unlock;
+
+	if (section->iscache != iscache)
+		goto out_unlock;
+
+	section->acount = acount;
+
+	return pt_section_unlock_attach(section);
+
+ out_unlock:
+	(void) pt_section_unlock_attach(section);
+	return -pte_internal;
+}
+
+int pt_section_detach(struct pt_section *section,
+		      struct pt_image_section_cache *iscache)
+{
+	uint16_t acount, ucount;
+	int errcode;
+
+	if (!section || !iscache)
+		return -pte_internal;
+
+	errcode = pt_section_lock_attach(section);
+	if (errcode < 0)
+		return errcode;
+
+	if (section->iscache != iscache)
+		goto out_unlock;
+
+	acount = section->acount;
+	if (!acount)
+		goto out_unlock;
+
+	acount -= 1;
+	ucount = section->ucount;
+	if (ucount < acount)
+		goto out_unlock;
+
+	section->acount = acount;
+	if (!acount)
+		section->iscache = NULL;
+
+	return pt_section_unlock_attach(section);
+
+ out_unlock:
+	(void) pt_section_unlock_attach(section);
+	return -pte_internal;
+}
+
 const char *pt_section_filename(const struct pt_section *section)
 {
 	if (!section)
@@ -251,6 +352,75 @@ uint64_t pt_section_size(const struct pt_section *section)
 	return section->size;
 }
 
+static int pt_section_bcache_memsize(const struct pt_section *section,
+				     uint64_t *psize)
+{
+	struct pt_block_cache *bcache;
+
+	if (!section || !psize)
+		return -pte_internal;
+
+	bcache = section->bcache;
+	if (!bcache) {
+		*psize = 0ull;
+		return 0;
+	}
+
+	*psize = sizeof(*bcache) +
+		(bcache->nentries * sizeof(struct pt_bcache_entry));
+
+	return 0;
+}
+
+static int pt_section_memsize_locked(const struct pt_section *section,
+				     uint64_t *psize)
+{
+	uint64_t msize, bcsize;
+	int (*memsize)(const struct pt_section *section, uint64_t *size);
+	int errcode;
+
+	if (!section || !psize)
+		return -pte_internal;
+
+	memsize = section->memsize;
+	if (!memsize) {
+		if (section->mcount)
+			return -pte_internal;
+
+		*psize = 0ull;
+		return 0;
+	}
+
+	errcode = memsize(section, &msize);
+	if (errcode < 0)
+		return errcode;
+
+	errcode = pt_section_bcache_memsize(section, &bcsize);
+	if (errcode < 0)
+		return errcode;
+
+	*psize = msize + bcsize;
+
+	return 0;
+}
+
+int pt_section_memsize(struct pt_section *section, uint64_t *size)
+{
+	int errcode, status;
+
+	errcode = pt_section_lock(section);
+	if (errcode < 0)
+		return errcode;
+
+	status = pt_section_memsize_locked(section, size);
+
+	errcode = pt_section_unlock(section);
+	if (errcode < 0)
+		return errcode;
+
+	return status;
+}
+
 uint64_t pt_section_offset(const struct pt_section *section)
 {
 	if (!section)
@@ -259,27 +429,152 @@ uint64_t pt_section_offset(const struct pt_section *section)
 	return section->offset;
 }
 
-int pt_section_add_bcache(struct pt_section *section)
+int pt_section_alloc_bcache(struct pt_section *section)
 {
-	uint32_t cache_size;
+	struct pt_image_section_cache *iscache;
+	struct pt_block_cache *bcache;
+	uint64_t ssize, memsize;
+	uint32_t csize;
+	int errcode;
 
-	if (!section || section->bcache)
+	if (!section)
 		return -pte_internal;
 
-	if (section->disable_bcache)
-		return 0;
+	if (!section->mcount)
+		return -pte_internal;
 
-	cache_size = (uint32_t) section->size;
+	ssize = pt_section_size(section);
+	csize = (uint32_t) ssize;
 
-	/* We do not allocate a cache if it would get too big.
+	if (csize != ssize)
+		return -pte_not_supported;
+
+	memsize = 0ull;
+
+	/* We need to take both the attach and the section lock in order to pair
+	 * the block cache allocation and the resize notification.
 	 *
-	 * We also do not treat failure to allocate a cache as an error.
-	 * Without the cache, decode will be slower but still correct.
+	 * This allows map notifications in between but they only change the
+	 * order of sections in the cache.
+	 *
+	 * The attach lock needs to be taken first.
 	 */
-	if (cache_size == section->size)
-		section->bcache = pt_bcache_alloc(cache_size);
+	errcode = pt_section_lock_attach(section);
+	if (errcode < 0)
+		return errcode;
 
-	return 0;
+	errcode = pt_section_lock(section);
+	if (errcode < 0)
+		goto out_alock;
+
+	bcache = pt_section_bcache(section);
+	if (bcache) {
+		errcode = 0;
+		goto out_lock;
+	}
+
+	bcache = pt_bcache_alloc(csize);
+	if (!bcache) {
+		errcode = -pte_nomem;
+		goto out_lock;
+	}
+
+	/* Install the block cache.  It will become visible and may be used
+	 * immediately.
+	 *
+	 * If we fail later on, we leave the block cache and report the error to
+	 * the allocating decoder thread.
+	 */
+	section->bcache = bcache;
+
+	errcode = pt_section_memsize_locked(section, &memsize);
+	if (errcode < 0)
+		goto out_lock;
+
+	errcode = pt_section_unlock(section);
+	if (errcode < 0)
+		goto out_alock;
+
+	if (memsize) {
+		iscache = section->iscache;
+		if (iscache) {
+			errcode = pt_iscache_notify_resize(iscache, section,
+							  memsize);
+			if (errcode < 0)
+				goto out_alock;
+		}
+	}
+
+	return pt_section_unlock_attach(section);
+
+
+out_lock:
+	(void) pt_section_unlock(section);
+
+out_alock:
+	(void) pt_section_unlock_attach(section);
+	return errcode;
+}
+
+int pt_section_on_map_lock(struct pt_section *section)
+{
+	struct pt_image_section_cache *iscache;
+	int errcode, status;
+
+	if (!section)
+		return -pte_internal;
+
+	errcode = pt_section_lock_attach(section);
+	if (errcode < 0)
+		return errcode;
+
+	iscache = section->iscache;
+	if (!iscache)
+		return pt_section_unlock_attach(section);
+
+	/* There is a potential deadlock when @section was unmapped again and
+	 * @iscache tries to map it.  This would cause this function to be
+	 * re-entered while we're still holding the attach lock.
+	 *
+	 * This scenario is very unlikely, though, since our caller does not yet
+	 * know whether pt_section_map() succeeded.
+	 */
+	status = pt_iscache_notify_map(iscache, section);
+
+	errcode = pt_section_unlock_attach(section);
+	if (errcode < 0)
+		return errcode;
+
+	return status;
+}
+
+int pt_section_map_share(struct pt_section *section)
+{
+	uint16_t mcount;
+	int errcode;
+
+	if (!section)
+		return -pte_internal;
+
+	errcode = pt_section_lock(section);
+	if (errcode < 0)
+		return errcode;
+
+	mcount = section->mcount;
+	if (!mcount) {
+		(void) pt_section_unlock(section);
+		return -pte_internal;
+	}
+
+	mcount += 1;
+	if (!mcount) {
+		(void) pt_section_unlock(section);
+		return -pte_overflow;
+	}
+
+	section->mcount = mcount;
+
+	return pt_section_unlock(section);
 }
 
 int pt_section_unmap(struct pt_section *section)

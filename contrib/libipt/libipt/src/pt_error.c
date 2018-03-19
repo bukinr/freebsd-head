@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017, Intel Corporation
+ * Copyright (c) 2013-2018, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -112,6 +112,9 @@ const char *pt_errstr(enum pt_error_code errcode)
 
 	case pte_bad_file:
 		return "bad file";
+
+	case pte_bad_cpu:
+		return "unknown cpu";
 	}
 
 	/* Should not reach here. */

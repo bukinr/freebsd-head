@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017, Intel Corporation
+ * Copyright (c) 2016-2018, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -43,11 +43,20 @@ struct pt_section {
 	uint64_t offset;
 	uint64_t size;
 
+	/* The bcache size. */
+	uint64_t bcsize;
+
+	/* The iscache back link. */
+	struct pt_image_section_cache *iscache;
+
 	/* The file content. */
 	uint8_t content[0x10];
 
 	/* The use count. */
 	int ucount;
+
+	/* The attach count. */
+	int acount;
 
 	/* The map count. */
 	int mcount;
@@ -55,6 +64,8 @@ struct pt_section {
 #if defined(FEATURE_THREADS)
 	/* A lock protecting this section. */
 	mtx_t lock;
+	/* A lock protecting the iscache and acount fields. */
+	mtx_t alock;
 #endif /* defined(FEATURE_THREADS) */
 };
 
@@ -63,13 +74,20 @@ extern struct pt_section *pt_mk_section(const char *filename, uint64_t offset,
 
 extern int pt_section_get(struct pt_section *section);
 extern int pt_section_put(struct pt_section *section);
+extern int pt_section_attach(struct pt_section *section,
+			     struct pt_image_section_cache *iscache);
+extern int pt_section_detach(struct pt_section *section,
+			     struct pt_image_section_cache *iscache);
 
 extern int pt_section_map(struct pt_section *section);
+extern int pt_section_map_share(struct pt_section *section);
 extern int pt_section_unmap(struct pt_section *section);
+extern int pt_section_request_bcache(struct pt_section *section);
 
 extern const char *pt_section_filename(const struct pt_section *section);
 extern uint64_t pt_section_offset(const struct pt_section *section);
 extern uint64_t pt_section_size(const struct pt_section *section);
+extern int pt_section_memsize(struct pt_section *section, uint64_t *size);
 
 extern int pt_section_read(const struct pt_section *section, uint8_t *buffer,
 			   uint16_t size, uint64_t offset);
@@ -84,11 +102,11 @@ struct pt_section *pt_mk_section(const char *filename, uint64_t offset,
 	if (section) {
 		uint8_t idx;
 
+		memset(section, 0, sizeof(*section));
 		section->filename = filename;
 		section->offset = offset;
 		section->size = size;
 		section->ucount = 1;
-		section->mcount = 0;
 
 		for (idx = 0; idx < sizeof(section->content); ++idx)
 			section->content[idx] = idx;
@@ -99,6 +117,13 @@ struct pt_section *pt_mk_section(const char *filename, uint64_t offset,
 
 			errcode = mtx_init(&section->lock, mtx_plain);
 			if (errcode != thrd_success) {
+				free(section);
+				section = NULL;
+			}
+
+			errcode = mtx_init(&section->alock, mtx_plain);
+			if (errcode != thrd_success) {
+				mtx_destroy(&section->lock);
 				free(section);
 				section = NULL;
 			}
@@ -137,6 +162,42 @@ static int pt_section_unlock(struct pt_section *section)
 		int errcode;
 
 		errcode = mtx_unlock(&section->lock);
+		if (errcode != thrd_success)
+			return -pte_bad_lock;
+	}
+#endif /* defined(FEATURE_THREADS) */
+
+	return 0;
+}
+
+static int pt_section_lock_attach(struct pt_section *section)
+{
+	if (!section)
+		return -pte_internal;
+
+#if defined(FEATURE_THREADS)
+	{
+		int errcode;
+
+		errcode = mtx_lock(&section->alock);
+		if (errcode != thrd_success)
+			return -pte_bad_lock;
+	}
+#endif /* defined(FEATURE_THREADS) */
+
+	return 0;
+}
+
+static int pt_section_unlock_attach(struct pt_section *section)
+{
+	if (!section)
+		return -pte_internal;
+
+#if defined(FEATURE_THREADS)
+	{
+		int errcode;
+
+		errcode = mtx_unlock(&section->alock);
 		if (errcode != thrd_success)
 			return -pte_bad_lock;
 	}
@@ -187,6 +248,7 @@ int pt_section_put(struct pt_section *section)
 
 	if (!ucount) {
 #if defined(FEATURE_THREADS)
+		mtx_destroy(&section->alock);
 		mtx_destroy(&section->lock);
 #endif /* defined(FEATURE_THREADS) */
 		free(section);
@@ -195,7 +257,113 @@ int pt_section_put(struct pt_section *section)
 	return 0;
 }
 
+int pt_section_attach(struct pt_section *section,
+		      struct pt_image_section_cache *iscache)
+{
+	int errcode, ucount, acount;
+
+	if (!section || !iscache)
+		return -pte_internal;
+
+	errcode = pt_section_lock_attach(section);
+	if (errcode < 0)
+		return errcode;
+
+	ucount = section->ucount;
+	acount = section->acount;
+	if (!acount) {
+		if (section->iscache || !ucount)
+			goto out_unlock;
+
+		section->iscache = iscache;
+		section->acount = 1;
+
+		return pt_section_unlock_attach(section);
+	}
+
+	acount += 1;
+	if (!acount) {
+		(void) pt_section_unlock_attach(section);
+		return -pte_overflow;
+	}
+
+	if (ucount < acount)
+		goto out_unlock;
+
+	if (section->iscache != iscache)
+		goto out_unlock;
+
+	section->acount = acount;
+
+	return pt_section_unlock_attach(section);
+
+ out_unlock:
+	(void) pt_section_unlock_attach(section);
+	return -pte_internal;
+}
+
+int pt_section_detach(struct pt_section *section,
+		      struct pt_image_section_cache *iscache)
+{
+	int errcode, ucount, acount;
+
+	if (!section || !iscache)
+		return -pte_internal;
+
+	errcode = pt_section_lock_attach(section);
+	if (errcode < 0)
+		return errcode;
+
+	if (section->iscache != iscache)
+		goto out_unlock;
+
+	acount = section->acount;
+	if (!acount)
+		goto out_unlock;
+
+	acount -= 1;
+	ucount = section->ucount;
+	if (ucount < acount)
+		goto out_unlock;
+
+	section->acount = acount;
+	if (!acount)
+		section->iscache = NULL;
+
+	return pt_section_unlock_attach(section);
+
+ out_unlock:
+	(void) pt_section_unlock_attach(section);
+	return -pte_internal;
+}
+
 int pt_section_map(struct pt_section *section)
+{
+	struct pt_image_section_cache *iscache;
+	int errcode, status;
+
+	if (!section)
+		return -pte_internal;
+
+	errcode = pt_section_map_share(section);
+	if (errcode < 0)
+		return errcode;
+
+	errcode = pt_section_lock_attach(section);
+	if (errcode < 0)
+		return errcode;
+
+	status = 0;
+	iscache = section->iscache;
+	if (iscache)
+		status = pt_iscache_notify_map(iscache, section);
+
+	errcode = pt_section_unlock_attach(section);
+
+	return (status < 0) ? status : errcode;
+}
+
+int pt_section_map_share(struct pt_section *section)
 {
 	int errcode, mcount;
 
@@ -229,6 +397,7 @@ int pt_section_unmap(struct pt_section *section)
 	if (errcode < 0)
 		return errcode;
 
+	section->bcsize = 0ull;
 	mcount = --section->mcount;
 
 	errcode = pt_section_unlock(section);
@@ -239,6 +408,51 @@ int pt_section_unmap(struct pt_section *section)
 		return -pte_internal;
 
 	return 0;
+}
+
+int pt_section_request_bcache(struct pt_section *section)
+{
+	struct pt_image_section_cache *iscache;
+	uint64_t memsize;
+	int errcode;
+
+	if (!section)
+		return -pte_internal;
+
+	errcode = pt_section_lock_attach(section);
+	if (errcode < 0)
+		return errcode;
+
+	errcode = pt_section_lock(section);
+	if (errcode < 0)
+		goto out_alock;
+
+	if (section->bcsize)
+		goto out_lock;
+
+	section->bcsize = section->size * 3;
+	memsize = section->size + section->bcsize;
+
+	errcode = pt_section_unlock(section);
+	if (errcode < 0)
+		goto out_alock;
+
+	iscache = section->iscache;
+	if (iscache) {
+		errcode = pt_iscache_notify_resize(iscache, section, memsize);
+		if (errcode < 0)
+			goto out_alock;
+	}
+
+	return pt_section_unlock_attach(section);
+
+
+out_lock:
+	(void) pt_section_unlock(section);
+
+out_alock:
+	(void) pt_section_unlock_attach(section);
+	return errcode;
 }
 
 const char *pt_section_filename(const struct pt_section *section)
@@ -263,6 +477,16 @@ uint64_t pt_section_size(const struct pt_section *section)
 		return 0ull;
 
 	return section->size;
+}
+
+int pt_section_memsize(struct pt_section *section, uint64_t *size)
+{
+	if (!section || !size)
+		return -pte_internal;
+
+	*size = section->mcount ? section->size + section->bcsize : 0ull;
+
+	return 0;
 }
 
 int pt_section_read(const struct pt_section *section, uint8_t *buffer,
@@ -352,6 +576,23 @@ static struct ptunit_result cfix_init(struct iscache_fixture *cfix)
 	return ptu_passed();
 }
 
+static struct ptunit_result sfix_init(struct iscache_fixture *cfix)
+{
+	int status, idx;
+
+	ptu_test(cfix_init, cfix);
+
+	cfix->iscache.limit = 0x7800;
+
+	for (idx = 0; idx < num_sections; ++idx) {
+		status = pt_iscache_add(&cfix->iscache, cfix->section[idx],
+					0ull);
+		ptu_int_ge(status, 0);
+	}
+
+	return ptu_passed();
+}
+
 static struct ptunit_result cfix_fini(struct iscache_fixture *cfix)
 {
 	int idx, errcode;
@@ -365,7 +606,9 @@ static struct ptunit_result cfix_fini(struct iscache_fixture *cfix)
 
 	for (idx = 0; idx < num_sections; ++idx) {
 		ptu_int_eq(cfix->section[idx]->ucount, 1);
+		ptu_int_eq(cfix->section[idx]->acount, 0);
 		ptu_int_eq(cfix->section[idx]->mcount, 0);
+		ptu_null(cfix->section[idx]->iscache);
 
 		errcode = pt_section_put(cfix->section[idx]);
 		ptu_int_eq(errcode, 0);
@@ -534,8 +777,9 @@ static struct ptunit_result add(struct iscache_fixture *cfix)
 	isid = pt_iscache_add(&cfix->iscache, cfix->section[0], 0ull);
 	ptu_int_gt(isid, 0);
 
-	/* The cache gets a reference on success. */
+	/* The cache attaches and gets a reference on success. */
 	ptu_int_eq(cfix->section[0]->ucount, 2);
+	ptu_int_eq(cfix->section[0]->acount, 1);
 
 	/* The added section must be implicitly put in pt_iscache_fini. */
 	return ptu_passed();
@@ -819,8 +1063,9 @@ add_twice_different_laddr(struct iscache_fixture *cfix)
 	/* We must get different identifiers. */
 	ptu_int_ne(isid[1], isid[0]);
 
-	/* We must take two references - one for each entry. */
+	/* We attach twice and take two references - one for each entry. */
 	ptu_int_eq(cfix->section[0]->ucount, 3);
+	ptu_int_eq(cfix->section[0]->acount, 2);
 
 	return ptu_passed();
 }
@@ -977,6 +1222,361 @@ static struct ptunit_result read_bad_isid(struct iscache_fixture *cfix)
 	return ptu_passed();
 }
 
+static struct ptunit_result lru_map(struct iscache_fixture *cfix)
+{
+	int status, isid;
+
+	cfix->iscache.limit = cfix->section[0]->size;
+	ptu_uint_eq(cfix->iscache.used, 0ull);
+	ptu_null(cfix->iscache.lru);
+
+	isid = pt_iscache_add(&cfix->iscache, cfix->section[0], 0xa000ull);
+	ptu_int_gt(isid, 0);
+
+	status = pt_section_map(cfix->section[0]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_unmap(cfix->section[0]);
+	ptu_int_eq(status, 0);
+
+	ptu_ptr(cfix->iscache.lru);
+	ptu_ptr_eq(cfix->iscache.lru->section, cfix->section[0]);
+	ptu_null(cfix->iscache.lru->next);
+	ptu_uint_eq(cfix->iscache.used, cfix->section[0]->size);
+
+	return ptu_passed();
+}
+
+static struct ptunit_result lru_read(struct iscache_fixture *cfix)
+{
+	uint8_t buffer[] = { 0xcc, 0xcc, 0xcc };
+	int status, isid;
+
+	cfix->iscache.limit = cfix->section[0]->size;
+	ptu_uint_eq(cfix->iscache.used, 0ull);
+	ptu_null(cfix->iscache.lru);
+
+	isid = pt_iscache_add(&cfix->iscache, cfix->section[0], 0xa000ull);
+	ptu_int_gt(isid, 0);
+
+	status = pt_iscache_read(&cfix->iscache, buffer, 2ull, isid, 0xa008ull);
+	ptu_int_eq(status, 2);
+
+	ptu_ptr(cfix->iscache.lru);
+	ptu_ptr_eq(cfix->iscache.lru->section, cfix->section[0]);
+	ptu_null(cfix->iscache.lru->next);
+	ptu_uint_eq(cfix->iscache.used, cfix->section[0]->size);
+
+	return ptu_passed();
+}
+
+static struct ptunit_result lru_map_nodup(struct iscache_fixture *cfix)
+{
+	int status, isid;
+
+	cfix->iscache.limit = 2 * cfix->section[0]->size;
+	ptu_uint_eq(cfix->iscache.used, 0ull);
+	ptu_null(cfix->iscache.lru);
+
+	isid = pt_iscache_add(&cfix->iscache, cfix->section[0], 0xa000ull);
+	ptu_int_gt(isid, 0);
+
+	status = pt_section_map(cfix->section[0]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_unmap(cfix->section[0]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_map(cfix->section[0]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_unmap(cfix->section[0]);
+	ptu_int_eq(status, 0);
+
+	ptu_ptr(cfix->iscache.lru);
+	ptu_ptr_eq(cfix->iscache.lru->section, cfix->section[0]);
+	ptu_null(cfix->iscache.lru->next);
+	ptu_uint_eq(cfix->iscache.used, cfix->section[0]->size);
+
+	return ptu_passed();
+}
+
+static struct ptunit_result lru_map_too_big(struct iscache_fixture *cfix)
+{
+	int status, isid;
+
+	cfix->iscache.limit = cfix->section[0]->size - 1;
+	ptu_uint_eq(cfix->iscache.used, 0ull);
+	ptu_null(cfix->iscache.lru);
+
+	isid = pt_iscache_add(&cfix->iscache, cfix->section[0], 0xa000ull);
+	ptu_int_gt(isid, 0);
+
+	status = pt_section_map(cfix->section[0]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_unmap(cfix->section[0]);
+	ptu_int_eq(status, 0);
+
+	ptu_null(cfix->iscache.lru);
+	ptu_uint_eq(cfix->iscache.used, 0ull);
+
+	return ptu_passed();
+}
+
+static struct ptunit_result lru_map_add_front(struct iscache_fixture *cfix)
+{
+	int status, isid;
+
+	cfix->iscache.limit = cfix->section[0]->size + cfix->section[1]->size;
+	ptu_uint_eq(cfix->iscache.used, 0ull);
+	ptu_null(cfix->iscache.lru);
+
+	isid = pt_iscache_add(&cfix->iscache, cfix->section[0], 0xa000ull);
+	ptu_int_gt(isid, 0);
+
+	isid = pt_iscache_add(&cfix->iscache, cfix->section[1], 0xa000ull);
+	ptu_int_gt(isid, 0);
+
+	status = pt_section_map(cfix->section[0]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_unmap(cfix->section[0]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_map(cfix->section[1]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_unmap(cfix->section[1]);
+	ptu_int_eq(status, 0);
+
+	ptu_ptr(cfix->iscache.lru);
+	ptu_ptr_eq(cfix->iscache.lru->section, cfix->section[1]);
+	ptu_ptr(cfix->iscache.lru->next);
+	ptu_ptr_eq(cfix->iscache.lru->next->section, cfix->section[0]);
+	ptu_null(cfix->iscache.lru->next->next);
+	ptu_uint_eq(cfix->iscache.used,
+		    cfix->section[0]->size + cfix->section[1]->size);
+
+	return ptu_passed();
+}
+
+static struct ptunit_result lru_map_move_front(struct iscache_fixture *cfix)
+{
+	int status, isid;
+
+	cfix->iscache.limit = cfix->section[0]->size + cfix->section[1]->size;
+	ptu_uint_eq(cfix->iscache.used, 0ull);
+	ptu_null(cfix->iscache.lru);
+
+	isid = pt_iscache_add(&cfix->iscache, cfix->section[0], 0xa000ull);
+	ptu_int_gt(isid, 0);
+
+	isid = pt_iscache_add(&cfix->iscache, cfix->section[1], 0xa000ull);
+	ptu_int_gt(isid, 0);
+
+	status = pt_section_map(cfix->section[0]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_unmap(cfix->section[0]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_map(cfix->section[1]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_unmap(cfix->section[1]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_map(cfix->section[0]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_unmap(cfix->section[0]);
+	ptu_int_eq(status, 0);
+
+	ptu_ptr(cfix->iscache.lru);
+	ptu_ptr_eq(cfix->iscache.lru->section, cfix->section[0]);
+	ptu_ptr(cfix->iscache.lru->next);
+	ptu_ptr_eq(cfix->iscache.lru->next->section, cfix->section[1]);
+	ptu_null(cfix->iscache.lru->next->next);
+	ptu_uint_eq(cfix->iscache.used,
+		    cfix->section[0]->size + cfix->section[1]->size);
+
+	return ptu_passed();
+}
+
+static struct ptunit_result lru_map_evict(struct iscache_fixture *cfix)
+{
+	int status, isid;
+
+	cfix->iscache.limit = cfix->section[0]->size +
+		cfix->section[1]->size - 1;
+	ptu_uint_eq(cfix->iscache.used, 0ull);
+	ptu_null(cfix->iscache.lru);
+
+	isid = pt_iscache_add(&cfix->iscache, cfix->section[0], 0xa000ull);
+	ptu_int_gt(isid, 0);
+
+	isid = pt_iscache_add(&cfix->iscache, cfix->section[1], 0xa000ull);
+	ptu_int_gt(isid, 0);
+
+	status = pt_section_map(cfix->section[0]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_unmap(cfix->section[0]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_map(cfix->section[1]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_unmap(cfix->section[1]);
+	ptu_int_eq(status, 0);
+
+	ptu_ptr(cfix->iscache.lru);
+	ptu_ptr_eq(cfix->iscache.lru->section, cfix->section[1]);
+	ptu_null(cfix->iscache.lru->next);
+	ptu_uint_eq(cfix->iscache.used, cfix->section[1]->size);
+
+	return ptu_passed();
+}
+
+static struct ptunit_result lru_bcache_evict(struct iscache_fixture *cfix)
+{
+	int status, isid;
+
+	cfix->iscache.limit = 4 * cfix->section[0]->size +
+		cfix->section[1]->size - 1;
+	ptu_uint_eq(cfix->iscache.used, 0ull);
+	ptu_null(cfix->iscache.lru);
+
+	isid = pt_iscache_add(&cfix->iscache, cfix->section[0], 0xa000ull);
+	ptu_int_gt(isid, 0);
+
+	isid = pt_iscache_add(&cfix->iscache, cfix->section[1], 0xa000ull);
+	ptu_int_gt(isid, 0);
+
+	status = pt_section_map(cfix->section[0]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_unmap(cfix->section[0]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_map(cfix->section[1]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_unmap(cfix->section[1]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_request_bcache(cfix->section[0]);
+	ptu_int_eq(status, 0);
+
+	ptu_ptr(cfix->iscache.lru);
+	ptu_ptr_eq(cfix->iscache.lru->section, cfix->section[0]);
+	ptu_null(cfix->iscache.lru->next);
+	ptu_uint_eq(cfix->iscache.used, 4 * cfix->section[0]->size);
+
+	return ptu_passed();
+}
+
+static struct ptunit_result lru_bcache_clear(struct iscache_fixture *cfix)
+{
+	int status, isid;
+
+	cfix->iscache.limit = cfix->section[0]->size + cfix->section[1]->size;
+	ptu_uint_eq(cfix->iscache.used, 0ull);
+	ptu_null(cfix->iscache.lru);
+
+	isid = pt_iscache_add(&cfix->iscache, cfix->section[0], 0xa000ull);
+	ptu_int_gt(isid, 0);
+
+	isid = pt_iscache_add(&cfix->iscache, cfix->section[1], 0xa000ull);
+	ptu_int_gt(isid, 0);
+
+	status = pt_section_map(cfix->section[0]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_unmap(cfix->section[0]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_map(cfix->section[1]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_unmap(cfix->section[1]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_request_bcache(cfix->section[0]);
+	ptu_int_eq(status, 0);
+
+	ptu_null(cfix->iscache.lru);
+	ptu_uint_eq(cfix->iscache.used, 0ull);
+
+	return ptu_passed();
+}
+
+static struct ptunit_result lru_limit_evict(struct iscache_fixture *cfix)
+{
+	int status, isid;
+
+	cfix->iscache.limit = cfix->section[0]->size + cfix->section[1]->size;
+	ptu_uint_eq(cfix->iscache.used, 0ull);
+	ptu_null(cfix->iscache.lru);
+
+	isid = pt_iscache_add(&cfix->iscache, cfix->section[0], 0xa000ull);
+	ptu_int_gt(isid, 0);
+
+	isid = pt_iscache_add(&cfix->iscache, cfix->section[1], 0xa000ull);
+	ptu_int_gt(isid, 0);
+
+	status = pt_section_map(cfix->section[0]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_unmap(cfix->section[0]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_map(cfix->section[1]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_unmap(cfix->section[1]);
+	ptu_int_eq(status, 0);
+
+	status = pt_iscache_set_limit(&cfix->iscache,
+				      cfix->section[0]->size +
+				      cfix->section[1]->size - 1);
+	ptu_int_eq(status, 0);
+
+	ptu_ptr(cfix->iscache.lru);
+	ptu_ptr_eq(cfix->iscache.lru->section, cfix->section[1]);
+	ptu_null(cfix->iscache.lru->next);
+	ptu_uint_eq(cfix->iscache.used, cfix->section[1]->size);
+
+	return ptu_passed();
+}
+
+static struct ptunit_result lru_clear(struct iscache_fixture *cfix)
+{
+	int status, isid;
+
+	cfix->iscache.limit = cfix->section[0]->size;
+	ptu_uint_eq(cfix->iscache.used, 0ull);
+	ptu_null(cfix->iscache.lru);
+
+	isid = pt_iscache_add(&cfix->iscache, cfix->section[0], 0xa000ull);
+	ptu_int_gt(isid, 0);
+
+	status = pt_section_map(cfix->section[0]);
+	ptu_int_eq(status, 0);
+
+	status = pt_section_unmap(cfix->section[0]);
+	ptu_int_eq(status, 0);
+
+	status = pt_iscache_clear(&cfix->iscache);
+	ptu_int_eq(status, 0);
+
+	ptu_null(cfix->iscache.lru);
+	ptu_uint_eq(cfix->iscache.used, 0ull);
+
+	return ptu_passed();
+}
+
 static int worker_add(void *arg)
 {
 	struct iscache_fixture *cfix;
@@ -1081,6 +1681,242 @@ static int worker_add_file(void *arg)
 	return 0;
 }
 
+static int worker_map(void *arg)
+{
+	struct iscache_fixture *cfix;
+	int it, sec, status;
+
+	cfix = arg;
+	if (!cfix)
+		return -pte_internal;
+
+	for (it = 0; it < num_iterations; ++it) {
+		for (sec = 0; sec < num_sections; ++sec) {
+
+			status = pt_section_map(cfix->section[sec]);
+			if (status < 0)
+				return status;
+
+			status = pt_section_unmap(cfix->section[sec]);
+			if (status < 0)
+				return status;
+		}
+	}
+
+	return 0;
+}
+
+static int worker_map_limit(void *arg)
+{
+	struct iscache_fixture *cfix;
+	uint64_t limits[] = { 0x8000, 0x3000, 0x12000, 0x0 }, limit;
+	int it, sec, errcode, lim;
+
+	cfix = arg;
+	if (!cfix)
+		return -pte_internal;
+
+	lim = 0;
+	for (it = 0; it < num_iterations; ++it) {
+		for (sec = 0; sec < num_sections; ++sec) {
+
+			errcode = pt_section_map(cfix->section[sec]);
+			if (errcode < 0)
+				return errcode;
+
+			errcode = pt_section_unmap(cfix->section[sec]);
+			if (errcode < 0)
+				return errcode;
+		}
+
+		if (it % 23 != 0)
+			continue;
+
+		limit = limits[lim++];
+		lim %= sizeof(limits) / sizeof(*limits);
+
+		errcode = pt_iscache_set_limit(&cfix->iscache, limit);
+		if (errcode < 0)
+			return errcode;
+	}
+
+	return 0;
+}
+
+static int worker_map_bcache(void *arg)
+{
+	struct iscache_fixture *cfix;
+	int it, sec, status;
+
+	cfix = arg;
+	if (!cfix)
+		return -pte_internal;
+
+	for (it = 0; it < num_iterations; ++it) {
+		for (sec = 0; sec < num_sections; ++sec) {
+			struct pt_section *section;
+
+			section = cfix->section[sec];
+
+			status = pt_section_map(section);
+			if (status < 0)
+				return status;
+
+			if (it % 13 == 0) {
+				status = pt_section_request_bcache(section);
+				if (status < 0) {
+					(void) pt_section_unmap(section);
+					return status;
+				}
+			}
+
+			status = pt_section_unmap(section);
+			if (status < 0)
+				return status;
+		}
+	}
+
+	return 0;
+}
+
+static int worker_add_map(void *arg)
+{
+	struct iscache_fixture *cfix;
+	struct pt_section *section;
+	int it;
+
+	cfix = arg;
+	if (!cfix)
+		return -pte_internal;
+
+	section = cfix->section[0];
+	for (it = 0; it < num_iterations; ++it) {
+		uint64_t laddr;
+		int isid, errcode;
+
+		laddr = (uint64_t) it << 3;
+
+		isid = pt_iscache_add(&cfix->iscache, section, laddr);
+		if (isid < 0)
+			return isid;
+
+		errcode = pt_section_map(section);
+		if (errcode < 0)
+			return errcode;
+
+		errcode = pt_section_unmap(section);
+		if (errcode < 0)
+			return errcode;
+	}
+
+	return 0;
+}
+
+static int worker_add_clear(void *arg)
+{
+	struct iscache_fixture *cfix;
+	struct pt_section *section;
+	int it;
+
+	cfix = arg;
+	if (!cfix)
+		return -pte_internal;
+
+	section = cfix->section[0];
+	for (it = 0; it < num_iterations; ++it) {
+		uint64_t laddr;
+		int isid, errcode;
+
+		laddr = (uint64_t) it << 3;
+
+		isid = pt_iscache_add(&cfix->iscache, section, laddr);
+		if (isid < 0)
+			return isid;
+
+		errcode = pt_iscache_clear(&cfix->iscache);
+		if (errcode < 0)
+			return errcode;
+	}
+
+	return 0;
+}
+
+static int worker_add_file_map(void *arg)
+{
+	struct iscache_fixture *cfix;
+	int it;
+
+	cfix = arg;
+	if (!cfix)
+		return -pte_internal;
+
+	for (it = 0; it < num_iterations; ++it) {
+		struct pt_section *section;
+		uint64_t offset, size, laddr, addr;
+		int isid, errcode;
+
+		offset = it % 7 < 4 ? 0x1000 : 0x2000;
+		size = it % 5 < 3 ? 0x1000 : 0x2000;
+		laddr = it % 3 < 2 ? 0x1000 : 0x2000;
+
+		isid = pt_iscache_add_file(&cfix->iscache, "name",
+					   offset, size, laddr);
+		if (isid < 0)
+			return isid;
+
+		errcode = pt_iscache_lookup(&cfix->iscache, &section,
+					    &addr, isid);
+		if (errcode < 0)
+			return errcode;
+
+		if (addr != laddr)
+			return -pte_internal;
+
+		errcode = pt_section_map(section);
+		if (errcode < 0)
+			return errcode;
+
+		errcode = pt_section_unmap(section);
+		if (errcode < 0)
+			return errcode;
+	}
+
+	return 0;
+}
+
+static int worker_add_file_clear(void *arg)
+{
+	struct iscache_fixture *cfix;
+	int it;
+
+	cfix = arg;
+	if (!cfix)
+		return -pte_internal;
+
+	for (it = 0; it < num_iterations; ++it) {
+		uint64_t offset, size, laddr;
+		int isid, errcode;
+
+		offset = it % 7 < 4 ? 0x1000 : 0x2000;
+		size = it % 5 < 3 ? 0x1000 : 0x2000;
+		laddr = it % 3 < 2 ? 0x1000 : 0x2000;
+
+		isid = pt_iscache_add_file(&cfix->iscache, "name",
+					   offset, size, laddr);
+		if (isid < 0)
+			return isid;
+
+		if (it % 11 < 9)
+			continue;
+
+		errcode = pt_iscache_clear(&cfix->iscache);
+		if (errcode < 0)
+			return errcode;
+	}
+
+	return 0;
+}
+
 static struct ptunit_result stress(struct iscache_fixture *cfix,
 				   int (*worker)(void *))
 {
@@ -1102,7 +1938,7 @@ static struct ptunit_result stress(struct iscache_fixture *cfix,
 }
 int main(int argc, char **argv)
 {
-	struct iscache_fixture cfix, dfix;
+	struct iscache_fixture cfix, dfix, sfix;
 	struct ptunit_suite suite;
 
 	cfix.init = cfix_init;
@@ -1110,6 +1946,9 @@ int main(int argc, char **argv)
 
 	dfix.init = dfix_init;
 	dfix.fini = cfix_fini;
+
+	sfix.init = sfix_init;
+	sfix.fini = cfix_fini;
 
 	suite = ptunit_mk_suite(argc, argv);
 
@@ -1162,8 +2001,27 @@ int main(int argc, char **argv)
 	ptu_run_f(suite, read_bad_vaddr, cfix);
 	ptu_run_f(suite, read_bad_isid, cfix);
 
+	ptu_run_f(suite, lru_map, cfix);
+	ptu_run_f(suite, lru_read, cfix);
+	ptu_run_f(suite, lru_map_nodup, cfix);
+	ptu_run_f(suite, lru_map_too_big, cfix);
+	ptu_run_f(suite, lru_map_add_front, cfix);
+	ptu_run_f(suite, lru_map_move_front, cfix);
+	ptu_run_f(suite, lru_map_evict, cfix);
+	ptu_run_f(suite, lru_limit_evict, cfix);
+	ptu_run_f(suite, lru_bcache_evict, cfix);
+	ptu_run_f(suite, lru_bcache_clear, cfix);
+	ptu_run_f(suite, lru_clear, cfix);
+
 	ptu_run_fp(suite, stress, cfix, worker_add);
 	ptu_run_fp(suite, stress, cfix, worker_add_file);
+	ptu_run_fp(suite, stress, sfix, worker_map);
+	ptu_run_fp(suite, stress, sfix, worker_map_limit);
+	ptu_run_fp(suite, stress, sfix, worker_map_bcache);
+	ptu_run_fp(suite, stress, cfix, worker_add_map);
+	ptu_run_fp(suite, stress, cfix, worker_add_clear);
+	ptu_run_fp(suite, stress, cfix, worker_add_file_map);
+	ptu_run_fp(suite, stress, cfix, worker_add_file_clear);
 
 	return ptunit_report(&suite);
 }

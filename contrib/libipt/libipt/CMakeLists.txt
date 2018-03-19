@@ -1,4 +1,4 @@
-# Copyright (c) 2013-2017, Intel Corporation
+# Copyright (c) 2013-2018, Intel Corporation
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -56,6 +56,7 @@ set(LIBIPT_FILES
   src/pt_insn.c
   src/pt_block_decoder.c
   src/pt_block_cache.c
+  src/pt_msec_cache.c
 )
 
 if (CMAKE_HOST_UNIX)
@@ -128,6 +129,7 @@ add_ptunit_std_test(sync src/pt_packet.c)
 add_ptunit_std_test(config)
 add_ptunit_std_test(image_section_cache)
 add_ptunit_std_test(block_cache)
+add_ptunit_std_test(msec_cache)
 
 add_ptunit_c_test(mapped_section src/pt_asid.c)
 add_ptunit_c_test(query
@@ -143,7 +145,6 @@ add_ptunit_c_test(query
   src/pt_decoder_function.c
   src/pt_packet_decoder.c
   src/pt_config.c
-  ${LIBIPT_SECTION_FILES}
   src/pt_time.c
   src/pt_block_cache.c
 )

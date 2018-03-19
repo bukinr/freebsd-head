@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017, Intel Corporation
+ * Copyright (c) 2016-2018, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -51,6 +51,18 @@ struct pt_iscache_entry {
 	uint64_t laddr;
 };
 
+/* An image section cache least recently used cache entry. */
+struct pt_iscache_lru_entry {
+	/* The next entry in a list ordered by recent use. */
+	struct pt_iscache_lru_entry *next;
+
+	/* The section mapped by the image section cache. */
+	struct pt_section *section;
+
+	/* The amount of memory used by mapping @section in bytes. */
+	uint64_t size;
+};
+
 /* A cache of image sections and their load addresses.
  *
  * We combine the section with its load address to reduce the amount of
@@ -69,6 +81,15 @@ struct pt_image_section_cache {
 
 	/* An array of @nentries cached sections. */
 	struct pt_iscache_entry *entries;
+
+	/* A list of mapped sections ordered by time of last access. */
+	struct pt_iscache_lru_entry *lru;
+
+	/* The memory limit for our LRU cache. */
+	uint64_t limit;
+
+	/* The current size of our LRU cache. */
+	uint64_t used;
 
 #if defined(FEATURE_THREADS)
 	/* A lock protecting this image section cache. */
@@ -147,5 +168,39 @@ extern int pt_iscache_lookup(struct pt_image_section_cache *iscache,
 
 /* Clear an image section cache. */
 extern int pt_iscache_clear(struct pt_image_section_cache *iscache);
+
+/* Notify about the mapping of a cached section.
+ *
+ * Notifies @iscache that @section has been mapped.
+ *
+ * The caller guarantees that @iscache contains @section (by using @section's
+ * iscache pointer) and prevents @iscache from detaching.
+ *
+ * The caller must not lock @section to allow @iscache to map it.  This function
+ * must not try to detach from @section.
+ *
+ * Returns zero on success, a negative pt_error_code otherwise.
+ * Returns -pte_internal if @iscache or @section is NULL.
+ * Returns -pte_bad_lock on any locking error.
+ */
+extern int pt_iscache_notify_map(struct pt_image_section_cache *iscache,
+				 struct pt_section *section);
+
+/* Notify about a size change of a mapped section.
+ *
+ * Notifies @iscache that @section's size has changed while it was mapped.
+ *
+ * The caller guarantees that @iscache contains @section (by using @section's
+ * iscache pointer) and prevents @iscache from detaching.
+ *
+ * The caller must not lock @section to allow @iscache to map it.  This function
+ * must not try to detach from @section.
+ *
+ * Returns zero on success, a negative pt_error_code otherwise.
+ * Returns -pte_internal if @iscache or @section is NULL.
+ * Returns -pte_bad_lock on any locking error.
+ */
+extern int pt_iscache_notify_resize(struct pt_image_section_cache *iscache,
+				    struct pt_section *section, uint64_t size);
 
 #endif /* PT_IMAGE_SECTION_CACHE_H */

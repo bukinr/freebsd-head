@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017, Intel Corporation
+ * Copyright (c) 2013-2018, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -36,6 +36,8 @@
 #  include <threads.h>
 #endif /* defined(FEATURE_THREADS) */
 
+#include "intel-pt.h"
+
 struct pt_block_cache;
 
 
@@ -70,10 +72,28 @@ struct pt_section {
 
 	/* A pointer to an optional block cache.
 	 *
-	 * The cache is created and destroyed implicitly when the section is
-	 * mapped and unmapped respectively.
+	 * The cache is created on request and destroyed implicitly when the
+	 * section is unmapped.
+	 *
+	 * We read this field without locking and only lock the section in order
+	 * to install the block cache.
+	 *
+	 * We rely on guaranteed atomic operations as specified in section 8.1.1
+	 * in Volume 3A of the Intel(R) Software Developer's Manual at
+	 * http://www.intel.com/sdm.
 	 */
 	struct pt_block_cache *bcache;
+
+	/* A pointer to the iscache attached to this section.
+	 *
+	 * The pointer is initialized when the iscache attaches and cleared when
+	 * it detaches again.  There can be at most one iscache attached to this
+	 * section at any time.
+	 *
+	 * In addition to attaching, the iscache will need to obtain a reference
+	 * to the section, which it needs to drop again after detaching.
+	 */
+	struct pt_image_section_cache *iscache;
 
 	/* A pointer to the unmap function - NULL if the section is currently
 	 * not mapped.
@@ -92,6 +112,14 @@ struct pt_section {
 	int (*read)(const struct pt_section *sec, uint8_t *buffer,
 		    uint16_t size, uint64_t offset);
 
+	/* A pointer to the memsize function - NULL if the section is currently
+	 * not mapped.
+	 *
+	 * This field is set in pt_section_map() and owned by the mapping
+	 * implementation.
+	 */
+	int (*memsize)(const struct pt_section *section, uint64_t *size);
+
 #if defined(FEATURE_THREADS)
 	/* A lock protecting this section.
 	 *
@@ -99,19 +127,26 @@ struct pt_section {
 	 * actual locking should be handled by pt_section_* functions.
 	 */
 	mtx_t lock;
+
+	/* A lock protecting the @iscache and @acount fields.
+	 *
+	 * We need separate locks to protect against a deadlock scenario when
+	 * the iscache is mapping or unmapping this section.
+	 *
+	 * The attach lock must not be taken while holding the section lock; the
+	 * other way round is OK.
+	 */
+	mtx_t alock;
 #endif /* defined(FEATURE_THREADS) */
 
 	/* The number of current users.  The last user destroys the section. */
 	uint16_t ucount;
 
+	/* The number of attaches.  This must be <= @ucount. */
+	uint16_t acount;
+
 	/* The number of current mappers.  The last unmaps the section. */
 	uint16_t mcount;
-
-	/* A collection of flags to:
-	 *
-	 * - disable block caching.
-	 */
-	uint32_t disable_bcache:1;
 };
 
 /* Create a section.
@@ -131,21 +166,6 @@ struct pt_section {
  */
 extern struct pt_section *pt_mk_section(const char *file, uint64_t offset,
 					uint64_t size);
-
-/* Clone (parts of) a section.
- *
- * The cloned section describes the same content as @section but starting at
- * @offset for @size bytes.  The cloned range must lie within @section.
- *
- * The cloned section is not mapped and starts with a user count of one.
- *
- * Returns zero on success, a negative error code otherwise.
- * Returns -pte_internal if @clone or @section is NULL.
- * Returns -pte_internal if the cloned range lies outside of @section.
- */
-extern int pt_section_clone(struct pt_section **clone,
-			    const struct pt_section *section, uint64_t offset,
-			    uint64_t size);
 
 /* Lock a section.
  *
@@ -171,7 +191,7 @@ extern int pt_section_unlock(struct pt_section *section);
  *
  * Returns zero on success, a negative error code otherwise.
  * Returns -pte_internal if @section is NULL.
- * Returns -pte_internal if the user count would overflow.
+ * Returns -pte_overflow if the user count would overflow.
  * Returns -pte_bad_lock on any locking error.
  */
 extern int pt_section_get(struct pt_section *section);
@@ -188,6 +208,32 @@ extern int pt_section_get(struct pt_section *section);
  */
 extern int pt_section_put(struct pt_section *section);
 
+/* Attaches the image section cache user.
+ *
+ * Similar to pt_section_get() but sets @section->iscache to @iscache.
+ *
+ * Returns zero on success, a negative error code otherwise.
+ * Returns -pte_internal if @section or @iscache is NULL.
+ * Returns -pte_internal if a different cache is already attached.
+ * Returns -pte_overflow if the attach count would overflow.
+ * Returns -pte_bad_lock on any locking error.
+ */
+extern int pt_section_attach(struct pt_section *section,
+			     struct pt_image_section_cache *iscache);
+
+/* Detaches the image section cache user.
+ *
+ * Similar to pt_section_put() but clears @section->iscache.
+ *
+ * Returns zero on success, a negative error code otherwise.
+ * Returns -pte_internal if @section or @iscache is NULL.
+ * Returns -pte_internal if the attach count is already zero.
+ * Returns -pte_internal if @section->iscache is not equal to @iscache.
+ * Returns -pte_bad_lock on any locking error.
+ */
+extern int pt_section_detach(struct pt_section *section,
+			     struct pt_image_section_cache *iscache);
+
 /* Return the filename of @section. */
 extern const char *pt_section_filename(const struct pt_section *section);
 
@@ -197,12 +243,46 @@ extern uint64_t pt_section_offset(const struct pt_section *section);
 /* Return the size of the section in bytes. */
 extern uint64_t pt_section_size(const struct pt_section *section);
 
+/* Return the amount of memory currently used by the section in bytes.
+ *
+ * We only consider the amount of memory required for mapping @section; we
+ * ignore the size of the section object itself and the size of the status
+ * object.
+ *
+ * If @section is currently not mapped, the size is zero.
+ *
+ * Returns zero on success, a negative pt_error_code otherwise.
+ * Returns -pte_internal if @size of @section is NULL.
+ */
+extern int pt_section_memsize(struct pt_section *section, uint64_t *size);
+
+/* Allocate a block cache.
+ *
+ * Returns zero on success, a negative error code otherwise.
+ * Returns -pte_internal if @section is NULL.
+ * Returns -pte_nomem if the block cache can't be allocated.
+ * Returns -pte_bad_lock on any locking error.
+ */
+extern int pt_section_alloc_bcache(struct pt_section *section);
+
+/* Request block caching.
+ *
+ * The caller must ensure that @section is mapped.
+ */
+static inline int pt_section_request_bcache(struct pt_section *section)
+{
+	if (!section)
+		return -pte_internal;
+
+	if (section->bcache)
+		return 0;
+
+	return pt_section_alloc_bcache(section);
+}
+
 /* Return @section's block cache, if available.
  *
- * @section must be mapped.
- *
- * The cache, if available, is implicitly created when the section is mapped and
- * implicitly destroyed when the section is unmapped.
+ * The caller must ensure that @section is mapped.
  *
  * The cache is not use-counted.  It is only valid as long as the caller keeps
  * @section mapped.
@@ -214,18 +294,6 @@ pt_section_bcache(const struct pt_section *section)
 		return NULL;
 
 	return section->bcache;
-}
-
-/* Enable block caching. */
-static inline void pt_section_enable_bcache(struct pt_section *section)
-{
-	section->disable_bcache = 0;
-}
-
-/* Disable block caching. */
-static inline void pt_section_disable_bcache(struct pt_section *section)
-{
-	section->disable_bcache = 1;
 }
 
 /* Create the OS-specific file status.
@@ -245,16 +313,26 @@ static inline void pt_section_disable_bcache(struct pt_section *section)
 extern int pt_section_mk_status(void **pstatus, uint64_t *psize,
 				const char *filename);
 
-/* Setup a block cache.
+/* Perform on-map maintenance work.
  *
- * This function is called from the OS-specific implementation when the section
- * is mapped.  Do not call this function directly.
+ * Notifies an attached image section cache about the mapping of @section.
+ *
+ * This function is called by the OS-specific pt_section_map() implementation
+ * after @section has been successfully mapped and @section has been unlocked.
  *
  * Returns zero on success, a negative error code otherwise.
  * Returns -pte_internal if @section is NULL.
- * Returns -pte_internal if @section already has an instruction cache.
+ * Returns -pte_bad_lock on any locking error.
  */
-extern int pt_section_add_bcache(struct pt_section *section);
+extern int pt_section_on_map_lock(struct pt_section *section);
+
+static inline int pt_section_on_map(struct pt_section *section)
+{
+	if (section && !section->iscache)
+		return 0;
+
+	return pt_section_on_map_lock(section);
+}
 
 /* Map a section.
  *
@@ -269,8 +347,24 @@ extern int pt_section_add_bcache(struct pt_section *section);
  * Returns -pte_bad_image if @section changed or can't be opened.
  * Returns -pte_bad_lock on any locking error.
  * Returns -pte_nomem if @section can't be mapped into memory.
+ * Returns -pte_overflow if the map count would overflow.
  */
 extern int pt_section_map(struct pt_section *section);
+
+/* Share a section mapping.
+ *
+ * Increases the map count for @section without notifying an attached image
+ * section cache.
+ *
+ * This function should only be used by the attached image section cache to
+ * resolve a deadlock scenario when mapping a section it intends to cache.
+ *
+ * Returns zero on success, a negative error code otherwise.
+ * Returns -pte_internal if @section is NULL.
+ * Returns -pte_internal if @section->mcount is zero.
+ * Returns -pte_bad_lock on any locking error.
+ */
+extern int pt_section_map_share(struct pt_section *section);
 
 /* Unmap a section.
  *

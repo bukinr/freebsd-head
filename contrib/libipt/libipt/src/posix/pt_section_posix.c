@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017, Intel Corporation
+ * Copyright (c) 2013-2018, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -101,6 +101,7 @@ int pt_sec_posix_map(struct pt_section *section, int fd)
 	struct pt_sec_posix_mapping *mapping;
 	uint64_t offset, size, adjustment;
 	uint8_t *base;
+	int errcode;
 
 	if (!section)
 		return -pte_internal;
@@ -131,8 +132,10 @@ int pt_sec_posix_map(struct pt_section *section, int fd)
 		return -pte_nomem;
 
 	mapping = malloc(sizeof(*mapping));
-	if (!mapping)
+	if (!mapping) {
+		errcode = -pte_nomem;
 		goto out_map;
+	}
 
 	mapping->base = base;
 	mapping->size = size;
@@ -142,18 +145,54 @@ int pt_sec_posix_map(struct pt_section *section, int fd)
 	section->mapping = mapping;
 	section->unmap = pt_sec_posix_unmap;
 	section->read = pt_sec_posix_read;
+	section->memsize = pt_sec_posix_memsize;
 
-	return pt_section_add_bcache(section);
+	return 0;
 
 out_map:
 	munmap(base, (size_t) size);
-	return -pte_nomem;
+	return errcode;
+}
+
+static int pt_sec_posix_map_success(struct pt_section *section)
+{
+	uint16_t mcount;
+	int errcode, status;
+
+	if (!section)
+		return -pte_internal;
+
+	mcount = section->mcount + 1;
+	if (!mcount) {
+		(void) pt_section_unlock(section);
+		return -pte_overflow;
+	}
+
+	section->mcount = mcount;
+
+	errcode = pt_section_unlock(section);
+	if (errcode < 0)
+		return errcode;
+
+	status = pt_section_on_map(section);
+	if (status < 0) {
+		/* We had to release the section lock for pt_section_on_map() so
+		 * @section may have meanwhile been mapped by other threads.
+		 *
+		 * We still want to return the error so we release our mapping.
+		 * Our caller does not yet know whether pt_section_map()
+		 * succeeded.
+		 */
+		(void) pt_section_unmap(section);
+		return status;
+	}
+
+	return 0;
 }
 
 int pt_section_map(struct pt_section *section)
 {
 	const char *filename;
-	uint16_t mcount;
 	FILE *file;
 	int fd, errcode;
 
@@ -164,15 +203,8 @@ int pt_section_map(struct pt_section *section)
 	if (errcode < 0)
 		return errcode;
 
-	mcount = section->mcount + 1;
-	if (mcount > 1) {
-		section->mcount = mcount;
-		return pt_section_unlock(section);
-	}
-
-	errcode = -pte_internal;
-	if (!mcount)
-		goto out_unlock;
+	if (section->mcount)
+		return pt_sec_posix_map_success(section);
 
 	if (section->mapping)
 		goto out_unlock;
@@ -193,9 +225,9 @@ int pt_section_map(struct pt_section *section)
 	/* We close the file on success.  This does not unmap the section. */
 	errcode = pt_sec_posix_map(section, fd);
 	if (!errcode) {
-		section->mcount = 1;
 		close(fd);
-		return pt_section_unlock(section);
+
+		return pt_sec_posix_map_success(section);
 	}
 
 	/* Fall back to file based sections - report the original error
@@ -209,10 +241,8 @@ int pt_section_map(struct pt_section *section)
 	 * the section is unmapped.
 	 */
 	errcode = pt_sec_file_map(section, file);
-	if (!errcode) {
-		section->mcount = 1;
-		return pt_section_unlock(section);
-	}
+	if (!errcode)
+		return pt_sec_posix_map_success(section);
 
 	fclose(file);
 	goto out_unlock;
@@ -233,12 +263,13 @@ int pt_sec_posix_unmap(struct pt_section *section)
 		return -pte_internal;
 
 	mapping = section->mapping;
-	if (!mapping || !section->unmap || !section->read)
+	if (!mapping || !section->unmap || !section->read || !section->memsize)
 		return -pte_internal;
 
 	section->mapping = NULL;
 	section->unmap = NULL;
 	section->read = NULL;
+	section->memsize = NULL;
 
 	munmap(mapping->base, (size_t) mapping->size);
 	free(mapping);
@@ -269,4 +300,27 @@ int pt_sec_posix_read(const struct pt_section *section, uint8_t *buffer,
 
 	memcpy(buffer, begin, size);
 	return (int) size;
+}
+
+int pt_sec_posix_memsize(const struct pt_section *section, uint64_t *size)
+{
+	struct pt_sec_posix_mapping *mapping;
+	const uint8_t *begin, *end;
+
+	if (!section || !size)
+		return -pte_internal;
+
+	mapping = section->mapping;
+	if (!mapping)
+		return -pte_internal;
+
+	begin = mapping->base;
+	end = mapping->end;
+
+	if (!begin || !end || end < begin)
+		return -pte_internal;
+
+	*size = (uint64_t) (end - begin);
+
+	return 0;
 }

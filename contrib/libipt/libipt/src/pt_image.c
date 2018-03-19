@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017, Intel Corporation
+ * Copyright (c) 2013-2018, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -53,7 +53,9 @@ static char *dupstr(const char *str)
 
 static struct pt_section_list *pt_mk_section_list(struct pt_section *section,
 						  const struct pt_asid *asid,
-						  uint64_t vaddr, int isid)
+						  uint64_t vaddr,
+						  uint64_t offset,
+						  uint64_t size, int isid)
 {
 	struct pt_section_list *list;
 	int errcode;
@@ -68,7 +70,7 @@ static struct pt_section_list *pt_mk_section_list(struct pt_section *section,
 	if (errcode < 0)
 		goto out_mem;
 
-	pt_msec_init(&list->section, section, asid, vaddr);
+	pt_msec_init(&list->section, section, asid, vaddr, offset, size);
 	list->isid = isid;
 
 	return list;
@@ -83,8 +85,6 @@ static void pt_section_list_free(struct pt_section_list *list)
 	if (!list)
 		return;
 
-	if (list->mapped)
-		pt_section_unmap(list->section.section);
 	pt_section_put(list->section.section);
 	pt_msec_fini(&list->section);
 	free(list);
@@ -110,7 +110,6 @@ void pt_image_init(struct pt_image *image, const char *name)
 	memset(image, 0, sizeof(*image));
 
 	image->name = dupstr(name);
-	image->cache = 10;
 }
 
 void pt_image_fini(struct pt_image *image)
@@ -149,78 +148,26 @@ const char *pt_image_name(const struct pt_image *image)
 	return image->name;
 }
 
-static int pt_image_clone(struct pt_section_list **list,
-			  const struct pt_mapped_section *msec,
-			  uint64_t begin, uint64_t end, int isid)
-{
-	const struct pt_asid *masid;
-	struct pt_section_list *next;
-	struct pt_section *section, *sec;
-	uint64_t mbegin, sbegin, offset, size;
-	int errcode;
-
-	if (!list || !msec)
-		return -pte_internal;
-
-	sec = pt_msec_section(msec);
-	masid = pt_msec_asid(msec);
-	mbegin = pt_msec_begin(msec);
-	sbegin = pt_section_offset(sec);
-
-	if (end <= begin)
-		return -pte_internal;
-
-	if (begin < mbegin)
-		return -pte_internal;
-
-	offset = begin - mbegin;
-	size = end - begin;
-
-	errcode = pt_section_clone(&section, sec, sbegin + offset, size);
-	if (errcode < 0)
-		return errcode;
-
-	next = pt_mk_section_list(section, masid, begin, isid);
-	if (!next) {
-		(void) pt_section_put(section);
-
-		return -pte_nomem;
-	}
-
-	/* The image list got its own reference; let's drop ours. */
-	errcode = pt_section_put(section);
-	if (errcode < 0) {
-		pt_section_list_free(next);
-
-		return errcode;
-	}
-
-	/* Add the new section. */
-	next->next = *list;
-	*list = next;
-
-	return 0;
-}
-
 int pt_image_add(struct pt_image *image, struct pt_section *section,
 		 const struct pt_asid *asid, uint64_t vaddr, int isid)
 {
-	struct pt_section_list **list, *next, *removed;
-	uint64_t begin, end;
+	struct pt_section_list **list, *next, *removed, *new;
+	uint64_t size, begin, end;
 	int errcode;
 
 	if (!image || !section)
 		return -pte_internal;
 
-	next = pt_mk_section_list(section, asid, vaddr, isid);
+	size = pt_section_size(section);
+	begin = vaddr;
+	end = begin + size;
+
+	next = pt_mk_section_list(section, asid, begin, 0ull, size, isid);
 	if (!next)
 		return -pte_nomem;
 
 	removed = NULL;
 	errcode = 0;
-
-	begin = vaddr;
-	end = begin + pt_section_size(section);
 
 	/* Check for overlaps while we move to the end of the list. */
 	list = &(image->sections);
@@ -229,7 +176,7 @@ int pt_image_add(struct pt_image *image, struct pt_section *section,
 		const struct pt_asid *masid;
 		struct pt_section_list *current;
 		struct pt_section *lsec;
-		uint64_t lbegin, lend;
+		uint64_t lbegin, lend, loff;
 
 		current = *list;
 		msec = &current->section;
@@ -254,6 +201,7 @@ int pt_image_add(struct pt_image *image, struct pt_section *section,
 
 		/* The new section overlaps with @msec's section. */
 		lsec = pt_msec_section(msec);
+		loff = pt_msec_offset(msec);
 
 		/* We remove @msec and insert new sections for the remaining
 		 * parts, if any.  Those new sections are not mapped initially
@@ -267,37 +215,31 @@ int pt_image_add(struct pt_image *image, struct pt_section *section,
 		current->next = removed;
 		removed = current;
 
-		/* Unmap the removed section.  If we need to re-add it, it will
-		 * be moved to the end of the section list where the unmapped
-		 * sections are.
-		 */
-		if (current->mapped) {
-			pt_section_unmap(lsec);
-			current->mapped = 0;
-		}
-
-		/* Add a section covering the remaining bytes at the front.
-		 *
-		 * We preserve the section identifier to indicate that the new
-		 * section originated from the original section.
-		 */
+		/* Add a section covering the remaining bytes at the front. */
 		if (lbegin < begin) {
-			errcode = pt_image_clone(&next, msec, lbegin, begin,
-						 current->isid);
-			if (errcode < 0)
+			new = pt_mk_section_list(lsec, masid, lbegin, loff,
+						 begin - lbegin, current->isid);
+			if (!new) {
+				errcode = -pte_nomem;
 				break;
+			}
+
+			new->next = next;
+			next = new;
 		}
 
-		/* Add a section covering the remaining bytes at the back.
-		 *
-		 * We preserve the section identifier to indicate that the new
-		 * section originated from the original section.
-		 */
+		/* Add a section covering the remaining bytes at the back. */
 		if (end < lend) {
-			errcode = pt_image_clone(&next, msec, end, lend,
-						 current->isid);
-			if (errcode < 0)
+			new = pt_mk_section_list(lsec, masid, end,
+						 loff + (end - lbegin),
+						 lend - end, current->isid);
+			if (!new) {
+				errcode = -pte_nomem;
 				break;
+			}
+
+			new->next = next;
+			next = new;
 		}
 	}
 
@@ -526,45 +468,6 @@ int pt_image_set_callback(struct pt_image *image,
 	return 0;
 }
 
-static int pt_image_prune_cache(struct pt_image *image)
-{
-	struct pt_section_list *list;
-	uint16_t cache, mapped;
-	int status;
-
-	if (!image)
-		return -pte_internal;
-
-	cache = image->cache;
-	status = 0;
-	mapped = 0;
-	for (list = image->sections; list; list = list->next) {
-		int errcode;
-
-		/* Let's traverse the entire list.  It isn't very long and
-		 * this allows us to fix up any previous unmap errors.
-		 */
-		if (!list->mapped)
-			continue;
-
-		mapped += 1;
-		if (mapped <= cache)
-			continue;
-
-		errcode = pt_section_unmap(list->section.section);
-		if (errcode < 0) {
-			status = errcode;
-			continue;
-		}
-
-		list->mapped = 0;
-		mapped -= 1;
-	}
-
-	image->mapped = mapped;
-	return status;
-}
-
 static int pt_image_read_callback(struct pt_image *image, int *isid,
 				  uint8_t *buffer, uint16_t size,
 				  const struct pt_asid *asid, uint64_t addr)
@@ -617,29 +520,6 @@ static inline int pt_image_check_msec(const struct pt_mapped_section *msec,
 	return 0;
 }
 
-/* Read memory from a mapped section.
- *
- * @msec's section must be mapped.
- *
- * Returns the number of bytes read on success.
- * Returns a negative error code otherwise.
- */
-static int pt_image_read_msec(uint8_t *buffer, uint16_t size,
-			      const struct pt_mapped_section *msec,
-			      uint64_t addr)
-{
-	struct pt_section *section;
-	uint64_t offset;
-
-	if (!msec)
-		return -pte_internal;
-
-	section = pt_msec_section(msec);
-	offset = pt_msec_unmap(msec, addr);
-
-	return pt_section_read(section, buffer, size, offset);
-}
-
 /* Find the section containing a given address in a given address space.
  *
  * On success, the found section is moved to the front of the section list.
@@ -680,46 +560,19 @@ static int pt_image_fetch_section(struct pt_image *image,
 			*start = elem;
 		}
 
-		/* Map the section if it isn't already - provided we do cache
-		 * recently used sections.
-		 */
-		if (!elem->mapped) {
-			uint16_t cache, already;
-
-			already = image->mapped;
-			cache = image->cache;
-			if (cache) {
-				struct pt_section *section;
-
-				section = pt_msec_section(msec);
-
-				errcode = pt_section_map(section);
-				if (errcode < 0)
-					return errcode;
-
-				elem->mapped = 1;
-
-				already += 1;
-				image->mapped = already;
-
-				if (cache < already)
-					return pt_image_prune_cache(image);
-			}
-		}
-
 		return 0;
 	}
 
 	return -pte_nomap;
 }
 
-static int pt_image_read_cold(struct pt_image *image, int *isid,
-			      uint8_t *buffer, uint16_t size,
-			      const struct pt_asid *asid, uint64_t addr)
+int pt_image_read(struct pt_image *image, int *isid, uint8_t *buffer,
+		  uint16_t size, const struct pt_asid *asid, uint64_t addr)
 {
 	struct pt_mapped_section *msec;
-	struct pt_section_list *section;
-	int errcode;
+	struct pt_section_list *slist;
+	struct pt_section *section;
+	int errcode, status;
 
 	if (!image || !isid)
 		return -pte_internal;
@@ -728,82 +581,39 @@ static int pt_image_read_cold(struct pt_image *image, int *isid,
 	if (errcode < 0) {
 		if (errcode != -pte_nomap)
 			return errcode;
-	}
-
-	section = image->sections;
-	if (!section)
-		return pt_image_read_callback(image, isid, buffer, size, asid,
-					      addr);
-
-	msec = &section->section;
-
-	errcode = pt_image_check_msec(msec, asid, addr);
-	if (errcode < 0) {
-		if (errcode != -pte_nomap)
-			return errcode;
 
 		return pt_image_read_callback(image, isid, buffer, size, asid,
 					      addr);
 	}
 
-	*isid = section->isid;
-
-	if (section->mapped)
-		return pt_image_read_msec(buffer, size, msec, addr);
-	else {
-		struct pt_section *sec;
-		int status;
-
-		sec = pt_msec_section(msec);
-
-		errcode = pt_section_map(sec);
-		if (errcode < 0)
-			return errcode;
-
-		status = pt_image_read_msec(buffer, size, msec, addr);
-
-		errcode = pt_section_unmap(sec);
-		if (errcode < 0)
-			return errcode;
-
-		return status;
-	}
-}
-
-
-int pt_image_read(struct pt_image *image, int *isid, uint8_t *buffer,
-		  uint16_t size, const struct pt_asid *asid, uint64_t addr)
-{
-	struct pt_mapped_section *msec;
-	struct pt_section_list *section;
-	int errcode;
-
-	if (!image || !isid)
+	slist = image->sections;
+	if (!slist)
 		return -pte_internal;
 
-	section = image->sections;
-	if (!section)
-		return pt_image_read_callback(image, isid, buffer, size, asid,
-					      addr);
+	*isid = slist->isid;
+	msec = &slist->section;
 
-	if (!section->mapped)
-		return pt_image_read_cold(image, isid, buffer, size, asid,
-					  addr);
+	section = pt_msec_section(msec);
 
-	msec = &section->section;
+	errcode = pt_section_map(section);
+	if (errcode < 0)
+		return errcode;
 
-	errcode = pt_image_check_msec(msec, asid, addr);
-	if (errcode < 0) {
-		if (errcode != -pte_nomap)
+	status = pt_msec_read(msec, buffer, size, addr);
+
+	errcode = pt_section_unmap(section);
+		if (errcode < 0)
 			return errcode;
 
-		return pt_image_read_cold(image, isid, buffer, size, asid,
-					  addr);
+	if (status < 0) {
+		if (status != -pte_nomap)
+			return status;
+
+		return pt_image_read_callback(image, isid, buffer, size, asid,
+					      addr);
 	}
 
-	*isid = section->isid;
-
-	return pt_image_read_msec(buffer, size, msec, addr);
+	return status;
 }
 
 int pt_image_add_cached(struct pt_image *image,
@@ -838,16 +648,15 @@ int pt_image_add_cached(struct pt_image *image,
 	return status;
 }
 
-static int pt_image_find_cold(struct pt_image *image,
-			      struct pt_section **psection, uint64_t *laddr,
-			      const struct pt_asid *asid, uint64_t vaddr)
+int pt_image_find(struct pt_image *image, struct pt_mapped_section *usec,
+		  const struct pt_asid *asid, uint64_t vaddr)
 {
 	struct pt_mapped_section *msec;
 	struct pt_section_list *slist;
 	struct pt_section *section;
 	int errcode;
 
-	if (!image || !psection || !laddr)
+	if (!image || !usec)
 		return -pte_internal;
 
 	errcode = pt_image_fetch_section(image, asid, vaddr);
@@ -856,79 +665,40 @@ static int pt_image_find_cold(struct pt_image *image,
 
 	slist = image->sections;
 	if (!slist)
-		return -pte_nomap;
+		return -pte_internal;
 
 	msec = &slist->section;
-
-	errcode = pt_image_check_msec(msec, asid, vaddr);
-	if (errcode < 0)
-		return errcode;
-
 	section = pt_msec_section(msec);
 
 	errcode = pt_section_get(section);
 	if (errcode < 0)
 		return errcode;
 
-	*psection = section;
-	*laddr = pt_msec_begin(msec);
+	*usec = *msec;
 
 	return slist->isid;
 }
 
-int pt_image_find(struct pt_image *image, struct pt_section **psection,
-		  uint64_t *laddr, const struct pt_asid *asid, uint64_t vaddr)
+int pt_image_validate(const struct pt_image *image,
+		      const struct pt_mapped_section *usec, uint64_t vaddr,
+		      int isid)
 {
-	struct pt_mapped_section *msec;
-	struct pt_section_list *slist;
-	struct pt_section *section;
-	int errcode;
+	const struct pt_section_list *slist;
+	uint64_t begin, end;
+	int status;
 
-	if (!image || !psection || !laddr)
+	if (!image || !usec)
 		return -pte_internal;
 
-	slist = image->sections;
-	if (!slist)
+	/* Check that @vaddr lies within @usec. */
+	begin = pt_msec_begin(usec);
+	end = pt_msec_end(usec);
+	if (vaddr < begin || end <= vaddr)
 		return -pte_nomap;
 
-	if (!slist->mapped)
-		return pt_image_find_cold(image, psection, laddr, asid, vaddr);
-
-	msec = &slist->section;
-
-	errcode = pt_image_check_msec(msec, asid, vaddr);
-	if (errcode < 0) {
-		if (errcode != -pte_nomap)
-			return errcode;
-
-		return pt_image_find_cold(image, psection, laddr, asid, vaddr);
-	}
-
-	section = pt_msec_section(msec);
-
-	errcode = pt_section_get(section);
-	if (errcode < 0)
-		return errcode;
-
-	*psection = section;
-	*laddr = pt_msec_begin(msec);
-
-	return slist->isid;
-}
-
-int pt_image_validate(const struct pt_image *image, const struct pt_asid *asid,
-		      uint64_t vaddr, const struct pt_section *section,
-		      uint64_t laddr, int isid)
-{
-	struct pt_mapped_section *msec;
-	struct pt_section_list *slist;
-
-	if (!image)
-		return -pte_internal;
-
-	/* We only look at the top of our LRU stack and accept sporadic
-	 * validation fails if @section moved down in the LRU stack or has been
-	 * evicted.
+	/* We assume that @usec is a copy of the top of our stack and accept
+	 * sporadic validation fails if it isn't, e.g. because it has moved
+	 * down.
 	 *
 	 * A failed validation requires decoders to re-fetch the section so it
 	 * only results in a (relatively small) performance loss.
@@ -940,13 +710,9 @@ int pt_image_validate(const struct pt_image *image, const struct pt_asid *asid,
 	if (slist->isid != isid)
 		return -pte_nomap;
 
-	msec = &slist->section;
-
-	if (pt_msec_section(msec) != section)
+	status = memcmp(&slist->section, usec, sizeof(*usec));
+	if (status)
 		return -pte_nomap;
 
-	if (pt_msec_begin(msec) != laddr)
-		return -pte_nomap;
-
-	return pt_image_check_msec(msec, asid, vaddr);
+	return 0;
 }
