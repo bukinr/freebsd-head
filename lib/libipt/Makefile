@@ -5,13 +5,13 @@ SHLIBDIR?=	/lib
 
 .include <src.opts.mk>
 
-LIBIPTSRC=	${SRCTOP}/contrib/processor-trace
+PTSRC=	${SRCTOP}/contrib/processor-trace
 
-.PATH:	${LIBIPTSRC}/libipt/src			\
-	${LIBIPTSRC}/libipt/src/posix		\
-	${LIBIPTSRC}/libipt/internal/include	\
-	${LIBIPTSRC}/libipt/include		\
-	${LIBIPTSRC}/include
+.PATH:	${PTSRC}/libipt/src			\
+	${PTSRC}/libipt/src/posix		\
+	${PTSRC}/libipt/internal/include	\
+	${PTSRC}/libipt/include			\
+	${PTSRC}/include
 
 LIB=	ipt
 SHLIB_MAJOR=0
@@ -47,10 +47,10 @@ SRCS=	\
 	pt_version.c
 
 CFLAGS+=	\
-	-I${LIBIPTSRC}/libipt/internal/include/posix	\
-	-I${LIBIPTSRC}/libipt/internal/include		\
-	-I${LIBIPTSRC}/libipt/include			\
-	-I${LIBIPTSRC}/include				\
+	-I${PTSRC}/libipt/internal/include/posix	\
+	-I${PTSRC}/libipt/internal/include		\
+	-I${PTSRC}/libipt/include			\
+	-I${PTSRC}/include				\
 	-I${.CURDIR}
 
 CFLAGS+=	\
