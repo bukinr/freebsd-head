@@ -5,7 +5,7 @@ SHLIBDIR?=	/lib
 
 .include <src.opts.mk>
 
-LIBIPTSRC=	${SRCTOP}/contrib/libipt
+LIBIPTSRC=	${SRCTOP}/contrib/processor-trace
 
 .PATH:	${LIBIPTSRC}/libipt/src			\
 	${LIBIPTSRC}/libipt/src/posix		\
