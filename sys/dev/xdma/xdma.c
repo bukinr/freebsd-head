@@ -100,14 +100,12 @@ xdma_task(void *arg)
 		msleep(xdma, &xdma->proc_mtx, PRIBIO, "jobqueue", hz);
 		mtx_unlock(&xdma->proc_mtx);
 
-		if (TAILQ_EMPTY(&xdma->channels)) {
+		if (TAILQ_EMPTY(&xdma->channels))
 			continue;
-		}
 
 		TAILQ_FOREACH_SAFE(xchan, &xdma->channels, xchan_next, xchan_tmp) {
-			if (xchan->flags & XCHAN_TYPE_SG) {
+			if (xchan->flags & XCHAN_TYPE_SG)
 				xdma_queue_submit(xchan);
-			}
 		}
 	}
 }
@@ -298,9 +296,8 @@ xdma_setup_intr(xdma_channel_t *xchan,
 
 	TAILQ_INSERT_TAIL(&xchan->ie_handlers, ih, ih_next);
 
-	if (ihandler != NULL) {
+	if (ihandler != NULL)
 		*ihandler = ih;
-	}
 
 	return (0);
 }
@@ -429,11 +426,10 @@ xchan_bufs_alloc(xdma_channel_t *xchan)
 		return (-1);
 	}
 
-	if (xchan->caps & XCHAN_CAP_BUSDMA) {
+	if (xchan->caps & XCHAN_CAP_BUSDMA)
 		ret = xchan_bufs_alloc_busdma(xchan);
-	} else {
+	else
 		ret = xchan_bufs_alloc_no_busdma(xchan);
-	}
 	if (ret != 0) {
 		device_printf(xdma->dev,
 		    "%s: Can't allocate bufs.\n", __func__);
@@ -452,10 +448,8 @@ xchan_bufs_free(xdma_channel_t *xchan)
 	struct xchan_buf *b;
 	int i;
 
-	if ((xchan->flags & XCHAN_BUFS_ALLOCATED) == 0) {
-		/* No bufs allocated. */
+	if ((xchan->flags & XCHAN_BUFS_ALLOCATED) == 0)
 		return (-1);
-	}
 
 	if (xchan->caps & XCHAN_CAP_BUSDMA) {
 		for (i = 0; i < xchan->xr_num; i++) {
@@ -614,9 +608,8 @@ xdma_dequeue(xdma_channel_t *xchan, void **user,
 	}
 	QUEUE_OUT_UNLOCK(xchan);
 
-	if (xr == NULL) {
+	if (xr == NULL)
 		return (-1);
-	}
 
 	*user = xr->user;
 	status->error = xr->status.error;
@@ -639,7 +632,7 @@ xdma_enqueue(xdma_channel_t *xchan, uintptr_t src, uintptr_t dst,
 
 	xr = xchan_bank_get(xchan);
 	if (xr == NULL) {
-		/* No space is available yet. */
+		/* No space is available. */
 		return (-1);
 	}
 
@@ -762,13 +755,12 @@ xdma_load_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
 		return (0);
 	}
 
-	if (xr->direction == XDMA_MEM_TO_DEV) {
+	if (xr->direction == XDMA_MEM_TO_DEV)
 		bus_dmamap_sync(xchan->dma_tag_bufs, xr->buf.map,
 		    BUS_DMASYNC_PREWRITE);
-	} else {
+	else
 		bus_dmamap_sync(xchan->dma_tag_bufs, xr->buf.map,
 		    BUS_DMASYNC_PREREAD);
-	}
 
 	return (nsegs);
 }
@@ -820,11 +812,10 @@ xdma_sglist_prepare_one(xdma_channel_t *xchan,
 	error = 0;
 	nsegs = 0;
 
-	if (xchan->caps & XCHAN_CAP_BUSDMA) {
+	if (xchan->caps & XCHAN_CAP_BUSDMA)
 		nsegs = xdma_load_busdma(xchan, xr, seg);
-	} else {
+	else
 		nsegs = xdma_load_no_busdma(xchan, xr, seg);
-	}
 	if (nsegs == 0) {
 		/* Try again later. */
 		return (0);
@@ -887,9 +878,8 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 		}
 
 		nsegs = xdma_sglist_prepare_one(xchan, xr, seg);
-		if (nsegs == 0) {
+		if (nsegs == 0)
 			break;
-		}
 
 		xdma_sglist_add(&sg[n], seg, nsegs, xr);
 		n += nsegs;
@@ -1064,9 +1054,8 @@ xchan_seg_done(xdma_channel_t *xchan,
 	xdma = xchan->xdma;
 
 	xr = TAILQ_FIRST(&xchan->processing);
-	if (xr == NULL) {
+	if (xr == NULL)
 		panic("request not found\n");
-	}
 
 	b = &xr->buf;
 
@@ -1074,13 +1063,12 @@ xchan_seg_done(xdma_channel_t *xchan,
 
 	if (b->nsegs_left == 0) {
 		if (xchan->caps & XCHAN_CAP_BUSDMA) {
-			if (xr->direction == XDMA_MEM_TO_DEV) {
+			if (xr->direction == XDMA_MEM_TO_DEV)
 				bus_dmamap_sync(xchan->dma_tag_bufs, b->map, 
 				    BUS_DMASYNC_POSTWRITE);
-			} else {
+			else
 				bus_dmamap_sync(xchan->dma_tag_bufs, b->map, 
 				    BUS_DMASYNC_POSTREAD);
-			}
 			bus_dmamap_unload(xchan->dma_tag_bufs, b->map);
 		}
 		xr->status.error = st->error;
@@ -1108,9 +1096,8 @@ xdma_callback(xdma_channel_t *xchan, xdma_transfer_status_t *status)
 	xdma = xchan->xdma;
 
 	TAILQ_FOREACH_SAFE(ih, &xchan->ie_handlers, ih_next, ih_tmp) {
-		if (ih->cb != NULL) {
+		if (ih->cb != NULL)
 			ih->cb(ih->cb_user, status);
-		}
 	}
 
 	wakeup(xdma);
@@ -1149,10 +1136,9 @@ xdma_ofw_get(device_t dev, const char *prop)
 	int idx;
 
 	node = ofw_bus_get_node(dev);
-	if (node <= 0) {
+	if (node <= 0)
 		device_printf(dev,
 		    "%s called on not ofw based device.\n", __func__);
-	}
 
 	error = ofw_bus_parse_xref_list_get_length(node,
 	    "dmas", "#dma-cells", &ndmas);
