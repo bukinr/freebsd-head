@@ -30,8 +30,8 @@
  * $FreeBSD$
  */
 
-#ifndef _DEV_XDMA_H_
-#define _DEV_XDMA_H_
+#ifndef _DEV_XDMA_XDMA_H_
+#define _DEV_XDMA_XDMA_H_
 
 #include <sys/proc.h>
 
@@ -262,4 +262,4 @@ int xchan_bank_put(xdma_channel_t *xchan, struct xdma_request *xr);
 #define	XDMA_SGLIST_MAXLEN	2048
 #define	XDMA_MAX_SEG		128
 
-#endif /* !_DEV_XDMA_H_ */
+#endif /* !_DEV_XDMA_XDMA_H_ */
