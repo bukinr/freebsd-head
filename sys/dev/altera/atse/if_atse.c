@@ -111,7 +111,10 @@ static uint8_t atse_ethernet_option_bits[ALTERA_ETHERNET_OPTION_BITS_LEN];
 #define	ATSE_UNLOCK(_sc)	mtx_unlock(&(_sc)->atse_mtx)
 #define	ATSE_LOCK_ASSERT(_sc)	mtx_assert(&(_sc)->atse_mtx, MA_OWNED)
 
-#ifdef DEBUG
+#define ATSE_DEBUG
+#undef ATSE_DEBUG
+
+#ifdef ATSE_DEBUG
 #define	DPRINTF(format, ...)	printf(format, __VA_ARGS__)
 #else
 #define	DPRINTF(format, ...)

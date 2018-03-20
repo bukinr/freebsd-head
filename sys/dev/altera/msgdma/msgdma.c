@@ -63,10 +63,10 @@ __FBSDID("$FreeBSD$");
 
 #include <dev/altera/msgdma/msgdma.h>
 
-#define DEBUG
-#undef DEBUG
+#define MSGDMA_DEBUG
+#undef MSGDMA_DEBUG
 
-#ifdef DEBUG
+#ifdef MSGDMA_DEBUG
 #define dprintf(fmt, ...)  printf(fmt, ##__VA_ARGS__)
 #else
 #define dprintf(fmt, ...)
