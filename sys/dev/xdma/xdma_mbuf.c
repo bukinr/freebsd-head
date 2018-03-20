@@ -72,9 +72,8 @@ xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 	}
 	QUEUE_OUT_UNLOCK(xchan);
 
-	if (xr == NULL) {
+	if (xr == NULL)
 		return (-1);
-	}
 
 	*mp = xr->m;
 	status->error = xr->status.error;
@@ -130,9 +129,8 @@ xdma_mbuf_chain_count(struct mbuf *m0)
 
 	c = 0;
 
-	for (m = m0; m != NULL; m = m->m_next) {
+	for (m = m0; m != NULL; m = m->m_next)
 		c++;
-	}
 
 	return (c);
 }

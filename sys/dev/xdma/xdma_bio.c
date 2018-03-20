@@ -72,9 +72,8 @@ xdma_dequeue_bio(xdma_channel_t *xchan, struct bio **bp,
 	}
 	QUEUE_OUT_UNLOCK(xchan);
 
-	if (xr == NULL) {
+	if (xr == NULL)
 		return (-1);
-	}
 
 	*bp = xr->bp;
 
