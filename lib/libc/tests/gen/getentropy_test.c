@@ -1,8 +1,8 @@
 /*-
- * SPDX-License-Identifier: BSD-3-Clause
+ * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
  *
- * Copyright (c) 2002 David E. O'Brien.  All rights reserved.
- * Copyright (c) 2017 Poul-Henning Kamp. All rights reserved.
+ * Copyright (c) 2018 Conrad Meyer <cem@FreeBSD.org>
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -12,9 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -27,30 +24,61 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
-#ifndef _SYS__STDARG_H_
-#define _SYS__STDARG_H_
-
 #include <sys/cdefs.h>
-#include <sys/_types.h>
+__FBSDID("$FreeBSD$");
 
-#ifndef _VA_LIST_DECLARED
-  #define _VA_LIST_DECLARED
-  typedef __va_list       va_list;
-#endif
+#include <sys/param.h>
+#include <errno.h>
+#include <unistd.h>
 
-#ifdef __GNUCLIKE_BUILTIN_STDARG
-  #define	va_start(ap, last)	__builtin_va_start((ap), (last))
-  #define	va_arg(ap, type)	__builtin_va_arg((ap), type)
-  #define	__va_copy(dest, src)	__builtin_va_copy((dest), (src))
-  #if __ISO_C_VISIBLE >= 1999
-    #define	va_copy(dest, src)	__va_copy(dest, src)
-  #endif
-  #define	va_end(ap)		__builtin_va_end(ap)
-#endif
+#include <atf-c.h>
 
-#endif /* ! _SYS__STDARG_H_ */
+ATF_TC_WITHOUT_HEAD(getentropy_count);
+ATF_TC_BODY(getentropy_count, tc)
+{
+	char buf[2];
+	int ret;
 
+	/* getentropy(2) does not modify buf past the requested length */
+	buf[1] = 0x7C;
+	ret = getentropy(buf, 1);
+	ATF_REQUIRE_EQ(ret, 0);
+	ATF_REQUIRE_EQ(buf[1], 0x7C);
+}
+
+ATF_TC_WITHOUT_HEAD(getentropy_fault);
+ATF_TC_BODY(getentropy_fault, tc)
+{
+	int ret;
+
+	ret = getentropy(NULL, 1);
+	ATF_REQUIRE_EQ(ret, -1);
+	ATF_REQUIRE_EQ(errno, EFAULT);
+}
+
+ATF_TC_WITHOUT_HEAD(getentropy_sizes);
+ATF_TC_BODY(getentropy_sizes, tc)
+{
+	char buf[512];
+
+	ATF_REQUIRE_EQ(getentropy(buf, sizeof(buf)), -1);
+	ATF_REQUIRE_EQ(errno, EIO);
+	ATF_REQUIRE_EQ(getentropy(buf, 257), -1);
+	ATF_REQUIRE_EQ(errno, EIO);
+
+	/* Smaller sizes always succeed: */
+	ATF_REQUIRE_EQ(getentropy(buf, 256), 0);
+	ATF_REQUIRE_EQ(getentropy(buf, 128), 0);
+	ATF_REQUIRE_EQ(getentropy(buf, 0), 0);
+}
+
+ATF_TP_ADD_TCS(tp)
+{
+
+	ATF_TP_ADD_TC(tp, getentropy_count);
+	ATF_TP_ADD_TC(tp, getentropy_fault);
+	ATF_TP_ADD_TC(tp, getentropy_sizes);
+	return (atf_no_error());
+}
