@@ -1,8 +1,8 @@
 /*-
- * SPDX-License-Identifier: BSD-3-Clause
+ * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
  *
- * Copyright (c) 2002 David E. O'Brien.  All rights reserved.
- * Copyright (c) 2017 Poul-Henning Kamp. All rights reserved.
+ * Copyright (c) 2018 Conrad Meyer <cem@FreeBSD.org>
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -12,9 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -27,30 +24,47 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
-#ifndef _SYS__STDARG_H_
-#define _SYS__STDARG_H_
-
 #include <sys/cdefs.h>
-#include <sys/_types.h>
+__FBSDID("$FreeBSD$");
 
-#ifndef _VA_LIST_DECLARED
-  #define _VA_LIST_DECLARED
-  typedef __va_list       va_list;
-#endif
+#include <sys/param.h>
+#include <sys/random.h>
 
-#ifdef __GNUCLIKE_BUILTIN_STDARG
-  #define	va_start(ap, last)	__builtin_va_start((ap), (last))
-  #define	va_arg(ap, type)	__builtin_va_arg((ap), type)
-  #define	__va_copy(dest, src)	__builtin_va_copy((dest), (src))
-  #if __ISO_C_VISIBLE >= 1999
-    #define	va_copy(dest, src)	__va_copy(dest, src)
-  #endif
-  #define	va_end(ap)		__builtin_va_end(ap)
-#endif
+#include <errno.h>
+#include <stdlib.h>
 
-#endif /* ! _SYS__STDARG_H_ */
+#include "libc_private.h"
 
+int
+getentropy(void *buf, size_t buflen)
+{
+	ssize_t rd;
+
+	if (buflen > 256) {
+		errno = EIO;
+		return (-1);
+	}
+
+	while (buflen > 0) {
+		rd = getrandom(buf, buflen, 0);
+		if (rd == -1) {
+			if (errno == EINTR)
+				continue;
+			else if (errno == ENOSYS)
+				abort();
+			else
+				return (-1);
+		}
+
+		/* This cannot happen. */
+		if (rd == 0)
+			abort();
+
+		buf = (char *)buf + rd;
+		buflen -= rd;
+	}
+
+	return (0);
+}
