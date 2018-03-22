@@ -30,8 +30,8 @@
  * $FreeBSD$
  */
 
-#ifndef _ARM64_CORESIGHT_CORESIGHT_H_
-#define _ARM64_CORESIGHT_CORESIGHT_H_
+#ifndef	_ARM64_CORESIGHT_CORESIGHT_H_
+#define	_ARM64_CORESIGHT_CORESIGHT_H_
 
 #include <dev/ofw/openfirm.h>
 
