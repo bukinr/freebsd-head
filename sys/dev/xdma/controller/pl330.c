@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2017 Ruslan Bukin <br@bsdpad.com>
+ * Copyright (c) 2017-2018 Ruslan Bukin <br@bsdpad.com>
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -64,12 +64,13 @@ __FBSDID("$FreeBSD$");
 
 #include <dev/xdma/xdma.h>
 #include <dev/xdma/controller/pl330.h>
+
 #include "xdma_if.h"
 
-#define DEBUG
-#undef DEBUG
+#define PL330_DEBUG
+#undef PL330_DEBUG
 
-#ifdef DEBUG
+#ifdef PL330_DEBUG
 #define dprintf(fmt, ...)  printf(fmt, ##__VA_ARGS__)
 #else
 #define dprintf(fmt, ...)
@@ -217,10 +218,8 @@ static uint32_t
 emit_lp(uint8_t *buf, uint8_t idx, uint32_t iter)
 {
 
-	if (idx > 1) {
-		/* We have two loops only. */
-		return (0);
-	}
+	if (idx > 1)
+		return (0); /* We have two loops only. */
 
 	buf[0] = DMALP;
 	buf[0] |= (idx << 1);
@@ -237,11 +236,10 @@ emit_lpend(uint8_t *buf, uint8_t idx,
 	buf[0] = DMALPEND;
 	buf[0] |= DMALPEND_NF;
 	buf[0] |= (idx << 2);
-	if (burst) {
+	if (burst)
 		buf[0] |= (1 << 1) | (1 << 0);
-	} else {
+	else
 		buf[0] |= (0 << 1) | (1 << 0);
-	}
 	buf[1] = jump_addr_relative;
 
 	return (2);
@@ -252,11 +250,10 @@ emit_ld(uint8_t *buf, uint8_t burst)
 {
 
 	buf[0] = DMALD;
-	if (burst) {
+	if (burst)
 		buf[0] |= (1 << 1) | (1 << 0);
-	} else {
+	else
 		buf[0] |= (0 << 1) | (1 << 0);
-	}
 
 	return (1);
 }
@@ -266,11 +263,10 @@ emit_st(uint8_t *buf, uint8_t burst)
 {
 
 	buf[0] = DMAST;
-	if (burst) {
+	if (burst)
 		buf[0] |= (1 << 1) | (1 << 0);
-	} else {
+	else
 		buf[0] |= (0 << 1) | (1 << 0);
-	}
 
 	return (1);
 }
@@ -357,9 +353,8 @@ pl330_attach(device_t dev)
 
 	/* Setup interrupt handler */
 	for (i = 0; i < PL330_NCHANNELS; i++) {
-		if (sc->res[i + 1] == NULL) {
+		if (sc->res[i + 1] == NULL)
 			break;
-		}
 		err = bus_setup_intr(dev, sc->res[i + 1], INTR_TYPE_MISC | INTR_MPSAFE,
 		    NULL, pl330_intr, sc, sc->ih[i]);
 		if (err) {
@@ -516,17 +511,16 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	offs = 0;
 
 	for (i = 0; i < sg_n; i++) {
-		if (sg[i].direction == XDMA_DEV_TO_MEM) {
+		if (sg[i].direction == XDMA_DEV_TO_MEM)
 			reg = CCR_DST_INC;
-		} else {
+		else {
 			reg = CCR_SRC_INC;
 			reg |= (CCR_DST_PROT_PRIV);
 		}
 
 		err = pl330_ccr_port_width(&sg[i], &reg);
-		if (err != 0) {
+		if (err != 0)
 			return (err);
-		}
 
 		offs += emit_mov(&chan->ibuf[offs], R_CCR, reg);
 
@@ -540,10 +534,8 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 		offs += emit_mov(&ibuf[offs], R_SAR, src_addr_lo);
 		offs += emit_mov(&ibuf[offs], R_DAR, dst_addr_lo);
 
-		if (sg[i].src_width != sg[i].dst_width) {
-			/* Not supported. */
-			return (-1);
-		}
+		if (sg[i].src_width != sg[i].dst_width)
+			return (-1); /* Not supported. */
 
 		cnt = (len / sg[i].src_width);
 		if (cnt > 128) {
@@ -559,9 +551,8 @@ pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 		offs += emit_ld(&ibuf[offs], 1);
 		offs += emit_st(&ibuf[offs], 1);
 
-		if (cnt > 128) {
+		if (cnt > 128)
 			offs += emit_lpend(&ibuf[offs], 1, 1, (offs - offs1));
-		}
 
 		offs += emit_lpend(&ibuf[offs], 0, 1, (offs - offs0));
 	}
@@ -631,9 +622,8 @@ pl330_ofw_md_data(device_t dev, pcell_t *cells, int ncells, void **ptr)
 {
 	struct pl330_fdt_data *data;
 
-	if (ncells != 1) {
+	if (ncells != 1)
 		return (-1);
-	}
 
 	data = malloc(sizeof(struct pl330_fdt_data),
 	    M_DEVBUF, (M_WAITOK | M_ZERO));
