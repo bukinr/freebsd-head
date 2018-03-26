@@ -66,9 +66,9 @@ __FBSDID("$FreeBSD$");
  */
 static struct mtx xdma_mtx;
 
-#define	XDMA_LOCK()		mtx_lock(&xdma_mtx)
-#define	XDMA_UNLOCK()		mtx_unlock(&xdma_mtx)
-#define	XDMA_ASSERT_LOCKED()	mtx_assert(&xdma_mtx, MA_OWNED)
+#define	XDMA_LOCK()			mtx_lock(&xdma_mtx)
+#define	XDMA_UNLOCK()			mtx_unlock(&xdma_mtx)
+#define	XDMA_ASSERT_LOCKED()		mtx_assert(&xdma_mtx, MA_OWNED)
 
 /*
  * Per channel locks.
