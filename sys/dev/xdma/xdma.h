@@ -44,8 +44,8 @@ enum xdma_direction {
 
 enum xdma_operation_type {
 	XDMA_MEMCPY,
-	XDMA_SG,
 	XDMA_CYCLIC,
+	XDMA_SG,
 };
 
 enum xdma_request_type {
