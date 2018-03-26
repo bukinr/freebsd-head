@@ -627,11 +627,6 @@ pl330_ofw_md_data(device_t dev, pcell_t *cells, int ncells, void **ptr)
 
 	data = malloc(sizeof(struct pl330_fdt_data),
 	    M_DEVBUF, (M_WAITOK | M_ZERO));
-	if (data == NULL) {
-		device_printf(dev, "%s: Cant allocate memory\n", __func__);
-		return (-1);
-	}
-
 	data->periph_id = cells[0];
 
 	*ptr = data;

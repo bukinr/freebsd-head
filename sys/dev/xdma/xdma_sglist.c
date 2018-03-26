@@ -67,9 +67,6 @@ xchan_sglist_init(xdma_channel_t *xchan)
 
 	sz = (sizeof(struct xdma_sglist) * XDMA_SGLIST_MAXLEN);
 	xchan->sg = malloc(sz, M_XDMA, M_WAITOK | M_ZERO);
-	if (xchan->sg == NULL)
-		return (-1);
-
 	xchan->flags |= XCHAN_SGLIST_ALLOCATED;
 
 	return (0);

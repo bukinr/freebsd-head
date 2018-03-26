@@ -109,7 +109,7 @@ xdma_task(void *arg)
 	}
 }
 
-static int
+static void
 xchan_bank_init(xdma_channel_t *xchan)
 {
 	struct xdma_request *xr;
@@ -121,18 +121,11 @@ xchan_bank_init(xdma_channel_t *xchan)
 
 	xchan->xr_mem = malloc(sizeof(struct xdma_request) * xchan->xr_num,
 	    M_XDMA, M_WAITOK | M_ZERO);
-	if (xchan->xr_mem == NULL) {
-		device_printf(xdma->dev,
-		    "%s: Can't allocate memory.\n", __func__);
-		return (-1);
-	}
 
 	for (i = 0; i < xchan->xr_num; i++) {
 		xr = &xchan->xr_mem[i];
 		TAILQ_INSERT_TAIL(&xchan->bank, xr, xr_next);
 	}
-
-	return (0);
 }
 
 static int
@@ -181,11 +174,6 @@ xdma_channel_alloc(xdma_controller_t *xdma, uint32_t caps)
 	int ret;
 
 	xchan = malloc(sizeof(xdma_channel_t), M_XDMA, M_WAITOK | M_ZERO);
-	if (xchan == NULL) {
-		device_printf(xdma->dev,
-		    "%s: Can't allocate memory for channel.\n", __func__);
-		return (NULL);
-	}
 	xchan->xdma = xdma;
 	xchan->caps = caps;
 
@@ -282,14 +270,6 @@ xdma_setup_intr(xdma_channel_t *xchan,
 
 	ih = malloc(sizeof(struct xdma_intr_handler),
 	    M_XDMA, M_WAITOK | M_ZERO);
-	if (ih == NULL) {
-		device_printf(xdma->dev,
-		    "%s: Can't allocate memory for interrupt handler.\n",
-		    __func__);
-
-		return (-1);
-	}
-
 	ih->cb = cb;
 	ih->cb_user = arg;
 
@@ -515,7 +495,6 @@ xdma_prep_sg(xdma_channel_t *xchan, uint32_t xr_num, uint32_t maxsegsize,
 {
 	xdma_controller_t *xdma;
 	int ret;
-	int err;
 
 	xdma = xchan->xdma;
 
@@ -553,16 +532,7 @@ xdma_prep_sg(xdma_channel_t *xchan, uint32_t xr_num, uint32_t maxsegsize,
 	TAILQ_INIT(&xchan->processing);
 
 	/* Allocate memory for requests. */
-	err = xchan_bank_init(xchan);
-	if (err != 0) {
-		device_printf(xdma->dev,
-		    "%s: Can't init bank.\n", __func__);
-
-		/* Cleanup */
-		xchan_sglist_free(xchan);
-
-		return (-1);
-	}
+	xchan_bank_init(xchan);
 
 	/* Allocate bufs. */
 	ret = xchan_bufs_alloc(xchan);
@@ -1166,11 +1136,6 @@ xdma_ofw_get(device_t dev, const char *prop)
 	}
 
 	xdma = malloc(sizeof(struct xdma_controller), M_XDMA, M_WAITOK | M_ZERO);
-	if (xdma == NULL) {
-		device_printf(dev,
-		    "%s can't allocate memory for xdma.\n", __func__);
-		return (NULL);
-	}
 	xdma->dev = dev;
 	xdma->dma_dev = dma_dev;
 
