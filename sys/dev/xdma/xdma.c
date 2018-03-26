@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2016-2017 Ruslan Bukin <br@bsdpad.com>
+ * Copyright (c) 2016-2018 Ruslan Bukin <br@bsdpad.com>
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -103,10 +103,9 @@ xdma_task(void *arg)
 		if (TAILQ_EMPTY(&xdma->channels))
 			continue;
 
-		TAILQ_FOREACH_SAFE(xchan, &xdma->channels, xchan_next, xchan_tmp) {
+		TAILQ_FOREACH_SAFE(xchan, &xdma->channels, xchan_next, xchan_tmp)
 			if (xchan->flags & XCHAN_TYPE_SG)
 				xdma_queue_submit(xchan);
-		}
 	}
 }
 
@@ -631,10 +630,8 @@ xdma_enqueue(xdma_channel_t *xchan, uintptr_t src, uintptr_t dst,
 	xdma = xchan->xdma;
 
 	xr = xchan_bank_get(xchan);
-	if (xr == NULL) {
-		/* No space is available. */
-		return (-1);
-	}
+	if (xr == NULL)
+		return (-1); /* No space is available. */
 
 	xr->user = user;
 	xr->direction = dir;
@@ -747,11 +744,10 @@ xdma_load_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
 			 * Out of memory. Try again later.
 			 * TODO: count errors.
 			 */
-		} else {
+		} else
 			device_printf(xdma->dma_dev,
 			    "%s: bus_dmamap_load failed with err %d\n",
 			    __func__, error);
-		}
 		return (0);
 	}
 
@@ -816,10 +812,8 @@ xdma_sglist_prepare_one(xdma_channel_t *xchan,
 		nsegs = xdma_load_busdma(xchan, xr, seg);
 	else
 		nsegs = xdma_load_no_busdma(xchan, xr, seg);
-	if (nsegs == 0) {
-		/* Try again later. */
-		return (0);
-	}
+	if (nsegs == 0)
+		return (0); /* Try again later. */
 
 	xr->buf.nsegs = nsegs;
 	xr->buf.nsegs_left = nsegs;
@@ -1043,7 +1037,7 @@ xdma_pause(xdma_channel_t *xchan)
 	return (ret);
 }
 
-int
+void
 xchan_seg_done(xdma_channel_t *xchan,
     struct xdma_transfer_status *st)
 {
@@ -1082,11 +1076,9 @@ xchan_seg_done(xdma_channel_t *xchan,
 		TAILQ_INSERT_TAIL(&xchan->queue_out, xr, xr_next);
 		QUEUE_OUT_UNLOCK(xchan);
 	}
-
-	return (0);
 }
 
-int
+void
 xdma_callback(xdma_channel_t *xchan, xdma_transfer_status_t *status)
 {
 	struct xdma_intr_handler *ih_tmp;
@@ -1095,14 +1087,11 @@ xdma_callback(xdma_channel_t *xchan, xdma_transfer_status_t *status)
 
 	xdma = xchan->xdma;
 
-	TAILQ_FOREACH_SAFE(ih, &xchan->ie_handlers, ih_next, ih_tmp) {
+	TAILQ_FOREACH_SAFE(ih, &xchan->ie_handlers, ih_next, ih_tmp)
 		if (ih->cb != NULL)
 			ih->cb(ih->cb_user, status);
-	}
 
 	wakeup(xdma);
-
-	return (0);
 }
 
 #ifdef FDT

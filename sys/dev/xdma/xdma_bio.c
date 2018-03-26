@@ -96,10 +96,8 @@ xdma_enqueue_bio(xdma_channel_t *xchan, struct bio **bp,
 	xdma = xchan->xdma;
 
 	xr = xchan_bank_get(xchan);
-	if (xr == NULL) {
-		/* No space is available yet. */
-		return (-1);
-	};
+	if (xr == NULL)
+		return (-1); /* No space is available yet. */
 
 	xr->direction = dir;
 	xr->bp = *bp;

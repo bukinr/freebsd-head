@@ -95,11 +95,8 @@ xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 	xdma = xchan->xdma;
 
 	xr = xchan_bank_get(xchan);
-	if (xr == NULL) {
-		printf("%s: no space\n", __func__);
-		/* No space is available yet. */
-		return (-1);
-	};
+	if (xr == NULL)
+		return (-1); /* No space is available yet. */
 
 	xr->direction = dir;
 	xr->m = *mp;
@@ -145,10 +142,8 @@ xdma_mbuf_defrag(xdma_channel_t *xchan, struct xdma_request *xr)
 	xdma = xchan->xdma;
 
 	c = xdma_mbuf_chain_count(xr->m);
-	if (c == 1) {
-		/* Nothing to do. */
-		return (c);
-	}
+	if (c == 1)
+		return (c); /* Nothing to do. */
 
 	if (xchan->caps & XCHAN_CAP_BUSDMA) {
 		if ((xchan->caps & XCHAN_CAP_BUSDMA_NOSEG) || \

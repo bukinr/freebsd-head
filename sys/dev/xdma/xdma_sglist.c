@@ -62,32 +62,27 @@ xchan_sglist_init(xdma_channel_t *xchan)
 {
 	uint32_t sz;
 
-	if (xchan->flags & XCHAN_SGLIST_ALLOCATED) {
+	if (xchan->flags & XCHAN_SGLIST_ALLOCATED)
 		return (-1);
-	}
 
 	sz = (sizeof(struct xdma_sglist) * XDMA_SGLIST_MAXLEN);
 	xchan->sg = malloc(sz, M_XDMA, M_WAITOK | M_ZERO);
-	if (xchan->sg == NULL) {
+	if (xchan->sg == NULL)
 		return (-1);
-	}
 
 	xchan->flags |= XCHAN_SGLIST_ALLOCATED;
 
 	return (0);
 }
 
-int
+void
 xchan_sglist_free(xdma_channel_t *xchan)
 {
 
-	if (xchan->flags & XCHAN_SGLIST_ALLOCATED) {
+	if (xchan->flags & XCHAN_SGLIST_ALLOCATED)
 		free(xchan->sg, M_XDMA);
-	}
 
 	xchan->flags &= ~XCHAN_SGLIST_ALLOCATED;
-
-	return (0);
 }
 
 int
@@ -96,9 +91,8 @@ xdma_sglist_add(struct xdma_sglist *sg, struct bus_dma_segment *seg,
 {
 	int i;
 
-	if (nsegs == 0) {
+	if (nsegs == 0)
 		return (-1);
-	}
 
 	for (i = 0; i < nsegs; i++) {
 		sg[i].src_width = xr->src_width;
