@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2017-2018 Ruslan Bukin <br@bsdpad.com>
+ * Copyright (c) 2018 Ruslan Bukin <br@bsdpad.com>
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -40,6 +40,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/kobj.h>
 #include <sys/malloc.h>
 #include <sys/mutex.h>
+#include <sys/mbuf.h>
 #include <sys/limits.h>
 #include <sys/lock.h>
 #include <sys/sysctl.h>
@@ -57,60 +58,57 @@ __FBSDID("$FreeBSD$");
 
 #include <dev/xdma/xdma.h>
 
-int
-xchan_sglist_alloc(xdma_channel_t *xchan)
+void
+xchan_bank_init(xdma_channel_t *xchan)
 {
-	uint32_t sz;
+	struct xdma_request *xr;
+	xdma_controller_t *xdma;
+	int i;
 
-	if (xchan->flags & XCHAN_SGLIST_ALLOCATED)
-		return (-1);
+	xdma = xchan->xdma;
+	KASSERT(xdma != NULL, ("xdma is NULL"));
 
-	sz = (sizeof(struct xdma_sglist) * XDMA_SGLIST_MAXLEN);
-	xchan->sg = malloc(sz, M_XDMA, M_WAITOK | M_ZERO);
-	xchan->flags |= XCHAN_SGLIST_ALLOCATED;
+	xchan->xr_mem = malloc(sizeof(struct xdma_request) * xchan->xr_num,
+	    M_XDMA, M_WAITOK | M_ZERO);
+
+	for (i = 0; i < xchan->xr_num; i++) {
+		xr = &xchan->xr_mem[i];
+		TAILQ_INSERT_TAIL(&xchan->bank, xr, xr_next);
+	}
+}
+
+int
+xchan_bank_free(xdma_channel_t *xchan)
+{
+
+	free(xchan->xr_mem, M_XDMA);
 
 	return (0);
 }
 
-void
-xchan_sglist_free(xdma_channel_t *xchan)
+struct xdma_request *
+xchan_bank_get(xdma_channel_t *xchan)
 {
+	struct xdma_request *xr;
+	struct xdma_request *xr_tmp;
 
-	if (xchan->flags & XCHAN_SGLIST_ALLOCATED)
-		free(xchan->sg, M_XDMA);
+	QUEUE_BANK_LOCK(xchan);
+	TAILQ_FOREACH_SAFE(xr, &xchan->bank, xr_next, xr_tmp) {
+		TAILQ_REMOVE(&xchan->bank, xr, xr_next);
+		break;
+	}
+	QUEUE_BANK_UNLOCK(xchan);
 
-	xchan->flags &= ~XCHAN_SGLIST_ALLOCATED;
+	return (xr);
 }
 
 int
-xdma_sglist_add(struct xdma_sglist *sg, struct bus_dma_segment *seg,
-    uint32_t nsegs, struct xdma_request *xr)
+xchan_bank_put(xdma_channel_t *xchan, struct xdma_request *xr)
 {
-	int i;
 
-	if (nsegs == 0)
-		return (-1);
-
-	for (i = 0; i < nsegs; i++) {
-		sg[i].src_width = xr->src_width;
-		sg[i].dst_width = xr->dst_width;
-
-		if (xr->direction == XDMA_MEM_TO_DEV) {
-			sg[i].src_addr = seg[i].ds_addr;
-			sg[i].dst_addr = xr->dst_addr;
-		} else {
-			sg[i].src_addr = xr->src_addr;
-			sg[i].dst_addr = seg[i].ds_addr;
-		}
-		sg[i].len = seg[i].ds_len;
-		sg[i].direction = xr->direction;
-
-		sg[i].first = 0;
-		sg[i].last = 0;
-	}
-
-	sg[0].first = 1;
-	sg[nsegs - 1].last = 1;
+	QUEUE_BANK_LOCK(xchan);
+	TAILQ_INSERT_TAIL(&xchan->bank, xr, xr_next);
+	QUEUE_BANK_UNLOCK(xchan);
 
 	return (0);
 }

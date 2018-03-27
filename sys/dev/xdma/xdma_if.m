@@ -76,6 +76,16 @@ METHOD int channel_capacity {
 };
 
 #
+# Submit sglist list to DMA.
+#
+METHOD int channel_submit {
+	device_t			dev;
+	struct xdma_channel		*xchan;
+	struct xdma_sglist		*sg;
+	uint32_t			sg_n;
+};
+
+#
 # Submit scatter-gather list to DMA.
 #
 METHOD int channel_submit_sg {

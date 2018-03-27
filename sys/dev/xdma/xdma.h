@@ -79,6 +79,13 @@ struct xdma_controller {
 	TAILQ_HEAD(xdma_channel_list, xdma_channel)	channels;
 };
 
+/*
+ * Per channel locks.
+ */
+#define	XCHAN_LOCK(xchan)		mtx_lock(&(xchan)->mtx_lock)
+#define	XCHAN_UNLOCK(xchan)		mtx_unlock(&(xchan)->mtx_lock)
+#define	XCHAN_ASSERT_LOCKED(xchan)	mtx_assert(&(xchan)->mtx_lock, MA_OWNED)
+
 typedef struct xdma_controller xdma_controller_t;
 
 struct xchan_buf {
@@ -192,6 +199,8 @@ int xdma_put(xdma_controller_t *xdma);
 xdma_channel_t * xdma_channel_alloc(xdma_controller_t *, uint32_t caps);
 int xdma_channel_free(xdma_channel_t *);
 
+int xdma_channel_free_sg(xdma_channel_t *xchan);
+
 int xdma_prep_cyclic(xdma_channel_t *, enum xdma_direction,
     uintptr_t, uintptr_t, int, int, int, int);
 int xdma_prep_memcpy(xdma_channel_t *, uintptr_t, uintptr_t, size_t len);
@@ -211,6 +220,7 @@ int xdma_enqueue(xdma_channel_t *xchan, uintptr_t src, uintptr_t dst,
     uint8_t, uint8_t, bus_size_t, enum xdma_direction dir, void *);
 
 int xdma_queue_submit(xdma_channel_t *xchan);
+int xdma_queue_submit_sg(xdma_channel_t *xchan);
 
 uint32_t xdma_mbuf_defrag(xdma_channel_t *xchan, struct xdma_request *xr);
 uint32_t xdma_mbuf_chain_count(struct mbuf *m0);
@@ -226,10 +236,12 @@ int xdma_teardown_intr(xdma_channel_t *xchan, struct xdma_intr_handler *ih);
 int xdma_teardown_all_intr(xdma_channel_t *xchan);
 void xdma_callback(struct xdma_channel *xchan, xdma_transfer_status_t *status);
 
-int xchan_sglist_init(xdma_channel_t *xchan);
+int xchan_sglist_alloc(xdma_channel_t *xchan);
 void xchan_sglist_free(xdma_channel_t *xchan);
 int xdma_sglist_add(struct xdma_sglist *sg, struct bus_dma_segment *seg,
     uint32_t nsegs, struct xdma_request *xr);
+
+int xdma_control(xdma_channel_t *xchan, enum xdma_command cmd);
 
 struct xdma_intr_handler {
 	int				(*cb)(void *cb_user, xdma_transfer_status_t *status);
@@ -240,6 +252,8 @@ struct xdma_intr_handler {
 
 static MALLOC_DEFINE(M_XDMA, "xdma", "xDMA framework");
 
+void xchan_bank_init(xdma_channel_t *xchan);
+int xchan_bank_free(xdma_channel_t *xchan);
 struct xdma_request * xchan_bank_get(xdma_channel_t *xchan);
 int xchan_bank_put(xdma_channel_t *xchan, struct xdma_request *xr);
 
