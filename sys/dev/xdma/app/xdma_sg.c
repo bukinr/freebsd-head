@@ -61,7 +61,7 @@ __FBSDID("$FreeBSD$");
 #include <xdma_if.h>
 
 static int
-xchan_bufs_alloc_no_busdma(xdma_channel_t *xchan)
+xchan_bufs_alloc(xdma_channel_t *xchan)
 {
 	xdma_controller_t *xdma;
 	struct xdma_request *xr;
@@ -148,7 +148,7 @@ xchan_bufs_alloc(xdma_channel_t *xchan)
 	if (xchan->caps & XCHAN_CAP_BUSDMA)
 		ret = xchan_bufs_alloc_busdma(xchan);
 	else
-		ret = xchan_bufs_alloc_no_busdma(xchan);
+		ret = xchan_bufs_alloc(xchan);
 	if (ret != 0) {
 		device_printf(xdma->dev,
 		    "%s: Can't allocate bufs.\n", __func__);
@@ -346,7 +346,7 @@ xdma_dmamap_cb(void *arg, bus_dma_segment_t *segs, int nsegs, int error)
 }
 
 static int
-xdma_load_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
+xdma_load_data_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
     struct bus_dma_segment *seg)
 {
 	xdma_controller_t *xdma;
@@ -433,7 +433,7 @@ xdma_load_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
 }
 
 static int
-xdma_load_no_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
+xdma_load_data(xdma_channel_t *xchan, struct xdma_request *xr,
     struct bus_dma_segment *seg)
 {
 	xdma_controller_t *xdma;
@@ -480,9 +480,9 @@ xdma_sglist_prepare_one(xdma_channel_t *xchan,
 	nsegs = 0;
 
 	if (xchan->caps & XCHAN_CAP_BUSDMA)
-		nsegs = xdma_load_busdma(xchan, xr, seg);
+		nsegs = xdma_load_data_busdma(xchan, xr, seg);
 	else
-		nsegs = xdma_load_no_busdma(xchan, xr, seg);
+		nsegs = xdma_load_data(xchan, xr, seg);
 	if (nsegs == 0)
 		return (0); /* Try again later. */
 
