@@ -95,7 +95,6 @@ struct xchan_buf {
 	void				*cbuf;
 };
 
-/* SG type of transfer. */
 struct xdma_request {
 	struct mbuf			*m;
 	struct bio			*bp;
@@ -207,6 +206,8 @@ int xdma_prep_memcpy(xdma_channel_t *, uintptr_t, uintptr_t, size_t len);
 int xdma_prep_sg(xdma_channel_t *xchan, uint32_t, uint32_t, uint32_t, uint32_t);
 
 void xchan_seg_done(xdma_channel_t *xchan, xdma_transfer_status_t *);
+
+int xdma_request(xdma_channel_t *xchan, struct xdma_request *r);
 
 /* xchan queues operations */
 int xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **m, xdma_transfer_status_t *);

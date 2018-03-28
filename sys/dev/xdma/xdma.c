@@ -257,6 +257,30 @@ xdma_teardown_all_intr(xdma_channel_t *xchan)
 }
 
 int
+xdma_request(xdma_channel_t *xchan, struct xdma_request *req)
+{
+	xdma_controller_t *xdma;
+	int ret;
+
+	xdma = xchan->xdma;
+
+	KASSERT(xdma != NULL, ("xdma is NULL"));
+
+	XCHAN_LOCK(xchan);
+	ret = XDMA_CHANNEL_REQUEST(xdma->dma_dev, xchan, req);
+	if (ret != 0) {
+		device_printf(xdma->dev,
+		    "%s: Can't request a transfer.\n", __func__);
+		XCHAN_UNLOCK(xchan);
+
+		return (-1);
+	}
+	XCHAN_UNLOCK(xchan);
+
+	return (0);
+}
+
+int
 xdma_dequeue(xdma_channel_t *xchan, void **user,
     xdma_transfer_status_t *status)
 {

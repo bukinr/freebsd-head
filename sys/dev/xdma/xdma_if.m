@@ -59,6 +59,15 @@ METHOD int channel_prep_memcpy {
 };
 
 #
+# Prepare a channel for memcpy transfer.
+#
+METHOD int channel_request {
+	device_t		dev;
+	struct xdma_channel	*xchan;
+	struct xdma_request	*req;
+};
+
+#
 # Prepare xDMA channel for a scatter-gather transfer.
 #
 METHOD int channel_prep_sg {
