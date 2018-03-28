@@ -562,7 +562,66 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 }
 
 int
-xdma_queue_submit_sg(xdma_channel_t *xchan)
+xdma_dequeue(xdma_channel_t *xchan, void **user,
+    xdma_transfer_status_t *status)
+{
+	struct xdma_request *xr_tmp;
+	struct xdma_request *xr;
+
+	QUEUE_OUT_LOCK(xchan);
+	TAILQ_FOREACH_SAFE(xr, &xchan->queue_out, xr_next, xr_tmp) {
+		TAILQ_REMOVE(&xchan->queue_out, xr, xr_next);
+		break;
+	}
+	QUEUE_OUT_UNLOCK(xchan);
+
+	if (xr == NULL)
+		return (-1);
+
+	*user = xr->user;
+	status->error = xr->status.error;
+	status->transferred = xr->status.transferred;
+
+	xchan_bank_put(xchan, xr);
+
+	return (0);
+}
+
+int
+xdma_enqueue(xdma_channel_t *xchan, uintptr_t src, uintptr_t dst,
+    uint8_t src_width, uint8_t dst_width, bus_size_t len,
+    enum xdma_direction dir, void *user)
+{
+	struct xdma_request *xr;
+	xdma_controller_t *xdma;
+
+	xdma = xchan->xdma;
+	KASSERT(xdma != NULL, ("xdma is NULL"));
+
+	xr = xchan_bank_get(xchan);
+	if (xr == NULL)
+		return (-1); /* No space is available. */
+
+	xr->user = user;
+	xr->direction = dir;
+	xr->m = NULL;
+	xr->bp = NULL;
+	xr->len = len;
+	xr->type = 0;
+	xr->src_addr = src;
+	xr->dst_addr = dst;
+	xr->src_width = src_width;
+	xr->dst_width = dst_width;
+
+	QUEUE_IN_LOCK(xchan);
+	TAILQ_INSERT_TAIL(&xchan->queue_in, xr, xr_next);
+	QUEUE_IN_UNLOCK(xchan);
+
+	return (0);
+}
+
+int
+xdma_queue_submit(xdma_channel_t *xchan)
 {
 	struct xdma_sglist *sg;
 	xdma_controller_t *xdma;

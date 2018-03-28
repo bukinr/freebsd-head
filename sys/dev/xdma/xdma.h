@@ -219,9 +219,7 @@ int xdma_enqueue_bio(xdma_channel_t *xchan, struct bio **bp, bus_addr_t addr,
 int xdma_dequeue(xdma_channel_t *xchan, void **user, xdma_transfer_status_t *status);
 int xdma_enqueue(xdma_channel_t *xchan, uintptr_t src, uintptr_t dst,
     uint8_t, uint8_t, bus_size_t, enum xdma_direction dir, void *);
-
 int xdma_queue_submit(xdma_channel_t *xchan);
-int xdma_queue_submit_sg(xdma_channel_t *xchan);
 
 uint32_t xdma_mbuf_defrag(xdma_channel_t *xchan, struct xdma_request *xr);
 uint32_t xdma_mbuf_chain_count(struct mbuf *m0);

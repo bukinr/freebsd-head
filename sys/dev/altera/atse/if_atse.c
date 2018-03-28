@@ -331,7 +331,7 @@ atse_transmit_locked(struct ifnet *ifp)
         }
 
 	if (enq > 0)
-		xdma_queue_submit_sg(sc->xchan_tx);
+		xdma_queue_submit(sc->xchan_tx);
 
 	return (0);
 }
@@ -1411,7 +1411,7 @@ err:
 	}
 
 	atse_rx_enqueue(sc, NUM_RX_MBUF);
-	xdma_queue_submit_sg(sc->xchan_rx);
+	xdma_queue_submit(sc->xchan_rx);
 
 	return (error);
 }
