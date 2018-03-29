@@ -109,14 +109,6 @@ xdma_channel_alloc(xdma_controller_t *xdma, uint32_t caps)
 	TAILQ_INIT(&xchan->queue_out);
 	TAILQ_INIT(&xchan->processing);
 
-#if 0
-	/* Allocate memory for requests. */
-	uint32_t xr_num;
-	xr_num = 128;
-	xchan->xr_num = xr_num;
-	xchan_bank_init(xchan);
-#endif
-
 	TAILQ_INSERT_TAIL(&xdma->channels, xchan, xchan_next);
 
 	XDMA_UNLOCK();
