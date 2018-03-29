@@ -180,7 +180,7 @@ msgdma_intr(void *arg)
 	/* Finish operation */
 	status.error = 0;
 	status.transferred = tot_copied;
-	xdma_callback(chan->xchan, &status);
+	xdma_callback_sg(chan->xchan, &status);
 }
 
 static int

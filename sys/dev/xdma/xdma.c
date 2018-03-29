@@ -70,29 +70,6 @@ static struct mtx xdma_mtx;
 #define	XDMA_UNLOCK()			mtx_unlock(&xdma_mtx)
 #define	XDMA_ASSERT_LOCKED()		mtx_assert(&xdma_mtx, MA_OWNED)
 
-static void
-xdma_task(void *arg)
-{
-	xdma_controller_t *xdma;
-	xdma_channel_t *xchan_tmp;
-	xdma_channel_t *xchan;
-
-	xdma = arg;
-
-	for (;;) {
-		mtx_lock(&xdma->proc_mtx);
-		msleep(xdma, &xdma->proc_mtx, PRIBIO, "jobqueue", hz);
-		mtx_unlock(&xdma->proc_mtx);
-
-		if (TAILQ_EMPTY(&xdma->channels))
-			continue;
-
-		TAILQ_FOREACH_SAFE(xchan, &xdma->channels, xchan_next, xchan_tmp)
-			if (xchan->flags & XCHAN_TYPE_SG)
-				xdma_queue_submit(xchan);
-	}
-}
-
 /*
  * Allocate virtual xDMA channel.
  */
@@ -312,8 +289,6 @@ xdma_callback(xdma_channel_t *xchan, xdma_transfer_status_t *status)
 	TAILQ_FOREACH_SAFE(ih, &xchan->ie_handlers, ih_next, ih_tmp)
 		if (ih->cb != NULL)
 			ih->cb(ih->cb_user, status);
-
-	wakeup(xdma);
 }
 
 #ifdef FDT
@@ -396,18 +371,6 @@ xdma_ofw_get(device_t dev, const char *prop)
 	xdma_ofw_md_data(xdma, cells, ncells);
 	free(cells, M_OFWPROP);
 
-	mtx_init(&xdma->proc_mtx, "xDMA ofw controller", NULL, MTX_DEF);
-	error = kproc_create(&xdma_task, xdma, &xdma->xdma_proc, 0, 0, "xdma drainer");
-	if (error) {
-		device_printf(dev,
-		    "%s failed to create kproc.\n", __func__);
-
-		/* Cleanup */
-		free(xdma, M_XDMA);
-
-		return (NULL);
-	}
-
 	return (xdma);
 }
 #endif
@@ -426,9 +389,6 @@ xdma_put(xdma_controller_t *xdma)
 		device_printf(xdma->dev, "%s: Can't free xDMA\n", __func__);
 		return (-1);
 	}
-
-	kproc_shutdown(&xdma->xdma_proc, 0);
-	mtx_destroy(&xdma->proc_mtx);
 
 	free(xdma->data, M_DEVBUF);
 	free(xdma, M_XDMA);

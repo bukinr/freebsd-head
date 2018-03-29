@@ -72,8 +72,6 @@ struct xdma_controller {
 	device_t dev;		/* DMA consumer device_t. */
 	device_t dma_dev;	/* A real DMA device_t. */
 	void *data;		/* OFW MD part. */
-	struct proc *xdma_proc;
-	struct mtx proc_mtx;
 
 	/* List of virtual channels allocated. */
 	TAILQ_HEAD(xdma_channel_list, xdma_channel)	channels;
@@ -233,7 +231,9 @@ int xdma_terminate(xdma_channel_t *xchan);
 int xdma_setup_intr(xdma_channel_t *xchan, int (*cb)(void *, xdma_transfer_status_t *), void *arg, void **);
 int xdma_teardown_intr(xdma_channel_t *xchan, struct xdma_intr_handler *ih);
 int xdma_teardown_all_intr(xdma_channel_t *xchan);
+
 void xdma_callback(struct xdma_channel *xchan, xdma_transfer_status_t *status);
+void xdma_callback_sg(xdma_channel_t *xchan, xdma_transfer_status_t *status);
 
 int xchan_sglist_alloc(xdma_channel_t *xchan);
 void xchan_sglist_free(xdma_channel_t *xchan);

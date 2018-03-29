@@ -547,7 +547,7 @@ softdma_worker(void *arg)
 
 		/* Finish operation */
 		chan->run = 0;
-		xdma_callback(chan->xchan, &status);
+		xdma_callback_sg(chan->xchan, &status);
 
 		mtx_unlock(&chan->mtx);
 	}

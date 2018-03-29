@@ -61,7 +61,7 @@ __FBSDID("$FreeBSD$");
 #include <xdma_if.h>
 
 static int
-xchan_bufs_alloc(xdma_channel_t *xchan)
+xchan_bufs_alloc_contig(xdma_channel_t *xchan)
 {
 	xdma_controller_t *xdma;
 	struct xdma_request *xr;
@@ -148,7 +148,7 @@ xchan_bufs_alloc(xdma_channel_t *xchan)
 	if (xchan->caps & XCHAN_CAP_BUSDMA)
 		ret = xchan_bufs_alloc_busdma(xchan);
 	else
-		ret = xchan_bufs_alloc(xchan);
+		ret = xchan_bufs_alloc_contig(xchan);
 	if (ret != 0) {
 		device_printf(xdma->dev,
 		    "%s: Can't allocate bufs.\n", __func__);
@@ -664,4 +664,12 @@ xdma_queue_submit(xdma_channel_t *xchan)
 	XCHAN_UNLOCK(xchan);
 
 	return (0);
+}
+
+void
+xdma_callback_sg(xdma_channel_t *xchan, xdma_transfer_status_t *status)
+{
+
+	xdma_callback(xchan, status);
+	xdma_queue_submit(xchan);
 }
