@@ -132,8 +132,6 @@ pdma_intr(void *arg)
 
 	sc = arg;
 
-	//printf("%s\n", __func__);
-
 	pending = READ4(sc, PDMA_DIRQP);
 
 	/* Ack all the channels. */

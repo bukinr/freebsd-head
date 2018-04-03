@@ -104,7 +104,6 @@ struct xdma_request {
 	uint8_t				dst_width;
 	bus_size_t			block_num;
 	bus_size_t			block_len;
-	bus_size_t			len;
 	xdma_transfer_status_t		status;
 	void				*user;
 	TAILQ_ENTRY(xdma_request)	xr_next;
@@ -179,17 +178,11 @@ int xdma_put(xdma_controller_t *xdma);
 /* xDMA channel ops */
 xdma_channel_t * xdma_channel_alloc(xdma_controller_t *, uint32_t caps);
 int xdma_channel_free(xdma_channel_t *);
-
-int xdma_channel_free_sg(xdma_channel_t *xchan);
-
-int xdma_prep_cyclic(xdma_channel_t *, enum xdma_direction,
-    uintptr_t, uintptr_t, int, int, int, int);
-int xdma_prep_memcpy(xdma_channel_t *, uintptr_t, uintptr_t, size_t len);
-int xdma_prep_sg(xdma_channel_t *xchan, uint32_t, uint32_t, uint32_t, uint32_t);
-
-void xchan_seg_done(xdma_channel_t *xchan, xdma_transfer_status_t *);
-
 int xdma_request(xdma_channel_t *xchan, struct xdma_request *r);
+
+int xdma_prep_sg(xdma_channel_t *xchan, uint32_t, uint32_t, uint32_t, uint32_t);
+int xdma_channel_free_sg(xdma_channel_t *xchan);
+void xchan_seg_done(xdma_channel_t *xchan, xdma_transfer_status_t *);
 
 /* xchan queues operations */
 int xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **m, xdma_transfer_status_t *);

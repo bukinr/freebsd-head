@@ -767,19 +767,12 @@ softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 }
 
 static int
-softdma_channel_prep_cyclic(device_t dev, struct xdma_channel *xchan)
-{
-
-	return (0);
-}
-
-static int
-softdma_channel_prep_memcpy(device_t dev, struct xdma_channel *xchan)
+softdma_channel_request(device_t dev, struct xdma_channel *xchan,
+    struct xdma_request *req)
 {
 	struct softdma_channel *chan;
 	struct softdma_desc *desc;
 	struct softdma_softc *sc;
-	xdma_config_t *conf;
 	int ret;
 
 	sc = device_get_softc(dev);
@@ -793,13 +786,11 @@ softdma_channel_prep_memcpy(device_t dev, struct xdma_channel *xchan)
 		return (-1);
 	}
 
-	conf = &xchan->conf;
-
 	desc = &chan->descs[0];
 
-	desc->src_addr = conf->src_addr;
-	desc->dst_addr = conf->dst_addr;
-	desc->len = conf->block_len;
+	desc->src_addr = req->src_addr;
+	desc->dst_addr = req->dst_addr;
+	desc->len = req->block_len;
 	desc->src_incr = 1;
 	desc->dst_incr = 1;
 	desc->next = NULL;
@@ -846,13 +837,14 @@ static device_method_t softdma_methods[] = {
 	/* xDMA Interface */
 	DEVMETHOD(xdma_channel_alloc,		softdma_channel_alloc),
 	DEVMETHOD(xdma_channel_free,		softdma_channel_free),
-	DEVMETHOD(xdma_channel_prep_cyclic,	softdma_channel_prep_cyclic),
-	DEVMETHOD(xdma_channel_prep_memcpy,	softdma_channel_prep_memcpy),
+	DEVMETHOD(xdma_channel_request,		softdma_channel_request),
 	DEVMETHOD(xdma_channel_control,		softdma_channel_control),
 
+	/* xDMA SG Interface */
 	DEVMETHOD(xdma_channel_prep_sg,		softdma_channel_prep_sg),
 	DEVMETHOD(xdma_channel_submit_sg,	softdma_channel_submit_sg),
 	DEVMETHOD(xdma_channel_capacity,	softdma_channel_capacity),
+
 #ifdef FDT
 	DEVMETHOD(xdma_ofw_md_data,		softdma_ofw_md_data),
 #endif

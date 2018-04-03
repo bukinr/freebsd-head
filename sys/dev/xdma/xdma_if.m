@@ -43,23 +43,7 @@
 INTERFACE xdma;
 
 #
-# Prepare a channel for cyclic transfer.
-#
-METHOD int channel_prep_cyclic {
-	device_t		dev;
-	struct xdma_channel	*xchan;
-};
-
-#
-# Prepare a channel for memcpy transfer.
-#
-METHOD int channel_prep_memcpy {
-	device_t		dev;
-	struct xdma_channel	*xchan;
-};
-
-#
-# Prepare a channel for memcpy transfer.
+# Request a transfer.
 #
 METHOD int channel_request {
 	device_t		dev;

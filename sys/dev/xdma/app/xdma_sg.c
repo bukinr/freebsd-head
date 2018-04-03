@@ -396,7 +396,8 @@ xdma_load_data_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
 		slr.error = 0;
 		slr.seg = seg;
 		error = bus_dmamap_load(xchan->dma_tag_bufs, xr->buf.map,
-		    addr, xr->len, xdma_dmamap_cb, &slr, BUS_DMA_NOWAIT);
+		    addr, (xr->block_len * xr->block_num),
+		    xdma_dmamap_cb, &slr, BUS_DMA_NOWAIT);
 		if (slr.error != 0) {
 			device_printf(xdma->dma_dev,
 			    "%s: bus_dmamap_load failed, err %d\n",
@@ -606,7 +607,8 @@ xdma_enqueue(xdma_channel_t *xchan, uintptr_t src, uintptr_t dst,
 	xr->direction = dir;
 	xr->m = NULL;
 	xr->bp = NULL;
-	xr->len = len;
+	xr->block_num = 1;
+	xr->block_len = len;
 	xr->type = 0;
 	xr->src_addr = src;
 	xr->dst_addr = dst;
