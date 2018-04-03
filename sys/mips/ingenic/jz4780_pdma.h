@@ -105,5 +105,5 @@ struct pdma_hwdesc {
 	uint32_t reserved[2];
 };
 
-#define	TX_DESC_COUNT	1024
-#define	TX_DESC_SIZE	(sizeof(struct pdma_hwdesc) * TX_DESC_COUNT)
+#define	CHAN_DESC_COUNT	4096
+#define	CHAN_DESC_SIZE	(sizeof(struct pdma_hwdesc) * CHAN_DESC_COUNT)

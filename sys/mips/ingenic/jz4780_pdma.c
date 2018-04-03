@@ -61,6 +61,17 @@ __FBSDID("$FreeBSD$");
 
 #include "xdma_if.h"
 
+#define	PDMA_DEBUG
+#undef	PDMA_DEBUG
+
+#ifdef	PDMA_DEBUG
+#define	dprintf(fmt, ...)	printf(fmt, ##__VA_ARGS__)
+#else
+#define	dprintf(fmt, ...)
+#endif
+
+#define	PDMA_DESC_RING_ALIGN	2048
+
 struct pdma_softc {
 	device_t		dev;
 	struct resource		*res[2];
@@ -76,7 +87,6 @@ struct pdma_fdt_data {
 };
 
 struct pdma_channel {
-	xdma_channel_t		*xchan;
 	struct pdma_fdt_data	data;
 	int			cur_desc;
 	int			used;
@@ -84,17 +94,15 @@ struct pdma_channel {
 	int			flags;
 #define	CHAN_DESCR_RELINK	(1 << 0)
 
+	/* Descriptors */
+	bus_dma_tag_t		desc_tag;
+	bus_dmamap_t		desc_map;
+	struct pdma_hwdesc	*desc_ring;
+	bus_addr_t		desc_ring_paddr;
+
+	/* xDMA */
+	xdma_channel_t		*xchan;
 	struct xdma_request	*req;
-
-	/* TX */
-	bus_dma_tag_t		txdesc_tag;
-	bus_dmamap_t		txdesc_map;
-	struct pdma_hwdesc	*txdesc_ring;
-	bus_addr_t		txdesc_ring_paddr;
-	uint32_t		tx_idx_head;
-	uint32_t		tx_idx_tail;
-	int			txcount;
-
 };
 
 #define	PDMA_NCHANNELS	32
@@ -133,8 +141,6 @@ pdma_intr(void *arg)
 
 	for (i = 0; i < PDMA_NCHANNELS; i++) {
 		if (pending & (1 << i)) {
-			//printf("disable channel\n");
-
 			chan = &pdma_channels[i];
 			xchan = chan->xchan;
 			req = chan->req;
@@ -145,8 +151,6 @@ pdma_intr(void *arg)
 			WRITE4(sc, PDMA_DCS(chan->index), 0);
 
 			if (chan->flags & CHAN_DESCR_RELINK) {
-				//printf("enable channel again\n");
-
 				/* Enable again */
 				chan->cur_desc = (chan->cur_desc + 1) % \
 				    req->block_num;
@@ -238,7 +242,7 @@ chan_start(struct pdma_softc *sc, struct pdma_channel *chan)
 	/* 8 byte descriptor. */
 	WRITE4(sc, PDMA_DCS(chan->index), DCS_DES8);
 	WRITE4(sc, PDMA_DDA(chan->index),
-	    chan->txdesc_ring_paddr + 8 * 4 * chan->cur_desc);
+	    chan->desc_ring_paddr + 8 * 4 * chan->cur_desc);
 
 	WRITE4(sc, PDMA_DDS, (1 << chan->index));
 
@@ -280,74 +284,51 @@ dwc_get1paddr(void *arg, bus_dma_segment_t *segs, int nsegs, int error)
 	*(bus_addr_t *)arg = segs[0].ds_addr;
 }
 
-static inline uint32_t
-next_txidx(struct pdma_channel *chan, uint32_t curidx)
-{
-
-	return ((curidx + 1) % TX_DESC_COUNT);
-}
-
 static int
-pdma_channel_alloc_one(device_t dev, struct pdma_channel *chan)
+pdma_channel_setup_descriptors(device_t dev, struct pdma_channel *chan)
 {
 	struct pdma_softc *sc;
+	int error;
 
 	sc = device_get_softc(dev);
-
-	int error;
-	//int nidx;
-	//int idx;
 
 	/*
 	 * Set up TX descriptor ring, descriptors, and dma maps.
 	 */
-#define	DWC_DESC_RING_ALIGN	2048
-
 	error = bus_dma_tag_create(
 	    bus_get_dma_tag(sc->dev),	/* Parent tag. */
-	    DWC_DESC_RING_ALIGN, 0,	/* alignment, boundary */
+	    PDMA_DESC_RING_ALIGN, 0,	/* alignment, boundary */
 	    BUS_SPACE_MAXADDR_32BIT,	/* lowaddr */
 	    BUS_SPACE_MAXADDR,		/* highaddr */
 	    NULL, NULL,			/* filter, filterarg */
-	    TX_DESC_SIZE, 1, 		/* maxsize, nsegments */
-	    TX_DESC_SIZE,		/* maxsegsize */
+	    CHAN_DESC_SIZE, 1, 		/* maxsize, nsegments */
+	    CHAN_DESC_SIZE,		/* maxsegsize */
 	    0,				/* flags */
 	    NULL, NULL,			/* lockfunc, lockarg */
-	    &chan->txdesc_tag);
+	    &chan->desc_tag);
 	if (error != 0) {
 		device_printf(sc->dev,
 		    "could not create TX ring DMA tag.\n");
 		return (-1);
-		//goto out;
 	}
 
-	error = bus_dmamem_alloc(chan->txdesc_tag, (void**)&chan->txdesc_ring,
+	error = bus_dmamem_alloc(chan->desc_tag, (void**)&chan->desc_ring,
 	    BUS_DMA_COHERENT | BUS_DMA_WAITOK | BUS_DMA_ZERO,
-	    &chan->txdesc_map);
+	    &chan->desc_map);
 	if (error != 0) {
 		device_printf(sc->dev,
 		    "could not allocate TX descriptor ring.\n");
 		return (-1);
-		//goto out;
 	}
 
-	error = bus_dmamap_load(chan->txdesc_tag, chan->txdesc_map,
-	    chan->txdesc_ring, TX_DESC_SIZE, dwc_get1paddr,
-	    &chan->txdesc_ring_paddr, 0);
+	error = bus_dmamap_load(chan->desc_tag, chan->desc_map,
+	    chan->desc_ring, CHAN_DESC_SIZE, dwc_get1paddr,
+	    &chan->desc_ring_paddr, 0);
 	if (error != 0) {
 		device_printf(sc->dev,
 		    "could not load TX descriptor ring map.\n");
 		return (-1);
-		//goto out;
 	}
-
-#if 0
-	for (idx = 0; idx < TX_DESC_COUNT; idx++) {
-		nidx = next_txidx(chan, idx);
-		chan->txdesc_ring[idx].addr_next = chan->txdesc_ring_paddr +
-		    (nidx * sizeof(struct pdma_hwdesc));
-	}
-#endif
 
 	return (0);
 }
@@ -369,7 +350,7 @@ pdma_channel_alloc(device_t dev, struct xdma_channel *xchan)
 			chan->used = 1;
 			chan->index = i;
 
-			pdma_channel_alloc_one(dev, chan);
+			pdma_channel_setup_descriptors(dev, chan);
 
 			return (0);
 		}
@@ -391,47 +372,6 @@ pdma_channel_free(device_t dev, struct xdma_channel *xchan)
 
 	return (0);
 }
-
-#if 0
-static int
-pdma_channel_prep_memcpy(device_t dev, struct xdma_channel *xchan)
-{
-	struct pdma_channel *chan;
-	struct pdma_hwdesc *desc;
-	struct pdma_softc *sc;
-	xdma_config_t *conf;
-	int ret;
-
-	sc = device_get_softc(dev);
-
-	chan = (struct pdma_channel *)xchan->chan;
-	/* Ensure we are not in operation */
-	chan_stop(sc, chan);
-
-	ret = xchan_desc_alloc(xchan, sizeof(struct pdma_hwdesc), 8);
-	if (ret != 0) {
-		device_printf(sc->dev,
-		    "%s: Can't allocate descriptors.\n", __func__);
-		return (-1);
-	}
-
-	conf = &xchan->conf;
-	descs = xchan->descs;
-
-	desc = descs[0].desc;
-	desc->dsa = conf->src_addr;
-	desc->dta = conf->dst_addr;
-	desc->drt = DRT_AUTO;
-	desc->dcm = DCM_SAI | DCM_DAI;
-
-	/* 4 byte copy for now. */
-	desc->dtc = (conf->block_len / 4);
-	desc->dcm |= DCM_SP_4 | DCM_DP_4 | DCM_TSZ_4;
-	desc->dcm |= DCM_TIE;
-
-	return (0);
-}
-#endif
 
 static int
 access_width(struct xdma_request *req, uint32_t *dcm, uint32_t *max_width)
@@ -500,17 +440,11 @@ pdma_channel_request(device_t dev, struct xdma_channel *xchan, struct xdma_reque
 
 	sc = device_get_softc(dev);
 
+	dprintf("%s: block_len %d block_num %d\n",
+	    __func__, req->block_len, req->block_num);
+
 	xdma = xchan->xdma;
 	data = (struct pdma_fdt_data *)xdma->data;
-
-#if 0
-	ret = xchan_desc_alloc(xchan, sizeof(struct pdma_hwdesc), 8);
-	if (ret != 0) {
-		device_printf(sc->dev,
-		    "%s: Can't allocate descriptors.\n", __func__);
-		return (-1);
-	}
-#endif
 
 	chan = (struct pdma_channel *)xchan->chan;
 	/* Ensure we are not in operation */
@@ -518,14 +452,11 @@ pdma_channel_request(device_t dev, struct xdma_channel *xchan, struct xdma_reque
 	chan->flags = CHAN_DESCR_RELINK;
 	chan->cur_desc = 0;
 	chan->req = req;
-
-	printf("%s: block_len %d block_num %d\n", __func__, req->block_len, req->block_num);
 	
 	for (i = 0; i < req->block_num; i++) {
-		desc = &chan->txdesc_ring[i];
+		desc = &chan->desc_ring[i];
 
 		if (req->direction == XDMA_MEM_TO_DEV) {
-			printf("XDMA_MEM_TO_DEV\n");
 			desc->dsa = req->src_addr + (i * req->block_len);
 			desc->dta = req->dst_addr;
 			desc->drt = data->tx;
