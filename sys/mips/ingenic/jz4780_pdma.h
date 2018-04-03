@@ -104,3 +104,6 @@ struct pdma_hwdesc {
 	uint32_t drt;		/* DMA Request Type */
 	uint32_t reserved[2];
 };
+
+#define	TX_DESC_COUNT	1024
+#define	TX_DESC_SIZE	(sizeof(struct pdma_hwdesc) * TX_DESC_COUNT)
