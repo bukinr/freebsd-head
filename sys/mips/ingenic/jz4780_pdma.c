@@ -480,7 +480,9 @@ pdma_channel_request(device_t dev, struct xdma_channel *xchan, struct xdma_reque
 		desc->dcm |= dcm | DCM_TIE;
 		desc->dtc = (req->block_len / max_width);
 
-		//xchan_desc_sync_pre(xchan, i);
+		/*
+		 * TODO: bus dma pre read/write sync here
+		 */
 
 		/*
 		 * PDMA does not provide interrupt after processing each descriptor,
