@@ -100,7 +100,7 @@ xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **mp,
 
 	xr->direction = dir;
 	xr->m = *mp;
-	xr->type = XR_TYPE_MBUF;
+	xr->req_type = XR_TYPE_MBUF;
 	if (dir == XDMA_MEM_TO_DEV) {
 		xr->dst_addr = addr;
 		xr->src_addr = 0;

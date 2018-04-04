@@ -101,7 +101,7 @@ xdma_enqueue_bio(xdma_channel_t *xchan, struct bio **bp,
 
 	xr->direction = dir;
 	xr->bp = *bp;
-	xr->type = XR_TYPE_BIO;
+	xr->req_type = XR_TYPE_BIO;
 	xr->src_width = src_width;
 	xr->dst_width = dst_width;
 	if (dir == XDMA_MEM_TO_DEV) {

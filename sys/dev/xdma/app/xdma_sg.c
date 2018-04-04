@@ -360,7 +360,7 @@ xdma_load_data_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
 	error = 0;
 	nsegs = 0;
 
-	switch (xr->type) {
+	switch (xr->req_type) {
 	case XR_TYPE_MBUF:
 		error = bus_dmamap_load_mbuf_sg(xchan->dma_tag_bufs,
 		    xr->buf.map, xr->m, seg, &nsegs, BUS_DMA_NOWAIT);
@@ -447,7 +447,7 @@ xdma_load_data(xdma_channel_t *xchan, struct xdma_request *xr,
 
 	nsegs = 1;
 
-	switch (xr->type) {
+	switch (xr->req_type) {
 	case XR_TYPE_MBUF:
 		if (xr->direction == XDMA_MEM_TO_DEV) {
 			m_copydata(m, 0, m->m_pkthdr.len, xr->buf.cbuf);
@@ -519,7 +519,7 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 	}
 
 	TAILQ_FOREACH_SAFE(xr, &xchan->queue_in, xr_next, xr_tmp) {
-		switch (xr->type) {
+		switch (xr->req_type) {
 		case XR_TYPE_MBUF:
 			c = xdma_mbuf_defrag(xchan, xr);
 			break;
@@ -609,7 +609,7 @@ xdma_enqueue(xdma_channel_t *xchan, uintptr_t src, uintptr_t dst,
 	xr->bp = NULL;
 	xr->block_num = 1;
 	xr->block_len = len;
-	xr->type = 0;
+	xr->req_type = XR_TYPE_ADDR;
 	xr->src_addr = src;
 	xr->dst_addr = dst;
 	xr->src_width = src_width;

@@ -447,7 +447,8 @@ pdma_channel_request(device_t dev, struct xdma_channel *xchan, struct xdma_reque
 	chan = (struct pdma_channel *)xchan->chan;
 	/* Ensure we are not in operation */
 	chan_stop(sc, chan);
-	chan->flags = CHAN_DESCR_RELINK;
+	if (req->operation == XDMA_CYCLIC)
+		chan->flags = CHAN_DESCR_RELINK;
 	chan->cur_desc = 0;
 	chan->req = req;
 	

@@ -45,7 +45,6 @@ enum xdma_direction {
 enum xdma_operation_type {
 	XDMA_MEMCPY,
 	XDMA_CYCLIC,
-	XDMA_SG,
 };
 
 enum xdma_request_type {
@@ -96,7 +95,8 @@ struct xchan_buf {
 struct xdma_request {
 	struct mbuf			*m;
 	struct bio			*bp;
-	enum xdma_request_type		type;
+	enum xdma_operation_type	operation;
+	enum xdma_request_type		req_type;
 	enum xdma_direction		direction;
 	bus_addr_t			src_addr;	/* Physical address. */
 	bus_addr_t			dst_addr;	/* Physical address. */
