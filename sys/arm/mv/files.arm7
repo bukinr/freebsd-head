@@ -1,26 +1,28 @@
 # $FreeBSD$
-#
-# The Marvell CPU cores
-# - Compliant with V5TE architecture
-# - Super scalar dual issue CPU
-# - Big/Little Endian
-# - MMU/MPU
-# - L1 Cache: Supports streaming and write allocate
-# - Variable pipeline stages
-# - Out-of-order execution
-# - Branch Prediction
-# - JTAG/ICE
-# - Vector Floating Point (VFP) unit
-#
+arm/mv/armada38x/armada38x.c	standard
+arm/mv/armadaxp/armadaxp.c	standard
+
 arm/mv/gpio.c			optional	gpio
 arm/mv/mv_common.c		standard
 arm/mv/mv_localbus.c		standard
-arm/mv/armv5_machdep.c		standard
+arm/mv/mv_armv7_machdep.c	standard
 arm/mv/mv_pci_ctrl.c		optional	pci | fdt
 arm/mv/mv_pci.c			optional	pci
 arm/mv/mv_ts.c			standard
-arm/mv/timer.c			optional	!soc_mv_armada38x
+arm/mv/timer.c			standard
 
+arm/mv/mpic.c			standard
+arm/mv/armada/thermal.c		optional	fdt
+arm/mv/armada/wdt.c		optional	fdt
+arm/mv/armada38x/armada38x_mp.c	optional	smp
+arm/mv/armada38x/pmsu.c		standard
+arm/mv/armada38x/armada38x_rtc.c		standard
+arm/mv/armada38x/armada38x_pl310.c	optional pl310
+dev/sdhci/sdhci_fdt.c		optional	sdhci
+
+arm/mv/rtc.c			standard
+arm/mv/armadaxp/armadaxp_mp.c	optional	smp
+arm/mv/armadaxp/mptramp.S	optional	smp
 dev/cesa/cesa.c			optional	cesa
 dev/iicbus/twsi/mv_twsi.c	optional	twsi
 dev/mge/if_mge.c		optional	mge
