@@ -180,7 +180,7 @@ msgdma_intr(void *arg)
 	/* Finish operation */
 	status.error = 0;
 	status.transferred = tot_copied;
-	xdma_callback_sg(chan->xchan, &status);
+	xdma_callback(chan->xchan, &status);
 }
 
 static int
@@ -461,7 +461,7 @@ msgdma_channel_capacity(device_t dev, xdma_channel_t *xchan,
 }
 
 static int
-msgdma_channel_submit(device_t dev, struct xdma_channel *xchan,
+msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
     struct xdma_sglist *sg, uint32_t sg_n)
 {
 	struct msgdma_channel *chan;
@@ -615,7 +615,7 @@ static device_method_t msgdma_methods[] = {
 	/* xDMA SG Interface */
 	DEVMETHOD(xdma_channel_capacity,	msgdma_channel_capacity),
 	DEVMETHOD(xdma_channel_prep_sg,		msgdma_channel_prep_sg),
-	DEVMETHOD(xdma_channel_submit,		msgdma_channel_submit),
+	DEVMETHOD(xdma_channel_submit_sg,	msgdma_channel_submit_sg),
 
 #ifdef FDT
 	DEVMETHOD(xdma_ofw_md_data,		msgdma_ofw_md_data),

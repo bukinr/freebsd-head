@@ -189,18 +189,13 @@ xchan_bufs_free(xdma_channel_t *xchan)
 	return (0);
 }
 
-int
+void
 xdma_channel_free_sg(xdma_channel_t *xchan)
 {
 
-	/* Deallocate bufs, if any. */
 	xchan_bufs_free(xchan);
-	if (xchan->flags & XCHAN_TYPE_SG) {
-		xchan_sglist_free(xchan);
-		xchan_bank_free(xchan);
-	}
-
-	return (xdma_channel_free(xchan));
+	xchan_sglist_free(xchan);
+	xchan_bank_free(xchan);
 }
 
 struct seg_load_request {
@@ -495,7 +490,7 @@ xdma_load_data(xdma_channel_t *xchan,
 }
 
 static int
-xdma_sglist_prepare(xdma_channel_t *xchan,
+xdma_process(xdma_channel_t *xchan,
     struct xdma_sglist *sg)
 {
 	struct bus_dma_segment seg[XDMA_MAX_SEG];
@@ -563,68 +558,8 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 	return (n);
 }
 
-int
-xdma_dequeue(xdma_channel_t *xchan, void **user,
-    xdma_transfer_status_t *status)
-{
-	struct xdma_request *xr_tmp;
-	struct xdma_request *xr;
-
-	QUEUE_OUT_LOCK(xchan);
-	TAILQ_FOREACH_SAFE(xr, &xchan->queue_out, xr_next, xr_tmp) {
-		TAILQ_REMOVE(&xchan->queue_out, xr, xr_next);
-		break;
-	}
-	QUEUE_OUT_UNLOCK(xchan);
-
-	if (xr == NULL)
-		return (-1);
-
-	*user = xr->user;
-	status->error = xr->status.error;
-	status->transferred = xr->status.transferred;
-
-	xchan_bank_put(xchan, xr);
-
-	return (0);
-}
-
-int
-xdma_enqueue(xdma_channel_t *xchan, uintptr_t src, uintptr_t dst,
-    uint8_t src_width, uint8_t dst_width, bus_size_t len,
-    enum xdma_direction dir, void *user)
-{
-	struct xdma_request *xr;
-	xdma_controller_t *xdma;
-
-	xdma = xchan->xdma;
-	KASSERT(xdma != NULL, ("xdma is NULL"));
-
-	xr = xchan_bank_get(xchan);
-	if (xr == NULL)
-		return (-1); /* No space is available. */
-
-	xr->user = user;
-	xr->direction = dir;
-	xr->m = NULL;
-	xr->bp = NULL;
-	xr->block_num = 1;
-	xr->block_len = len;
-	xr->req_type = XR_TYPE_ADDR;
-	xr->src_addr = src;
-	xr->dst_addr = dst;
-	xr->src_width = src_width;
-	xr->dst_width = dst_width;
-
-	QUEUE_IN_LOCK(xchan);
-	TAILQ_INSERT_TAIL(&xchan->queue_in, xr, xr_next);
-	QUEUE_IN_UNLOCK(xchan);
-
-	return (0);
-}
-
-int
-xdma_queue_submit(xdma_channel_t *xchan)
+static int
+xdma_queue_submit_sg(xdma_channel_t *xchan)
 {
 	struct xdma_sglist *sg;
 	xdma_controller_t *xdma;
@@ -634,27 +569,26 @@ xdma_queue_submit(xdma_channel_t *xchan)
 	xdma = xchan->xdma;
 	KASSERT(xdma != NULL, ("xdma is NULL"));
 
+	XCHAN_ASSERT_LOCKED(xchan);
+
 	sg = xchan->sg;
 
 	if ((xchan->flags & XCHAN_BUFS_ALLOCATED) == 0) {
 		device_printf(xdma->dev,
-		    "%s: Can't submit SG transfer: no bufs\n",
+		    "%s: Can't submit a transfer: no bufs\n",
 		    __func__);
 		return (-1);
 	}
 
-	XCHAN_LOCK(xchan);
-
-	sg_n = xdma_sglist_prepare(xchan, sg);
+	sg_n = xdma_process(xchan, sg);
 	if (sg_n == 0) {
 		/* Nothing to submit */
 		XCHAN_UNLOCK(xchan);
 		return (0);
 	}
 
-	/* Now submit xdma_sglist to DMA engine driver. */
-
-	ret = XDMA_CHANNEL_SUBMIT(xdma->dma_dev, xchan, sg, sg_n);
+	/* Now submit sglist to DMA engine driver. */
+	ret = XDMA_CHANNEL_SUBMIT_SG(xdma->dma_dev, xchan, sg, sg_n);
 	if (ret != 0) {
 		device_printf(xdma->dev,
 		    "%s: Can't submit an sglist.\n", __func__);
@@ -664,15 +598,26 @@ xdma_queue_submit(xdma_channel_t *xchan)
 		return (-1);
 	}
 
-	XCHAN_UNLOCK(xchan);
-
 	return (0);
 }
 
-void
-xdma_callback_sg(xdma_channel_t *xchan, xdma_transfer_status_t *status)
+int
+xdma_queue_submit(xdma_channel_t *xchan)
 {
+	xdma_controller_t *xdma;
+	int ret;
 
-	xdma_callback(xchan, status);
-	xdma_queue_submit(xchan);
+	xdma = xchan->xdma;
+	KASSERT(xdma != NULL, ("xdma is NULL"));
+
+	ret = 0;
+
+	XCHAN_LOCK(xchan);
+
+	if (xchan->flags & XCHAN_TYPE_SG)
+		ret = xdma_queue_submit_sg(xchan);
+
+	XCHAN_UNLOCK(xchan);
+
+	return (ret);
 }

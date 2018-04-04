@@ -547,7 +547,7 @@ softdma_worker(void *arg)
 
 		/* Finish operation */
 		chan->run = 0;
-		xdma_callback_sg(chan->xchan, &status);
+		xdma_callback(chan->xchan, &status);
 
 		mtx_unlock(&chan->mtx);
 	}
@@ -698,7 +698,7 @@ softdma_channel_capacity(device_t dev, xdma_channel_t *xchan,
 }
 
 static int
-softdma_channel_submit(device_t dev, struct xdma_channel *xchan,
+softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
     struct xdma_sglist *sg, uint32_t sg_n)
 {
 	struct softdma_channel *chan;
@@ -842,7 +842,7 @@ static device_method_t softdma_methods[] = {
 
 	/* xDMA SG Interface */
 	DEVMETHOD(xdma_channel_prep_sg,		softdma_channel_prep_sg),
-	DEVMETHOD(xdma_channel_submit,		softdma_channel_submit),
+	DEVMETHOD(xdma_channel_submit_sg,	softdma_channel_submit_sg),
 	DEVMETHOD(xdma_channel_capacity,	softdma_channel_capacity),
 
 #ifdef FDT

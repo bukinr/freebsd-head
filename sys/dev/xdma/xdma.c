@@ -134,6 +134,9 @@ xdma_channel_free(xdma_channel_t *xchan)
 		return (-1);
 	}
 
+	if (xchan->flags & XCHAN_TYPE_SG)
+		xdma_channel_free_sg(xchan);
+
 	xdma_teardown_all_intr(xchan);
 
 	mtx_destroy(&xchan->mtx_lock);
@@ -279,6 +282,9 @@ xdma_callback(xdma_channel_t *xchan, xdma_transfer_status_t *status)
 	TAILQ_FOREACH_SAFE(ih, &xchan->ie_handlers, ih_next, ih_tmp)
 		if (ih->cb != NULL)
 			ih->cb(ih->cb_user, status);
+
+	if (xchan->flags & XCHAN_TYPE_SG)
+		xdma_queue_submit(xchan);
 }
 
 #ifdef FDT

@@ -72,7 +72,7 @@ METHOD int channel_capacity {
 #
 # Submit sglist list to DMA engine driver.
 #
-METHOD int channel_submit {
+METHOD int channel_submit_sg {
 	device_t			dev;
 	struct xdma_channel		*xchan;
 	struct xdma_sglist		*sg;

@@ -181,10 +181,10 @@ int xdma_channel_free(xdma_channel_t *);
 int xdma_request(xdma_channel_t *xchan, struct xdma_request *r);
 
 int xdma_prep_sg(xdma_channel_t *xchan, uint32_t, uint32_t, uint32_t, uint32_t);
-int xdma_channel_free_sg(xdma_channel_t *xchan);
+void xdma_channel_free_sg(xdma_channel_t *xchan);
 void xchan_seg_done(xdma_channel_t *xchan, xdma_transfer_status_t *);
 
-/* xchan queues operations */
+/* xchan queue operations */
 int xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **m, xdma_transfer_status_t *);
 int xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **m, uintptr_t addr,
     uint8_t, uint8_t, enum xdma_direction dir);
@@ -208,9 +208,7 @@ int xdma_terminate(xdma_channel_t *xchan);
 int xdma_setup_intr(xdma_channel_t *xchan, int (*cb)(void *, xdma_transfer_status_t *), void *arg, void **);
 int xdma_teardown_intr(xdma_channel_t *xchan, struct xdma_intr_handler *ih);
 int xdma_teardown_all_intr(xdma_channel_t *xchan);
-
 void xdma_callback(struct xdma_channel *xchan, xdma_transfer_status_t *status);
-void xdma_callback_sg(xdma_channel_t *xchan, xdma_transfer_status_t *status);
 
 int xchan_sglist_alloc(xdma_channel_t *xchan);
 void xchan_sglist_free(xdma_channel_t *xchan);
