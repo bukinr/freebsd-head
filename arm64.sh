@@ -12,7 +12,7 @@ VARS=`make TARGET=arm64 buildenvvars`
 eval $VARS make -C lib/libpmcstat || exit 1
 eval $VARS make -C lib/libpmc || exit 1
 
-#eval $VARS make -C lib/libopencsd clean all || exit 1
+#eval $VARS make -j8 -C lib/libopencsd clean all || exit 1
 eval $VARS make -j8 -C lib/libopencsd all || exit 1
 
 eval $VARS make -C usr.sbin/pmcstat || exit 1
