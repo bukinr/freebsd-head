@@ -60,6 +60,12 @@ __FBSDID("$FreeBSD$");
 
 #include <xdma_if.h>
 
+struct seg_load_request {
+	struct bus_dma_segment *seg;
+	uint32_t nsegs;
+	uint32_t error;
+};
+
 static int
 _xchan_bufs_alloc(xdma_channel_t *xchan)
 {
@@ -197,12 +203,6 @@ xdma_channel_free_sg(xdma_channel_t *xchan)
 	xchan_sglist_free(xchan);
 	xchan_bank_free(xchan);
 }
-
-struct seg_load_request {
-	struct bus_dma_segment *seg;
-	uint32_t nsegs;
-	uint32_t error;
-};
 
 /*
  * Prepare xchan for a scatter-gather transfer.
