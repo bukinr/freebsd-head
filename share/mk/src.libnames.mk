@@ -69,7 +69,6 @@ _LIBRARIES=	\
 		bz2 \
 		c \
 		c_pic \
-		cplusplus \
 		calendar \
 		cam \
 		casper \
@@ -234,7 +233,6 @@ _DP_bsnmp=	crypto
 _DP_geom=	bsdxml sbuf
 _DP_cam=	sbuf
 _DP_kvm=	elf
-_DP_cplusplus=	cxxrt
 _DP_casper=	nv
 _DP_cap_dns=	nv
 _DP_cap_grp=	nv
@@ -310,7 +308,7 @@ _DP_gssapi_krb5+=	gssapi krb5 crypto roken asn1 com_err
 _DP_lzma=	pthread
 _DP_ucl=	m
 _DP_vmmapi=	util
-_DP_opencsd=	cxxrt cplusplus
+_DP_opencsd=	cxxrt
 _DP_ctf=	z
 _DP_dtrace=	ctf elf proc pthread rtld_db
 _DP_xo=		util
@@ -352,7 +350,6 @@ _DP_osmvendor=	ibumad pthread
 
 # Define special cases
 LDADD_supcplusplus=	-lsupc++
-LDADD_cplusplus=	-lc++
 LIBATF_C=	${LIBDESTDIR}${LIBDIR_BASE}/libprivateatf-c.a
 LIBATF_CXX=	${LIBDESTDIR}${LIBDIR_BASE}/libprivateatf-c++.a
 LDADD_atf_c=	-lprivateatf-c
