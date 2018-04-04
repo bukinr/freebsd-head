@@ -347,7 +347,7 @@ xdma_dmamap_cb(void *arg, bus_dma_segment_t *segs, int nsegs, int error)
 }
 
 static int
-xdma_load_data_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
+_xdma_load_data_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
     struct bus_dma_segment *seg)
 {
 	xdma_controller_t *xdma;
@@ -435,7 +435,7 @@ xdma_load_data_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
 }
 
 static int
-xdma_load_data(xdma_channel_t *xchan, struct xdma_request *xr,
+_xdma_load_data(xdma_channel_t *xchan, struct xdma_request *xr,
     struct bus_dma_segment *seg)
 {
 	xdma_controller_t *xdma;
@@ -469,7 +469,7 @@ xdma_load_data(xdma_channel_t *xchan, struct xdma_request *xr,
 }
 
 static int
-xdma_sglist_prepare_one(xdma_channel_t *xchan,
+xdma_load_data(xdma_channel_t *xchan,
     struct xdma_request *xr, struct bus_dma_segment *seg)
 {
 	xdma_controller_t *xdma;
@@ -482,9 +482,9 @@ xdma_sglist_prepare_one(xdma_channel_t *xchan,
 	nsegs = 0;
 
 	if (xchan->caps & XCHAN_CAP_BUSDMA)
-		nsegs = xdma_load_data_busdma(xchan, xr, seg);
+		nsegs = _xdma_load_data_busdma(xchan, xr, seg);
 	else
-		nsegs = xdma_load_data(xchan, xr, seg);
+		nsegs = _xdma_load_data(xchan, xr, seg);
 	if (nsegs == 0)
 		return (0); /* Try again later. */
 
@@ -544,7 +544,7 @@ xdma_sglist_prepare(xdma_channel_t *xchan,
 			break;
 		}
 
-		nsegs = xdma_sglist_prepare_one(xchan, xr, seg);
+		nsegs = xdma_load_data(xchan, xr, seg);
 		if (nsegs == 0)
 			break;
 
