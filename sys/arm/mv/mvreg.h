@@ -296,26 +296,19 @@
 #define GPIO_INT_EDGE_MASK	0x18
 #define GPIO_INT_LEV_MASK	0x1c
 
-#define GPIO_HI_DATA_OUT		0x40
-#define GPIO_HI_DATA_OUT_EN_CTRL	0x44
-#define GPIO_HI_BLINK_EN		0x48
-#define GPIO_HI_DATA_IN_POLAR		0x4c
-#define GPIO_HI_DATA_IN			0x50
-#define GPIO_HI_INT_CAUSE		0x54
-#define GPIO_HI_INT_EDGE_MASK		0x58
-#define GPIO_HI_INT_LEV_MASK		0x5c
-
 #define GPIO(n)			(1 << (n))
 #define MV_GPIO_MAX_NPINS	64
 
-#define MV_GPIO_IN_NONE		0x0
-#define MV_GPIO_IN_POL_LOW	(1 << 16)
-#define MV_GPIO_IN_IRQ_EDGE	(2 << 16)
-#define MV_GPIO_IN_IRQ_LEVEL	(4 << 16)
-#define MV_GPIO_OUT_NONE	0x0
-#define MV_GPIO_OUT_BLINK	0x1
-#define MV_GPIO_OUT_OPEN_DRAIN	0x2
-#define MV_GPIO_OUT_OPEN_SRC	0x4
+#define MV_GPIO_IN_NONE			0x0
+#define MV_GPIO_IN_POL_LOW		(1 << 16)
+#define MV_GPIO_IN_IRQ_EDGE		(2 << 16)
+#define MV_GPIO_IN_IRQ_LEVEL		(4 << 16)
+#define MV_GPIO_IN_IRQ_DOUBLE_EDGE	(8 << 16)
+#define MV_GPIO_IN_DEBOUNCE		(16 << 16)
+#define MV_GPIO_OUT_NONE		0x0
+#define MV_GPIO_OUT_BLINK		0x1
+#define MV_GPIO_OUT_OPEN_DRAIN		0x2
+#define MV_GPIO_OUT_OPEN_SRC		0x4
 
 #define IS_GPIO_IRQ(irq)	((irq) >= NIRQ && (irq) < NIRQ + MV_GPIO_MAX_NPINS)
 #define GPIO2IRQ(gpio)		((gpio) + NIRQ)
