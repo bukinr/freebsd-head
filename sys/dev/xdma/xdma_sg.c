@@ -600,24 +600,3 @@ xdma_queue_submit_sg(xdma_channel_t *xchan)
 
 	return (0);
 }
-
-int
-xdma_queue_submit(xdma_channel_t *xchan)
-{
-	xdma_controller_t *xdma;
-	int ret;
-
-	xdma = xchan->xdma;
-	KASSERT(xdma != NULL, ("xdma is NULL"));
-
-	ret = 0;
-
-	XCHAN_LOCK(xchan);
-
-	if (xchan->flags & XCHAN_TYPE_SG)
-		ret = xdma_queue_submit_sg(xchan);
-
-	XCHAN_UNLOCK(xchan);
-
-	return (ret);
-}
