@@ -479,7 +479,7 @@ pl330_ccr_port_width(struct xdma_sglist *sg, uint32_t *addr)
 }
 
 static int
-pl330_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
+pl330_channel_submit(device_t dev, struct xdma_channel *xchan,
     struct xdma_sglist *sg, uint32_t sg_n)
 {
 	struct pl330_fdt_data *data;
@@ -649,7 +649,7 @@ static device_method_t pl330_methods[] = {
 	/* xDMA SG Interface */
 	DEVMETHOD(xdma_channel_capacity,	pl330_channel_capacity),
 	DEVMETHOD(xdma_channel_prep_sg,		pl330_channel_prep_sg),
-	DEVMETHOD(xdma_channel_submit_sg,	pl330_channel_submit_sg),
+	DEVMETHOD(xdma_channel_submit,		pl330_channel_submit),
 
 #ifdef FDT
 	DEVMETHOD(xdma_ofw_md_data,		pl330_ofw_md_data),

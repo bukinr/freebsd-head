@@ -654,10 +654,10 @@ xdma_queue_submit(xdma_channel_t *xchan)
 
 	/* Now submit xdma_sglist to DMA engine driver. */
 
-	ret = XDMA_CHANNEL_SUBMIT_SG(xdma->dma_dev, xchan, sg, sg_n);
+	ret = XDMA_CHANNEL_SUBMIT(xdma->dma_dev, xchan, sg, sg_n);
 	if (ret != 0) {
 		device_printf(xdma->dev,
-		    "%s: Can't submit SG transfer.\n", __func__);
+		    "%s: Can't submit an sglist.\n", __func__);
 
 		XCHAN_UNLOCK(xchan);
 

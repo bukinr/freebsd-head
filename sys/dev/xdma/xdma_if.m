@@ -1,5 +1,5 @@
 #-
-# Copyright (c) 2016 Ruslan Bukin <br@bsdpad.com>
+# Copyright (c) 2016-2018 Ruslan Bukin <br@bsdpad.com>
 # All rights reserved.
 #
 # This software was developed by SRI International and the University of
@@ -70,19 +70,9 @@ METHOD int channel_capacity {
 };
 
 #
-# Submit sglist list to DMA.
+# Submit sglist list to DMA engine driver.
 #
 METHOD int channel_submit {
-	device_t			dev;
-	struct xdma_channel		*xchan;
-	struct xdma_sglist		*sg;
-	uint32_t			sg_n;
-};
-
-#
-# Submit scatter-gather list to DMA.
-#
-METHOD int channel_submit_sg {
 	device_t			dev;
 	struct xdma_channel		*xchan;
 	struct xdma_sglist		*sg;
@@ -108,7 +98,7 @@ METHOD int channel_alloc {
 };
 
 #
-# Free the channel.
+# Free the real hardware channel.
 #
 METHOD int channel_free {
 	device_t dev;
