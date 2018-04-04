@@ -312,6 +312,8 @@ struct mv_pcib_softc {
 	int		sc_skip_enable_procedure;
 	int		sc_enable_find_root_slot;
 	struct ofw_bus_iinfo	sc_pci_iinfo;
+
+	int		ap_segment;		/* PCI domain */
 };
 
 /* Local forward prototypes */
@@ -411,7 +413,9 @@ mv_pcib_probe(device_t self)
 		return (ENXIO);
 
 	if (!(ofw_bus_is_compatible(self, "mrvl,pcie") ||
-	    ofw_bus_is_compatible(self, "mrvl,pci")))
+	    ofw_bus_is_compatible(self, "mrvl,pci") ||
+	    ofw_bus_node_is_compatible(
+	    OF_parent(node), "marvell,armada-370-pcie")))
 		return (ENXIO);
 
 	device_set_desc(self, "Marvell Integrated PCI/PCI-E Controller");
@@ -441,21 +445,22 @@ mv_pcib_attach(device_t self)
 			return(ENXIO);
 	}
 
+	sc->ap_segment = port_id;
+
 	if (ofw_bus_node_is_compatible(node, "mrvl,pcie")) {
 		sc->sc_type = MV_TYPE_PCIE;
-		if (ofw_bus_node_is_compatible(parnode, "marvell,armada-370-pcie")) {
-			sc->sc_win_target = MV_WIN_PCIE_TARGET_ARMADA38X(port_id);
-			sc->sc_mem_win_attr = MV_WIN_PCIE_MEM_ATTR_ARMADA38X(port_id);
-			sc->sc_io_win_attr = MV_WIN_PCIE_IO_ATTR_ARMADA38X(port_id);
-			sc->sc_enable_find_root_slot = 1;
-		} else {
-			sc->sc_win_target = MV_WIN_PCIE_TARGET(port_id);
-			sc->sc_mem_win_attr = MV_WIN_PCIE_MEM_ATTR(port_id);
-			sc->sc_io_win_attr = MV_WIN_PCIE_IO_ATTR(port_id);
+		sc->sc_win_target = MV_WIN_PCIE_TARGET(port_id);
+		sc->sc_mem_win_attr = MV_WIN_PCIE_MEM_ATTR(port_id);
+		sc->sc_io_win_attr = MV_WIN_PCIE_IO_ATTR(port_id);
 #if __ARM_ARCH >= 6
-			sc->sc_skip_enable_procedure = 1;
+		sc->sc_skip_enable_procedure = 1;
 #endif
-		}
+	} else if (ofw_bus_node_is_compatible(parnode, "marvell,armada-370-pcie")) {
+		sc->sc_type = MV_TYPE_PCIE;
+		sc->sc_win_target = MV_WIN_PCIE_TARGET_ARMADA38X(port_id);
+		sc->sc_mem_win_attr = MV_WIN_PCIE_MEM_ATTR_ARMADA38X(port_id);
+		sc->sc_io_win_attr = MV_WIN_PCIE_IO_ATTR_ARMADA38X(port_id);
+		sc->sc_enable_find_root_slot = 1;
 	} else if (ofw_bus_node_is_compatible(node, "mrvl,pci")) {
 		sc->sc_type = MV_TYPE_PCI;
 		sc->sc_win_target = MV_WIN_PCI_TARGET;
@@ -879,6 +884,11 @@ mv_pcib_alloc_resource(device_t dev, device_t child, int type, int *rid,
 	case SYS_RES_MEMORY:
 		rm = &sc->sc_mem_rman;
 		break;
+#ifdef PCI_RES_BUS
+	case PCI_RES_BUS:
+		return (pci_domain_alloc_bus(sc->ap_segment, child, rid, start,
+		    end, count, flags));
+#endif
 	default:
 		return (BUS_ALLOC_RESOURCE(device_get_parent(dev), dev,
 		    type, rid, start, end, count, flags));
@@ -915,7 +925,12 @@ static int
 mv_pcib_release_resource(device_t dev, device_t child, int type, int rid,
     struct resource *res)
 {
+#ifdef PCI_RES_BUS
+	struct mv_pcib_softc *sc = device_get_softc(dev);
 
+	if (type == PCI_RES_BUS)
+		return (pci_domain_release_bus(sc->ap_segment, child, rid, res));
+#endif
 	if (type != SYS_RES_IOPORT && type != SYS_RES_MEMORY)
 		return (BUS_RELEASE_RESOURCE(device_get_parent(dev), child,
 		    type, rid, res));
