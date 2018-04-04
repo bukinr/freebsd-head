@@ -61,7 +61,7 @@ __FBSDID("$FreeBSD$");
 #include <xdma_if.h>
 
 static int
-xchan_bufs_alloc_contig(xdma_channel_t *xchan)
+_xchan_bufs_alloc(xdma_channel_t *xchan)
 {
 	xdma_controller_t *xdma;
 	struct xdma_request *xr;
@@ -85,7 +85,7 @@ xchan_bufs_alloc_contig(xdma_channel_t *xchan)
 }
 
 static int
-xchan_bufs_alloc_busdma(xdma_channel_t *xchan)
+_xchan_bufs_alloc_busdma(xdma_channel_t *xchan)
 {
 	xdma_controller_t *xdma;
 	struct xdma_request *xr;
@@ -146,9 +146,9 @@ xchan_bufs_alloc(xdma_channel_t *xchan)
 	}
 
 	if (xchan->caps & XCHAN_CAP_BUSDMA)
-		ret = xchan_bufs_alloc_busdma(xchan);
+		ret = _xchan_bufs_alloc_busdma(xchan);
 	else
-		ret = xchan_bufs_alloc_contig(xchan);
+		ret = _xchan_bufs_alloc(xchan);
 	if (ret != 0) {
 		device_printf(xdma->dev,
 		    "%s: Can't allocate bufs.\n", __func__);
@@ -210,6 +210,7 @@ struct seg_load_request {
 };
 
 /*
+ * Prepare xchan for a scatter-gather transfer.
  * xr_num - xdma requests queue size,
  * maxsegsize - maximum allowed scatter-gather list element size in bytes
  */

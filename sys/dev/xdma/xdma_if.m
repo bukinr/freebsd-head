@@ -60,7 +60,8 @@ METHOD int channel_prep_sg {
 };
 
 #
-# Check the amount of free entries for requests.
+# Query DMA engine driver for the amount of free entries
+# (descriptors) are available.
 #
 METHOD int channel_capacity {
 	device_t			dev;
