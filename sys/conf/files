@@ -3531,12 +3531,12 @@ wpi.fw			optional wpifw					\
 	clean		"wpi.fw"
 dev/xdma/controller/pl330.c	optional xdma pl330
 dev/xdma/xdma.c			optional xdma
-dev/xdma/xdma_addr.c		optional xdma
 dev/xdma/xdma_bank.c		optional xdma
 dev/xdma/xdma_bio.c		optional xdma
 dev/xdma/xdma_fdt_test.c	optional xdma xdma_test fdt
 dev/xdma/xdma_if.m		optional xdma
 dev/xdma/xdma_mbuf.c		optional xdma
+dev/xdma/xdma_queue.c		optional xdma
 dev/xdma/xdma_sg.c		optional xdma
 dev/xdma/xdma_sglist.c		optional xdma
 dev/xe/if_xe.c			optional xe
