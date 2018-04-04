@@ -211,7 +211,7 @@ void xdma_channel_free_sg(xdma_channel_t *xchan);
 int xdma_queue_submit_sg(xdma_channel_t *xchan);
 void xchan_seg_done(xdma_channel_t *xchan, xdma_transfer_status_t *);
 
-/* queue operations */
+/* Queue operations */
 int xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **m, xdma_transfer_status_t *);
 int xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **m, uintptr_t addr,
     uint8_t, uint8_t, enum xdma_direction dir);
@@ -242,7 +242,7 @@ void xchan_sglist_free(xdma_channel_t *xchan);
 int xdma_sglist_add(struct xdma_sglist *sg, struct bus_dma_segment *seg,
     uint32_t nsegs, struct xdma_request *xr);
 
-/* Request bank */
+/* Requests bank */
 void xchan_bank_init(xdma_channel_t *xchan);
 int xchan_bank_free(xdma_channel_t *xchan);
 struct xdma_request * xchan_bank_get(xdma_channel_t *xchan);
