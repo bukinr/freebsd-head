@@ -182,6 +182,7 @@ int xdma_request(xdma_channel_t *xchan, struct xdma_request *r);
 
 int xdma_prep_sg(xdma_channel_t *xchan, uint32_t, uint32_t, uint32_t, uint32_t);
 void xdma_channel_free_sg(xdma_channel_t *xchan);
+int xdma_queue_submit_sg(xdma_channel_t *xchan);
 void xchan_seg_done(xdma_channel_t *xchan, xdma_transfer_status_t *);
 
 /* xchan queue operations */

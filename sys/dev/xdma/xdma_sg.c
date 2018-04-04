@@ -558,7 +558,7 @@ xdma_process(xdma_channel_t *xchan,
 	return (n);
 }
 
-static int
+int
 xdma_queue_submit_sg(xdma_channel_t *xchan)
 {
 	struct xdma_sglist *sg;
