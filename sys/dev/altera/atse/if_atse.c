@@ -1302,10 +1302,13 @@ atse_attach(device_t dev)
 	}
 
 	xdma_prep_sg(sc->xchan_tx,
-		TX_QUEUE_SIZE,	/* xchan requests queue size */
-		MCLBYTES,	/* maxsegsize */
-		8,		/* maxnsegs */
-		16);		/* alignment */
+	    TX_QUEUE_SIZE,	/* xchan requests queue size */
+	    MCLBYTES,	/* maxsegsize */
+	    8,		/* maxnsegs */
+	    16,		/* alignment */
+	    0,		/* boundary */
+	    BUS_SPACE_MAXADDR_32BIT,
+	    BUS_SPACE_MAXADDR);
 
 	/* Get RX xDMA controller */
 	sc->xdma_rx = xdma_ofw_get(sc->dev, "rx");
@@ -1330,10 +1333,13 @@ atse_attach(device_t dev)
 	}
 
 	xdma_prep_sg(sc->xchan_rx,
-		RX_QUEUE_SIZE,	/* xchan requests queue size */
-		MCLBYTES,	/* maxsegsize */
-		1,		/* maxnsegs */
-		16);		/* alignment */
+	    RX_QUEUE_SIZE,	/* xchan requests queue size */
+	    MCLBYTES,		/* maxsegsize */
+	    1,			/* maxnsegs */
+	    16,			/* alignment */
+	    0,			/* boundary */
+	    BUS_SPACE_MAXADDR_32BIT,
+	    BUS_SPACE_MAXADDR);
 
 	mtx_init(&sc->br_mtx, "buf ring mtx", NULL, MTX_DEF);
 	sc->br = buf_ring_alloc(BUFRING_SIZE, M_DEVBUF,

@@ -103,9 +103,10 @@ _xchan_bufs_alloc_busdma(xdma_channel_t *xchan)
 	/* Create bus_dma tag */
 	err = bus_dma_tag_create(
 	    bus_get_dma_tag(xdma->dev),	/* Parent tag. */
-	    xchan->alignment, 0,	/* alignment, boundary */
-	    BUS_SPACE_MAXADDR_32BIT,	/* lowaddr */
-	    BUS_SPACE_MAXADDR,		/* highaddr */
+	    xchan->alignment,		/* alignment */
+	    xchan->boundary,		/* boundary */
+	    xchan->lowaddr,		/* lowaddr */
+	    xchan->highaddr,		/* highaddr */
 	    NULL, NULL,			/* filter, filterarg */
 	    xchan->maxsegsize * xchan->maxnsegs, /* maxsize */
 	    xchan->maxnsegs,		/* nsegments */
@@ -210,8 +211,10 @@ xdma_channel_free_sg(xdma_channel_t *xchan)
  * maxsegsize - maximum allowed scatter-gather list element size in bytes
  */
 int
-xdma_prep_sg(xdma_channel_t *xchan, uint32_t xr_num, uint32_t maxsegsize,
-    uint32_t maxnsegs, uint32_t alignment)
+xdma_prep_sg(xdma_channel_t *xchan, uint32_t xr_num,
+    bus_size_t maxsegsize, bus_size_t maxnsegs,
+    bus_size_t alignment, bus_addr_t boundary,
+    bus_addr_t lowaddr, bus_addr_t highaddr)
 {
 	xdma_controller_t *xdma;
 	int ret;
@@ -226,15 +229,17 @@ xdma_prep_sg(xdma_channel_t *xchan, uint32_t xr_num, uint32_t maxsegsize,
 		return (-1);
 	}
 
+	xchan->xr_num = xr_num;
 	xchan->maxsegsize = maxsegsize;
 	xchan->maxnsegs = maxnsegs;
 	xchan->alignment = alignment;
-	xchan->xr_num = xr_num;
+	xchan->boundary = boundary;
+	xchan->lowaddr = lowaddr;
+	xchan->highaddr = highaddr;
 
 	if (xchan->maxnsegs > XDMA_MAX_SEG) {
-		device_printf(xdma->dev,
-		    "%s: maxnsegs %d is too big\n",
-		    __func__, xchan->maxnsegs);
+		device_printf(xdma->dev, "%s: maxnsegs is too big\n",
+		    __func__);
 		return (-1);
 	}
 
@@ -375,7 +380,7 @@ _xdma_load_data_busdma(xdma_channel_t *xchan, struct xdma_request *xr,
 		}
 		nsegs = slr.nsegs;
 		break;
-	case XR_TYPE_ADDR:
+	case XR_TYPE_VIRT:
 		switch (xr->direction) {
 		case XDMA_MEM_TO_DEV:
 			addr = (void *)xr->src_addr;
@@ -455,7 +460,7 @@ _xdma_load_data(xdma_channel_t *xchan, struct xdma_request *xr,
 		}
 		break;
 	case XR_TYPE_BIO:
-	case XR_TYPE_ADDR:
+	case XR_TYPE_VIRT:
 	default:
 		panic("implement me\n");
 	}
@@ -503,6 +508,8 @@ xdma_process(xdma_channel_t *xchan,
 	int nsegs;
 	int ret;
 
+	XCHAN_ASSERT_LOCKED(xchan);
+
 	xdma = xchan->xdma;
 
 	n = 0;
@@ -520,8 +527,7 @@ xdma_process(xdma_channel_t *xchan,
 			c = xdma_mbuf_defrag(xchan, xr);
 			break;
 		case XR_TYPE_BIO:
-			/* TODO: unmapped bio ? */
-		case XR_TYPE_ADDR:
+		case XR_TYPE_VIRT:
 		default:
 			c = 1;
 		}
@@ -581,20 +587,14 @@ xdma_queue_submit_sg(xdma_channel_t *xchan)
 	}
 
 	sg_n = xdma_process(xchan, sg);
-	if (sg_n == 0) {
-		/* Nothing to submit */
-		XCHAN_UNLOCK(xchan);
-		return (0);
-	}
+	if (sg_n == 0)
+		return (0); /* Nothing to submit */
 
 	/* Now submit sglist to DMA engine driver. */
 	ret = XDMA_CHANNEL_SUBMIT_SG(xdma->dma_dev, xchan, sg, sg_n);
 	if (ret != 0) {
 		device_printf(xdma->dev,
 		    "%s: Can't submit an sglist.\n", __func__);
-
-		XCHAN_UNLOCK(xchan);
-
 		return (-1);
 	}
 

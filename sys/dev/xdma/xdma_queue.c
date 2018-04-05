@@ -99,7 +99,7 @@ xdma_enqueue(xdma_channel_t *xchan, uintptr_t src, uintptr_t dst,
 	xr->bp = NULL;
 	xr->block_num = 1;
 	xr->block_len = len;
-	xr->req_type = XR_TYPE_ADDR;
+	xr->req_type = XR_TYPE_VIRT;
 	xr->src_addr = src;
 	xr->dst_addr = dst;
 	xr->src_width = src_width;

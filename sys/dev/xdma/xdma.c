@@ -62,11 +62,11 @@ __FBSDID("$FreeBSD$");
  * Multiple xDMA controllers may work with single DMA device,
  * so we have global lock for physical channel management.
  */
-static struct mtx xdma_mtx;
+static struct sx xdma_sx;
 
-#define	XDMA_LOCK()			mtx_lock(&xdma_mtx)
-#define	XDMA_UNLOCK()			mtx_unlock(&xdma_mtx)
-#define	XDMA_ASSERT_LOCKED()		mtx_assert(&xdma_mtx, MA_OWNED)
+#define	XDMA_LOCK()			sx_xlock(&xdma_sx)
+#define	XDMA_UNLOCK()			sx_xunlock(&xdma_sx)
+#define	XDMA_ASSERT_LOCKED()		sx_xassert(&xdma_sx, MA_OWNED)
 
 /*
  * Allocate virtual xDMA channel.
@@ -96,11 +96,11 @@ xdma_channel_alloc(xdma_controller_t *xdma, uint32_t caps)
 
 	TAILQ_INIT(&xchan->ie_handlers);
 
-	mtx_init(&xchan->mtx_lock, "xDMA", NULL, MTX_DEF);
-	mtx_init(&xchan->mtx_qin_lock, "xDMA", NULL, MTX_DEF);
-	mtx_init(&xchan->mtx_qout_lock, "xDMA", NULL, MTX_DEF);
-	mtx_init(&xchan->mtx_bank_lock, "xDMA", NULL, MTX_DEF);
-	mtx_init(&xchan->mtx_proc_lock, "xDMA", NULL, MTX_DEF);
+	mtx_init(&xchan->mtx_lock, "xDMA chan", NULL, MTX_DEF);
+	mtx_init(&xchan->mtx_qin_lock, "xDMA qin", NULL, MTX_DEF);
+	mtx_init(&xchan->mtx_qout_lock, "xDMA qout", NULL, MTX_DEF);
+	mtx_init(&xchan->mtx_bank_lock, "xDMA bank", NULL, MTX_DEF);
+	mtx_init(&xchan->mtx_proc_lock, "xDMA proc", NULL, MTX_DEF);
 
 	TAILQ_INIT(&xchan->bank);
 	TAILQ_INIT(&xchan->queue_in);
@@ -358,7 +358,8 @@ xdma_ofw_get(device_t dev, const char *prop)
 		return (NULL);
 	}
 
-	xdma = malloc(sizeof(struct xdma_controller), M_XDMA, M_WAITOK | M_ZERO);
+	xdma = malloc(sizeof(struct xdma_controller),
+	    M_XDMA, M_WAITOK | M_ZERO);
 	xdma->dev = dev;
 	xdma->dma_dev = dma_dev;
 
@@ -398,7 +399,7 @@ static void
 xdma_init(void)
 {
 
-	mtx_init(&xdma_mtx, "xDMA", NULL, MTX_DEF);
+	sx_init(&xdma_sx, "xDMA");
 }
 
 SYSINIT(xdma, SI_SUB_DRIVERS, SI_ORDER_FIRST, xdma_init, NULL);

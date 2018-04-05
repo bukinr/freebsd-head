@@ -45,10 +45,13 @@ enum xdma_direction {
 enum xdma_operation_type {
 	XDMA_MEMCPY,
 	XDMA_CYCLIC,
+	XDMA_FIFO,
+	XDMA_SG,
 };
 
 enum xdma_request_type {
-	XR_TYPE_ADDR,
+	XR_TYPE_PHYS,
+	XR_TYPE_VIRT,
 	XR_TYPE_MBUF,
 	XR_TYPE_BIO,
 };
@@ -57,7 +60,6 @@ enum xdma_command {
 	XDMA_CMD_BEGIN,
 	XDMA_CMD_PAUSE,
 	XDMA_CMD_TERMINATE,
-	XDMA_CMD_TERMINATE_ALL,
 };
 
 struct xdma_transfer_status {
@@ -91,8 +93,8 @@ struct xdma_request {
 	enum xdma_operation_type	operation;
 	enum xdma_request_type		req_type;
 	enum xdma_direction		direction;
-	bus_addr_t			src_addr;	/* Physical address. */
-	bus_addr_t			dst_addr;	/* Physical address. */
+	bus_addr_t			src_addr;
+	bus_addr_t			dst_addr;
 	uint8_t				src_width;
 	uint8_t				dst_width;
 	bus_size_t			block_num;
@@ -149,9 +151,12 @@ struct xdma_channel {
 	uint32_t			xr_num;
 
 	/* Bus dma tag options. */
-	uint32_t			maxsegsize;
-	uint32_t			maxnsegs;
-	uint32_t			alignment;
+	bus_size_t			maxsegsize;
+	bus_size_t			maxnsegs;
+	bus_size_t			alignment;
+	bus_addr_t			boundary;
+	bus_addr_t			lowaddr;
+	bus_addr_t			highaddr;
 
 	struct xdma_sglist		*sg;
 
@@ -165,9 +170,9 @@ struct xdma_channel {
 typedef struct xdma_channel xdma_channel_t;
 
 struct xdma_intr_handler {
-	int				(*cb)(void *cb_user, xdma_transfer_status_t *status);
-	void				*cb_user;
-	struct mtx			ih_lock;
+	int		(*cb)(void *cb_user, xdma_transfer_status_t *status);
+	void		*cb_user;
+	struct mtx	ih_lock;
 	TAILQ_ENTRY(xdma_intr_handler)	ih_next;
 };
 
@@ -175,23 +180,28 @@ static MALLOC_DEFINE(M_XDMA, "xdma", "xDMA framework");
 
 #define	XCHAN_LOCK(xchan)		mtx_lock(&(xchan)->mtx_lock)
 #define	XCHAN_UNLOCK(xchan)		mtx_unlock(&(xchan)->mtx_lock)
-#define	XCHAN_ASSERT_LOCKED(xchan)	mtx_assert(&(xchan)->mtx_lock, MA_OWNED)
+#define	XCHAN_ASSERT_LOCKED(xchan)	\
+    mtx_assert(&(xchan)->mtx_lock, MA_OWNED)
 
 #define	QUEUE_IN_LOCK(xchan)		mtx_lock(&(xchan)->mtx_qin_lock)
 #define	QUEUE_IN_UNLOCK(xchan)		mtx_unlock(&(xchan)->mtx_qin_lock)
-#define	QUEUE_IN_ASSERT_LOCKED(xchan)	mtx_assert(&(xchan)->mtx_qin_lock, MA_OWNED)
+#define	QUEUE_IN_ASSERT_LOCKED(xchan)	\
+    mtx_assert(&(xchan)->mtx_qin_lock, MA_OWNED)
 
 #define	QUEUE_OUT_LOCK(xchan)		mtx_lock(&(xchan)->mtx_qout_lock)
 #define	QUEUE_OUT_UNLOCK(xchan)		mtx_unlock(&(xchan)->mtx_qout_lock)
-#define	QUEUE_OUT_ASSERT_LOCKED(xchan)	mtx_assert(&(xchan)->mtx_qout_lock, MA_OWNED)
+#define	QUEUE_OUT_ASSERT_LOCKED(xchan)	\
+    mtx_assert(&(xchan)->mtx_qout_lock, MA_OWNED)
 
 #define	QUEUE_BANK_LOCK(xchan)		mtx_lock(&(xchan)->mtx_bank_lock)
 #define	QUEUE_BANK_UNLOCK(xchan)	mtx_unlock(&(xchan)->mtx_bank_lock)
-#define	QUEUE_BANK_ASSERT_LOCKED(xchan)	mtx_assert(&(xchan)->mtx_bank_lock, MA_OWNED)
+#define	QUEUE_BANK_ASSERT_LOCKED(xchan)	\
+    mtx_assert(&(xchan)->mtx_bank_lock, MA_OWNED)
 
 #define	QUEUE_PROC_LOCK(xchan)		mtx_lock(&(xchan)->mtx_proc_lock)
 #define	QUEUE_PROC_UNLOCK(xchan)	mtx_unlock(&(xchan)->mtx_proc_lock)
-#define	QUEUE_PROC_ASSERT_LOCKED(xchan)	mtx_assert(&(xchan)->mtx_proc_lock, MA_OWNED)
+#define	QUEUE_PROC_ASSERT_LOCKED(xchan)	\
+    mtx_assert(&(xchan)->mtx_proc_lock, MA_OWNED)
 
 #define	XDMA_SGLIST_MAXLEN	2048
 #define	XDMA_MAX_SEG		128
@@ -206,19 +216,23 @@ int xdma_channel_free(xdma_channel_t *);
 int xdma_request(xdma_channel_t *xchan, struct xdma_request *r);
 
 /* SG interface */
-int xdma_prep_sg(xdma_channel_t *xchan, uint32_t, uint32_t, uint32_t, uint32_t);
+int xdma_prep_sg(xdma_channel_t *, uint32_t,
+    bus_size_t, bus_size_t, bus_size_t, bus_addr_t, bus_addr_t, bus_addr_t);
 void xdma_channel_free_sg(xdma_channel_t *xchan);
 int xdma_queue_submit_sg(xdma_channel_t *xchan);
 void xchan_seg_done(xdma_channel_t *xchan, xdma_transfer_status_t *);
 
 /* Queue operations */
-int xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **m, xdma_transfer_status_t *);
+int xdma_dequeue_mbuf(xdma_channel_t *xchan, struct mbuf **m,
+    xdma_transfer_status_t *);
 int xdma_enqueue_mbuf(xdma_channel_t *xchan, struct mbuf **m, uintptr_t addr,
     uint8_t, uint8_t, enum xdma_direction dir);
-int xdma_dequeue_bio(xdma_channel_t *xchan, struct bio **bp, xdma_transfer_status_t *status);
+int xdma_dequeue_bio(xdma_channel_t *xchan, struct bio **bp,
+    xdma_transfer_status_t *status);
 int xdma_enqueue_bio(xdma_channel_t *xchan, struct bio **bp, bus_addr_t addr,
     uint8_t, uint8_t, enum xdma_direction dir);
-int xdma_dequeue(xdma_channel_t *xchan, void **user, xdma_transfer_status_t *status);
+int xdma_dequeue(xdma_channel_t *xchan, void **user,
+    xdma_transfer_status_t *status);
 int xdma_enqueue(xdma_channel_t *xchan, uintptr_t src, uintptr_t dst,
     uint8_t, uint8_t, bus_size_t, enum xdma_direction dir, void *);
 int xdma_queue_submit(xdma_channel_t *xchan);
@@ -231,7 +245,8 @@ uint32_t xdma_mbuf_chain_count(struct mbuf *m0);
 int xdma_control(xdma_channel_t *xchan, enum xdma_command cmd);
 
 /* Interrupt callback */
-int xdma_setup_intr(xdma_channel_t *xchan, int (*cb)(void *, xdma_transfer_status_t *), void *arg, void **);
+int xdma_setup_intr(xdma_channel_t *xchan, int (*cb)(void *,
+    xdma_transfer_status_t *), void *arg, void **);
 int xdma_teardown_intr(xdma_channel_t *xchan, struct xdma_intr_handler *ih);
 int xdma_teardown_all_intr(xdma_channel_t *xchan);
 void xdma_callback(struct xdma_channel *xchan, xdma_transfer_status_t *status);

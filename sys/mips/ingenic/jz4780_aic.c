@@ -335,7 +335,7 @@ setup_xdma(struct sc_pcminfo *scp)
 	KASSERT(fmt & AFMT_16BIT, ("16-bit audio supported only."));
 
 	sc->req.operation = XDMA_CYCLIC;
-	sc->req.req_type = XR_TYPE_ADDR;
+	sc->req.req_type = XR_TYPE_PHYS;
 	sc->req.direction = XDMA_MEM_TO_DEV;
 	sc->req.src_addr = sc->buf_base_phys;
 	sc->req.dst_addr = sc->aic_fifo_paddr;
