@@ -44,7 +44,14 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
 
-//#include <arm/qualcomm/qcom_gcc.h>
+#define	GCC_QDSS_BCR			0x29000
+#define	 GCC_QDSS_BCR_BLK_ARES		(1 << 0) /* Async software reset. */
+#define	GCC_QDSS_CFG_AHB_CBCR		0x29008
+#define	 AHB_CBCR_CLK_ENABLE		(1 << 0) /* AHB clk branch ctrl */
+#define	GCC_QDSS_DAP_CBCR		0x29084
+#define	 DAP_CBCR_CLK_ENABLE		(1 << 0) /* DAP clk branch ctrl */
+#define	GCC_QDSS_ETR_USB_CBCR		0x29028
+#define	 ETR_USB_CBCR_CLK_ENABLE	(1 << 0) /* ETR USB clk branch ctrl */
 
 static struct ofw_compat_data compat_data[] = {
 	{ "qcom,gcc-msm8916",			1 },
@@ -54,7 +61,6 @@ static struct ofw_compat_data compat_data[] = {
 struct qcom_gcc_softc {
 	struct resource		*res;
 };
-struct qcom_gcc_softc *qcom_gcc_sc;
 
 static struct resource_spec qcom_gcc_spec[] = {
 	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },
@@ -79,6 +85,7 @@ static int
 qcom_gcc_attach(device_t dev)
 {
 	struct qcom_gcc_softc *sc;
+	uint32_t reg;
 
 	sc = device_get_softc(dev);
 
@@ -87,66 +94,22 @@ qcom_gcc_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	qcom_gcc_sc = sc;
+	/* Put block to reset */
+	bus_write_4(sc->res, GCC_QDSS_BCR, GCC_QDSS_BCR_BLK_ARES);
 
-#define	GCC_PCNOC_RPM_AHB_CBCR	0x027024
+	/* Enable AHB clock branch */
+	bus_write_4(sc->res, GCC_QDSS_CFG_AHB_CBCR, AHB_CBCR_CLK_ENABLE);
 
-#define	GCC_QDSS_BCR		0x29000
-#define	GCC_QDSS_CFG_AHB_CBCR	0x29008
-#define	GCC_QDSS_DAP_CBCR	0x29084
-#define	GCC_QDSS_ETR_USB_CBCR	0x29028
+	/* Enable DAP clock branch */
+	bus_write_4(sc->res, GCC_QDSS_DAP_CBCR, DAP_CBCR_CLK_ENABLE);
 
-	bus_write_4(sc->res, GCC_QDSS_BCR, 1);
-	DELAY(100000);
-	bus_write_4(sc->res, GCC_QDSS_CFG_AHB_CBCR, 1);
-	DELAY(100000);
-	bus_write_4(sc->res, GCC_QDSS_DAP_CBCR, 1);
-	DELAY(100000);
-	bus_write_4(sc->res, GCC_QDSS_ETR_USB_CBCR, 1);
-	DELAY(100000);
+	/* Enable ETR USB clock branch */
+	bus_write_4(sc->res, GCC_QDSS_ETR_USB_CBCR, ETR_USB_CBCR_CLK_ENABLE);
+
+	/* Out of reset */
+	reg = bus_read_4(sc->res, GCC_QDSS_BCR);
+	reg &= ~GCC_QDSS_BCR_BLK_ARES;
 	bus_write_4(sc->res, GCC_QDSS_BCR, 0);
-
-	printf("GCC_PCNOC_RPM_AHB_CBCR %x\n", bus_read_4(sc->res, GCC_PCNOC_RPM_AHB_CBCR));
-	return (0);
-
-	int reg;
-
-#define	GCC_GPLL0_MODE	0x21000
-#define	GCC_GPLL0_L_VAL	0x21004
-#define	GCC_GPLL0_M_VAL	0x21008
-#define	GCC_GPLL0_N_VAL	0x2100C
-
-	//bus_write_4(sc->res, GCC_GPLL0_L_VAL, 29);
-
-	reg = bus_read_4(sc->res, GCC_GPLL0_L_VAL);
-	printf("GCC_GPLL0_L_VAL: %x\n", reg);
-	reg = bus_read_4(sc->res, GCC_GPLL0_M_VAL);
-	printf("GCC_GPLL0_M_VAL: %x\n", reg);
-	reg = bus_read_4(sc->res, GCC_GPLL0_N_VAL);
-	printf("GCC_GPLL0_N_VAL: %x\n", reg);
-
-	reg = bus_read_4(sc->res, GCC_GPLL0_MODE);
-	printf("GCC_GPLL0_MODE: %x\n", reg);
-	bus_write_4(sc->res, GCC_GPLL0_MODE, reg);
-
-#define	GCC_GPLL1_MODE	0x20000
-#define	 PLL_OUTCTRL	(1 << 0)	/* Activate PLL output */
-#define	 PLL_BYPASSNL	(1 << 1)	/* Use PLL */
-#define	 PLL_RESET_N	(1 << 2)	/* Reset PLL */
-
-	reg = ~(PLL_OUTCTRL | PLL_BYPASSNL | PLL_RESET_N);
-	reg = 0;
-	bus_write_4(sc->res, GCC_GPLL1_MODE, reg);
-
-#define	GCC_GPLL2_MODE	0x4A000
-	bus_write_4(sc->res, GCC_GPLL2_MODE, reg);
-
-
-	/* test */
-#define	GCC_QDSS_TRACECLKIN_CMD_RCGR	0x29048
-#define	GCC_QDSS_TRACECLKIN_CBCR	0x29060
-	bus_write_4(sc->res, GCC_QDSS_TRACECLKIN_CMD_RCGR, 1);
-	bus_write_4(sc->res, GCC_QDSS_TRACECLKIN_CBCR, 1);
 
 	return (0);
 }
