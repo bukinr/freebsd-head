@@ -67,6 +67,30 @@ static struct resource_spec qcom_gcc_spec[] = {
 	{ -1, 0 }
 };
 
+/*
+ * Qualcomm Debug Subsystem (QDSS)
+ * block enabling routine.
+ */
+static void
+qcom_qdss_enable(struct qcom_gcc_softc *sc)
+{
+
+	/* Put QDSS block to reset */
+	bus_write_4(sc->res, GCC_QDSS_BCR, GCC_QDSS_BCR_BLK_ARES);
+
+	/* Enable AHB clock branch */
+	bus_write_4(sc->res, GCC_QDSS_CFG_AHB_CBCR, AHB_CBCR_CLK_ENABLE);
+
+	/* Enable DAP clock branch */
+	bus_write_4(sc->res, GCC_QDSS_DAP_CBCR, DAP_CBCR_CLK_ENABLE);
+
+	/* Enable ETR USB clock branch */
+	bus_write_4(sc->res, GCC_QDSS_ETR_USB_CBCR, ETR_USB_CBCR_CLK_ENABLE);
+
+	/* Out of reset */
+	bus_write_4(sc->res, GCC_QDSS_BCR, 0);
+}
+
 static int
 qcom_gcc_probe(device_t dev)
 {
@@ -85,7 +109,6 @@ static int
 qcom_gcc_attach(device_t dev)
 {
 	struct qcom_gcc_softc *sc;
-	uint32_t reg;
 
 	sc = device_get_softc(dev);
 
@@ -94,22 +117,11 @@ qcom_gcc_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	/* Put block to reset */
-	bus_write_4(sc->res, GCC_QDSS_BCR, GCC_QDSS_BCR_BLK_ARES);
-
-	/* Enable AHB clock branch */
-	bus_write_4(sc->res, GCC_QDSS_CFG_AHB_CBCR, AHB_CBCR_CLK_ENABLE);
-
-	/* Enable DAP clock branch */
-	bus_write_4(sc->res, GCC_QDSS_DAP_CBCR, DAP_CBCR_CLK_ENABLE);
-
-	/* Enable ETR USB clock branch */
-	bus_write_4(sc->res, GCC_QDSS_ETR_USB_CBCR, ETR_USB_CBCR_CLK_ENABLE);
-
-	/* Out of reset */
-	reg = bus_read_4(sc->res, GCC_QDSS_BCR);
-	reg &= ~GCC_QDSS_BCR_BLK_ARES;
-	bus_write_4(sc->res, GCC_QDSS_BCR, 0);
+	/*
+	 * Enable debug unit.
+	 * This is required for Coresight operation.
+	 */
+	qcom_qdss_enable(sc);
 
 	return (0);
 }
