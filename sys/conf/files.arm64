@@ -84,7 +84,6 @@ arm/broadcom/bcm2835/bcm2835_wdog.c		optional soc_brcm_bcm2837 fdt
 arm/broadcom/bcm2835/bcm2836.c			optional soc_brcm_bcm2837 fdt
 arm/broadcom/bcm2835/bcm283x_dwc_fdt.c		optional dwcotg fdt soc_brcm_bcm2837
 arm/mv/armada38x/armada38x_rtc.c		optional mv_rtc fdt
-arm/qualcomm/qcom_gcc.c		standard
 arm64/acpica/acpi_machdep.c	optional	acpi
 arm64/acpica/OsdEnvironment.c	optional	acpi
 arm64/acpica/acpi_wakeup.c	optional	acpi
@@ -152,6 +151,7 @@ arm64/coresight/coresight-dynamic-replicator.c	standard
 arm64/coresight/coresight-etm4x.c		standard
 arm64/coresight/coresight-funnel.c		standard
 arm64/coresight/coresight-tmc.c			standard
+arm64/qualcomm/qcom_gcc.c			optional qcom_gcc fdt
 contrib/vchiq/interface/compat/vchi_bsd.c	optional vchiq soc_brcm_bcm2837 \
 	compile-with "${NORMAL_C} -DUSE_VCHIQ_ARM -D__VCCOREVER__=0x04000000 -I$S/contrib/vchiq"
 contrib/vchiq/interface/vchiq_arm/vchiq_2835_arm.c	optional vchiq soc_brcm_bcm2837 \
