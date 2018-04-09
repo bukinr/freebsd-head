@@ -48,10 +48,10 @@ __FBSDID("$FreeBSD$");
 #define	 GCC_QDSS_BCR_BLK_ARES		(1 << 0) /* Async software reset. */
 #define	GCC_QDSS_CFG_AHB_CBCR		0x29008
 #define	 AHB_CBCR_CLK_ENABLE		(1 << 0) /* AHB clk branch ctrl */
-#define	GCC_QDSS_DAP_CBCR		0x29084
-#define	 DAP_CBCR_CLK_ENABLE		(1 << 0) /* DAP clk branch ctrl */
 #define	GCC_QDSS_ETR_USB_CBCR		0x29028
 #define	 ETR_USB_CBCR_CLK_ENABLE	(1 << 0) /* ETR USB clk branch ctrl */
+#define	GCC_QDSS_DAP_CBCR		0x29084
+#define	 DAP_CBCR_CLK_ENABLE		(1 << 0) /* DAP clk branch ctrl */
 
 static struct ofw_compat_data compat_data[] = {
 	{ "qcom,gcc-msm8916",			1 },
@@ -120,6 +120,7 @@ qcom_gcc_attach(device_t dev)
 	/*
 	 * Enable debug unit.
 	 * This is required for Coresight operation.
+	 * This also enables USB clock branch.
 	 */
 	qcom_qdss_enable(sc);
 
