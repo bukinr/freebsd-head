@@ -66,6 +66,7 @@ typedef	uint64_t	pn_t;			/* page number */
 #define	Ln_ADDR_MASK	(Ln_ENTRIES - 1)
 
 /* Bits 9:7 are reserved for software */
+#define	PTE_ATTR_MASK	0x3ff
 #define	PTE_SW_MANAGED	(1 << 9)
 #define	PTE_SW_WIRED	(1 << 8)
 #define	PTE_D		(1 << 7) /* Dirty */

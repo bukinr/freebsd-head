@@ -80,6 +80,21 @@ enum {
 	RSTMGR_SYSCTL_HPS2FPGA
 };
 
+int
+rstmgr_a10_reset(void)
+{
+	struct rstmgr_softc *sc;
+	uint32_t reg;
+
+	sc = rstmgr_sc;
+
+	reg = BRGMODRST_F2SSDRAM2 | BRGMODRST_F2SSDRAM1 | BRGMODRST_F2SSDRAM0;
+	reg |= BRGMODRST_FPGA2HPS | BRGMODRST_LWHPS2FPGA | BRGMODRST_HPS2FPGA;
+	WRITE4(sc, RSTMGR_A10_BRGMODRST, reg);
+
+	return (0);
+}
+
 static int
 l3remap(struct rstmgr_softc *sc, int remap, int enable)
 {
@@ -87,6 +102,8 @@ l3remap(struct rstmgr_softc *sc, int remap, int enable)
 	bus_addr_t vaddr;
 	phandle_t node;
 	int reg;
+
+	return (0);
 
 	/*
 	 * Control whether bridge is visible to L3 masters or not.
@@ -145,7 +162,7 @@ rstmgr_sysctl(SYSCTL_HANDLER_ARGS)
 		return (1);
 	}
 
-	reg = READ4(sc, RSTMGR_BRGMODRST);
+	reg = READ4(sc, RSTMGR_A10_BRGMODRST);
 	enable = reg & bit ? 0 : 1;
 
 	err = sysctl_handle_int(oidp, &enable, 0, req);
@@ -159,7 +176,7 @@ rstmgr_sysctl(SYSCTL_HANDLER_ARGS)
 	else
 		return (EINVAL);
 
-	WRITE4(sc, RSTMGR_BRGMODRST, reg);
+	WRITE4(sc, RSTMGR_A10_BRGMODRST, reg);
 	l3remap(sc, remap, enable);
 
 	return (0);
@@ -234,6 +251,29 @@ rstmgr_attach(device_t dev)
 	sc->bst = rman_get_bustag(sc->res[0]);
 	sc->bsh = rman_get_bushandle(sc->res[0]);
 
+#if 1
+	uint32_t reg;
+	/* Reset QSPI */
+	reg = READ4(sc, RSTMGR_PER0MODRST);
+	reg |= (PER0MODRST_QSPI);
+	//reg |= (PER0MODRST_QSPI_OCP);
+	WRITE4(sc, RSTMGR_PER0MODRST, reg);
+
+	DELAY(1000000);
+	DELAY(1000000);
+	DELAY(1000000);
+
+	/* Unreset QSPI */
+	reg = READ4(sc, RSTMGR_PER0MODRST);
+	reg &= ~(PER0MODRST_QSPI);
+	//reg &= ~(PER0MODRST_QSPI_OCP);
+	WRITE4(sc, RSTMGR_PER0MODRST, reg);
+
+	reg = READ4(sc, RSTMGR_PER1MODRST);
+	reg &= ~(0x7 << 24); //gpio
+	WRITE4(sc, RSTMGR_PER1MODRST, reg);
+#endif
+
 	rstmgr_sc = sc;
 	rstmgr_add_sysctl(sc);
 
@@ -254,4 +294,5 @@ static driver_t rstmgr_driver = {
 
 static devclass_t rstmgr_devclass;
 
-DRIVER_MODULE(rstmgr, simplebus, rstmgr_driver, rstmgr_devclass, 0, 0);
+EARLY_DRIVER_MODULE(rstmgr, simplebus, rstmgr_driver, rstmgr_devclass,
+    0, 0, BUS_PASS_BUS + BUS_PASS_ORDER_MIDDLE);

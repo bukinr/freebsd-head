@@ -14,7 +14,7 @@
 	};
 
 	chosen {
-		stdout-path = &uart4;
+		stdout-path = &uart0;
 	};
 
 	memory {
@@ -120,6 +120,28 @@
 			gpios = <&gpc 3 0>;
 			linux,default-trigger = "none";
 		};
+	};
+
+	softdma: softdma@0 {
+		compatible = "freebsd,softdma";
+
+		#dma-cells = <3>;
+	};
+
+	xdma_test {
+		compatible = "freebsd,xdma-test";
+
+		dmas = <&softdma 0 0 0xffffffff>;
+		dma-names = "test";
+	};
+
+	xdma_test2 {
+		compatible = "freebsd,xdma-test";
+
+		dmas = <&softdma 0 0 0xffffffff>;
+		dma-names = "test";
+
+		status = "disabled";
 	};
 };
 
@@ -235,6 +257,9 @@
 
 		interrupt-parent = <&gpe>;
 		interrupts = <19 0x4>;
+
+		dmas = <&dma 0 0 0xffffffff>;
+		dma-names = "fifo";
 	};
 };
 

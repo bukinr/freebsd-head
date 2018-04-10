@@ -72,9 +72,11 @@ struct pio_softc {
 	void			*ih;
 };
 
+struct pio_softc *pio_sc;
+
 static struct resource_spec pio_spec[] = {
 	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },
-	{ SYS_RES_IRQ,		0,	RF_ACTIVE },
+	{ SYS_RES_IRQ,		0,	RF_ACTIVE | RF_OPTIONAL},
 	{ -1, 0 }
 };
 
@@ -169,6 +171,8 @@ pio_attach(device_t dev)
 	sc = device_get_softc(dev);
 	sc->dev = dev;
 
+	pio_sc = sc;
+
 	if (bus_alloc_resources(dev, pio_spec, sc->res)) {
 		device_printf(dev, "could not allocate resources\n");
 		return (ENXIO);
@@ -187,6 +191,17 @@ pio_attach(device_t dev)
 	SLIST_INSERT_HEAD(&fdt_ic_list_head, fic, fdt_ics);
 
 	return (0);
+}
+
+void
+pio_test(void)
+{
+	struct pio_softc *sc;
+
+	sc = pio_sc;
+
+	printf("%s\n", __func__);
+	WRITE4(sc, 0x0, 0xffffffff);
 }
 
 static device_method_t pio_methods[] = {

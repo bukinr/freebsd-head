@@ -22,8 +22,10 @@
 
 include 	"SOCFPGA"
 ident		SOCDK
+hints		"SOCDK.hints"
 
-options		ROOTDEVNAME=\"ufs:/dev/mmcsd0s4\"
+#options		ROOTDEVNAME=\"ufs:/dev/mmcsd0s4\"
+options		ROOTDEVNAME=\"ufs:/dev/da0\"
 
 # Flattened Device Tree
 options		FDT_DTB_STATIC
