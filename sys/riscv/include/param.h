@@ -55,7 +55,7 @@
 #endif
 #else
 #define	MAXCPU		1
-#endif /* SMP || KLD_MODULE */
+#endif /* SMP */
 
 #ifndef MAXMEMDOM
 #define	MAXMEMDOM	1

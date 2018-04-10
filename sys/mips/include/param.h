@@ -104,7 +104,7 @@
 #else
 #define	MAXSMPCPU	1
 #define	MAXCPU		1
-#endif
+#endif /* SMP */
 
 #ifndef MAXMEMDOM
 #define	MAXMEMDOM	1
