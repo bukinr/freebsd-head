@@ -1,9 +1,0 @@
-# $FreeBSD$
-
-# Chrome Embedded Controller
-hint.max1619.0.at="iicbus0"
-hint.max1619.0.addr=0x4c
-
-# Character LCD display
-hint.nhd_0216k3z.0.at="iicbus0"
-hint.nhd_0216k3z.0.addr=0x28

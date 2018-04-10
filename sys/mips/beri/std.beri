@@ -4,4 +4,3 @@ files	"../beri/files.beri"
 cpu		CPU_MIPS4KC
 
 options 	BERI_LARGE_TLB
-# options 	PLATFORM_INIT_SECONDARY

@@ -302,9 +302,9 @@ buffer_copy(struct sc_chinfo *ch)
 			    sc->rbuf[dst + HDSPE_CHANBUF_SAMPLES * ch->rslot];
 		}
 
-		dst += 1;
+		dst+=1;
 		dst %= dsize;
-		src += 2;
+		src+=2;
 		src %= ssize;
 	}
 }

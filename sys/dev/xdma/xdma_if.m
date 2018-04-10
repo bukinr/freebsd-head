@@ -1,5 +1,5 @@
 #-
-# Copyright (c) 2016-2018 Ruslan Bukin <br@bsdpad.com>
+# Copyright (c) 2016 Ruslan Bukin <br@bsdpad.com>
 # All rights reserved.
 #
 # This software was developed by SRI International and the University of
@@ -43,40 +43,19 @@
 INTERFACE xdma;
 
 #
-# Request a transfer.
+# Prepare a channel for cyclic transfer.
 #
-METHOD int channel_request {
-	device_t		dev;
-	struct xdma_channel	*xchan;
-	struct xdma_request	*req;
-};
-
-#
-# Prepare xDMA channel for a scatter-gather transfer.
-#
-METHOD int channel_prep_sg {
+METHOD int channel_prep_cyclic {
 	device_t		dev;
 	struct xdma_channel	*xchan;
 };
 
 #
-# Query DMA engine driver for the amount of free entries
-# (descriptors) are available.
+# Prepare a channel for memcpy transfer.
 #
-METHOD int channel_capacity {
-	device_t			dev;
-	struct xdma_channel		*xchan;
-	uint32_t			*capacity;
-};
-
-#
-# Submit sglist list to DMA engine driver.
-#
-METHOD int channel_submit_sg {
-	device_t			dev;
-	struct xdma_channel		*xchan;
-	struct xdma_sglist		*sg;
-	uint32_t			sg_n;
+METHOD int channel_prep_memcpy {
+	device_t		dev;
+	struct xdma_channel	*xchan;
 };
 
 #
@@ -98,7 +77,7 @@ METHOD int channel_alloc {
 };
 
 #
-# Free the real hardware channel.
+# Free the channel, including descriptors.
 #
 METHOD int channel_free {
 	device_t dev;

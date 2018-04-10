@@ -43,7 +43,7 @@
 	soc {
 		/* Local timer */
 		timer@ffffc600 {
-			clock-frequency = <300000000>;
+			clock-frequency = <200000000>;
 		};
 
 		/* Global timer */
@@ -51,13 +51,7 @@
 			compatible = "arm,cortex-a9-global-timer";
 			reg = <0xffffc200 0x20>;
 			interrupts = <1 11 0x301>;
-			clock-frequency = <300000000>;
-		};
-
-		/* LED pio */
-		pio: pio@ff200010 {
-			compatible = "altr,pio";
-			reg = <0xff200010 0x10>;
+			clock-frequency = <200000000>;
 		};
 	};
 
@@ -77,7 +71,7 @@
 	cap-sd-highspeed;
 	broken-cd;
 	bus-width = <4>;
-	bus-frequency = <50000000>;
+	bus-frequency = <200000000>;
 };
 
 &i2c1 {
@@ -89,38 +83,4 @@
 
 &usb0 {
 	dr_mode = "host";
-};
-
-&qspi {
-	status = "okay";
-
-	dmas = <&pdma 24>, <&pdma 25>;
-	dma-names = "tx", "rx";
-
-	flash0: n25q00@0 {
-		#address-cells = <1>;
-		#size-cells = <1>;
-		compatible = "n25q00aa";
-		reg = <0>;
-		spi-max-frequency = <100000000>;
-
-		m25p,fast-read;
-		cdns,page-size = <256>;
-		cdns,block-size = <16>;
-		cdns,read-delay = <4>;
-		cdns,tshsl-ns = <50>;
-		cdns,tsd2d-ns = <50>;
-		cdns,tchsh-ns = <4>;
-		cdns,tslch-ns = <4>;
-
-		partition@qspi-boot {
-			label = "boot";
-			reg = <0x0 0x2720000>;
-		};
-
-		partition@qspi-rootfs {
-			label = "rootfs";
-			reg = <0x2720000 0x58E0000>;
-		};
-	};
 };

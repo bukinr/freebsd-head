@@ -51,7 +51,6 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/openfirm.h>
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
-#include <dev/altera/pio/pio.h>
 
 #include <machine/bus.h>
 #include <machine/cpu.h>
@@ -350,8 +349,6 @@ fpga_write(struct cdev *dev, struct uio *uio, int ioflag)
 		bus_space_write_4(sc->bst_data, sc->bsh_data,
 		    0x0, buffer);
 	}
-
-	pio_test();
 
 	return (0);
 }

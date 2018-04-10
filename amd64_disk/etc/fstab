@@ -1,2 +1,0 @@
-# Device	Mountpoint	FStype	Options	Dump	Pass#
-/dev/vtbd0p2	/		ufs	rw	1	1

@@ -93,8 +93,6 @@
 #define	SDMMC_MINTSTS		0x40	/* Masked Interrupt Status Register */
 #define	SDMMC_RINTSTS		0x44	/* Raw Interrupt Status Register */
 #define	SDMMC_STATUS		0x48	/* Status Register */
-#define	 SDMMC_STATUS_FIFO_COUNT_S	17
-#define	 SDMMC_STATUS_FIFO_COUNT_M	(0x1fff << SDMMC_STATUS_FIFO_COUNT_S)
 #define	 SDMMC_STATUS_DATA_BUSY	(1 << 9) /* card_data[0] */
 #define	 SDMMC_STATUS_FIFO_FULL	(1 << 3) /* FIFO full */
 #define	 SDMMC_STATUS_FIFO_EMPTY (1 << 2) /* FIFO empty */

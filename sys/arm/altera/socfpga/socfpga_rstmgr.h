@@ -39,22 +39,12 @@
 #define	RSTMGR_PERMODRST	0x14	/* Peripheral Module Reset */
 #define	RSTMGR_PER2MODRST	0x18	/* Peripheral 2 Module Reset */
 #define	RSTMGR_BRGMODRST	0x1C	/* Bridge Module Reset */
-#define	RSTMGR_A10_BRGMODRST	0x2C	/* Bridge Module Reset */
-#define	 BRGMODRST_F2SSDRAM2	(1 << 5)
-#define	 BRGMODRST_F2SSDRAM1	(1 << 4)
-#define	 BRGMODRST_F2SSDRAM0	(1 << 3)
 #define	 BRGMODRST_FPGA2HPS	(1 << 2)
 #define	 BRGMODRST_LWHPS2FPGA	(1 << 1)
 #define	 BRGMODRST_HPS2FPGA	(1 << 0)
 #define	RSTMGR_MISCMODRST	0x20	/* Miscellaneous Module Reset */
-#define	RSTMGR_PER0MODRST	0x24
-#define	 PER0MODRST_QSPI_OCP	(1 << 14)
-#define	 PER0MODRST_QSPI	(1 << 6) /* Resets QSPI flash controller */
-#define	RSTMGR_PER1MODRST	0x28
 
 #define	RSTMGR_A10_CTRL		0xC	/* Control */
 #define	RSTMGR_A10_MPUMODRST	0x20	/* MPU Module Reset */
 
 int rstmgr_warmreset(uint32_t reg);
-int rstmgr_a10_reset(void);
-

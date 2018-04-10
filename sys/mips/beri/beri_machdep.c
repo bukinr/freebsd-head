@@ -242,7 +242,6 @@ platform_start(__register_t a0, __register_t a1,  __register_t a2,
 	 */
 	ofw_parse_bootargs();
 #endif
-	boothowto |= RB_SINGLE;
 
 	/*
 	 * XXXRW: We have no way to compare wallclock time to cycle rate on
