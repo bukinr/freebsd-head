@@ -52,9 +52,18 @@ __FBSDID("$FreeBSD$");
 #include <machine/intr.h>
 
 struct berimgr_softc {
+	struct resource		*res[3];
 	struct cdev		*mgr_cdev;
 	device_t		dev;
+	bus_space_tag_t		bst_data;
+	bus_space_handle_t	bsh_data;
 };
+
+static struct resource_spec berimgr_spec[] = {
+	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },
+	{ -1, 0 }
+};
+
 
 static int
 beri_open(struct cdev *dev, int flags __unused,
@@ -86,17 +95,24 @@ static int
 beri_write(struct cdev *dev, struct uio *uio, int ioflag)
 {
 	struct berimgr_softc *sc;
+	uint32_t offs;
 	int buffer;
 
 	sc = dev->si_drv1;
 
 	printf("%s\n", __func__);
 
+	offs = 0;
+
 	while (uio->uio_resid > 0) {
 		uiomove(&buffer, 4, uio);
-		//bus_space_write_4(sc->bst_data, sc->bsh_data,
-		//    0x0, buffer);
+		bus_space_write_4(sc->bst_data, sc->bsh_data,
+		    offs, buffer);
+		offs += 4;
 	}
+
+	if (offs > 0)
+		printf("%s: written %d bytes\n", __func__, offs);
 
 	return (0);
 }
@@ -140,6 +156,15 @@ berimgr_attach(device_t dev)
 
 	sc = device_get_softc(dev);
 	sc->dev = dev;
+
+	if (bus_alloc_resources(dev, berimgr_spec, sc->res)) {
+		device_printf(dev, "could not allocate resources\n");
+		return (ENXIO);
+	}
+
+	/* Memory interface */
+	sc->bst_data = rman_get_bustag(sc->res[0]);
+	sc->bsh_data = rman_get_bushandle(sc->res[0]);
 
 	sc->mgr_cdev = make_dev(&beri_cdevsw, 0, UID_ROOT, GID_WHEEL,
 	    0600, "beri%d", device_get_unit(sc->dev));
