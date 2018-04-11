@@ -82,6 +82,7 @@
 
 	memory {
 		device_type = "memory";
+		/* Memory is reserved for device-model */
 		reg = <0x00000000 0x10000000>,		// 256M at 0x0
 		      <0x11000000 0x2f000000>;		// 768M-16M at 0x11000000
 	};
