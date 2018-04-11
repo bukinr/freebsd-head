@@ -82,7 +82,8 @@
 
 	memory {
 		device_type = "memory";
-		reg = <0x0 0x40000000>;		// 1G at 0x0
+		reg = <0x00000000 0x10000000>,		// 256M at 0x0
+		      <0x11000000 0x2f000000>;		// 768M-16M at 0x11000000
 	};
 
 	cpuintc: cpuintc@0 {
@@ -158,6 +159,11 @@
 			compatible = "altera,jtag_uart-11_0";
 			reg = <0x7f002000 0x40>;
 			status = "disabled";
+		};
+
+		manager {
+			compatible = "beri,mgr";
+			status = "okay";
 		};
 
 		sdcard@7f008000 {
