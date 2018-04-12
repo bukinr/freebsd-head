@@ -348,25 +348,31 @@ atse_transmit(struct ifnet *ifp, struct mbuf *m)
 
 	ATSE_LOCK(sc);
 
+	mtx_lock(&sc->br_mtx);
+
 	if ((ifp->if_drv_flags & (IFF_DRV_RUNNING | IFF_DRV_OACTIVE)) != IFF_DRV_RUNNING) {
 		error = drbr_enqueue(ifp, sc->br, m);
+		mtx_unlock(&sc->br_mtx);
 		ATSE_UNLOCK(sc);
 		return (error);
 	}
 
 	if ((sc->atse_flags & ATSE_FLAGS_LINK) == 0) {
 		error = drbr_enqueue(ifp, sc->br, m);
+		mtx_unlock(&sc->br_mtx);
 		ATSE_UNLOCK(sc);
 		return (error);
 	}
 
 	error = drbr_enqueue(ifp, br, m);
 	if (error) {
+		mtx_unlock(&sc->br_mtx);
 		ATSE_UNLOCK(sc);
 		return (error);
 	}
 	error = atse_transmit_locked(ifp);
 
+	mtx_unlock(&sc->br_mtx);
 	ATSE_UNLOCK(sc);
 
 	return (error);
