@@ -150,10 +150,6 @@ static struct ofw_compat_data compat_data[] = {
 	{ NULL,			HWTYPE_NONE },
 };
 
-static int pl330_probe(device_t dev);
-static int pl330_attach(device_t dev);
-static int pl330_detach(device_t dev);
-
 static void
 pl330_intr(void *arg)
 {
