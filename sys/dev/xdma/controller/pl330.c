@@ -44,7 +44,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/sglist.h>
 #include <sys/module.h>
 #include <sys/lock.h>
-#include <sys/mutex.h>
 #include <sys/resource.h>
 #include <sys/rman.h>
 
@@ -86,7 +85,6 @@ __FBSDID("$FreeBSD$");
 
 struct pl330_channel {
 	struct pl330_softc	*sc;
-	struct mtx		mtx;
 	xdma_channel_t		*xchan;
 	int			used;
 	int			index;

@@ -39,7 +39,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/queue.h>
 #include <sys/kobj.h>
 #include <sys/malloc.h>
-#include <sys/mutex.h>
 #include <sys/limits.h>
 #include <sys/lock.h>
 #include <sys/sysctl.h>
@@ -96,11 +95,11 @@ xdma_channel_alloc(xdma_controller_t *xdma, uint32_t caps)
 
 	TAILQ_INIT(&xchan->ie_handlers);
 
-	mtx_init(&xchan->mtx_lock, "xDMA chan", NULL, MTX_DEF);
-	mtx_init(&xchan->mtx_qin_lock, "xDMA qin", NULL, MTX_DEF);
-	mtx_init(&xchan->mtx_qout_lock, "xDMA qout", NULL, MTX_DEF);
-	mtx_init(&xchan->mtx_bank_lock, "xDMA bank", NULL, MTX_DEF);
-	mtx_init(&xchan->mtx_proc_lock, "xDMA proc", NULL, MTX_DEF);
+	sx_init(&xchan->sx_lock, "xDMA chan");
+	sx_init(&xchan->sx_qin_lock, "xDMA qin");
+	sx_init(&xchan->sx_qout_lock, "xDMA qout");
+	sx_init(&xchan->sx_bank_lock, "xDMA bank");
+	sx_init(&xchan->sx_proc_lock, "xDMA proc");
 
 	TAILQ_INIT(&xchan->bank);
 	TAILQ_INIT(&xchan->queue_in);
@@ -139,11 +138,11 @@ xdma_channel_free(xdma_channel_t *xchan)
 
 	xdma_teardown_all_intr(xchan);
 
-	mtx_destroy(&xchan->mtx_lock);
-	mtx_destroy(&xchan->mtx_qin_lock);
-	mtx_destroy(&xchan->mtx_qout_lock);
-	mtx_destroy(&xchan->mtx_bank_lock);
-	mtx_destroy(&xchan->mtx_proc_lock);
+	sx_destroy(&xchan->sx_lock);
+	sx_destroy(&xchan->sx_qin_lock);
+	sx_destroy(&xchan->sx_qout_lock);
+	sx_destroy(&xchan->sx_bank_lock);
+	sx_destroy(&xchan->sx_proc_lock);
 
 	TAILQ_REMOVE(&xdma->channels, xchan, xchan_next);
 
@@ -179,7 +178,9 @@ xdma_setup_intr(xdma_channel_t *xchan,
 	ih->cb = cb;
 	ih->cb_user = arg;
 
+	XCHAN_LOCK(xchan);
 	TAILQ_INSERT_TAIL(&xchan->ie_handlers, ih, ih_next);
+	XCHAN_UNLOCK(xchan);
 
 	if (ihandler != NULL)
 		*ihandler = ih;
