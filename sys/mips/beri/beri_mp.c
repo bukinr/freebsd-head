@@ -166,8 +166,9 @@ platform_init_secondary(int cpuid)
 	beripic_setup_ipi(ic, cpuid, ipi);
 
 	/* Unmask the interrupt */
-	if (cpuid != 0)
+	if (cpuid != 0) {
 		mips_wr_status(mips_rd_status() | (((1 << ipi) << 8) << 2));
+	}
 }
 
 
