@@ -45,6 +45,13 @@ device		altera_msgdma
 options 	INTRNG
 
 #
+# DMA support
+#
+device		xdma
+device		altera_softdma
+device		altera_msgdma
+
+#
 # USB support
 #
 #options	USB_DEBUG
