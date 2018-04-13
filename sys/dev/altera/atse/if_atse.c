@@ -91,6 +91,9 @@ __FBSDID("$FreeBSD$");
 #include <dev/altera/atse/if_atsereg.h>
 #include <dev/xdma/xdma.h>
 
+MODULE_DEPEND(atse, ether, 1, 1, 1);
+MODULE_DEPEND(atse, miibus, 1, 1, 1);
+
 #define	RX_QUEUE_SIZE		4096
 #define	TX_QUEUE_SIZE		4096
 #define	NUM_RX_MBUF		512
