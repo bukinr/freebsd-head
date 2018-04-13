@@ -245,7 +245,8 @@ softdma_attach(device_t dev)
 	sc->dev = dev;
 
 	if (bus_alloc_resources(dev, softdma_spec, sc->res)) {
-		device_printf(dev, "could not allocate resources for device\n");
+		device_printf(dev,
+		    "could not allocate resources for device\n");
 		return (ENXIO);
 	}
 
