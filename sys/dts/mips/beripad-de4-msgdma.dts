@@ -269,7 +269,7 @@
 			#dma-cells = <3>;
 		};
 
-		softdma3: softdma@7f007500 {
+		softdma3: softdma@7f005500 {
 			compatible = "altr,softdma";
 			reg = < 0x7f005500 0x8		/* rx */
 				0x7f005520 0x20 >;	/* rxc */
