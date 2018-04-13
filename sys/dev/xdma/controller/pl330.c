@@ -53,7 +53,6 @@ __FBSDID("$FreeBSD$");
 #include <vm/pmap.h>
 
 #include <machine/bus.h>
-#include <machine/fdt.h>
 
 #ifdef FDT
 #include <dev/fdt/fdt_common.h>
