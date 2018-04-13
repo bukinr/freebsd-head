@@ -28,7 +28,7 @@
  * SUCH DAMAGE.
  */
 
-/* Altera FIFO driver. */
+/* This is driver for SoftDMA device built using Altera FIFO component. */
 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
