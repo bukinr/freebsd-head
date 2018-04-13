@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2017 Ruslan Bukin <br@bsdpad.com>
+ * Copyright (c) 2017-2018 Ruslan Bukin <br@bsdpad.com>
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -28,7 +28,7 @@
  * SUCH DAMAGE.
  */
 
-/* Altera FIFO driver with xDMA(4) interface. */
+/* Altera FIFO driver. */
 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
@@ -60,10 +60,10 @@ __FBSDID("$FreeBSD$");
 #include <dev/xdma/xdma.h>
 #include "xdma_if.h"
 
-#define DEBUG
-#undef DEBUG
+#define SOFTDMA_DEBUG
+#undef SOFTDMA_DEBUG
 
-#ifdef DEBUG
+#ifdef SOFTDMA_DEBUG
 #define dprintf(fmt, ...)  printf(fmt, ##__VA_ARGS__)
 #else
 #define dprintf(fmt, ...)
@@ -75,12 +75,14 @@ __FBSDID("$FreeBSD$");
 #define	CONTROL_GEN_EOP				(1 << 1)
 #define	CONTROL_OWN				(1 << 31)
 
-#define	ATSE_RX_EVENTS	(A_ONCHIP_FIFO_MEM_CORE_INTR_FULL	|\
-			 A_ONCHIP_FIFO_MEM_CORE_INTR_OVERFLOW	|\
-			 A_ONCHIP_FIFO_MEM_CORE_INTR_UNDERFLOW)
-#define	ATSE_TX_EVENTS	(A_ONCHIP_FIFO_MEM_CORE_INTR_EMPTY	|\
-			 A_ONCHIP_FIFO_MEM_CORE_INTR_OVERFLOW	|\
-			 A_ONCHIP_FIFO_MEM_CORE_INTR_UNDERFLOW)
+#define	SOFTDMA_RX_EVENTS	\
+	(A_ONCHIP_FIFO_MEM_CORE_INTR_FULL	| \
+	 A_ONCHIP_FIFO_MEM_CORE_INTR_OVERFLOW	| \
+	 A_ONCHIP_FIFO_MEM_CORE_INTR_UNDERFLOW)
+#define	SOFTDMA_TX_EVENTS	\
+	(A_ONCHIP_FIFO_MEM_CORE_INTR_EMPTY	| \
+ 	A_ONCHIP_FIFO_MEM_CORE_INTR_OVERFLOW	| \
+ 	A_ONCHIP_FIFO_MEM_CORE_INTR_UNDERFLOW)
 
 struct softdma_channel {
 	struct softdma_softc	*sc;
@@ -210,7 +212,8 @@ softdma_intr(void *arg)
 	}
 
 	if (reg != 0) {
-		softdma_memc_write(sc, A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_EVENT, reg);
+		softdma_memc_write(sc,
+		    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_EVENT, reg);
 		chan->run = 1;
 		wakeup(chan);
 	}
@@ -223,7 +226,7 @@ softdma_probe(device_t dev)
 	if (!ofw_bus_status_okay(dev))
 		return (ENXIO);
 
-	if (!ofw_bus_is_compatible(dev, "freebsd,softdma"))
+	if (!ofw_bus_is_compatible(dev, "altr,softdma"))
 		return (ENXIO);
 
 	device_set_desc(dev, "SoftDMA");
@@ -294,9 +297,8 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 	sc = chan->sc;
 
 	fill_level = softdma_fill_level(sc);
-	while (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
+	while (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH)
 		fill_level = softdma_fill_level(sc);
-	}
 
 	/* Set start of packet. */
 	if (desc->control & CONTROL_GEN_SOP) {
@@ -350,17 +352,15 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 
 	/* Set end of packet. */
 	reg = 0;
-	if (desc->control & CONTROL_GEN_EOP) {
+	if (desc->control & CONTROL_GEN_EOP)
 		reg |= A_ONCHIP_FIFO_MEM_CORE_EOP;
-	}
 	reg |= ((4 - leftm) << A_ONCHIP_FIFO_MEM_CORE_EMPTY_SHIFT);
 	softdma_mem_write(sc, A_ONCHIP_FIFO_MEM_CORE_METADATA, reg);
 
 	/* Ensure there is a FIFO entry available. */
 	fill_level = softdma_fill_level(sc);
-	while (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH) {
+	while (fill_level == AVALON_FIFO_TX_BASIC_OPTS_DEPTH)
 		fill_level = softdma_fill_level(sc);
-	};
 
 	/* Final write */
 	bus_write_4(sc->res[0], A_ONCHIP_FIFO_MEM_CORE_DATA, val);
@@ -429,24 +429,24 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 			*(uint32_t *)(desc->dst_addr + dst_offs) = data;
 			dst_offs += 4;
 		} else if (empty == 1) {
-			*(uint16_t *)(desc->dst_addr + dst_offs) = ((data >> 16) & 0xffff);
+			*(uint16_t *)(desc->dst_addr + dst_offs) =
+			    ((data >> 16) & 0xffff);
 			dst_offs += 2;
 
-			*(uint8_t *)(desc->dst_addr + dst_offs) = ((data >> 8) & 0xff);
+			*(uint8_t *)(desc->dst_addr + dst_offs) =
+			    ((data >> 8) & 0xff);
 			dst_offs += 1;
 		} else {
 			panic("empty %d\n", empty);
 		}
 
-		if (meta & A_ONCHIP_FIFO_MEM_CORE_EOP) {
+		if (meta & A_ONCHIP_FIFO_MEM_CORE_EOP)
 			break;
-		}
 
 		fill_level = softdma_fill_level(sc);
 		timeout = 100;
-		while (fill_level == 0 && timeout--) {
+		while (fill_level == 0 && timeout--)
 			fill_level = softdma_fill_level(sc);
-		}
 		if (timeout == 0) {
 			/* No EOP received. Broken packet. */
 			error = 1;
@@ -462,7 +462,8 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 }
 
 static uint32_t
-softdma_process_descriptors(struct softdma_channel *chan, xdma_transfer_status_t *status)
+softdma_process_descriptors(struct softdma_channel *chan,
+    xdma_transfer_status_t *status)
 {
 	struct xdma_channel *xchan;
 	struct softdma_desc *desc;
@@ -737,13 +738,10 @@ softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 		desc->reserved = 0;
 		desc->control = 0;
 
-		if (sg[i].first == 1) {
+		if (sg[i].first == 1)
 			desc->control |= CONTROL_GEN_SOP;
-		}
-
-		if (sg[i].last == 1) {
+		if (sg[i].last == 1)
 			desc->control |= CONTROL_GEN_EOP;
-		}
 
 		tmp = chan->idx_head;
 		chan->idx_head = softdma_next_desc(chan, chan->idx_head);
@@ -752,16 +750,16 @@ softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 		enqueued += 1;
 	}
 
-	if (enqueued == 0) {
+	if (enqueued == 0)
 		return (0);
-	}
 
 	if (saved_dir == XDMA_MEM_TO_DEV) {
 		chan->run = 1;
 		wakeup(chan);
-	} else {
-		softdma_memc_write(sc, A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_INT_ENABLE, ATSE_RX_EVENTS);
-	}
+	} else
+		softdma_memc_write(sc,
+		    A_ONCHIP_FIFO_MEM_CORE_STATUS_REG_INT_ENABLE,
+		    SOFTDMA_RX_EVENTS);
 
 	return (0);
 }
@@ -821,7 +819,8 @@ softdma_channel_control(device_t dev, xdma_channel_t *xchan, int cmd)
 
 #ifdef FDT
 static int
-softdma_ofw_md_data(device_t dev, pcell_t *cells, int ncells, void **ptr)
+softdma_ofw_md_data(device_t dev, pcell_t *cells,
+    int ncells, void **ptr)
 {
 
 	return (0);
