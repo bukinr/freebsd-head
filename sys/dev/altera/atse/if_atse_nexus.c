@@ -1,5 +1,4 @@
 /*-
-<<<<<<< HEAD
  * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
  *
  * Copyright (c) 2012,2013 Bjoern A. Zeeb
