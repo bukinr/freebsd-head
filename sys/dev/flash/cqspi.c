@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2017 Ruslan Bukin <br@bsdpad.com>
+ * Copyright (c) 2017-2018 Ruslan Bukin <br@bsdpad.com>
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -150,11 +150,10 @@ cqspi_intr(void *arg)
 
 	pending = READ4(sc, CQSPI_IRQSTAT);
 
-#if 1
-	printf("%s: IRQSTAT %x\n", __func__, pending);
-#endif
+	dprintf("%s: IRQSTAT %x\n", __func__, pending);
 
-	if (pending & (IRQMASK_INDOPDONE | IRQMASK_INDXFRLVL | IRQMASK_INDSRAMFULL)) {
+	if (pending & (IRQMASK_INDOPDONE | IRQMASK_INDXFRLVL |
+	    IRQMASK_INDSRAMFULL)) {
 		/* TODO: PIO operation done */
 	}
 
@@ -184,9 +183,10 @@ cqspi_xdma_tx_intr(void *arg, xdma_transfer_status_t *status)
 		sc->write_op_done = 1;
 		deq++;
 	}
-	if (deq > 1) {
-		device_printf(sc->dev, "Warning: more than 1 tx bio dequeued\n");
-	}
+
+	if (deq > 1)
+		device_printf(sc->dev,
+		    "Warning: more than 1 tx bio dequeued\n");
 
 	wakeup(&sc->xdma_tx);
 
@@ -217,9 +217,9 @@ cqspi_xdma_rx_intr(void *arg, xdma_transfer_status_t *status)
 		deq++;
 	}
 
-	if (deq > 1) {
-		device_printf(sc->dev, "Warning: more than 1 rx bio dequeued\n");
-	}
+	if (deq > 1)
+		device_printf(sc->dev,
+		    "Warning: more than 1 rx bio dequeued\n");
 
 	wakeup(&sc->xdma_rx);
 
@@ -239,8 +239,10 @@ cqspi_wait_for_completion(struct cqspi_softc *sc)
 			break;
 		}
 	}
+
 	if (i == 0) {
-		printf("%s: cmd timed out: %x\n", __func__, READ4(sc, CQSPI_FLASHCMD));
+		device_printf(sc->dev, "%s: cmd timed out: %x\n",
+		    __func__, READ4(sc, CQSPI_FLASHCMD));
 		return (-1);
 	}
 
@@ -323,9 +325,8 @@ cqspi_cmd_read(struct cqspi_softc *sc, uint8_t cmd,
 
 	data = READ4(sc, CQSPI_FLASHCMDRDDATALO);
 
-	for (i = 0; i < len; i++) {
+	for (i = 0; i < len; i++)
 		buf[i] = (data >> (i * 8)) & 0xff;
-	}
 
 	return (0);
 }
@@ -414,7 +415,8 @@ cqspi_write(device_t dev, device_t child, struct bio *bp,
 	struct cqspi_softc *sc;
 	uint32_t reg;
 
-	dprintf("%s: offset 0x%llx count %lld bytes\n", __func__, offset, count);
+	dprintf("%s: offset 0x%llx count %lld bytes\n",
+	    __func__, offset, count);
 
 	sc = device_get_softc(dev);
 
@@ -447,7 +449,8 @@ cqspi_write(device_t dev, device_t child, struct bio *bp,
 	reg |= DEVRD_INST_WIDTH_SINGLE;
 	WRITE4(sc, CQSPI_DEVRD, reg);
 
-	xdma_enqueue_bio(sc->xchan_tx, &bp, sc->sram_phys, 4, 4, XDMA_MEM_TO_DEV);
+	xdma_enqueue_bio(sc->xchan_tx, &bp,
+	    sc->sram_phys, 4, 4, XDMA_MEM_TO_DEV);
 	xdma_queue_submit(sc->xchan_tx);
 
 	sc->write_op_done = 0;
@@ -471,7 +474,8 @@ cqspi_read(device_t dev, device_t child, struct bio *bp,
 
 	sc = device_get_softc(dev);
 
-	dprintf("%s: offset 0x%llx count %lld bytes\n", __func__, offset, count);
+	dprintf("%s: offset 0x%llx count %lld bytes\n",
+	    __func__, offset, count);
 
 	cqspi_wait_idle(sc);
 
@@ -497,7 +501,8 @@ cqspi_read(device_t dev, device_t child, struct bio *bp,
 	WRITE4(sc, CQSPI_MODEBIT, 0xff);
 	WRITE4(sc, CQSPI_IRQMASK, 0);
 
-	xdma_enqueue_bio(sc->xchan_rx, &bp, sc->sram_phys, 4, 4, XDMA_DEV_TO_MEM);
+	xdma_enqueue_bio(sc->xchan_rx, &bp, sc->sram_phys, 4, 4,
+	    XDMA_DEV_TO_MEM);
 	xdma_queue_submit(sc->xchan_rx);
 
 	sc->read_op_done = 0;
@@ -520,7 +525,8 @@ cqspi_init(struct cqspi_softc *sc)
 	uint32_t reg;
 	int len;
 
-	device_printf(sc->dev, "Module ID %x\n", READ4(sc, CQSPI_MODULEID));
+	device_printf(sc->dev, "Module ID %x\n",
+	    READ4(sc, CQSPI_MODULEID));
 
 	if ((node = ofw_bus_get_node(sc->dev)) == -1) {
 		return (ENXIO);
@@ -594,7 +600,8 @@ cqspi_add_devices(device_t dev)
 	node = ofw_bus_get_node(dev);
 
 	for (child = OF_child(node); child != 0; child = OF_peer(child)) {
-		child_dev = simplebus_add_device(dev, child, 0, NULL, -1, NULL);
+		child_dev =
+		    simplebus_add_device(dev, child, 0, NULL, -1, NULL);
 		if (child_dev == NULL) {
 			return (ENXIO);
 		}
@@ -697,22 +704,26 @@ cqspi_attach(device_t dev)
 	}
 
 	/* Setup xDMA interrupt handlers. */
-	error = xdma_setup_intr(sc->xchan_tx, cqspi_xdma_tx_intr, sc, &sc->ih_tx);
+	error = xdma_setup_intr(sc->xchan_tx, cqspi_xdma_tx_intr,
+	    sc, &sc->ih_tx);
 	if (error) {
 		device_printf(sc->dev,
 		    "Can't setup xDMA interrupt handler.\n");
 		return (ENXIO);
 	}
 
-	error = xdma_setup_intr(sc->xchan_rx, cqspi_xdma_rx_intr, sc, &sc->ih_rx);
+	error = xdma_setup_intr(sc->xchan_rx, cqspi_xdma_rx_intr,
+	    sc, &sc->ih_rx);
 	if (error) {
 		device_printf(sc->dev,
 		    "Can't setup xDMA interrupt handler.\n");
 		return (ENXIO);
 	}
 
-	xdma_prep_sg(sc->xchan_tx, TX_QUEUE_SIZE, MAXPHYS, 8, 16, 0, BUS_SPACE_MAXADDR_32BIT, BUS_SPACE_MAXADDR);
-	xdma_prep_sg(sc->xchan_rx, TX_QUEUE_SIZE, MAXPHYS, 8, 16, 0, BUS_SPACE_MAXADDR_32BIT, BUS_SPACE_MAXADDR);
+	xdma_prep_sg(sc->xchan_tx, TX_QUEUE_SIZE, MAXPHYS, 8, 16, 0,
+	    BUS_SPACE_MAXADDR_32BIT, BUS_SPACE_MAXADDR);
+	xdma_prep_sg(sc->xchan_rx, TX_QUEUE_SIZE, MAXPHYS, 8, 16, 0,
+	    BUS_SPACE_MAXADDR_32BIT, BUS_SPACE_MAXADDR);
 
 	cqspi_init(sc);
 
