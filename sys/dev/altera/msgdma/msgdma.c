@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2016 Ruslan Bukin <br@bsdpad.com>
+ * Copyright (c) 2016-2018 Ruslan Bukin <br@bsdpad.com>
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -148,8 +148,8 @@ msgdma_intr(void *arg)
 	chan = &sc->channels[0];
 	xchan = chan->xchan;
 
-	dprintf("%s(%d): status 0x%08x next_descr 0x%08x, control 0x%08x\n", __func__,
-	    device_get_unit(sc->dev),
+	dprintf("%s(%d): status 0x%08x next_descr 0x%08x, control 0x%08x\n",
+	    __func__, device_get_unit(sc->dev),
 		READ4_DESC(sc, PF_STATUS),
 		READ4_DESC(sc, PF_NEXT_LO),
 		READ4_DESC(sc, PF_CONTROL));
@@ -157,7 +157,8 @@ msgdma_intr(void *arg)
 	tot_copied = 0;
 
 	while (chan->idx_tail != chan->idx_head) {
-		dprintf("%s: idx_tail %d idx_head %d\n", __func__, chan->idx_tail, chan->idx_head);
+		dprintf("%s: idx_tail %d idx_head %d\n", __func__,
+		    chan->idx_tail, chan->idx_head);
 		bus_dmamap_sync(chan->dma_tag, chan->dma_map[chan->idx_tail],
 		    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
 
@@ -181,6 +182,35 @@ msgdma_intr(void *arg)
 	status.error = 0;
 	status.transferred = tot_copied;
 	xdma_callback(chan->xchan, &status);
+}
+
+static int
+msgdma_reset(struct msgdma_softc *sc)
+{
+	int timeout;
+
+	dprintf("%s: read status: %x\n", __func__, READ4(sc, 0x00));
+	dprintf("%s: read control: %x\n", __func__, READ4(sc, 0x04));
+	dprintf("%s: read 1: %x\n", __func__, READ4(sc, 0x08));
+	dprintf("%s: read 2: %x\n", __func__, READ4(sc, 0x0C));
+
+	WRITE4(sc, DMA_CONTROL, CONTROL_RESET);
+
+	timeout = 100;
+	do {
+		if ((READ4(sc, DMA_STATUS) & STATUS_RESETTING) == 0)
+			break;
+	} while (timeout--);
+
+	dprintf("timeout %d\n", timeout);
+
+	if (timeout == 0)
+		return (-1);
+
+	dprintf("%s: read control after reset: %x\n",
+	    __func__, READ4(sc, DMA_CONTROL));
+
+	return (0);
 }
 
 static int
@@ -235,39 +265,10 @@ msgdma_attach(device_t dev)
 	xref = OF_xref_from_node(node);
 	OF_device_register_xref(xref, dev);
 
-	printf("%s: read status: %x\n", __func__, READ4(sc, 0x00));
-	printf("%s: read control: %x\n", __func__, READ4(sc, 0x04));
-	printf("%s: read 1: %x\n", __func__, READ4(sc, 0x08));
-	printf("%s: read 2: %x\n", __func__, READ4(sc, 0x0C));
-
-	int timeout;
-
-	WRITE4(sc, DMA_STATUS, 0x3ff);
-	WRITE4(sc, DMA_CONTROL, CONTROL_RESET);
-
-	timeout = 100;
-	do {
-		if ((READ4(sc, DMA_STATUS) & STATUS_RESETTING) == 0)
-			break;
-	} while (timeout--);
-
-	printf("timeout %d\n", timeout);
+	if (msgdma_reset(sc) != 0)
+		return (-1);
 
 	WRITE4(sc, DMA_CONTROL, CONTROL_GIEM);
-
-	printf("%s: read control after reset: %x\n", __func__, READ4(sc, DMA_CONTROL));
-
-#if 0
-	int i;
-	for (i = 0; i < 10000; i++) {
-		printf("%s: read control after reset: %x\n", __func__, READ4(sc, DMA_CONTROL));
-		DELAY(1);
-	}
-
-	for (i = 0; i < 20; i++) {
-		printf("%s: read status after reset: %x\n", __func__, READ4(sc, DMA_STATUS));
-	}
-#endif
 
 	return (0);
 }
@@ -298,7 +299,8 @@ msgdma_dmamap_cb(void *arg, bus_dma_segment_t *segs, int nseg, int err)
 	chan->descs_phys[chan->map_descr].ds_addr = segs[0].ds_addr;
 	chan->descs_phys[chan->map_descr].ds_len = segs[0].ds_len;
 
-	dprintf("map desc %d: descs phys %lx len %ld\n", chan->map_descr, segs[0].ds_addr, segs[0].ds_len);
+	dprintf("map desc %d: descs phys %lx len %ld\n",
+	    chan->map_descr, segs[0].ds_addr, segs[0].ds_len);
 }
 
 static int
@@ -371,7 +373,8 @@ msgdma_desc_alloc(struct msgdma_softc *sc, struct msgdma_channel *chan,
 		    BUS_DMA_WAITOK | BUS_DMA_ZERO, &chan->dma_map[i]);
 		if (err) {
 			device_printf(sc->dev,
-			    "%s: Can't allocate memory for descriptors.\n", __func__);
+			    "%s: Can't allocate memory for descriptors.\n",
+			    __func__);
 			return (-1);
 		}
 
@@ -501,11 +504,13 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 
 			if (sg[i].last == 1) {
 				desc->control |= htole32(CONTROL_GEN_EOP);
-				desc->control |= htole32(CONTROL_TC_IRQ_EN | CONTROL_ET_IRQ_EN | CONTROL_ERR_M);
+				desc->control |= htole32(CONTROL_TC_IRQ_EN |
+				    CONTROL_ET_IRQ_EN | CONTROL_ERR_M);
 			}
 		} else {
 			desc->control |= htole32(CONTROL_END_ON_EOP | (1 << 13));
-			desc->control |= htole32(CONTROL_TC_IRQ_EN | CONTROL_ET_IRQ_EN | CONTROL_ERR_M);
+			desc->control |= htole32(CONTROL_TC_IRQ_EN |
+			    CONTROL_ET_IRQ_EN | CONTROL_ERR_M);
 		}
 
 		tmp = chan->idx_head;
