@@ -2,6 +2,7 @@
  * Copyright (c) 2006 M. Warner Losh.  All rights reserved.
  * Copyright (c) 2009 Oleksandr Tymoshenko.  All rights reserved.
  * Copyright (c) 2017 Ruslan Bukin <br@bsdpad.com>
+ * Copyright (c) 2018 Ian Lepore.  All rights reserved.
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -61,10 +62,10 @@ __FBSDID("$FreeBSD$");
 
 #include "qspi_if.h"
 
-#define DEBUG
-#undef DEBUG
+#define	N25Q_DEBUG
+#undef N25Q_DEBUG
 
-#ifdef DEBUG
+#ifdef N25Q_DEBUG
 #define dprintf(fmt, ...)  printf(fmt, ##__VA_ARGS__)
 #else
 #define dprintf(fmt, ...)
@@ -82,15 +83,6 @@ __FBSDID("$FreeBSD$");
  * results in a completely un-usable system.
  */
 #define	FLASH_SECTORSIZE	512
-
-#define	READ4(_sc, _reg) bus_read_4((_sc)->res[0], _reg)
-#define READ2(_sc, _reg) bus_read_2((_sc)->res[0], _reg)
-#define READ1(_sc, _reg) bus_read_1((_sc)->res[0], _reg)
-#define WRITE4(_sc, _reg, _val) bus_write_4((_sc)->res[0], _reg, _val)
-#define WRITE2(_sc, _reg, _val) bus_write_2((_sc)->res[0], _reg, _val)
-#define WRITE1(_sc, _reg, _val) bus_write_1((_sc)->res[0], _reg, _val)
-#define READ_DATA_4(_sc, _reg) bus_read_4((_sc)->res[1], _reg)
-#define READ_DATA_1(_sc, _reg) bus_read_1((_sc)->res[1], _reg)
 
 struct n25q_flash_ident {
 	const char	*name;
@@ -116,7 +108,12 @@ struct n25q_softc {
 	struct proc		*sc_p;
 	struct bio_queue_head	sc_bio_queue;
 	unsigned int		sc_flags;
+	unsigned int		sc_taskstate;
 };
+
+#define	TSTATE_STOPPED	0
+#define	TSTATE_STOPPING	1
+#define	TSTATE_RUNNING	2
 
 #define	N25Q_LOCK(_sc)		mtx_lock(&(_sc)->sc_mtx)
 #define	N25Q_UNLOCK(_sc)	mtx_unlock(&(_sc)->sc_mtx)
@@ -146,25 +143,20 @@ struct n25q_flash_ident flash_devices[] = {
 	{ "n25q00", 0x20, 0xbb21, (64 * 1024), 2048, FL_ENABLE_4B_ADDR},
 };
 
-static uint8_t
-n25q_get_status(device_t dev)
+static int
+n25q_wait_for_device_ready(device_t dev)
 {
 	device_t pdev;
 	uint8_t status;
+	int err;
 
 	pdev = device_get_parent(dev);
 
-	QSPI_READ_REG(pdev, dev, CMD_READ_STATUS, &status, 1);
+	do {
+		err = QSPI_READ_REG(pdev, dev, CMD_READ_STATUS, &status, 1);
+	} while (err == 0 && (status & STATUS_WIP));
 
-	return (status);
-}
-
-static void
-n25q_wait_for_device_ready(device_t dev)
-{
-
-	while ((n25q_get_status(dev) & STATUS_WIP))
-		continue;
+	return (err);
 }
 
 static struct n25q_flash_ident*
@@ -335,6 +327,8 @@ n25q_attach(device_t dev)
 	bioq_init(&sc->sc_bio_queue);
 
 	kproc_create(&n25q_task, sc, &sc->sc_p, 0, 0, "task: n25q flash");
+	sc->sc_taskstate = TSTATE_RUNNING;
+
 	device_printf(sc->dev, "%s, sector %d bytes, %d sectors\n", 
 	    ident->name, ident->sectorsize, ident->sectorcount);
 
@@ -344,8 +338,33 @@ n25q_attach(device_t dev)
 static int
 n25q_detach(device_t dev)
 {
+	struct n25q_softc *sc;
+	int err;
 
-	return (EIO);
+	sc = device_get_softc(dev);
+	err = 0;
+
+	N25Q_LOCK(sc);
+	if (sc->sc_taskstate == TSTATE_RUNNING) {
+		sc->sc_taskstate = TSTATE_STOPPING;
+		wakeup(sc);
+		while (err == 0 && sc->sc_taskstate != TSTATE_STOPPED) {
+			err = msleep(sc, &sc->sc_mtx, 0, "n25q", hz * 3);
+			if (err != 0) {
+				sc->sc_taskstate = TSTATE_RUNNING;
+				device_printf(sc->dev,
+				    "Failed to stop queue task\n");
+			}
+		}
+	}
+	N25Q_UNLOCK(sc);
+
+	if (err == 0 && sc->sc_taskstate == TSTATE_STOPPED) {
+		disk_destroy(sc->sc_disk);
+		bioq_flush(&sc->sc_bio_queue, NULL, ENXIO);
+		N25Q_LOCK_DESTROY(sc);
+	}
+	return (err);
 }
 
 static int
@@ -421,10 +440,15 @@ n25q_task(void *arg)
 	for (;;) {
 		N25Q_LOCK(sc);
 		do {
-			bp = bioq_first(&sc->sc_bio_queue);
-			if (bp == NULL) {
-				msleep(sc, &sc->sc_mtx, PRIBIO, "jobqueue", hz);
+			if (sc->sc_taskstate == TSTATE_STOPPING) {
+				sc->sc_taskstate = TSTATE_STOPPED;
+				N25Q_UNLOCK(sc);
+				wakeup(sc);
+				kproc_exit(0);
 			}
+			bp = bioq_first(&sc->sc_bio_queue);
+			if (bp == NULL)
+				msleep(sc, &sc->sc_mtx, PRIBIO, "jobqueue", hz);
 		} while (bp == NULL);
 		bioq_remove(&sc->sc_bio_queue, bp);
 		N25Q_UNLOCK(sc);
