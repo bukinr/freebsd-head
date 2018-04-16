@@ -1972,11 +1972,7 @@ in6_if2idlen(struct ifnet *ifp)
 	case IFT_BRIDGE:	/* bridge(4) only does Ethernet-like links */
 	case IFT_INFINIBAND:
 		return (64);
-	case IFT_FDDI:		/* RFC2467 */
-		return (64);
 	case IFT_PPP:		/* RFC2472 */
-		return (64);
-	case IFT_ARCNET:	/* RFC2497 */
 		return (64);
 	case IFT_FRELAY:	/* RFC2590 */
 		return (64);

@@ -120,7 +120,6 @@ MAN=	aac.4 \
 	chromebook_platform.4 \
 	ciss.4 \
 	cloudabi.4 \
-	cm.4 \
 	cmx.4 \
 	${_coretemp.4} \
 	${_cpuctl.4} \
@@ -170,7 +169,6 @@ MAN=	aac.4 \
 	ffclock.4 \
 	filemon.4 \
 	firewire.4 \
-	fpa.4 \
 	full.4 \
 	fwe.4 \
 	fwip.4 \
