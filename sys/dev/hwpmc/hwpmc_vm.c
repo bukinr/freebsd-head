@@ -39,6 +39,8 @@ __FBSDID("$FreeBSD$");
 #include <sys/mman.h>
 #include <sys/mutex.h>
 #include <sys/rwlock.h>
+#include <sys/smp.h>
+#include <sys/osd.h>
 
 #include <vm/vm.h>
 #include <vm/pmap.h>
@@ -63,7 +65,7 @@ static int
 pmc_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
     vm_size_t mapsize, struct vm_object **objp, int nprot)
 {
-	struct pmc_vm_map *map, *map_tmp;
+	struct pmc_vm_map *map;
 	struct cdev_cpu *cc;
 
 	cc = cdev->si_drv1;
@@ -71,15 +73,11 @@ pmc_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 	if (nprot != PROT_READ || *offset != 0)
 		return (ENXIO);
 
-	mtx_lock(&cc->vm_mtx);
-	TAILQ_FOREACH_SAFE(map, &cc->pmc_maplist, map_next, map_tmp) {
-		if (map->t == curthread) {
-			mtx_unlock(&cc->vm_mtx);
-			*objp = map->obj;
-			return (0);
-		}
+	map = osd_thread_get(curthread, cc->osd_id);
+	if (map) {
+		*objp = map->obj;
+		return (0);
 	}
-	mtx_unlock(&cc->vm_mtx);
 
 	return (ENXIO);
 }
@@ -93,22 +91,36 @@ static struct cdevsw pmc_cdevsw = {
 int
 pmc_vm_initialize(struct pmc_mdep *md)
 {
-	unsigned int maxcpu;
+	struct cdev_cpu *cc_all;
 	struct cdev_cpu *cc;
 	int cpu;
 
-	maxcpu = pmc_cpu_max();
+	struct make_dev_args args;
+	int error;
 
-	for (cpu = 0; cpu < maxcpu; cpu++) {
-		cc = malloc(sizeof(struct cdev_cpu), M_PMC, M_WAITOK | M_ZERO);
+	cc_all = malloc(sizeof(struct cdev_cpu) * (mp_maxid + 1),
+	    M_PMC, M_WAITOK | M_ZERO);
+
+	CPU_FOREACH(cpu) {
+		cc = &cc_all[cpu];
 		cc->cpu = cpu;
 		cc->md = md;
-		mtx_init(&cc->vm_mtx, "PMC VM", NULL, MTX_DEF);
-		TAILQ_INIT(&cc->pmc_maplist);
+		cc->osd_id = osd_thread_register(NULL);
 
-		pmc_cdev[cpu] = make_dev(&pmc_cdevsw, 0, UID_ROOT, GID_WHEEL,
-		    0666, "pmc%d", cpu);
-		pmc_cdev[cpu]->si_drv1 = cc;
+		mtx_init(&cc->vm_mtx, "PMC VM", NULL, MTX_DEF);
+
+		/* Register the device */
+		make_dev_args_init(&args);
+		args.mda_devsw = &pmc_cdevsw;
+		args.mda_unit = cpu;
+		args.mda_uid = UID_ROOT;
+		args.mda_gid = GID_WHEEL;
+		args.mda_mode = 0666;
+		args.mda_si_drv1 = cc;
+		error = make_dev_s(&args, &pmc_cdev[cpu], "pmc%d", cpu);
+		if (error != 0) {
+			/* destroy */
+		}
 	}
 
 	return (0);
@@ -117,18 +129,19 @@ pmc_vm_initialize(struct pmc_mdep *md)
 int
 pmc_vm_finalize(void)
 {
-	unsigned int maxcpu;
+	struct cdev_cpu *cc_all;
 	struct cdev_cpu *cc;
 	int cpu;
 
-	maxcpu = pmc_cpu_max();
+	cc_all = pmc_cdev[0]->si_drv1;
 
-	for (cpu = 0; cpu < maxcpu; cpu++) {
-		cc = pmc_cdev[cpu]->si_drv1;
+	CPU_FOREACH(cpu) {
+		cc = &cc_all[cpu];
 		mtx_destroy(&cc->vm_mtx);
-		free(cc, M_PMC);
-		destroy_dev(pmc_cdev[cpu]);
+		destroy_dev_sched(pmc_cdev[cpu]);
 	}
+
+	free(cc_all, M_PMC);
 
 	return (0);
 }

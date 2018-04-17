@@ -50,6 +50,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/vmmeter.h>
 #include <sys/kthread.h>
 #include <sys/pmclog.h>
+#include <sys/osd.h>
 
 #include <vm/vm.h>
 #include <vm/vm_param.h>
@@ -176,10 +177,7 @@ coresight_buffer_allocate(uint32_t cpu,
 	map->buf = (void *)coresight_buf;
 
 	cc = pmc_cdev[cpu]->si_drv1;
-
-	mtx_lock(&cc->vm_mtx);
-	TAILQ_INSERT_HEAD(&cc->pmc_maplist, map, map_next);
-	mtx_unlock(&cc->vm_mtx);
+	osd_thread_set(curthread, cc->osd_id, map);
 
 	coresight_buf->phys_base = phys_base;
 
@@ -190,25 +188,15 @@ static int
 coresight_buffer_deallocate(uint32_t cpu,
     struct coresight_buffer *coresight_buf)
 {
-	struct pmc_vm_map *map, *map_tmp;
+	struct pmc_vm_map *map;
 	struct cdev_cpu *cc;
 
 	cc = pmc_cdev[cpu]->si_drv1;
 
 	dprintf("%s\n", __func__);
 
-	mtx_lock(&cc->vm_mtx);
-	TAILQ_FOREACH_SAFE(map, &cc->pmc_maplist, map_next, map_tmp) {
-		KASSERT(map->t == curthread,
-		    ("Deallocation must be done in the same"
-		    "thread as allocation"));
-		if (map->buf == (void *)coresight_buf) {
-			TAILQ_REMOVE(&cc->pmc_maplist, map, map_next);
-			free(map, M_CORESIGHT);
-			break;
-		}
-	}
-	mtx_unlock(&cc->vm_mtx);
+	map = osd_thread_get(curthread, cc->osd_id);
+	free(map, M_CORESIGHT);
 
 	return (0);
 }

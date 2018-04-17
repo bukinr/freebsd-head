@@ -51,6 +51,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/bus.h>
 #include <sys/kthread.h>
 #include <sys/pmclog.h>
+#include <sys/osd.h>
 
 #include <vm/vm.h>
 #include <vm/vm_param.h>
@@ -285,9 +286,7 @@ pt_buffer_allocate(uint32_t cpu, struct pt_buffer *pt_buf)
 
 	cc = pmc_cdev[cpu]->si_drv1;
 
-	mtx_lock(&cc->vm_mtx);
-	TAILQ_INSERT_HEAD(&cc->pmc_maplist, map, map_next);
-	mtx_unlock(&cc->vm_mtx);
+	osd_thread_set(curthread, cc->osd_id, map);
 
 	return (0);
 
@@ -302,20 +301,13 @@ error:
 static int
 pt_buffer_deallocate(uint32_t cpu, struct pt_buffer *pt_buf)
 {
-	struct pmc_vm_map *map, *map_tmp;
+	struct pmc_vm_map *map;
 	struct cdev_cpu *cc;
 
 	cc = pmc_cdev[cpu]->si_drv1;
 
-	mtx_lock(&cc->vm_mtx);
-	TAILQ_FOREACH_SAFE(map, &cc->pmc_maplist, map_next, map_tmp) {
-		if (map->buf == pt_buf) {
-			TAILQ_REMOVE(&cc->pmc_maplist, map, map_next);
-			free(map, M_PT);
-			break;
-		}
-	}
-	mtx_unlock(&cc->vm_mtx);
+	map = osd_thread_get(curthread, cc->osd_id);
+	free(map, M_PT);
 
 	free(pt_buf->topa_hw, M_PT);
 	free(pt_buf->topa_sw, M_PT);

@@ -38,7 +38,6 @@ int pmc_vm_initialize(struct pmc_mdep *md);
 int pmc_vm_finalize(void);
 
 struct pmc_vm_map {
-	TAILQ_ENTRY(pmc_vm_map)		map_next;
 	struct thread			*t;
 	vm_object_t			obj;
 	void *				buf;
@@ -47,8 +46,8 @@ struct pmc_vm_map {
 struct cdev_cpu {
 	struct pmc_mdep			*md;
 	struct mtx			vm_mtx;
-	TAILQ_HEAD(, pmc_vm_map)	pmc_maplist;
 	uint32_t			cpu;
+	int				osd_id;
 };
 
 #endif /* !_DEV_HWPMC_VM_H_ */
