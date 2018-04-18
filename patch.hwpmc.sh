@@ -1,4 +1,4 @@
-$!/bin/sh
+#!/bin/sh
 
 # 1 - core
 git diff -U99999999 origin/master sys/kern sys/sys sys/dev/hwpmc/hwpmc_mod.c > patch.hwpmc1
