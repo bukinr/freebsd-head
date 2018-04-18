@@ -73,11 +73,14 @@ pmc_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 	if (nprot != PROT_READ || *offset != 0)
 		return (ENXIO);
 
+	mtx_lock(&cc->vm_mtx);
 	map = osd_thread_get(curthread, cc->osd_id);
 	if (map) {
 		*objp = map->obj;
+		mtx_unlock(&cc->vm_mtx);
 		return (0);
 	}
+	mtx_unlock(&cc->vm_mtx);
 
 	return (ENXIO);
 }
@@ -91,12 +94,12 @@ static struct cdevsw pmc_cdevsw = {
 int
 pmc_vm_initialize(struct pmc_mdep *md)
 {
+	struct make_dev_args args;
 	struct cdev_cpu *cc_all;
 	struct cdev_cpu *cc;
-	int cpu;
-
-	struct make_dev_args args;
 	int error;
+	int cpu;
+	int i;
 
 	cc_all = malloc(sizeof(struct cdev_cpu) * (mp_maxid + 1),
 	    M_PMC, M_WAITOK | M_ZERO);
@@ -119,7 +122,9 @@ pmc_vm_initialize(struct pmc_mdep *md)
 		args.mda_si_drv1 = cc;
 		error = make_dev_s(&args, &pmc_cdev[cpu], "pmc%d", cpu);
 		if (error != 0) {
-			/* destroy */
+			for (i = 0; i < cpu; i++)
+				destroy_dev_sched(pmc_cdev[cpu]);
+			return (-1);
 		}
 	}
 

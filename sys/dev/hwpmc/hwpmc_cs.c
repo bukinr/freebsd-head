@@ -137,8 +137,8 @@ static int
 coresight_buffer_allocate(uint32_t cpu,
     struct coresight_buffer *coresight_buf, uint32_t bufsize)
 {
+	struct pmc_vm_map *map1;
 	struct pmc_vm_map *map;
-	struct coresight_cpu *coresight_pc;
 	uint64_t phys_base;
 	struct cdev_cpu *cc;
 	vm_object_t obj;
@@ -147,9 +147,9 @@ coresight_buffer_allocate(uint32_t cpu,
 
 	dprintf("%s\n", __func__);
 
-	coresight_pc = coresight_pcpu[cpu];
+	cc = pmc_cdev[cpu]->si_drv1;
 
-	coresight_buf->obj = obj = vm_pager_allocate(OBJT_PHYS, 0, bufsize,
+	obj = vm_pager_allocate(OBJT_PHYS, 0, bufsize,
 	    PROT_READ, 0, curthread->td_ucred);
 
 	npages = bufsize / PAGE_SIZE;
@@ -161,6 +161,7 @@ coresight_buffer_allocate(uint32_t cpu,
 		VM_OBJECT_WUNLOCK(obj);
 		printf("%s: Can't allocate memory.\n", __func__);
 		vm_object_deallocate(obj);
+		mtx_unlock(&cc->vm_mtx);
 		return (-1);
 	}
 	phys_base = VM_PAGE_TO_PHYS(m);
@@ -176,9 +177,20 @@ coresight_buffer_allocate(uint32_t cpu,
 	map->obj = obj;
 	map->buf = (void *)coresight_buf;
 
-	cc = pmc_cdev[cpu]->si_drv1;
-	osd_thread_set(curthread, cc->osd_id, map);
+	mtx_lock(&cc->vm_mtx);
+	map1 = osd_thread_get(curthread, cc->osd_id);
+	if (map1) {
+		/* Already allocated */
+		vm_object_deallocate(obj);
+		free(map, M_CORESIGHT);
+		mtx_unlock(&cc->vm_mtx);
+		return (-1);
+	}
 
+	osd_thread_set(curthread, cc->osd_id, map);
+	mtx_unlock(&cc->vm_mtx);
+
+	coresight_buf->obj = obj;
 	coresight_buf->phys_base = phys_base;
 
 	return (0);
@@ -195,8 +207,11 @@ coresight_buffer_deallocate(uint32_t cpu,
 
 	dprintf("%s\n", __func__);
 
+	mtx_lock(&cc->vm_mtx);
 	map = osd_thread_get(curthread, cc->osd_id);
 	free(map, M_CORESIGHT);
+	osd_thread_del(curthread, cc->osd_id);
+	mtx_unlock(&cc->vm_mtx);
 
 	return (0);
 }

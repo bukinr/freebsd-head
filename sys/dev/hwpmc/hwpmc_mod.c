@@ -5239,9 +5239,9 @@ pmc_initialize(void)
 			    "\13TAG\14CSC");
 		}
 		printf("\n");
-	}
 
-	pmc_vm_initialize(md);
+		error = pmc_vm_initialize(md);
+	}
 
 	return (error);
 }

@@ -229,6 +229,8 @@ pt_buffer_allocate(uint32_t cpu, struct pt_buffer *pt_buf)
 
 	pt_pc = pt_pcpu[cpu];
 
+	cc = pmc_cdev[cpu]->si_drv1;
+
 	bufsize = 16 * 1024 * 1024;
 
 	if (pt_pc->l0_ecx & CPUPT_TOPA_MULTI)
@@ -240,7 +242,7 @@ pt_buffer_allocate(uint32_t cpu, struct pt_buffer *pt_buf)
 	ntopa = bufsize / segsize;
 	npages = segsize / PAGE_SIZE;
 
-	pt_buf->obj = obj = vm_pager_allocate(OBJT_PHYS, 0, bufsize,
+	obj = vm_pager_allocate(OBJT_PHYS, 0, bufsize,
 	    PROT_READ, 0, curthread->td_ucred);
 
 	size = roundup2((ntopa + 1) * 8, PAGE_SIZE);
@@ -275,6 +277,8 @@ pt_buffer_allocate(uint32_t cpu, struct pt_buffer *pt_buf)
 	}
 	VM_OBJECT_WUNLOCK(obj);
 
+	pt_buf->obj = obj;
+
 	/* The last entry is a pointer to the base table. */
 	pt_buf->topa_hw[ntopa] = vtophys(pt_buf->topa_hw) | TOPA_END;
 	pt_buf->cycle = 0;
@@ -284,9 +288,17 @@ pt_buffer_allocate(uint32_t cpu, struct pt_buffer *pt_buf)
 	map->obj = obj;
 	map->buf = pt_buf;
 
-	cc = pmc_cdev[cpu]->si_drv1;
+	mtx_lock(&cc->vm_mtx);
+	map1 = osd_thread_get(curthread, cc->osd_id);
+	if (map1) {
+		/* Already allocated */
+		free(map, M_PT);
+		mtx_unlock(&cc->vm_mtx);
+		goto error;
+	}
 
 	osd_thread_set(curthread, cc->osd_id, map);
+	mtx_unlock(&cc->vm_mtx);
 
 	return (0);
 
@@ -306,8 +318,11 @@ pt_buffer_deallocate(uint32_t cpu, struct pt_buffer *pt_buf)
 
 	cc = pmc_cdev[cpu]->si_drv1;
 
+	mtx_lock(&cc->vm_mtx);
 	map = osd_thread_get(curthread, cc->osd_id);
 	free(map, M_PT);
+	osd_thread_del(curthread, cc->osd_id);
+	mtx_unlock(&cc->vm_mtx);
 
 	free(pt_buf->topa_hw, M_PT);
 	free(pt_buf->topa_sw, M_PT);
