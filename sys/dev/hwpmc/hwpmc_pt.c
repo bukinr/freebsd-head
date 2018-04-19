@@ -212,7 +212,7 @@ pt_configure_ranges(struct pt_cpu *pt_pc, const uint64_t *ranges,
 static int
 pt_buffer_allocate(uint32_t cpu, struct pt_buffer *pt_buf)
 {
-	struct pmc_vm_map *map;
+	struct pmc_vm_map *map1, *map;
 	struct pt_cpu *pt_pc;
 	uint64_t topa_size;
 	uint64_t segsize;

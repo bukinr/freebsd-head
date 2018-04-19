@@ -76,6 +76,7 @@ pmc_mmap_single(struct cdev *cdev, vm_ooffset_t *offset,
 	mtx_lock(&cc->vm_mtx);
 	map = osd_thread_get(curthread, cc->osd_id);
 	if (map) {
+		vm_object_reference(map->obj);
 		*objp = map->obj;
 		mtx_unlock(&cc->vm_mtx);
 		return (0);
@@ -123,7 +124,7 @@ pmc_vm_initialize(struct pmc_mdep *md)
 		error = make_dev_s(&args, &pmc_cdev[cpu], "pmc%d", cpu);
 		if (error != 0) {
 			for (i = 0; i < cpu; i++)
-				destroy_dev_sched(pmc_cdev[cpu]);
+				destroy_dev(pmc_cdev[cpu]);
 			return (-1);
 		}
 	}
@@ -143,7 +144,7 @@ pmc_vm_finalize(void)
 	CPU_FOREACH(cpu) {
 		cc = &cc_all[cpu];
 		mtx_destroy(&cc->vm_mtx);
-		destroy_dev_sched(pmc_cdev[cpu]);
+		destroy_dev(pmc_cdev[cpu]);
 	}
 
 	free(cc_all, M_PMC);
