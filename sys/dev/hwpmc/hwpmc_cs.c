@@ -161,7 +161,6 @@ coresight_buffer_allocate(uint32_t cpu,
 		VM_OBJECT_WUNLOCK(obj);
 		printf("%s: Can't allocate memory.\n", __func__);
 		vm_object_deallocate(obj);
-		mtx_unlock(&cc->vm_mtx);
 		return (-1);
 	}
 	phys_base = VM_PAGE_TO_PHYS(m);
@@ -182,8 +181,8 @@ coresight_buffer_allocate(uint32_t cpu,
 	if (map1) {
 		/* Already allocated */
 		vm_object_deallocate(obj);
-		free(map, M_CORESIGHT);
 		mtx_unlock(&cc->vm_mtx);
+		free(map, M_CORESIGHT);
 		return (-1);
 	}
 
@@ -209,8 +208,9 @@ coresight_buffer_deallocate(uint32_t cpu,
 
 	mtx_lock(&cc->vm_mtx);
 	map = osd_thread_get(curthread, cc->osd_id);
-	free(map, M_CORESIGHT);
 	osd_thread_del(curthread, cc->osd_id);
+	vm_object_deallocate(map->obj);
+	free(map, M_CORESIGHT);
 	mtx_unlock(&cc->vm_mtx);
 
 	return (0);
