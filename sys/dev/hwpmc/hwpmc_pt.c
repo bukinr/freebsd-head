@@ -251,7 +251,6 @@ pt_buffer_allocate(uint32_t cpu, struct pt_buffer *pt_buf)
 	    M_WAITOK | M_ZERO);
 
 	VM_OBJECT_WLOCK(obj);
-	vm_object_reference_locked(obj);
 	offset = 0;
 	for (i = 0; i < ntopa; i++) {
 		req = VM_ALLOC_NOBUSY | VM_ALLOC_ZERO;
@@ -292,8 +291,8 @@ pt_buffer_allocate(uint32_t cpu, struct pt_buffer *pt_buf)
 	map1 = osd_thread_get(curthread, cc->osd_id);
 	if (map1) {
 		/* Already allocated */
-		free(map, M_PT);
 		mtx_unlock(&cc->vm_mtx);
+		free(map, M_PT);
 		goto error;
 	}
 
@@ -320,13 +319,13 @@ pt_buffer_deallocate(uint32_t cpu, struct pt_buffer *pt_buf)
 
 	mtx_lock(&cc->vm_mtx);
 	map = osd_thread_get(curthread, cc->osd_id);
-	free(map, M_PT);
 	osd_thread_del(curthread, cc->osd_id);
+	vm_object_deallocate(map->obj);
+	free(map, M_PT);
 	mtx_unlock(&cc->vm_mtx);
 
 	free(pt_buf->topa_hw, M_PT);
 	free(pt_buf->topa_sw, M_PT);
-	vm_object_deallocate(pt_buf->obj);
 
 	return (0);
 }
