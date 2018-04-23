@@ -47,7 +47,7 @@ options 	INTRNG
 # ARM MPCore timer
 device		mpcore_timer
 
-# ARM DMA controller
+# DMA support
 device		xdma
 device		pl330
 
@@ -90,8 +90,7 @@ device		max1619
 device		nhd_0216k3z
 
 # SPI
-# device		spibus
-# device		mx25l
+device		spibus
 device		cqspi
 device		n25q
 
