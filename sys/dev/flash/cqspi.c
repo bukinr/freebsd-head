@@ -79,15 +79,15 @@ __FBSDID("$FreeBSD$");
 #define	RX_QUEUE_SIZE		16
 
 #define	READ4(_sc, _reg) bus_read_4((_sc)->res[0], _reg)
-#define READ2(_sc, _reg) bus_read_2((_sc)->res[0], _reg)
-#define READ1(_sc, _reg) bus_read_1((_sc)->res[0], _reg)
-#define WRITE4(_sc, _reg, _val) bus_write_4((_sc)->res[0], _reg, _val)
-#define WRITE2(_sc, _reg, _val) bus_write_2((_sc)->res[0], _reg, _val)
-#define WRITE1(_sc, _reg, _val) bus_write_1((_sc)->res[0], _reg, _val)
-#define READ_DATA_4(_sc, _reg) bus_read_4((_sc)->res[1], _reg)
-#define READ_DATA_1(_sc, _reg) bus_read_1((_sc)->res[1], _reg)
-#define WRITE_DATA_4(_sc, _reg, _val) bus_write_4((_sc)->res[1], _reg, _val)
-#define WRITE_DATA_1(_sc, _reg, _val) bus_write_1((_sc)->res[1], _reg, _val)
+#define	READ2(_sc, _reg) bus_read_2((_sc)->res[0], _reg)
+#define	READ1(_sc, _reg) bus_read_1((_sc)->res[0], _reg)
+#define	WRITE4(_sc, _reg, _val) bus_write_4((_sc)->res[0], _reg, _val)
+#define	WRITE2(_sc, _reg, _val) bus_write_2((_sc)->res[0], _reg, _val)
+#define	WRITE1(_sc, _reg, _val) bus_write_1((_sc)->res[0], _reg, _val)
+#define	READ_DATA_4(_sc, _reg) bus_read_4((_sc)->res[1], _reg)
+#define	READ_DATA_1(_sc, _reg) bus_read_1((_sc)->res[1], _reg)
+#define	WRITE_DATA_4(_sc, _reg, _val) bus_write_4((_sc)->res[1], _reg, _val)
+#define	WRITE_DATA_1(_sc, _reg, _val) bus_write_1((_sc)->res[1], _reg, _val)
 
 struct cqspi_softc {
 	device_t		dev;
