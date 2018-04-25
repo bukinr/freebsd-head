@@ -42,6 +42,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/timetc.h>
 #include <sys/conf.h>
 #include <sys/uio.h>
+#include <sys/endian.h>
 
 #include <dev/ofw/openfirm.h>
 #include <dev/ofw/ofw_bus.h>
@@ -64,6 +65,13 @@ static struct resource_spec berimgr_spec[] = {
 	{ -1, 0 }
 };
 
+struct spin_entry {
+	uint64_t entry_addr;
+	uint64_t a0;
+	uint32_t rsvd1;
+	uint32_t pir;
+	uint64_t rsvd2;
+};
 
 static int
 beri_open(struct cdev *dev, int flags __unused,
@@ -88,6 +96,25 @@ beri_close(struct cdev *dev, int flags __unused,
 
 	printf("%s\n", __func__);
 
+	/* Release CPU 1 */
+
+	struct spin_entry *se;
+	se = (struct spin_entry *)0xffffffff800fffe0;
+
+	printf("%s: current entry %lx\n", __func__, se->entry_addr);
+
+	se->pir = 1;
+	mips_sync();
+	se->entry_addr = 0xffffffffb0000000;
+	mips_sync();
+
+	printf("%s: new entry %lx\n", __func__, se->entry_addr);
+
+	printf("%s: cpu released\n", __func__);
+	int i;
+	for (i = 0; i < 1000; i++)
+		printf("%s: addr %lx\n", __func__, bus_space_read_8(sc->bst_data, sc->bsh_data, 0x00800000));
+
 	return (0);
 }
 
@@ -96,7 +123,7 @@ beri_write(struct cdev *dev, struct uio *uio, int ioflag)
 {
 	struct berimgr_softc *sc;
 	uint32_t offs;
-	int buffer;
+	uint32_t buffer;
 
 	sc = dev->si_drv1;
 
@@ -110,6 +137,10 @@ beri_write(struct cdev *dev, struct uio *uio, int ioflag)
 		    offs, buffer);
 		offs += 4;
 	}
+
+	mips_sync();
+	mips_sync();
+	mips_sync();
 
 	if (offs > 0)
 		printf("%s: written %d bytes\n", __func__, offs);

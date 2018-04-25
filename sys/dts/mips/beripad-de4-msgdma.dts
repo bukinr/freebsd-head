@@ -156,7 +156,7 @@
 		serial@7f001000 {
 			compatible = "altera,jtag_uart-11_0";
 			reg = <0x7f001000 0x40>;
-			status = "disabled";
+			status = "okay";
 		};
 
 		serial@7f002000 {
