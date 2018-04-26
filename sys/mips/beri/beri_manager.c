@@ -58,6 +58,7 @@ struct berimgr_softc {
 	device_t		dev;
 	bus_space_tag_t		bst_data;
 	bus_space_handle_t	bsh_data;
+	uint32_t		offs;
 };
 
 static struct resource_spec berimgr_spec[] = {
@@ -83,6 +84,8 @@ beri_open(struct cdev *dev, int flags __unused,
 
 	printf("%s\n", __func__);
 
+	sc->offs = 0;
+
 	return (0);
 }
 
@@ -94,6 +97,9 @@ beri_close(struct cdev *dev, int flags __unused,
 
 	sc = dev->si_drv1;
 
+	if (sc->offs > 0)
+		printf("%s: written %d bytes\n", __func__, sc->offs);
+
 	printf("%s\n", __func__);
 
 	/* Release CPU 1 */
@@ -103,14 +109,16 @@ beri_close(struct cdev *dev, int flags __unused,
 
 	printf("%s: current entry %lx\n", __func__, se->entry_addr);
 
+	bus_space_write_8(sc->bst_data, sc->bsh_data, 0x00800000, 0);
+
 	se->pir = 1;
 	mips_sync();
 	se->entry_addr = 0xffffffffb0000000;
 	mips_sync();
 
 	printf("%s: new entry %lx\n", __func__, se->entry_addr);
-
 	printf("%s: cpu released\n", __func__);
+
 	int i;
 	for (i = 0; i < 1000; i++)
 		printf("%s: addr %lx\n", __func__, bus_space_read_8(sc->bst_data, sc->bsh_data, 0x00800000));
@@ -122,28 +130,22 @@ static int
 beri_write(struct cdev *dev, struct uio *uio, int ioflag)
 {
 	struct berimgr_softc *sc;
-	uint32_t offs;
 	uint32_t buffer;
 
 	sc = dev->si_drv1;
 
 	printf("%s\n", __func__);
 
-	offs = 0;
-
 	while (uio->uio_resid > 0) {
 		uiomove(&buffer, 4, uio);
 		bus_space_write_4(sc->bst_data, sc->bsh_data,
-		    offs, buffer);
-		offs += 4;
+		   sc->offs, buffer);
+		sc->offs += 4;
 	}
 
 	mips_sync();
 	mips_sync();
 	mips_sync();
-
-	if (offs > 0)
-		printf("%s: written %d bytes\n", __func__, offs);
 
 	return (0);
 }
