@@ -20,8 +20,7 @@ main(void)
 
 	*addr = 0x1515151515161616;
 
-	while (1)
-		*(volatile unsigned int *)(0x9000000000000000 | UART_BASE) = __bswap32_var(0x61);
+	*(volatile unsigned int *)(0x9000000000000000 | UART_BASE) = __bswap32_var(0x63);
 
 	return (0);
 }

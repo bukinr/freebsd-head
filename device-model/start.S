@@ -43,7 +43,15 @@ _start:
 	dla	sp, 0xffffffffb0010000
 	nop
 	dla	t0, main
+	jalr	t0
+	nop
+
+	/* Reset */
+	dla	t0, 0x40000000
 	jr	t0
 	nop
 
 	/* NOT REACHED */
+1:
+	j	1b
+	nop
