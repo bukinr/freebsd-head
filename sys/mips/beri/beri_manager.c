@@ -74,6 +74,12 @@ struct spin_entry {
 	uint64_t rsvd2;
 };
 
+#define	BERIPIC1_CFG		0x7f808000
+#define	BERIPIC1_IP_READ	0x7f80a000
+#define	BERIPIC1_IP_SET		0x7f80a080
+#define	BERIPIC1_IP_CLEAR	0x7f80a100
+#define	MIPS_XKPHYS_UNCACHED_BASE	0x9000000000000000ULL
+
 static int
 beri_open(struct cdev *dev, int flags __unused,
     int fmt __unused, struct thread *td __unused)
@@ -83,6 +89,23 @@ beri_open(struct cdev *dev, int flags __unused,
 	sc = dev->si_drv1;
 
 	printf("%s\n", __func__);
+
+	uint64_t addr;
+	addr = BERIPIC1_CFG | MIPS_XKPHYS_UNCACHED_BASE;
+	printf("BERIPIC1_CFG %lx\n", (*(volatile uint64_t *)(addr + 16 * 8)));
+
+	addr = BERIPIC1_IP_SET | MIPS_XKPHYS_UNCACHED_BASE;
+	printf("Sending IPI..\n");
+	*(volatile uint64_t *)(addr + 0x00) = (1 << 16);
+	mips_barrier();
+	mips_sync();
+	mips_sync();
+	mips_sync();
+
+	DELAY(100000);
+	DELAY(100000);
+	DELAY(100000);
+	DELAY(100000);
 
 	sc->offs = 0;
 
@@ -120,7 +143,7 @@ beri_close(struct cdev *dev, int flags __unused,
 	printf("%s: cpu released\n", __func__);
 
 	int i;
-	for (i = 0; i < 1000; i++)
+	for (i = 0; i < 100; i++)
 		printf("%s: addr %lx\n", __func__, bus_space_read_8(sc->bst_data, sc->bsh_data, 0x00800000));
 
 	return (0);

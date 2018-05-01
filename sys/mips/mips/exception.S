@@ -178,6 +178,14 @@ VECTOR(MipsException, unknown)
  * and MipsTLBInvalidException
  */
 	.set	noat
+#if 1
+	mfc0	k0, $15, 6
+	and	k0, k0, 0xffff
+	beqz	k0, 1f
+	dli	k0, (0x40000000 | 0x9000000000000000)
+	jr	k0
+1:
+#endif
 	mfc0	k0, MIPS_COP_0_STATUS		# Get the status register
 	mfc0	k1, MIPS_COP_0_CAUSE		# Get the cause register value.
 	and	k0, k0, MIPS_SR_KSU_USER	# test for user mode
