@@ -182,8 +182,10 @@ VECTOR(MipsException, unknown)
 	mfc0	k0, $15, 6
 	and	k0, k0, 0xffff
 	beqz	k0, 1f
-	dli	k0, (0x40000000 | 0x9000000000000000)
+	nop
+	dli	k0, 0xffffffffb0001000
 	jr	k0
+	nop
 1:
 #endif
 	mfc0	k0, MIPS_COP_0_STATUS		# Get the status register
