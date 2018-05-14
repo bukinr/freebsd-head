@@ -112,6 +112,8 @@ MTX_SYSINIT(in_multi_free_mtx, &in_multi_free_mtx, "in_multi_free_mtx", MTX_DEF)
 struct sx in_multi_sx;
 SX_SYSINIT(in_multi_sx, &in_multi_sx, "in_multi_sx");
 
+int ifma_restart;
+
 /*
  * Functions with non-static linkage defined in this file should be
  * declared in in_var.h:
@@ -252,6 +254,33 @@ inm_release_list_deferred(struct in_multi_head *inmh)
 }
 
 void
+inm_disconnect(struct in_multi *inm)
+{
+	struct ifnet *ifp;
+	struct ifmultiaddr *ifma, *ll_ifma;
+
+	ifp = inm->inm_ifp;
+	IF_ADDR_WLOCK_ASSERT(ifp);
+	ifma = inm->inm_ifma;
+
+	if_ref(ifp);
+	TAILQ_REMOVE(&ifp->if_multiaddrs, ifma, ifma_link);
+	MCDPRINTF("removed ifma: %p from %s\n", ifma, ifp->if_xname);
+	if ((ll_ifma = ifma->ifma_llifma) != NULL) {
+		MPASS(ifma != ll_ifma);
+		ifma->ifma_llifma = NULL;
+		MPASS(ll_ifma->ifma_llifma == NULL);
+		MPASS(ll_ifma->ifma_ifp == ifp);
+		if (--ll_ifma->ifma_refcount == 0) {
+			TAILQ_REMOVE(&ifp->if_multiaddrs, ll_ifma, ifma_link);
+			MCDPRINTF("removed ll_ifma: %p from %s\n", ll_ifma, ifp->if_xname);
+			if_freemulti(ll_ifma);
+			ifma_restart = true;
+		}
+	}
+}
+
+void
 inm_release_deferred(struct in_multi *inm)
 {
 	struct in_multi_head tmp;
@@ -260,6 +289,7 @@ inm_release_deferred(struct in_multi *inm)
 	MPASS(inm->inm_refcount > 0);
 	if (--inm->inm_refcount == 0) {
 		SLIST_INIT(&tmp);
+		inm_disconnect(inm);
 		inm->inm_ifma->ifma_protospec = NULL;
 		SLIST_INSERT_HEAD(&tmp, inm, inm_nrele);
 		inm_release_list_deferred(&tmp);
@@ -643,9 +673,11 @@ inm_release(struct in_multi *inm)
 	inm_purge(inm);
 	free(inm, M_IPMADDR);
 
-	if_delmulti_ifma(ifma);
-	if (ifp)
+	if_delmulti_ifma_flags(ifma, 1);
+	if (ifp) {
 		CURVNET_RESTORE();
+		if_rele(ifp);
+	}
 }
 
 /*
@@ -1270,7 +1302,6 @@ in_joingroup_locked(struct ifnet *ifp, const struct in_addr *gina,
 	}
 
  out_inm_release:
-	IN_MULTI_LIST_UNLOCK();
 	if (error) {
 
 		CTR2(KTR_IGMPV3, "%s: dropping ref on %p", __func__, inm);
@@ -1278,6 +1309,7 @@ in_joingroup_locked(struct ifnet *ifp, const struct in_addr *gina,
 	} else {
 		*pinm = inm;
 	}
+	IN_MULTI_LIST_UNLOCK();
 
 	return (error);
 }
@@ -1350,7 +1382,9 @@ in_leavegroup_locked(struct in_multi *inm, /*const*/ struct in_mfilter *imf)
 	CTR1(KTR_IGMPV3, "%s: doing igmp downcall", __func__);
 	CURVNET_SET(inm->inm_ifp->if_vnet);
 	error = igmp_change_state(inm);
+	IF_ADDR_WLOCK(inm->inm_ifp);
 	inm_release_deferred(inm);
+	IF_ADDR_WUNLOCK(inm->inm_ifp);
 	IN_MULTI_LIST_UNLOCK();
 	CURVNET_RESTORE();
 	if (error)
@@ -1639,16 +1673,29 @@ inp_findmoptions(struct inpcb *inp)
  * SMPng: NOTE: assumes INP write lock is held.
  */
 void
-inp_freemoptions(struct ip_moptions *imo)
+inp_freemoptions(struct ip_moptions *imo, struct inpcbinfo *pcbinfo)
 {
+	int wlock;
 
 	if (imo == NULL)
 		return;
+
+	INP_INFO_LOCK_ASSERT(pcbinfo);
+	wlock = INP_INFO_WLOCKED(pcbinfo);
+	if (wlock)
+		INP_INFO_WUNLOCK(pcbinfo);
+	else
+		INP_INFO_RUNLOCK(pcbinfo);
+
 	KASSERT(imo != NULL, ("%s: ip_moptions is NULL", __func__));
 	IN_MULTI_LIST_LOCK();
 	STAILQ_INSERT_TAIL(&imo_gc_list, imo, imo_link);
 	IN_MULTI_LIST_UNLOCK();
 	taskqueue_enqueue(taskqueue_thread, &imo_gc_task);
+	if (wlock)
+		INP_INFO_WLOCK(pcbinfo);
+	else
+		INP_INFO_RLOCK(pcbinfo);
 }
 
 static void
@@ -2454,6 +2501,8 @@ inp_leave_group(struct inpcb *inp, struct sockopt *sopt)
 	/*
 	 * Begin state merge transaction at IGMP layer.
 	 */
+	in_pcbref(inp);
+	INP_WUNLOCK(inp);
 	IN_MULTI_LOCK();
 
 	if (is_final) {
@@ -2484,6 +2533,9 @@ inp_leave_group(struct inpcb *inp, struct sockopt *sopt)
 out_in_multi_locked:
 
 	IN_MULTI_UNLOCK();
+	INP_WLOCK(inp);
+	if (in_pcbrele_wlocked(inp))
+		return (ENXIO);
 
 	if (error)
 		imf_rollback(imf);

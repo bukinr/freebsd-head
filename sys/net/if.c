@@ -87,6 +87,7 @@
 #include <netinet/ip_carp.h>
 #ifdef INET
 #include <netinet/if_ether.h>
+#include <netinet/netdump/netdump.h>
 #endif /* INET */
 #ifdef INET6
 #include <netinet6/in6_var.h>
@@ -103,6 +104,7 @@
 _Static_assert(sizeof(((struct ifreq *)0)->ifr_name) ==
     offsetof(struct ifreq, ifr_ifru), "gap between ifr_name and ifr_ifru");
 
+epoch_t net_epoch;
 #ifdef COMPAT_FREEBSD32
 #include <sys/mount.h>
 #include <compat/freebsd32/freebsd32.h>
@@ -219,7 +221,6 @@ static MALLOC_DEFINE(M_IFDESCR, "ifdescr", "ifnet descriptions");
 static struct sx ifdescr_sx;
 SX_SYSINIT(ifdescr_sx, &ifdescr_sx, "ifnet descr");
 
-void	(*bridge_linkstate_p)(struct ifnet *ifp);
 void	(*ng_ether_link_state_p)(struct ifnet *ifp, int state);
 void	(*lagg_linkstate_p)(struct ifnet *ifp, int state);
 /* These are external hooks for CARP. */
@@ -253,7 +254,6 @@ struct mbuf *(*tbr_dequeue_ptr)(struct ifaltq *, int) = NULL;
 static void	if_attachdomain(void *);
 static void	if_attachdomain1(struct ifnet *);
 static int	ifconf(u_long, caddr_t);
-static void	if_freemulti(struct ifmultiaddr *);
 static void	if_grow(void);
 static void	if_input_default(struct ifnet *, struct mbuf *);
 static int	if_requestencap_default(struct ifnet *, struct if_encap_req *);
@@ -903,6 +903,7 @@ if_attachdomain(void *dummy)
 {
 	struct ifnet *ifp;
 
+	net_epoch = epoch_alloc();
 	TAILQ_FOREACH(ifp, &V_ifnet, if_link)
 		if_attachdomain1(ifp);
 }
@@ -1830,9 +1831,10 @@ ifa_maintain_loopback_route(int cmd, const char *otype, struct ifaddr *ifa,
 
 	error = rtrequest1_fib(cmd, &info, NULL, ifp->if_fib);
 
-	if (error != 0)
-		log(LOG_DEBUG, "%s: %s failed for interface %s: %u\n",
-		    __func__, otype, if_name(ifp), error);
+	if (error != 0 &&
+	    !(cmd == RTM_ADD && error == EEXIST) &&
+	    !(cmd == RTM_DELETE && error == ENOENT))
+		if_printf(ifp, "%s failed: %d\n", otype, error);
 
 	return (error);
 }
@@ -2315,7 +2317,7 @@ do_link_state_change(void *arg, int pending)
 	if (ifp->if_carp)
 		(*carp_linkstate_p)(ifp);
 	if (ifp->if_bridge)
-		(*bridge_linkstate_p)(ifp);
+		ifp->if_bridge_linkstate(ifp);
 	if (ifp->if_lagg)
 		(*lagg_linkstate_p)(ifp, link_state);
 
@@ -2326,7 +2328,7 @@ do_link_state_change(void *arg, int pending)
 	if (pending > 1)
 		if_printf(ifp, "%d link states coalesced\n", pending);
 	if (log_link_state_change)
-		log(LOG_NOTICE, "%s: link state changed to %s\n", ifp->if_xname,
+		if_printf(ifp, "link state changed to %s\n",
 		    (link_state == LINK_STATE_UP) ? "UP" : "DOWN" );
 	EVENTHANDLER_INVOKE(ifnet_link_event, ifp, link_state);
 	CURVNET_RESTORE();
@@ -2629,8 +2631,7 @@ ifhwioctl(u_long cmd, struct ifnet *ifp, caddr_t data, struct thread *td)
 			else if (ifp->if_pcount == 0)
 				ifp->if_flags &= ~IFF_PROMISC;
 			if (log_promisc_mode_change)
-                                log(LOG_INFO, "%s: permanently promiscuous mode %s\n",
-                                    ifp->if_xname,
+                                if_printf(ifp, "permanently promiscuous mode %s\n",
                                     ((new_flags & IFF_PPROMISC) ?
                                      "enabled" : "disabled"));
 		}
@@ -2693,8 +2694,7 @@ ifhwioctl(u_long cmd, struct ifnet *ifp, caddr_t data, struct thread *td)
 		rt_ifannouncemsg(ifp, IFAN_DEPARTURE);
 		EVENTHANDLER_INVOKE(ifnet_departure_event, ifp);
 
-		log(LOG_INFO, "%s: changing name to '%s'\n",
-		    ifp->if_xname, new_name);
+		if_printf(ifp, "changing name to '%s'\n", new_name);
 
 		IF_ADDR_WLOCK(ifp);
 		strlcpy(ifp->if_xname, new_name, sizeof(ifp->if_xname));
@@ -2769,6 +2769,9 @@ ifhwioctl(u_long cmd, struct ifnet *ifp, caddr_t data, struct thread *td)
 		if (error == 0) {
 			getmicrotime(&ifp->if_lastchange);
 			rt_ifmsg(ifp);
+#ifdef INET
+			NETDUMP_REINIT(ifp);
+#endif
 		}
 		/*
 		 * If the link MTU changed, do network layer specific procedure.
@@ -3194,8 +3197,7 @@ ifpromisc(struct ifnet *ifp, int pswitch)
 	/* If promiscuous mode status has changed, log a message */
 	if (error == 0 && ((ifp->if_flags ^ oldflags) & IFF_PROMISC) &&
             log_promisc_mode_change)
-		log(LOG_INFO, "%s: promiscuous mode %s\n",
-		    ifp->if_xname,
+		if_printf(ifp, "promiscuous mode %s\n",
 		    (ifp->if_flags & IFF_PROMISC) ? "enabled" : "disabled");
 	return (error);
 }
@@ -3391,7 +3393,10 @@ if_allocmulti(struct ifnet *ifp, struct sockaddr *sa, struct sockaddr *llsa,
  * counting, notifying the driver, handling routing messages, and releasing
  * any dependent link layer state.
  */
-static void
+#ifdef MCAST_VERBOSE
+extern void kdb_backtrace(void);
+#endif
+void
 if_freemulti(struct ifmultiaddr *ifma)
 {
 
@@ -3400,6 +3405,10 @@ if_freemulti(struct ifmultiaddr *ifma)
 
 	if (ifma->ifma_lladdr != NULL)
 		free(ifma->ifma_lladdr, M_IFMADDR);
+#ifdef MCAST_VERBOSE
+	kdb_backtrace();
+	printf("%s freeing ifma: %p\n", __func__, ifma);
+#endif
 	free(ifma->ifma_addr, M_IFMADDR);
 	free(ifma, M_IFMADDR);
 }
@@ -3606,6 +3615,12 @@ if_delallmulti(struct ifnet *ifp)
 	IF_ADDR_WUNLOCK(ifp);
 }
 
+void
+if_delmulti_ifma(struct ifmultiaddr *ifma)
+{
+	if_delmulti_ifma_flags(ifma, 0);
+}
+
 /*
  * Delete a multicast group membership by group membership pointer.
  * Network-layer protocol domains must use this routine.
@@ -3613,11 +3628,11 @@ if_delallmulti(struct ifnet *ifp)
  * It is safe to call this routine if the ifp disappeared.
  */
 void
-if_delmulti_ifma(struct ifmultiaddr *ifma)
+if_delmulti_ifma_flags(struct ifmultiaddr *ifma, int flags)
 {
 	struct ifnet *ifp;
 	int lastref;
-
+	MCDPRINTF("%s freeing ifma: %p\n", __func__, ifma);
 #ifdef INET
 	IN_MULTI_LIST_UNLOCK_ASSERT();
 #endif
@@ -3645,7 +3660,7 @@ if_delmulti_ifma(struct ifmultiaddr *ifma)
 	if (ifp != NULL)
 		IF_ADDR_WLOCK(ifp);
 
-	lastref = if_delmulti_locked(ifp, ifma, 0);
+	lastref = if_delmulti_locked(ifp, ifma, flags);
 
 	if (ifp != NULL) {
 		/*
@@ -3679,6 +3694,7 @@ if_delmulti_locked(struct ifnet *ifp, struct ifmultiaddr *ifma, int detaching)
 	}
 
 	ifp = ifma->ifma_ifp;
+	MCDPRINTF("%s freeing %p from %s \n", __func__, ifma, ifp ? ifp->if_xname : "");
 
 	/*
 	 * If the ifnet is detaching, null out references to ifnet,
@@ -3704,6 +3720,9 @@ if_delmulti_locked(struct ifnet *ifp, struct ifmultiaddr *ifma, int detaching)
 	if (--ifma->ifma_refcount > 0)
 		return 0;
 
+	if (ifp != NULL && detaching == 0)
+		TAILQ_REMOVE(&ifp->if_multiaddrs, ifma, ifma_link);
+
 	/*
 	 * If this ifma is a network-layer ifma, a link-layer ifma may
 	 * have been associated with it. Release it first if so.
@@ -3722,11 +3741,15 @@ if_delmulti_locked(struct ifnet *ifp, struct ifmultiaddr *ifma, int detaching)
 			if_freemulti(ll_ifma);
 		}
 	}
-	if (ifp != NULL && detaching == 0)
-		TAILQ_REMOVE(&ifp->if_multiaddrs, ifma, ifma_link);
+#ifdef INVARIANTS
+	if (ifp) {
+		struct ifmultiaddr *ifmatmp;
 
+		TAILQ_FOREACH(ifmatmp, &ifp->if_multiaddrs, ifma_link)
+			MPASS(ifma != ifmatmp);
+	}
+#endif
 	if_freemulti(ifma);
-
 	/*
 	 * The last reference to this instance of struct ifmultiaddr
 	 * was released; the hardware should be notified of this change.
@@ -3879,16 +3902,16 @@ if_initname(struct ifnet *ifp, const char *name, int unit)
 }
 
 int
-if_printf(struct ifnet *ifp, const char * fmt, ...)
+if_printf(struct ifnet *ifp, const char *fmt, ...)
 {
+	char if_fmt[256];
 	va_list ap;
-	int retval;
 
-	retval = printf("%s: ", ifp->if_xname);
+	snprintf(if_fmt, sizeof(if_fmt), "%s: %s", ifp->if_xname, fmt);
 	va_start(ap, fmt);
-	retval += vprintf(fmt, ap);
+	vlog(LOG_INFO, if_fmt, ap);
 	va_end(ap);
-	return (retval);
+	return (0);
 }
 
 void

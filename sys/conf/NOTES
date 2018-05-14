@@ -1025,6 +1025,10 @@ options 	TCP_SIGNATURE		#include support for RFC 2385
 # a smooth scheduling of the traffic.
 options 	DUMMYNET
 
+# The NETDUMP option enables netdump(4) client support in the kernel.
+# This allows a panicking kernel to transmit a kernel dump to a remote host.
+options 	NETDUMP
+
 #####################################################################
 # FILESYSTEM OPTIONS
 
@@ -2127,7 +2131,6 @@ device		ix		# Intel Pro/10Gbe PCIE Ethernet
 device		ixv		# Intel Pro/10Gbe PCIE Ethernet VF
 device		le		# AMD Am7900 LANCE and Am79C9xx PCnet
 device		mxge		# Myricom Myri-10G 10GbE NIC
-device		nxge		# Neterion Xframe 10GbE Server/Storage Adapter
 device		oce		# Emulex 10 GbE (OneConnect Ethernet)
 device		ti		# Alteon Networks Tigon I/II gigabit Ethernet
 device		txp		# 3Com 3cR990 (``Typhoon'')

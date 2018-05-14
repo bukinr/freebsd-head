@@ -1461,7 +1461,7 @@ t4fw.fwo		optional cxgbe					\
 	no-implicit-rule						\
 	clean		"t4fw.fwo"
 t4fw.fw			optional cxgbe					\
-	dependency	"$S/dev/cxgbe/firmware/t4fw-1.16.63.0.bin.uu"	\
+	dependency	"$S/dev/cxgbe/firmware/t4fw-1.19.1.0.bin.uu"	\
 	compile-with	"${NORMAL_FW}"					\
 	no-obj no-implicit-rule						\
 	clean		"t4fw.fw"
@@ -1495,7 +1495,7 @@ t5fw.fwo		optional cxgbe					\
 	no-implicit-rule						\
 	clean		"t5fw.fwo"
 t5fw.fw			optional cxgbe					\
-	dependency	"$S/dev/cxgbe/firmware/t5fw-1.16.63.0.bin.uu"	\
+	dependency	"$S/dev/cxgbe/firmware/t5fw-1.19.1.0.bin.uu"	\
 	compile-with	"${NORMAL_FW}"					\
 	no-obj no-implicit-rule						\
 	clean		"t5fw.fw"
@@ -1529,7 +1529,7 @@ t6fw.fwo		optional cxgbe					\
 	no-implicit-rule						\
 	clean		"t6fw.fwo"
 t6fw.fw			optional cxgbe					\
-	dependency	"$S/dev/cxgbe/firmware/t6fw-1.16.63.0.bin.uu"	\
+	dependency	"$S/dev/cxgbe/firmware/t6fw-1.19.1.0.bin.uu"	\
 	compile-with	"${NORMAL_FW}"					\
 	no-obj no-implicit-rule						\
 	clean		"t6fw.fw"
@@ -2544,25 +2544,6 @@ dev/netmap/netmap_legacy.c	optional netmap
 # compile-with "${NORMAL_C} -Wconversion -Wextra"
 dev/nfsmb/nfsmb.c		optional nfsmb pci
 dev/nge/if_nge.c		optional nge
-dev/nxge/if_nxge.c		optional nxge \
-	compile-with "${NORMAL_C} ${NO_WSELF_ASSIGN}"
-dev/nxge/xgehal/xgehal-device.c	optional nxge \
-	compile-with "${NORMAL_C} ${NO_WSELF_ASSIGN}"
-dev/nxge/xgehal/xgehal-mm.c	optional nxge
-dev/nxge/xgehal/xge-queue.c	optional nxge
-dev/nxge/xgehal/xgehal-driver.c	optional nxge \
-	compile-with "${NORMAL_C} ${NO_WSELF_ASSIGN}"
-dev/nxge/xgehal/xgehal-ring.c	optional nxge \
-	compile-with "${NORMAL_C} ${NO_WSELF_ASSIGN}"
-dev/nxge/xgehal/xgehal-channel.c	optional nxge \
-	compile-with "${NORMAL_C} ${NO_WSELF_ASSIGN}"
-dev/nxge/xgehal/xgehal-fifo.c	optional nxge \
-	compile-with "${NORMAL_C} ${NO_WSELF_ASSIGN}"
-dev/nxge/xgehal/xgehal-stats.c	optional nxge \
-	compile-with "${NORMAL_C} ${NO_WSELF_ASSIGN}"
-dev/nxge/xgehal/xgehal-config.c	optional nxge
-dev/nxge/xgehal/xgehal-mgmt.c	optional nxge \
-	compile-with "${NORMAL_C} ${NO_WSELF_ASSIGN}"
 dev/nmdm/nmdm.c			optional nmdm
 dev/nsp/nsp.c			optional nsp
 dev/nsp/nsp_pccard.c		optional nsp pccard
@@ -3913,6 +3894,7 @@ kern/subr_compressor.c		standard \
 kern/subr_counter.c		standard
 kern/subr_devstat.c		standard
 kern/subr_disk.c		standard
+kern/subr_epoch.c		standard
 kern/subr_eventhandler.c	standard
 kern/subr_fattime.c		standard
 kern/subr_firmware.c		optional firmware
@@ -4158,6 +4140,7 @@ net/if_vlan.c			optional vlan
 net/if_vxlan.c			optional vxlan inet | vxlan inet6
 net/ifdi_if.m			optional ether pci
 net/iflib.c			optional ether pci
+net/iflib_clone.c		optional ether pci
 net/mp_ring.c			optional ether
 net/mppcc.c			optional netgraph_mppc_compression
 net/mppcd.c			optional netgraph_mppc_compression
@@ -4375,6 +4358,7 @@ netinet/libalias/alias_mod.c	optional libalias | netgraph_nat
 netinet/libalias/alias_proxy.c	optional libalias inet | netgraph_nat inet
 netinet/libalias/alias_util.c	optional libalias inet | netgraph_nat inet
 netinet/libalias/alias_sctp.c	optional libalias inet | netgraph_nat inet
+netinet/netdump/netdump_client.c optional inet netdump
 netinet6/dest6.c		optional inet6
 netinet6/frag6.c		optional inet6
 netinet6/icmp6.c		optional inet6
