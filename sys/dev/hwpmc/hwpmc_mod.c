@@ -1445,7 +1445,6 @@ pmc_process_csw_in(struct thread *td)
 		} else if (PMC_TO_MODE(pm) == PMC_MODE_TT) {
 			/* Nothing */
 		} else {
-			/* Nothing */
 			KASSERT(PMC_TO_MODE(pm) == PMC_MODE_TC,
 			    ("[pmc,%d] illegal mode=%d", __LINE__,
 			    PMC_TO_MODE(pm)));
@@ -1725,10 +1724,7 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 	struct proc *p;
 	bool pause_thread;
 
-	sx_slock(&pmc_sx);
-
 	freepath = fullpath = NULL;
-	epoch_exit_preempt(global_epoch_preempt);
 	pmc_getfilename((struct vnode *) pkm->pm_file, &fullpath, &freepath);
 
 	pid = td->td_proc->p_pid;
@@ -1740,13 +1736,13 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 			pmclog_process_map_in(po, pid, pkm->pm_address, fullpath);
 
 	if ((pp = pmc_find_process_descriptor(td->td_proc, 0)) == NULL) {
-		sx_sunlock(&pmc_sx);
+		epoch_exit_preempt(global_epoch_preempt);
 		goto done;
 	}
 
 	p = td->td_proc;
 	if ((p->p_flag & P_HWPMC) == 0) {
-		sx_sunlock(&pmc_sx);
+		epoch_exit_preempt(global_epoch_preempt);
 		goto done;
 	}
 
@@ -1766,7 +1762,7 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 			pause_thread = 1;
 	}
 
-	sx_sunlock(&pmc_sx);
+	epoch_exit_preempt(global_epoch_preempt);
 
 	if (pause_thread) {
 		PROC_LOCK(td->td_proc);
@@ -1826,8 +1822,6 @@ pmc_log_kernel_mappings(struct pmc *pm)
 {
 	struct pmc_owner *po;
 	struct pmckern_map_in *km, *kmbase;
-
-	//sx_assert(&pmc_sx, SX_LOCKED);
 
 	MPASS(in_epoch() || sx_xlocked(&pmc_sx));
 	KASSERT(PMC_IS_SAMPLING_MODE(PMC_TO_MODE(pm)) ||
@@ -2238,7 +2232,6 @@ pmc_hook_handler(struct thread *td, int function, void *arg)
 		break;
 
 	case PMC_FN_MMAP:
-		MPASS(in_epoch() || sx_xlocked(&pmc_sx));
 		pmc_process_mmap(td, (struct pmckern_map_in *) arg);
 		break;
 
