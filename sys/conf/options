@@ -313,6 +313,9 @@ NFS_ROOT	opt_nfsroot.h
 # SMB/CIFS requester
 NETSMB		opt_netsmb.h
 
+# Enable netdump(4) client support.
+NETDUMP 	opt_global.h
+
 # Options used only in subr_param.c.
 HZ		opt_param.h
 MAXFILES	opt_param.h
@@ -901,9 +904,6 @@ HWPMC_DEBUG		opt_global.h
 HWPMC_HOOKS
 HWPMC_MIPS_BACKTRACE 	opt_hwpmc_hooks.h
 
-# Interrupt filtering
-INTR_FILTER
-
 # 802.11 support layer
 IEEE80211_DEBUG		opt_wlan.h
 IEEE80211_DEBUG_REFCNT	opt_wlan.h
@@ -1006,3 +1006,6 @@ EKCD		opt_ekcd.h
 
 # NVME options
 NVME_USE_NVD	opt_nvme.h
+
+# amdsbwd options
+AMDSBWD_DEBUG	opt_amdsbwd.h
