@@ -147,7 +147,7 @@ usage(int code)
 		"       %*s [-m mem] [-p vcpu:hostcpu] [-s <pci>] [-U uuid] <vm>\n"
 		"       -a: local apic is in xAPIC mode (deprecated)\n"
 		"       -A: create ACPI tables\n"
-		"       -c: number of cpus and/or topology specification"
+		"       -c: number of cpus and/or topology specification\n"
 		"       -C: include guest memory in core file\n"
 		"       -e: exit on unhandled I/O access\n"
 		"       -g: gdb port\n"
@@ -193,6 +193,7 @@ topology_parse(const char *opt)
 	c = 1, n = 1, s = 1, t = 1;
 	ns = false, scts = false;
 	str = strdup(opt);
+	assert(str != NULL);
 
 	while ((cp = strsep(&str, ",")) != NULL) {
 		if (sscanf(cp, "%i%n", &tmp, &chk) == 1) {
@@ -218,11 +219,13 @@ topology_parse(const char *opt)
 		} else if (cp[0] == '\0')
 			continue;
 		else
-			return (-1);
+			goto out;
 		/* Any trailing garbage causes an error */
 		if (cp[chk] != '\0')
-			return (-1);
+			goto out;
 	}
+	free(str);
+
 	/*
 	 * Range check 1 <= n <= UINT16_MAX all values
 	 */
@@ -248,6 +251,10 @@ topology_parse(const char *opt)
 	cores = c;
 	threads = t;
 	return(0);
+
+out:
+	free(str);
+	return (-1);
 }
 
 static int
