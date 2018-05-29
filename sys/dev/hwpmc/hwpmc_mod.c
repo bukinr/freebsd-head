@@ -1725,6 +1725,7 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 	bool pause_thread;
 
 	freepath = fullpath = NULL;
+	MPASS(!in_epoch());
 	pmc_getfilename((struct vnode *) pkm->pm_file, &fullpath, &freepath);
 
 	pid = td->td_proc->p_pid;
@@ -1775,6 +1776,7 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
   done:
 	if (freepath)
 		free(freepath, M_TEMP);
+	epoch_exit_preempt(global_epoch_preempt);
 }
 
 
