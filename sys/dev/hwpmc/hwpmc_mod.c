@@ -1737,13 +1737,11 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 			pmclog_process_map_in(po, pid, pkm->pm_address, fullpath);
 
 	if ((pp = pmc_find_process_descriptor(td->td_proc, 0)) == NULL) {
-		epoch_exit_preempt(global_epoch_preempt);
 		goto done;
 	}
 
 	p = td->td_proc;
 	if ((p->p_flag & P_HWPMC) == 0) {
-		epoch_exit_preempt(global_epoch_preempt);
 		goto done;
 	}
 
@@ -1762,8 +1760,6 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 		if (PMC_TO_MODE(pm) == PMC_MODE_TT)
 			pause_thread = 1;
 	}
-
-	epoch_exit_preempt(global_epoch_preempt);
 
 	if (pause_thread) {
 		PROC_LOCK(td->td_proc);
