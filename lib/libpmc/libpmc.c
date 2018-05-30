@@ -2599,6 +2599,7 @@ pt_allocate_pmc(enum pmc_event pe, char *ctrspec,
 	pm_pt->nranges = addrn;
 
 	pmc_config->pm_caps |= PMC_CAP_READ;
+	pmc_config->pm_caps &= ~PMC_CAP_WRITE;
 
 	return (0);
 }
@@ -2744,6 +2745,7 @@ coresight_allocate_pmc(enum pmc_event pe, char *ctrspec,
 	pm_coresight->nranges = addrn;
 
 	pmc_config->pm_caps |= PMC_CAP_READ;
+	pmc_config->pm_caps &= ~PMC_CAP_WRITE;
 
 	return (0);
 }
