@@ -2947,6 +2947,7 @@ pmc_allocate(const char *ctrspec, enum pmc_mode mode,
 	    mode != PMC_MODE_SC && mode != PMC_MODE_TC &&
 	    mode != PMC_MODE_ST && mode != PMC_MODE_TT) {
 		return (EINVAL);
+		goto out;
 	}
 	bzero(&pmc_config, sizeof(pmc_config));
 	pmc_config.pm_cpu   = cpu;
@@ -2960,11 +2961,12 @@ pmc_allocate(const char *ctrspec, enum pmc_mode mode,
 	r = spec_copy = strdup(ctrspec);
 	ctrname = strsep(&r, ",");
 	if (pmc_pmu_pmcallocate(ctrname, &pmc_config) == 0) {
-		if (PMC_CALL(PMCALLOCATE, &pmc_config) < 0)
-			return (errno);
-		free(spec_copy);
+		if (PMC_CALL(PMCALLOCATE, &pmc_config) < 0) {
+			goto out;
+		}
+		retval = 0;
 		*pmcid = pmc_config.pm_pmcid;
-		return (0);
+		goto out;
 	} else {
 		free(spec_copy);
 		spec_copy = NULL;
@@ -3455,6 +3457,7 @@ pmc_init(void)
 		return (pmc_syscall = -1);
 	}
 
+	bzero(&op_cpu_info, sizeof(op_cpu_info));
 	if (PMC_CALL(GETCPUINFO, &op_cpu_info) < 0)
 		return (pmc_syscall = -1);
 
@@ -3462,7 +3465,7 @@ pmc_init(void)
 	cpu_info.pm_ncpu    = op_cpu_info.pm_ncpu;
 	cpu_info.pm_npmc    = op_cpu_info.pm_npmc;
 	cpu_info.pm_nclass  = op_cpu_info.pm_nclass;
-	for (n = 0; n < cpu_info.pm_nclass; n++)
+	for (n = 0; n < op_cpu_info.pm_nclass; n++)
 		memcpy(&cpu_info.pm_classes[n], &op_cpu_info.pm_classes[n],
 		    sizeof(cpu_info.pm_classes[n]));
 
