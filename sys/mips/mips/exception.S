@@ -178,7 +178,7 @@ VECTOR(MipsException, unknown)
  * and MipsTLBInvalidException
  */
 	.set	noat
-#if 1
+#if defined(CPU_BERI) && !defined(SMP)
 	mfc0	k0, $15, 6
 	and	k0, k0, 0xffff
 	beqz	k0, 1f
