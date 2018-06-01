@@ -189,6 +189,7 @@ static const struct pmc_event_descr cortex_a57_event_table[] =
 		PMC_CLASS_##C, __VA_ARGS__			\
 	}
 
+PMC_MDEP_TABLE(kabylake, PT);
 PMC_MDEP_TABLE(k8, K8, PMC_CLASS_SOFT, PMC_CLASS_TSC);
 PMC_MDEP_TABLE(xscale, XSCALE, PMC_CLASS_SOFT, PMC_CLASS_XSCALE);
 PMC_MDEP_TABLE(cortex_a8, ARMV7, PMC_CLASS_SOFT, PMC_CLASS_ARMV7);
@@ -383,6 +384,10 @@ pmc_parse_mask(const struct pmc_masks *pmask, char *p, uint64_t *evmask)
  * AMD K8 PMCs.
  *
  */
+
+static struct pmc_event_alias kabylake_aliases[] = {
+	EV_ALIAS(NULL, NULL)
+};
 
 static struct pmc_event_alias k8_aliases[] = {
 	EV_ALIAS("branches",		"k8-fr-retired-taken-branches"),
@@ -1383,6 +1388,10 @@ pmc_event_names_of_class(enum pmc_class cl, const char ***eventnames,
 		ev = tsc_event_table;
 		count = PMC_EVENT_TABLE_SIZE(tsc);
 		break;
+	case PMC_CLASS_PT:
+		ev = pt_event_table;
+		count = PMC_EVENT_TABLE_SIZE(pt);
+		break;
 	case PMC_CLASS_K8:
 		ev = k8_event_table;
 		count = PMC_EVENT_TABLE_SIZE(k8);
@@ -1600,6 +1609,9 @@ pmc_init(void)
 	if (cpu_info.pm_cputype != PMC_CPU_GENERIC)
 		pmc_class_table[n++] = &tsc_class_table_descr;
 
+	if (cpu_info.pm_cputype == PMC_CPU_INTEL_KABYLAKE)
+		pmc_class_table[n++] = &pt_class_table_descr;
+
 	/*
  	 * Check if this CPU has fixed function counters.
 	 */
@@ -1631,11 +1643,14 @@ pmc_init(void)
 #if defined(__amd64__) || defined(__i386__)
 	case PMC_CPU_AMD_K8:
 		PMC_MDEP_INIT(k8);
-		pmc_class_table[n] = &k8_class_table_descr;
+		pmc_class_table[n++] = &k8_class_table_descr;
 		break;
 #endif
 	case PMC_CPU_GENERIC:
 		PMC_MDEP_INIT(generic);
+		break;
+	case PMC_CPU_INTEL_KABYLAKE:
+		PMC_MDEP_INIT(kabylake);
 		break;
 #if defined(__arm__)
 #if defined(__XSCALE__)
