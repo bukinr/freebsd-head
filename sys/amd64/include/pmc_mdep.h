@@ -43,7 +43,6 @@ struct pmc_mdep;
 
 #include <dev/hwpmc/hwpmc_amd.h>
 #include <dev/hwpmc/hwpmc_core.h>
-#include <dev/hwpmc/hwpmc_piv.h>
 #include <dev/hwpmc/hwpmc_tsc.h>
 #include <dev/hwpmc/hwpmc_pt.h>
 #include <dev/hwpmc/hwpmc_uncore.h>
@@ -81,9 +80,8 @@ union pmc_md_op_pmcallocate  {
 	struct pmc_md_iap_op_pmcallocate	pm_iap;
 	struct pmc_md_ucf_op_pmcallocate	pm_ucf;
 	struct pmc_md_ucp_op_pmcallocate	pm_ucp;
-	struct pmc_md_p4_op_pmcallocate		pm_p4;
 	struct pmc_md_pt_op_pmcallocate		pm_pt;
-	uint64_t				__pad[1];
+	uint64_t				__pad[2];
 };
 
 /* Logging */
@@ -98,7 +96,6 @@ union pmc_md_pmc {
 	struct pmc_md_iap_pmc	pm_iap;
 	struct pmc_md_ucf_pmc	pm_ucf;
 	struct pmc_md_ucp_pmc	pm_ucp;
-	struct pmc_md_p4_pmc	pm_p4;
 	struct pmc_md_pt_pmc	pm_pt;
 };
 

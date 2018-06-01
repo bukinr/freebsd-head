@@ -97,30 +97,8 @@ pmc_intel_initialize(void)
 	snprintf(pmc_cpuid, sizeof(pmc_cpuid), "GenuineIntel-%d-%02X",
 			 (cpu_id & 0xF00) >> 8, model);
 	switch (cpu_id & 0xF00) {
-#if	defined(__i386__)
-	case 0x500:		/* Pentium family processors */
-		cputype = PMC_CPU_INTEL_P5;
-		break;
-#endif
 	case 0x600:		/* Pentium Pro, Celeron, Pentium II & III */
 		switch (model) {
-#if	defined(__i386__)
-		case 0x1:
-			cputype = PMC_CPU_INTEL_P6;
-			break;
-		case 0x3: case 0x5:
-			cputype = PMC_CPU_INTEL_PII;
-			break;
-		case 0x6: case 0x16:
-			cputype = PMC_CPU_INTEL_CL;
-			break;
-		case 0x7: case 0x8: case 0xA: case 0xB:
-			cputype = PMC_CPU_INTEL_PIII;
-			break;
-		case 0x9: case 0xD:
-			cputype = PMC_CPU_INTEL_PM;
-			break;
-#endif
 		case 0xE:
 			cputype = PMC_CPU_INTEL_CORE;
 			break;
@@ -224,13 +202,8 @@ pmc_intel_initialize(void)
 			nclasses = 4;
 			break;
 		break;
-#if	defined(__i386__) || defined(__amd64__)
-	case 0xF00:		/* P4 */
-		if (model >= 0 && model <= 6) /* known models */
-			cputype = PMC_CPU_INTEL_PIV;
-		break;
 	}
-#endif
+
 
 	if ((int) cputype == -1) {
 		printf("pmc: Unknown Intel CPU.\n");
@@ -249,7 +222,6 @@ pmc_intel_initialize(void)
 	if (error)
 		goto error;
 	switch (cputype) {
-#if	defined(__i386__) || defined(__amd64__)
 		/*
 		 * Intel Core, Core 2 and Atom processors.
 		 */
@@ -275,37 +247,6 @@ pmc_intel_initialize(void)
 	case PMC_CPU_INTEL_HASWELL_XEON:
 		error = pmc_core_initialize(pmc_mdep, ncpus, verov);
 		break;
-
-		/*
-		 * Intel Pentium 4 Processors, and P4/EMT64 processors.
-		 */
-
-	case PMC_CPU_INTEL_PIV:
-		error = pmc_p4_initialize(pmc_mdep, ncpus);
-		break;
-#endif
-
-#if	defined(__i386__)
-		/*
-		 * P6 Family Processors
-		 */
-
-	case PMC_CPU_INTEL_P6:
-	case PMC_CPU_INTEL_CL:
-	case PMC_CPU_INTEL_PII:
-	case PMC_CPU_INTEL_PIII:
-	case PMC_CPU_INTEL_PM:
-		error = pmc_p6_initialize(pmc_mdep, ncpus);
-		break;
-
-		/*
-		 * Intel Pentium PMCs.
-		 */
-
-	case PMC_CPU_INTEL_P5:
-		error = pmc_p5_initialize(pmc_mdep, ncpus);
-		break;
-#endif
 
 	default:
 		KASSERT(0, ("[intel,%d] Unknown CPU type", __LINE__));
@@ -362,7 +303,6 @@ pmc_intel_finalize(struct pmc_mdep *md)
 	pmc_tsc_finalize(md);
 
 	switch (md->pmd_cputype) {
-#if	defined(__i386__) || defined(__amd64__)
 	case PMC_CPU_INTEL_ATOM:
 	case PMC_CPU_INTEL_ATOM_SILVERMONT:
 	case PMC_CPU_INTEL_BROADWELL:
@@ -385,23 +325,6 @@ pmc_intel_finalize(struct pmc_mdep *md)
 	case PMC_CPU_INTEL_IVYBRIDGE_XEON:
 		pmc_core_finalize(md);
 		break;
-
-	case PMC_CPU_INTEL_PIV:
-		pmc_p4_finalize(md);
-		break;
-#endif
-#if	defined(__i386__)
-	case PMC_CPU_INTEL_P6:
-	case PMC_CPU_INTEL_CL:
-	case PMC_CPU_INTEL_PII:
-	case PMC_CPU_INTEL_PIII:
-	case PMC_CPU_INTEL_PM:
-		pmc_p6_finalize(md);
-		break;
-	case PMC_CPU_INTEL_P5:
-		pmc_p5_finalize(md);
-		break;
-#endif
 	default:
 		KASSERT(0, ("[intel,%d] unknown CPU type", __LINE__));
 	}
