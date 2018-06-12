@@ -66,11 +66,12 @@ static struct cmd_handler disp_table[] = {
 	{"stat-system", cmd_pmc_stat_system},
 	{"list-events", cmd_pmc_list_events},
 	{"filter", cmd_pmc_filter},
+	{"summary", cmd_pmc_summary},
 	{NULL, NULL}
 };
 
-static void
-usage(void)
+static void __dead2
+usage(void) 
 {
 	errx(EX_USAGE,
 	    "\t pmc management utility\n"

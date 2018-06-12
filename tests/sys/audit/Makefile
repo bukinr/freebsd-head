@@ -2,12 +2,16 @@
 
 TESTSDIR=	${TESTSBASE}/sys/audit
 
-ATF_TESTS_C=	file-create
+ATF_TESTS_C=	file-attribute-access
+ATF_TESTS_C+=	file-create
 ATF_TESTS_C+=	file-delete
 ATF_TESTS_C+=	file-close
 ATF_TESTS_C+=	file-write
 ATF_TESTS_C+=	file-read
+ATF_TESTS_C+=	open
 
+SRCS.file-attribute-access+=	file-attribute-access.c
+SRCS.file-attribute-access+=	utils.c
 SRCS.file-create+=	file-create.c
 SRCS.file-create+=	utils.c
 SRCS.file-delete+=	file-delete.c
@@ -18,6 +22,8 @@ SRCS.file-write+=	file-write.c
 SRCS.file-write+=	utils.c
 SRCS.file-read+=	file-read.c
 SRCS.file-read+=	utils.c
+SRCS.open+=		open.c
+SRCS.open+=		utils.c
 
 TEST_METADATA+= timeout="30"
 TEST_METADATA+= required_user="root"

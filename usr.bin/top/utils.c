@@ -66,7 +66,8 @@ atoiwi(const char *str)
 				 */
 _Static_assert(sizeof(int) <= 4, "buffer too small for this sized int");
 
-char *itoa(unsigned int val)
+char *
+itoa(unsigned int val)
 {
     char *ptr;
     static char buffer[16];	/* result is built here */
@@ -94,7 +95,8 @@ char *itoa(unsigned int val)
  *	a front end to a more general routine for efficiency.
  */
 
-char *itoa7(int val)
+char *
+itoa7(int val)
 {
     char *ptr;
     static char buffer[16];	/* result is built here */
@@ -122,17 +124,20 @@ char *itoa7(int val)
 
 /*
  *  digits(val) - return number of decimal digits in val.  Only works for
- *	positive numbers.  If val <= 0 then digits(val) == 0.
+ *	non-negative numbers.
  */
 
-int digits(int val)
+int __pure2
+digits(int val)
 {
     int cnt = 0;
+	if (val == 0) {
+		return 1;
+	}
 
-    while (val > 0)
-    {
-	cnt++;
-	val /= 10;
+    while (val > 0) {
+		cnt++;
+		val /= 10;
     }
     return(cnt);
 }
@@ -182,7 +187,7 @@ argparse(char *line, int *cntp)
 	    ap++;
         }
     }
-    return argv;
+    return (argv);
 }
 
 /*
@@ -313,7 +318,8 @@ format_time(long seconds)
 
 #define NUM_STRINGS 8
 
-char *format_k(int amt)
+char *
+format_k(long amt)
 {
     static char retarray[NUM_STRINGS][16];
     static int index = 0;
@@ -396,6 +402,6 @@ find_pid(pid_t pid)
 	}
 
 done:
-	kvm_close(kd);	
+	kvm_close(kd);
 	return ret;
 }

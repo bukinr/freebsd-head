@@ -309,6 +309,7 @@ MAN=	aac.4 \
 	msk.4 \
 	mtio.4 \
 	multicast.4 \
+	muge.4 \
 	mvs.4 \
 	mwl.4 \
 	mwlfw.4 \
@@ -886,6 +887,11 @@ _vmm.4=		vmm.4
 
 .if ${MACHINE_CPUARCH} == "mips"
 _nvram2env.4=	nvram2env.4
+.endif
+
+.if ${MACHINE_CPUARCH} == "powerpc"
+_nvd.4= 	nvd.4
+_nvme.4=	nvme.4
 .endif
 
 .if ${MACHINE_ARCH:Marmv[67]*} != "" || ${MACHINE_CPUARCH} == "aarch64"
