@@ -453,6 +453,7 @@ MLINKS+=altq.9 ALTQ.9
 MLINKS+=atomic.9 atomic_add.9 \
 	atomic.9 atomic_clear.9 \
 	atomic.9 atomic_cmpset.9 \
+	atomic.9 atomic_fcmpset.9 \
 	atomic.9 atomic_fetchadd.9 \
 	atomic.9 atomic_load.9 \
 	atomic.9 atomic_readandclear.9 \
@@ -1540,7 +1541,9 @@ MLINKS+=OF_device_from_xref.9 OF_device_register_xref.9 \
 	OF_device_from_xref.9 OF_xref_from_device.9
 MLINKS+=OF_getprop.9 OF_getencprop.9 \
 	OF_getprop.9 OF_getencprop_alloc.9 \
+	OF_getprop.9 OF_getencprop_alloc_multi.9 \
 	OF_getprop.9 OF_getprop_alloc.9 \
+	OF_getprop.9 OF_getprop_alloc_multi.9 \
 	OF_getprop.9 OF_getproplen.9 \
 	OF_getprop.9 OF_hasprop.9 \
 	OF_getprop.9 OF_nextprop.9 \

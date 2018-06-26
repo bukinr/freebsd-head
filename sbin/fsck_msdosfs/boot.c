@@ -167,23 +167,19 @@ readboot(int dosfs, struct bootblock *boot)
 			 * requirement is suspect.  For now, just
 			 * print out useful information and continue.
 			 */
-			pfatal("backup (block %d) mismatch with primary bootblock:\n",
+			pwarn("backup (block %d) mismatch with primary bootblock:\n",
 			        boot->bpbBackup);
 			for (i = 11; i < 11 + 90; i++) {
 				if (block[i] != backup[i])
-					pfatal("\ti=%d\tprimary 0x%02x\tbackup 0x%02x\n",
+					pwarn("\ti=%d\tprimary 0x%02x\tbackup 0x%02x\n",
 					       i, block[i], backup[i]);
 			}
 		}
 		/* Check backup bpbFSInfo?					XXX */
 	}
 
-	boot->ClusterOffset = (boot->bpbRootDirEnts * 32 +
-	    boot->bpbBytesPerSec - 1) / boot->bpbBytesPerSec +
-	    boot->bpbResSectors + boot->bpbFATs * boot->FATsecs -
-	    CLUST_FIRST * boot->bpbSecPerClust;
-
-	if (boot->bpbBytesPerSec % DOSBOOTBLOCKSIZE_REAL != 0) {
+	if (boot->bpbBytesPerSec % DOSBOOTBLOCKSIZE_REAL != 0 ||
+	    boot->bpbBytesPerSec == 0) {
 		pfatal("Invalid sector size: %u", boot->bpbBytesPerSec);
 		return FSFATAL;
 	}
@@ -196,6 +192,10 @@ readboot(int dosfs, struct bootblock *boot)
 		boot->NumSectors = boot->bpbSectors;
 	} else
 		boot->NumSectors = boot->bpbHugeSectors;
+	boot->ClusterOffset = (boot->bpbRootDirEnts * 32 +
+	    boot->bpbBytesPerSec - 1) / boot->bpbBytesPerSec +
+	    boot->bpbResSectors + boot->bpbFATs * boot->FATsecs -
+	    CLUST_FIRST * boot->bpbSecPerClust;
 	boot->NumClusters = (boot->NumSectors - boot->ClusterOffset) /
 	    boot->bpbSecPerClust;
 

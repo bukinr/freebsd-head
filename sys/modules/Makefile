@@ -121,7 +121,6 @@ SUBDIR=	\
 	${_ena} \
 	${_ep} \
 	${_epic} \
-	epoch_test \
 	esp \
 	${_et} \
 	evdev \
@@ -206,7 +205,6 @@ SUBDIR=	\
 	${_ix} \
 	${_ixv} \
 	${_ixl} \
-	${_ixlv} \
 	jme \
 	joy \
 	kbdmux \
@@ -239,6 +237,12 @@ SUBDIR=	\
 	mac_seeotheruids \
 	mac_stub \
 	mac_test \
+	mac_veriexec \
+	mac_veriexec_rmd160 \
+	mac_veriexec_sha1 \
+	mac_veriexec_sha256 \
+	mac_veriexec_sha384 \
+	mac_veriexec_sha512 \
 	malo \
 	md \
 	mdio \
@@ -331,6 +335,7 @@ SUBDIR=	\
 	${_rdrand_rng} \
 	re \
 	rl \
+	${_rockchip} \
 	rtwn \
 	rtwn_pci \
 	rtwn_usb \
@@ -389,6 +394,7 @@ SUBDIR=	\
 	uinput \
 	unionfs \
 	usb \
+	veriexec \
 	${_vesa} \
 	${_virtio} \
 	vge \
@@ -563,6 +569,7 @@ _allwinner=	allwinner
 _armv8crypto=	armv8crypto
 _efirt=		efirt
 _em=		em
+_rockchip=	rockchip
 .endif
 
 .if ${MACHINE_CPUARCH} == "i386" || ${MACHINE_CPUARCH} == "amd64"

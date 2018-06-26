@@ -160,7 +160,8 @@ display_resize(void)
     return(smart_terminal ? lines : Largest);
 }
 
-int display_updatecpus(struct statics *statics)
+int
+display_updatecpus(struct statics *statics)
 {
     int lines;
     int i;
@@ -184,7 +185,8 @@ int display_updatecpus(struct statics *statics)
     return(lines);
 }
 
-int display_init(struct statics * statics)
+int
+display_init(struct statics * statics)
 {
     int lines;
     char **pp;
@@ -377,12 +379,13 @@ u_procstates(int total, int *brkdn)
     if (ltotal != total)
     {
 	/* move and overwrite */
-#if (x_procstate == 0)
+if (x_procstate == 0) {
 	Move_to(x_procstate, y_procstate);
-#else
+}
+else {
 	/* cursor is already there...no motion needed */
-	/* assert(lastline == 1); */
-#endif
+	assert(lastline == 1);
+}
 	printf("%d", total);
 
 	/* if number of digits differs, rewrite the label */
@@ -955,11 +958,14 @@ new_message(int type, const char *msgfmt, ...)
 	    i = strlen(next_msg);
 	    if ((type & MT_delayed) == 0)
 	    {
-		type & MT_standout ? top_standout(next_msg) :
-		                     fputs(next_msg, stdout);
-		(void) clear_eol(msglen - i);
-		msglen = i;
-		next_msg[0] = '\0';
+			if (type & MT_standout) {
+				top_standout(next_msg);
+			} else {
+				fputs(next_msg, stdout);
+			}
+			clear_eol(msglen - i);
+			msglen = i;
+			next_msg[0] = '\0';
 	    }
 	}
     }
@@ -967,7 +973,11 @@ new_message(int type, const char *msgfmt, ...)
     {
 	if ((type & MT_delayed) == 0)
 	{
-	    type & MT_standout ? top_standout(next_msg) : fputs(next_msg, stdout);
+		if (type & MT_standout) {
+			top_standout(next_msg);
+		} else {
+			fputs(next_msg, stdout);
+		}
 	    msglen = strlen(next_msg);
 	    next_msg[0] = '\0';
 	}
@@ -1066,7 +1076,8 @@ readline(char *buffer, int size, int numeric)
 
 /* internal support routines */
 
-static void summary_format(char *str, int *numbers, const char * const *names)
+static void
+summary_format(char *str, int *numbers, const char * const *names)
 {
     char *p;
     int num;
