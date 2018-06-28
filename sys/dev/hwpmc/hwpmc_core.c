@@ -1125,15 +1125,15 @@ core2_intr(struct trapframe *tf)
 	struct core_cpu *cc;
 	pmc_value_t v;
 
+	cpu = curcpu;
+	PMCDBG3(MDP,INT, 1, "cpu=%d tf=0x%p um=%d", cpu, (void *) tf,
+	    TRAPF_USERMODE(tf));
+
 	error = pmc_pt_intr(cpu, tf);
 	if (error) {
 		/* Found */
 		return (1);
 	}
-
-	cpu = curcpu;
-	PMCDBG3(MDP,INT, 1, "cpu=%d tf=0x%p um=%d", cpu, (void *) tf,
-	    TRAPF_USERMODE(tf));
 
 	/*
 	 * The IA_GLOBAL_STATUS (MSR 0x38E) register indicates which
