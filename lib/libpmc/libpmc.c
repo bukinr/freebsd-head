@@ -1209,7 +1209,6 @@ pmc_allocate(const char *ctrspec, enum pmc_mode mode,
 			*pmcid = pmc_config.pm_pmcid;
 			goto out;
 		}
-		errx(EX_USAGE, "ERROR: pmc_pmu_allocate failed, check for ctrname %s\n", ctrname);
 	} else {
 		free(spec_copy);
 		spec_copy = NULL;
@@ -1225,9 +1224,6 @@ pmc_allocate(const char *ctrspec, enum pmc_mode mode,
 
 	if (spec_copy == NULL)
 		spec_copy = strdup(ctrspec);
-
-	r = spec_copy;
-	ctrname = strsep(&r, ",");
 
 	/*
 	 * If a explicit class prefix was given by the user, restrict the
@@ -1616,8 +1612,10 @@ pmc_init(void)
 	if (cpu_info.pm_cputype != PMC_CPU_GENERIC)
 		pmc_class_table[n++] = &tsc_class_table_descr;
 
+#if defined(__amd64__)
 	if (cpu_info.pm_cputype == PMC_CPU_INTEL_KABYLAKE)
 		pmc_class_table[n++] = &pt_class_table_descr;
+#endif
 
 	/*
  	 * Check if this CPU has fixed function counters.
