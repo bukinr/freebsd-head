@@ -408,6 +408,7 @@ format_header(const char *uname_field)
 		    ps.jail ? TOP_JID_LEN : 0, ps.jail ? " JID" : "",
 		    namelength, namelength, uname_field);
 		sbuf_cat(header, "   VCSW  IVCSW   READ  WRITE  FAULT  TOTAL PERCENT COMMAND");
+		sbuf_finish(header);
 		break;
 	}
 	case DISP_MAX:
@@ -950,7 +951,6 @@ format_next_process(struct handle * xhandle, char *(*get_userid)(int), int flags
 		}
 	} else {
 		if (pp->ki_flag & P_SYSTEM ||
-		    pp->ki_args == NULL ||
 		    (args = kvm_getargv(kd, pp, cmdlen)) == NULL ||
 		    !(*args)) {
 			if (ps.thread && pp->ki_flag & P_HADTHREADS &&
