@@ -379,7 +379,7 @@ pmctrace_delayed_start(bool user_mode, char *func_name, char *func_image)
 	int i;
 
 	if (func_name == NULL || func_image == NULL)
-		return (0);
+		return (-1);
 
 	ncpu = pmctrace_ncpu();
 	if (ncpu < 0)
@@ -391,15 +391,14 @@ pmctrace_delayed_start(bool user_mode, char *func_name, char *func_image)
 			errx(EX_SOFTWARE, "ERROR: can't get target.");
 		pp = pmcstat_process_lookup(pt->pt_pid, 0);
 		if (pp == NULL)
-			errx(EX_SOFTWARE, "ERROR: pp is NULL, pid %d\n",
-			    (uint32_t)pt->pt_pid);
+			return (-2);
 	} else
 		pp = pmcstat_kernproc;
 
 	sym = pmcstat_symbol_search_by_name(pp, func_image, func_name,
 	    &addr_start, &addr_end);
 	if (!sym)
-		return (0);
+		return (-3);
 
 	dprintf("%s: SYM addr start %lx end %lx\n",
 	    __func__, addr_start, addr_end);
@@ -419,7 +418,7 @@ pmctrace_delayed_start(bool user_mode, char *func_name, char *func_image)
 
 	pmctrace_start_pmcs();
 
-	return (1);
+	return (0);
 }
 
 
@@ -482,11 +481,15 @@ pmctrace_run(bool user_mode, char *func_name, char *func_image)
 			    pmcstat_kernproc, pmcstat_mergepmc, &pmcstat_npmcs,
 			    &ps_samples_period);
 
+			/*
+			 * Try start PMCs. This may or may not happen
+			 * based on mmap log entries arrival.
+			 */
 			if (started == 0 &&
-			    pmctrace_delayed_start(user_mode, func_name, func_image) == 1)
+			    pmctrace_delayed_start(user_mode, func_name, func_image) == 0)
 				started = 1;
 
-			if (user_mode) {
+			if (user_mode && started) {
 				pt = SLIST_FIRST(&args.pa_targets);
 				ev = STAILQ_FIRST(&args.pa_events);
 				pmc_proc_unsuspend(ev->ev_pmcid, pt->pt_pid);
