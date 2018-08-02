@@ -28,7 +28,7 @@ makeoptions     MODULES_OVERRIDE="hwpmc"
 
 options 	SCHED_ULE		# ULE scheduler
 options 	PREEMPTION		# Enable kernel thread preemption
-#options 	VIMAGE			# Subsystem virtualization, e.g. VNET
+options 	VIMAGE			# Subsystem virtualization, e.g. VNET
 options 	INET			# InterNETworking
 options 	INET6			# IPv6 communications protocols
 options 	IPSEC			# IP (v4/v6) security
@@ -171,6 +171,8 @@ device		iic
 device		vt
 device		kbdmux
 
+device		vt_efifb
+
 # Pseudo devices.
 device		loop		# Network loopback
 device		random		# Entropy device
@@ -187,6 +189,7 @@ options 	EXT_RESOURCES
 device		clk
 device		phy
 device		hwreset
+device		nvmem
 device		regulator
 device		syscon
 
