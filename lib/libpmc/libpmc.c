@@ -1650,12 +1650,12 @@ pmc_init(void)
 		PMC_MDEP_INIT(k8);
 		pmc_class_table[n++] = &k8_class_table_descr;
 		break;
+	case PMC_CPU_INTEL_KABYLAKE:
+		PMC_MDEP_INIT(kabylake);
+		break;
 #endif
 	case PMC_CPU_GENERIC:
 		PMC_MDEP_INIT(generic);
-		break;
-	case PMC_CPU_INTEL_KABYLAKE:
-		PMC_MDEP_INIT(kabylake);
 		break;
 #if defined(__arm__)
 #if defined(__XSCALE__)

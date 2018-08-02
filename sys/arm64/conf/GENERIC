@@ -24,7 +24,7 @@ ident		GENERIC
 makeoptions	DEBUG=-g		# Build kernel with gdb(1) debug symbols
 makeoptions	WITH_CTF=1		# Run ctfconvert(1) for DTrace support
 
-makeoptions     MODULES_OVERRIDE="hwpmc"
+makeoptions	MODULES_OVERRIDE="hwpmc"
 
 options 	SCHED_ULE		# ULE scheduler
 options 	PREEMPTION		# Enable kernel thread preemption
@@ -103,19 +103,51 @@ options 	GZIO			# gzip-compressed kernel and user dumps
 options 	ZSTDIO			# zstd-compressed kernel and user dumps
 options 	NETDUMP			# netdump(4) client support
 
+# SoC support
+options 	SOC_ALLWINNER_A64
+options 	SOC_ALLWINNER_H5
+options 	SOC_CAVM_THUNDERX
+options 	SOC_HISI_HI6220
+options 	SOC_BRCM_BCM2837
+options 	SOC_ROCKCHIP_RK3328
+options 	SOC_XILINX_ZYNQ
+
+# Annapurna Alpine drivers
+device		al_ccu			# Alpine Cache Coherency Unit
+device		al_nb_service		# Alpine North Bridge Service
+device		al_iofic		# I/O Fabric Interrupt Controller
+device		al_serdes		# Serializer/Deserializer
+device		al_udma			# Universal DMA
+
 # Qualcomm Snapdragon drivers
 device		qcom_gcc		# Global Clock Controller
+
+# VirtIO support
+device		virtio
+device		virtio_pci
+device		virtio_mmio
+device		virtio_blk
+device		vtnet
 
 # CPU frequency control
 device		cpufreq
 
-# Qualcomm
-device		qcom_gcc
+# Bus drivers
+device		pci
+device		al_pci		# Annapurna Alpine PCI-E
+options 	PCI_HP			# PCI-Express native HotPlug
+options 	PCI_IOV		# PCI SR-IOV support
 
 # Ethernet NICs
 device		mdio
 device		mii
 device		miibus		# MII bus support
+device		awg		# Allwinner EMAC Gigabit Ethernet
+device		axgbe		# AMD Opteron A1100 integrated NIC
+device		em		# Intel PRO/1000 Gigabit Ethernet Family
+device		ix		# Intel 10Gb Ethernet Family
+device		msk		# Marvell/SysKonnect Yukon II Gigabit Ethernet
+device		neta		# Marvell Armada 370/38x/XP/3700 NIC
 device  	smc		# SMSC LAN91C111
 device		vnic		# Cavium ThunderX NIC
 device		al_eth		# Annapurna Alpine Ethernet NIC
@@ -131,8 +163,10 @@ device		pass		# Passthrough device (direct ATA/SCSI access)
 
 # MMC/SD/SDIO Card slot support
 device		sdhci
+device		aw_mmc			# Allwinner SD/MMC controller
 device		mmc			# mmc/sd bus
 device		mmcsd			# mmc/sd flash cards
+device		dwmmc
 
 # Serial (COM) ports
 device		uart		# Generic UART driver
@@ -149,7 +183,9 @@ device		aw_usbphy		# Allwinner USB PHY
 device		dwcotg			# DWC OTG controller
 device		ohci			# OHCI USB interface
 device		ehci			# EHCI USB interface (USB 2.0)
+device		ehci_mv			# Marvell EHCI USB interface
 device		xhci			# XHCI PCI->USB interface (USB 3.0)
+device		xhci_mv			# Marvell XHCI USB interface
 device		usb			# USB Bus (required)
 device		ukbd			# Keyboard
 device		umass			# Disks/Mass storage - Requires scbus and da
@@ -157,15 +193,47 @@ device		ehci_msm
 
 # USB ethernet support
 device		axe
+device		smcphy
+device		smsc
 
 # GPIO
+device		aw_gpio		# Allwinner GPIO controller
 device		gpio
 device		gpioled
 device		fdt_pinctrl
 
 # I2C
+device		aw_rsb		# Allwinner Reduced Serial Bus
+device		bcm2835_bsc	# Broadcom BCM283x I2C bus
 device		iicbus
 device		iic
+device		twsi		# Allwinner I2C controller
+
+# Clock and reset controllers
+device		aw_ccu		# Allwinner clock controller
+
+# Interrupt controllers
+device		aw_nmi		# Allwinner NMI support
+
+# Real-time clock support
+device		aw_rtc		# Allwinner Real-time Clock
+device		mv_rtc		# Marvell Real-time Clock
+
+# Watchdog controllers
+device		aw_wdog		# Allwinner Watchdog
+
+# Power management controllers
+device		axp81x		# X-Powers AXP81x PMIC
+
+# EFUSE
+device		aw_sid		# Allwinner Secure ID EFUSE
+
+# Thermal sensors
+device		aw_thermal	# Allwinner Thermal Sensor Controller
+
+# SPI
+device		spibus
+device		bcm2835_spi	# Broadcom BCM283x SPI bus
 
 # Console
 device		vt
@@ -198,7 +266,11 @@ device		syscon
 # Note that 'bpf' is required for DHCP.
 device		bpf		# Berkeley packet filter
 
+# Chip-specific errata
+options 	THUNDERX_PASS_1_1_ERRATA
+
 options 	FDT
+device		acpi
 
 # The crypto framework is required by IPSEC
 device		crypto			# Required by IPSEC
