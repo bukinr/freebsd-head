@@ -1797,6 +1797,13 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 			pause_thread = 1;
 	}
 
+	/*
+	 * pmclog entry with mmap information just scheduled to ship
+	 * to userspace. This not yet received by pmctrace application.
+	 * Put this thread on pause before we continue. Once user process
+	 * receive log entry, it can reconfigure tracing filters, start
+	 * tracing operation and finally unsuspend this thread.
+	 */
 	if (pause_thread) {
 		PROC_LOCK(td->td_proc);
 		PROC_SLOCK(td->td_proc);
