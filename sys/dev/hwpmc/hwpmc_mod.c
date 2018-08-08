@@ -1774,14 +1774,12 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 	    if (po->po_flags & PMC_PO_OWNS_LOGFILE)
 			pmclog_process_map_in(po, pid, pkm->pm_address, fullpath);
 
-	if ((pp = pmc_find_process_descriptor(td->td_proc, 0)) == NULL) {
+	if ((pp = pmc_find_process_descriptor(td->td_proc, 0)) == NULL)
 		goto done;
-	}
 
 	p = td->td_proc;
-	if ((p->p_flag & P_HWPMC) == 0) {
+	if ((p->p_flag & P_HWPMC) == 0)
 		goto done;
-	}
 
 	pause_thread = 0;
 
@@ -1810,7 +1808,6 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
   done:
 	if (freepath)
 		free(freepath, M_TEMP);
-
 	PMC_EPOCH_EXIT();
 }
 
