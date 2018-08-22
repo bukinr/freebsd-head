@@ -923,8 +923,7 @@ pmap_init(void)
 	 */
 	s = (vm_size_t)(pv_npg * sizeof(struct md_page));
 	s = round_page(s);
-	pv_table = (struct md_page *)kmem_malloc(kernel_arena, s,
-	    M_WAITOK | M_ZERO);
+	pv_table = (struct md_page *)kmem_malloc(s, M_WAITOK | M_ZERO);
 	for (i = 0; i < pv_npg; i++)
 		TAILQ_INIT(&pv_table[i].pv_list);
 	TAILQ_INIT(&pv_dummy.pv_list);
@@ -4813,7 +4812,7 @@ pmap_change_attr_locked(vm_offset_t va, vm_size_t size, int mode)
 		return (EINVAL);
 
 	for (tmpva = base; tmpva < base + size; ) {
-		pte = pmap_pte(kernel_pmap, va, &lvl);
+		pte = pmap_pte(kernel_pmap, tmpva, &lvl);
 		if (pte == NULL)
 			return (EINVAL);
 
