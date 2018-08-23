@@ -171,6 +171,12 @@
 			status = "okay";
 		};
 
+		epw_test {
+			compatible = "beri,epw-test";
+			reg = <0x7fb00000 0x1000>;
+			status = "okay";
+		};
+
 		sdcard@7f008000 {
 			compatible = "altera,sdcard_11_2011";
 			reg = <0x7f008000 0x400>;
