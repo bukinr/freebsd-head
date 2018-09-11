@@ -95,16 +95,38 @@ beri_close(struct cdev *dev, int flags __unused,
 
 	printf("%s\n", __func__);
 
-#if 0
-	printf("%s: Writing to window\n", __func__);
-	bus_write_4(sc->res[0], 0x00, 2);
-	printf("%s: Writing to window done\n", __func__);
-#else
-	uint32_t reg;
-	printf("%s: Reading to window\n", __func__);
-	reg = bus_read_4(sc->res[0], 0x4000);
-	printf("%s: Reading to window done: reg %x\n", __func__, reg);
+#if 1
+	printf("%s: write4 to window offset 0x3000\n", __func__);
+	bus_write_4(sc->res[0], 0x3000, 14);
+	printf("%s: write4 to window offset 0x3000 done\n", __func__);
+
+	mips_sync();
+
+	printf("%s: write2 to window offset 0x3000\n", __func__);
+	bus_write_2(sc->res[0], 0x3000, 12);
+	printf("%s: write2 to window offset 0x3000 done\n", __func__);
+
+	mips_sync();
+
+	printf("%s: write1 to window offset 0x3000\n", __func__);
+	bus_write_1(sc->res[0], 0x3000, 11);
+	printf("%s: write1 to window offset 0x3000 done\n", __func__);
+
+	mips_sync();
 #endif
+
+	uint64_t reg;
+	printf("%s: read1 to window offset 0x4000\n", __func__);
+	reg = bus_read_1(sc->res[0], 0x4000);
+	printf("%s: read1 to window offset 0x4000 done: reg %lx\n", __func__, reg);
+
+	printf("%s: read2 to window offset 0x4000\n", __func__);
+	reg = bus_read_2(sc->res[0], 0x4000);
+	printf("%s: read2 to window offset 0x4000 done: reg %lx\n", __func__, reg);
+
+	printf("%s: read4 to window offset 0x4000\n", __func__);
+	reg = bus_read_4(sc->res[0], 0x4000);
+	printf("%s: read4 to window offset 0x4000 done: reg %lx\n", __func__, reg);
 
 	return (0);
 }
