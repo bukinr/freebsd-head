@@ -52,6 +52,13 @@ __FBSDID("$FreeBSD$");
 #include <machine/cpu.h>
 #include <machine/intr.h>
 
+struct beri_cmd {
+	int test;
+};
+
+#define	BM_RESET	_IOWR('X', 1, struct beri_cmd)
+#define	BM_RELEASE	_IOWR('X', 2, struct beri_cmd)
+
 struct berimgr_softc {
 	struct resource		*res[3];
 	struct cdev		*mgr_cdev;
@@ -59,6 +66,10 @@ struct berimgr_softc {
 	bus_space_tag_t		bst_data;
 	bus_space_handle_t	bsh_data;
 	uint32_t		offs;
+	uint32_t		state;
+#define	STATE_RESET	0
+#define	STATE_LOADED	1
+#define	STATE_RUNNING	2
 };
 
 static struct resource_spec berimgr_spec[] = {
@@ -80,17 +91,13 @@ struct spin_entry {
 #define	BERIPIC1_IP_CLEAR	0x7f80a100
 #define	MIPS_XKPHYS_UNCACHED_BASE	0x9000000000000000ULL
 
-static int
-beri_open(struct cdev *dev, int flags __unused,
-    int fmt __unused, struct thread *td __unused)
+static void
+dm_reset(struct berimgr_softc *sc)
 {
-	struct berimgr_softc *sc;
-
-	sc = dev->si_drv1;
+	uint64_t addr;
 
 	printf("%s\n", __func__);
 
-	uint64_t addr;
 	addr = BERIPIC1_CFG | MIPS_XKPHYS_UNCACHED_BASE;
 	printf("BERIPIC1_CFG %lx\n", (*(volatile uint64_t *)(addr + 16 * 8)));
 
@@ -108,26 +115,17 @@ beri_open(struct cdev *dev, int flags __unused,
 	DELAY(100000);
 
 	sc->offs = 0;
-
-	return (0);
 }
 
-static int
-beri_close(struct cdev *dev, int flags __unused,
-    int fmt __unused, struct thread *td __unused)
+static void
+dm_release(struct berimgr_softc *sc)
 {
-	struct berimgr_softc *sc;
-
-	sc = dev->si_drv1;
+	struct spin_entry *se;
 
 	if (sc->offs > 0)
 		printf("%s: written %d bytes\n", __func__, sc->offs);
 
-	printf("%s\n", __func__);
-
 	/* Release CPU 1 */
-
-	struct spin_entry *se;
 	se = (struct spin_entry *)0xffffffff800fffe0;
 
 	printf("%s: current entry %lx\n", __func__, se->entry_addr);
@@ -145,6 +143,26 @@ beri_close(struct cdev *dev, int flags __unused,
 	int i;
 	for (i = 0; i < 100; i++)
 		printf("%s: addr %lx\n", __func__, bus_space_read_8(sc->bst_data, sc->bsh_data, 0x00800000));
+}
+
+static int
+beri_open(struct cdev *dev, int flags __unused,
+    int fmt __unused, struct thread *td __unused)
+{
+	struct berimgr_softc *sc;
+
+	sc = dev->si_drv1;
+
+	return (0);
+}
+
+static int
+beri_close(struct cdev *dev, int flags __unused,
+    int fmt __unused, struct thread *td __unused)
+{
+	struct berimgr_softc *sc;
+
+	sc = dev->si_drv1;
 
 	return (0);
 }
@@ -157,12 +175,13 @@ beri_write(struct cdev *dev, struct uio *uio, int ioflag)
 
 	sc = dev->si_drv1;
 
-	printf("%s\n", __func__);
+	if (sc->state != STATE_RESET)
+		return (-1);
 
 	while (uio->uio_resid > 0) {
 		uiomove(&buffer, 4, uio);
 		bus_space_write_4(sc->bst_data, sc->bsh_data,
-		   sc->offs, buffer);
+		    sc->offs, buffer);
 		sc->offs += 4;
 	}
 
@@ -177,6 +196,26 @@ static int
 beri_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
     struct thread *td)
 {
+	struct berimgr_softc *sc;
+
+	sc = dev->si_drv1;
+
+	switch (cmd) {
+	case BM_RESET:
+		dm_reset(sc);
+		sc->state = STATE_RESET;
+		break;
+	case BM_RELEASE:
+		if (sc->offs == 0) {
+			/* Nothing loaded */
+			return (-1);
+		}
+		dm_release(sc);
+		sc->state = STATE_RUNNING;
+		break;
+	default:
+		break;
+	};
 
 	return (0);
 }
@@ -230,6 +269,8 @@ berimgr_attach(device_t dev)
 	}
 
 	sc->mgr_cdev->si_drv1 = sc;
+	sc->offs = 0;
+	sc->state = STATE_RESET;
 
 	return (0);
 }
