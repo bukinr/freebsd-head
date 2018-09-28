@@ -90,44 +90,40 @@ struct spin_entry {
 #define	BERIPIC1_IP_SET			0x7f80a080
 #define	BERIPIC1_IP_CLEAR		0x7f80a100
 #define	MIPS_XKPHYS_UNCACHED_BASE	0x9000000000000000ULL
+#define	SOFT_IRQ_N			16
 
 static void
 dm_reset(struct berimgr_softc *sc)
 {
 	uint64_t addr;
 
-	printf("%s\n", __func__);
-
-	addr = BERIPIC1_CFG | MIPS_XKPHYS_UNCACHED_BASE;
-	printf("BERIPIC1_CFG %lx\n", (*(volatile uint64_t *)(addr + 16 * 8)));
+	printf("%s: sending IPI to CPU1\n", __func__);
 
 	addr = BERIPIC1_IP_SET | MIPS_XKPHYS_UNCACHED_BASE;
-	printf("Sending IPI..\n");
-	*(volatile uint64_t *)(addr + 0x00) = (1 << 16);
-	mips_barrier();
-	mips_sync();
-	mips_sync();
-	mips_sync();
+	*(volatile uint64_t *)(addr) = (1 << SOFT_IRQ_N);
 
-	DELAY(100000);
-	DELAY(100000);
-	DELAY(100000);
-	DELAY(100000);
+	mips_barrier();
+
+	mips_sync();
+	mips_sync();
+	mips_sync();
 
 	sc->offs = 0;
 }
 
-static void
+static int
 dm_release(struct berimgr_softc *sc)
 {
 	struct spin_entry *se;
 
-	if (sc->offs > 0)
-		printf("%s: written %d bytes\n", __func__, sc->offs);
+	if (sc->offs == 0) {
+		/* Nothing loaded */
+		return (ENXIO);
+	}
 
 	/* Release CPU 1 */
-	se = (struct spin_entry *)0xffffffff800fffe0;
 
+	se = (struct spin_entry *)0xffffffff800fffe0;
 	printf("%s: current entry %lx\n", __func__, se->entry_addr);
 
 	bus_space_write_8(sc->bst_data, sc->bsh_data, 0x00800000, 0);
@@ -140,9 +136,11 @@ dm_release(struct berimgr_softc *sc)
 	printf("%s: new entry %lx\n", __func__, se->entry_addr);
 	printf("%s: cpu released\n", __func__);
 
-	int i;
-	for (i = 0; i < 100; i++)
-		printf("%s: addr %lx\n", __func__, bus_space_read_8(sc->bst_data, sc->bsh_data, 0x00800000));
+	//int i;
+	//for (i = 0; i < 100; i++)
+	//	printf("%s: addr %lx\n", __func__, bus_space_read_8(sc->bst_data, sc->bsh_data, 0x00800000));
+
+	return (0);
 }
 
 static int
@@ -206,12 +204,8 @@ beri_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 		sc->state = STATE_RESET;
 		break;
 	case BM_RELEASE:
-		if (sc->offs == 0) {
-			/* Nothing loaded */
-			return (ENXIO);
-		}
-		dm_release(sc);
-		sc->state = STATE_RUNNING;
+		if (dm_release(sc) == 0)
+			sc->state = STATE_RUNNING;
 		break;
 	default:
 		break;
