@@ -154,7 +154,7 @@ main(int argc, char *argv[])
 
 	if (release_flag) {
 		if (ioctl(fd, BM_RELEASE, &cmd) != 0) {
-			printf("Failed to release.\n");
+			printf("Failed to release CPU1.\n");
 			return (3);
 		}
 	}
