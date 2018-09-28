@@ -124,8 +124,6 @@ dm_release(struct berimgr_softc *sc)
 	/* Release CPU 1 */
 
 	se = (struct spin_entry *)0xffffffff800fffe0;
-	printf("%s: current entry %lx\n", __func__, se->entry_addr);
-
 	bus_space_write_8(sc->bst_data, sc->bsh_data, 0x00800000, 0);
 
 	se->pir = 1;
@@ -133,12 +131,7 @@ dm_release(struct berimgr_softc *sc)
 	se->entry_addr = 0xffffffffb0000000;
 	mips_sync();
 
-	printf("%s: new entry %lx\n", __func__, se->entry_addr);
 	printf("%s: cpu released\n", __func__);
-
-	//int i;
-	//for (i = 0; i < 100; i++)
-	//	printf("%s: addr %lx\n", __func__, bus_space_read_8(sc->bst_data, sc->bsh_data, 0x00800000));
 
 	return (0);
 }
