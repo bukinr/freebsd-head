@@ -93,12 +93,10 @@ struct racct;
  * (a) Constant from inception
  * (b) Lockless, updated using atomics
  * (c) Locked by global uihashtbl_lock
- * (d) Locked by the ui_vmsize_mtx
  */
 struct uidinfo {
 	LIST_ENTRY(uidinfo) ui_hash;	/* (c) hash chain of uidinfos */
-	struct mtx ui_vmsize_mtx;
-	vm_ooffset_t ui_vmsize;		/* (d) swap reservation by uid */
+	u_long ui_vmsize;	/* (b) pages of swap reservation by uid */
 	long	ui_sbsize;		/* (b) socket buffer space consumed */
 	long	ui_proccnt;		/* (b) number of processes */
 	long	ui_ptscnt;		/* (b) number of pseudo-terminals */
@@ -128,7 +126,6 @@ int	 chgsbsize(struct uidinfo *uip, u_int *hiwat, u_int to,
 	    rlim_t maxval);
 int	 chgptscnt(struct uidinfo *uip, int diff, rlim_t maxval);
 int	 chgumtxcnt(struct uidinfo *uip, int diff, rlim_t maxval);
-int	 fuswintr(void *base);
 int	 kern_proc_setrlimit(struct thread *td, struct proc *p, u_int which,
 	    struct rlimit *limp);
 struct plimit
@@ -152,7 +149,6 @@ void	 rufetchcalc(struct proc *p, struct rusage *ru, struct timeval *up,
 	    struct timeval *sp);
 void	 rufetchtd(struct thread *td, struct rusage *ru);
 void	 ruxagg(struct proc *p, struct thread *td);
-int	 suswintr(void *base, int word);
 struct uidinfo
 	*uifind(uid_t uid);
 void	 uifree(struct uidinfo *uip);

@@ -34,12 +34,36 @@ local hook = require("hook")
 
 local core = {}
 
+local default_safe_mode = false
+local default_single_user = false
+local default_verbose = false
+
 local function composeLoaderCmd(cmd_name, argstr)
 	if argstr ~= nil then
 		cmd_name = cmd_name .. " " .. argstr
 	end
 	return cmd_name
 end
+
+local function recordDefaults()
+	-- On i386, hint.acpi.0.rsdp will be set before we're loaded. On !i386,
+	-- it will generally be set upon execution of the kernel. Because of
+	-- this, we can't (or don't really want to) detect/disable ACPI on !i386
+	-- reliably. Just set it enabled if we detect it and leave well enough
+	-- alone if we don't.
+	local boot_acpi = core.isSystem386() and core.getACPIPresent(false)
+	local boot_single = loader.getenv("boot_single") or "no"
+	local boot_verbose = loader.getenv("boot_verbose") or "no"
+	default_single_user = boot_single:lower() ~= "no"
+	default_verbose = boot_verbose:lower() ~= "no"
+
+	if boot_acpi then
+		core.setACPI(true)
+	end
+	core.setSingleUser(default_single_user)
+	core.setVerbose(default_verbose)
+end
+
 
 -- Globals
 -- try_include will return the loaded module on success, or nil on failure.
@@ -185,7 +209,7 @@ function core.kernelList()
 	end
 
 	if v ~= nil then
-		for n in v:gmatch("([^; ]+)[; ]?") do
+		for n in v:gmatch("([^;, ]+)[;, ]?") do
 			if unique[n] == nil then
 				i = i + 1
 				kernels[i] = n
@@ -268,9 +292,9 @@ end
 
 function core.setDefaults()
 	core.setACPI(core.getACPIPresent(true))
-	core.setSafeMode(false)
-	core.setSingleUser(false)
-	core.setVerbose(false)
+	core.setSafeMode(default_safe_mode)
+	core.setSingleUser(default_single_user)
+	core.setVerbose(default_verbose)
 end
 
 function core.autoboot(argstr)
@@ -310,14 +334,6 @@ function core.isZFSBoot()
 end
 
 function core.isSerialBoot()
-	local c = loader.getenv("console")
-
-	if c ~= nil then
-		if c:find("comconsole") ~= nil then
-			return true
-		end
-	end
-
 	local s = loader.getenv("boot_serial")
 	if s ~= nil then
 		return true
@@ -336,16 +352,7 @@ end
 
 -- Is the menu skipped in the environment in which we've booted?
 function core.isMenuSkipped()
-	if core.isSerialBoot() then
-		return true
-	end
-	local c = string.lower(loader.getenv("console") or "")
-	if c:match("^efi[ ;]") ~= nil or c:match("[ ;]efi[ ;]") ~= nil then
-		return true
-	end
-
-	c = string.lower(loader.getenv("beastie_disable") or "")
-	return c == "yes"
+	return string.lower(loader.getenv("beastie_disable") or "") == "yes"
 end
 
 -- This may be a better candidate for a 'utility' module.
@@ -384,13 +391,6 @@ function core.popFrontTable(tbl)
 	return first_value, new_tbl
 end
 
--- On i386, hint.acpi.0.rsdp will be set before we're loaded. On !i386, it will
--- generally be set upon execution of the kernel. Because of this, we can't (or
--- don't really want to) detect/disable ACPI on !i386 reliably. Just set it
--- enabled if we detect it and leave well enough alone if we don't.
-if core.isSystem386() and core.getACPIPresent(false) then
-	core.setACPI(true)
-end
-
+recordDefaults()
 hook.register("config.reloaded", core.clearCachedKernels)
 return core

@@ -92,9 +92,9 @@ static int
 crossmp_vop_lock1(struct vop_lock1_args *ap)
 {
 	struct vnode *vp;
-	struct lock *lk;
-	const char *file;
-	int flags, line;
+	struct lock *lk __unused;
+	const char *file __unused;
+	int flags, line __unused;
 
 	vp = ap->a_vp;
 	lk = vp->v_vnlock;
@@ -118,7 +118,7 @@ static int
 crossmp_vop_unlock(struct vop_unlock_args *ap)
 {
 	struct vnode *vp;
-	struct lock *lk;
+	struct lock *lk __unused;
 	int flags;
 
 	vp = ap->a_vp;
@@ -159,10 +159,6 @@ nameiinit(void *dummy __unused)
 	getnewvnode("crossmp", NULL, &crossmp_vnodeops, &vp_crossmp);
 }
 SYSINIT(vfs, SI_SUB_VFS, SI_ORDER_SECOND, nameiinit, NULL);
-
-static int lookup_shared = 1;
-SYSCTL_INT(_vfs, OID_AUTO, lookup_shared, CTLFLAG_RWTUN, &lookup_shared, 0,
-    "enables shared locks for path name translation");
 
 static int lookup_cap_dotdot = 1;
 SYSCTL_INT(_vfs, OID_AUTO, lookup_cap_dotdot, CTLFLAG_RWTUN,
@@ -307,8 +303,6 @@ namei(struct nameidata *ndp)
 	    ("namei: flags contaminated with nameiops"));
 	MPASS(ndp->ni_startdir == NULL || ndp->ni_startdir->v_type == VDIR ||
 	    ndp->ni_startdir->v_type == VBAD);
-	if (!lookup_shared)
-		cnp->cn_flags &= ~LOCKSHARED;
 	fdp = p->p_fd;
 	TAILQ_INIT(&ndp->ni_cap_tracker);
 	ndp->ni_lcf = 0;
@@ -660,10 +654,7 @@ lookup(struct nameidata *ndp)
 	 * We use shared locks until we hit the parent of the last cn then
 	 * we adjust based on the requesting flags.
 	 */
-	if (lookup_shared)
-		cnp->cn_lkflags = LK_SHARED;
-	else
-		cnp->cn_lkflags = LK_EXCLUSIVE;
+	cnp->cn_lkflags = LK_SHARED;
 	dp = ndp->ni_startdir;
 	ndp->ni_startdir = NULLVP;
 	vn_lock(dp,
@@ -1087,7 +1078,7 @@ nextname:
 		VOP_UNLOCK(dp, 0);
 success:
 	/*
-	 * Because of lookup_shared we may have the vnode shared locked, but
+	 * Because of shared lookup we may have the vnode shared locked, but
 	 * the caller may want it to be exclusively locked.
 	 */
 	if (needs_exclusive_leaf(dp->v_mount, cnp->cn_flags) &&

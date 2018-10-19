@@ -31,7 +31,12 @@
 #ifndef _VMM_H_
 #define	_VMM_H_
 
+#include <sys/sdt.h>
 #include <x86/segments.h>
+
+#ifdef _KERNEL
+SDT_PROVIDER_DECLARE(vmm);
+#endif
 
 enum vm_suspend_how {
 	VM_SUSPEND_NONE,
@@ -207,6 +212,7 @@ int vm_mmap_getnext(struct vm *vm, vm_paddr_t *gpa, int *segid,
     vm_ooffset_t *segoff, size_t *len, int *prot, int *flags);
 int vm_get_memseg(struct vm *vm, int ident, size_t *len, bool *sysmem,
     struct vm_object **objptr);
+vm_paddr_t vmm_sysmem_maxaddr(struct vm *vm);
 void *vm_gpa_hold(struct vm *, int vcpuid, vm_paddr_t gpa, size_t len,
     int prot, void **cookie);
 void vm_gpa_release(void *cookie);
@@ -551,6 +557,7 @@ enum vm_exitcode {
 	VM_EXITCODE_SVM,
 	VM_EXITCODE_REQIDLE,
 	VM_EXITCODE_DEBUG,
+	VM_EXITCODE_VMINSN,
 	VM_EXITCODE_MAX
 };
 

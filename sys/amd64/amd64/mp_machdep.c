@@ -71,6 +71,7 @@ __FBSDID("$FreeBSD$");
 #include <machine/smp.h>
 #include <machine/specialreg.h>
 #include <machine/tss.h>
+#include <x86/ucode.h>
 #include <machine/cpu.h>
 #include <x86/init.h>
 
@@ -85,12 +86,15 @@ __FBSDID("$FreeBSD$");
 
 #define GiB(v)			(v ## ULL << 30)
 
+#define	AP_BOOTPT_SZ		(PAGE_SIZE * 3)
+
 extern	struct pcpu __pcpu[];
 
 /* Temporary variables for init_secondary()  */
 char *doublefault_stack;
 char *mce_stack;
 char *nmi_stack;
+char *dbg_stack;
 
 /*
  * Local data and functions.
@@ -98,41 +102,79 @@ char *nmi_stack;
 
 static int	start_ap(int apic_id);
 
+static bool
+is_kernel_paddr(vm_paddr_t pa)
+{
+
+	return (pa >= trunc_2mpage(btext - KERNBASE) &&
+	   pa < round_page(_end - KERNBASE));
+}
+
+static bool
+is_mpboot_good(vm_paddr_t start, vm_paddr_t end)
+{
+
+	return (start + AP_BOOTPT_SZ <= GiB(4) && atop(end) < Maxmem);
+}
+
 /*
  * Calculate usable address in base memory for AP trampoline code.
  */
 void
 mp_bootaddress(vm_paddr_t *physmap, unsigned int *physmap_idx)
 {
+	vm_paddr_t start, end;
 	unsigned int i;
 	bool allocated;
 
 	alloc_ap_trampoline(physmap, physmap_idx);
 
+	/*
+	 * Find a memory region big enough below the 4GB boundary to
+	 * store the initial page tables.  Region must be mapped by
+	 * the direct map.
+	 *
+	 * Note that it needs to be aligned to a page boundary.
+	 */
 	allocated = false;
 	for (i = *physmap_idx; i <= *physmap_idx; i -= 2) {
 		/*
-		 * Find a memory region big enough below the 4GB boundary to
-		 * store the initial page tables. Note that it needs to be
-		 * aligned to a page boundary.
+		 * First, try to chomp at the start of the physmap region.
+		 * Kernel binary might claim it already.
 		 */
-		if (physmap[i] >= GiB(4) ||
-		    (physmap[i + 1] - round_page(physmap[i])) < (PAGE_SIZE * 3))
-			continue;
+		start = round_page(physmap[i]);
+		end = start + AP_BOOTPT_SZ;
+		if (start < end && end <= physmap[i + 1] &&
+		    is_mpboot_good(start, end) &&
+		    !is_kernel_paddr(start) && !is_kernel_paddr(end - 1)) {
+			allocated = true;
+			physmap[i] = end;
+			break;
+		}
 
-		allocated = true;
-		mptramp_pagetables = round_page(physmap[i]);
-		physmap[i] = round_page(physmap[i]) + (PAGE_SIZE * 3);
+		/*
+		 * Second, try to chomp at the end.  Again, check
+		 * against kernel.
+		 */
+		end = trunc_page(physmap[i + 1]);
+		start = end - AP_BOOTPT_SZ;
+		if (start < end && start >= physmap[i] &&
+		    is_mpboot_good(start, end) &&
+		    !is_kernel_paddr(start) && !is_kernel_paddr(end - 1)) {
+			allocated = true;
+			physmap[i + 1] = start;
+			break;
+		}
+	}
+	if (allocated) {
+		mptramp_pagetables = start;
 		if (physmap[i] == physmap[i + 1] && *physmap_idx != 0) {
 			memmove(&physmap[i], &physmap[i + 2],
 			    sizeof(*physmap) * (*physmap_idx - i + 2));
 			*physmap_idx -= 2;
 		}
-		break;
-	}
-
-	if (!allocated) {
-		mptramp_pagetables = trunc_page(boot_address) - (PAGE_SIZE * 3);
+	} else {
+		mptramp_pagetables = trunc_page(boot_address) - AP_BOOTPT_SZ;
 		if (bootverbose)
 			printf(
 "Cannot find enough space for the initial AP page tables, placing them at %#x",
@@ -237,6 +279,9 @@ init_secondary(void)
 	/* Set by the startup code for us to use */
 	cpu = bootAP;
 
+	/* Update microcode before doing anything else. */
+	ucode_load_ap(cpu);
+
 	/* Init tss */
 	common_tss[cpu] = common_tss[0];
 	common_tss[cpu].tss_iobase = sizeof(struct amd64tss) +
@@ -250,6 +295,10 @@ init_secondary(void)
 	/* The MC# stack runs on IST3. */
 	np = ((struct nmi_pcpu *) &mce_stack[PAGE_SIZE]) - 1;
 	common_tss[cpu].tss_ist3 = (long) np;
+
+	/* The DB# stack runs on IST4. */
+	np = ((struct nmi_pcpu *) &dbg_stack[PAGE_SIZE]) - 1;
+	common_tss[cpu].tss_ist4 = (long) np;
 
 	/* Prepare private GDT */
 	gdt_segs[GPROC0_SEL].ssd_base = (long) &common_tss[cpu];
@@ -276,17 +325,18 @@ init_secondary(void)
 	pc->pc_tssp = &common_tss[cpu];
 	pc->pc_commontssp = &common_tss[cpu];
 	pc->pc_rsp0 = 0;
+	pc->pc_pti_rsp0 = (((vm_offset_t)&pc->pc_pti_stack +
+	    PC_PTI_STACK_SZ * sizeof(uint64_t)) & ~0xful);
 	pc->pc_tss = (struct system_segment_descriptor *)&gdt[NGDT * cpu +
 	    GPROC0_SEL];
 	pc->pc_fs32p = &gdt[NGDT * cpu + GUFS32_SEL];
 	pc->pc_gs32p = &gdt[NGDT * cpu + GUGS32_SEL];
 	pc->pc_ldt = (struct system_segment_descriptor *)&gdt[NGDT * cpu +
 	    GUSERLDT_SEL];
-	pc->pc_curpmap = kernel_pmap;
+	/* See comment in pmap_bootstrap(). */
+	pc->pc_pcid_next = PMAP_PCID_KERN + 2;
 	pc->pc_pcid_gen = 1;
-	pc->pc_pcid_next = PMAP_PCID_KERN + 1;
-	common_tss[cpu].tss_rsp0 = pti ? ((vm_offset_t)&pc->pc_pti_stack +
-	    PC_PTI_STACK_SZ * sizeof(uint64_t)) & ~0xful : 0;
+	common_tss[cpu].tss_rsp0 = 0;
 
 	/* Save the per-cpu pointer for use by the NMI handler. */
 	np = ((struct nmi_pcpu *) &nmi_stack[PAGE_SIZE]) - 1;
@@ -294,6 +344,10 @@ init_secondary(void)
 
 	/* Save the per-cpu pointer for use by the MC# handler. */
 	np = ((struct nmi_pcpu *) &mce_stack[PAGE_SIZE]) - 1;
+	np->np_pcpu = (register_t) pc;
+
+	/* Save the per-cpu pointer for use by the DB# handler. */
+	np = ((struct nmi_pcpu *) &dbg_stack[PAGE_SIZE]) - 1;
 	np->np_pcpu = (register_t) pc;
 
 	wrmsr(MSR_FSBASE, 0);		/* User value */
@@ -383,16 +437,14 @@ native_start_all_aps(void)
 		apic_id = cpu_apic_ids[cpu];
 
 		/* allocate and set up an idle stack data page */
-		bootstacks[cpu] = (void *)kmem_malloc(kernel_arena,
-		    kstack_pages * PAGE_SIZE, M_WAITOK | M_ZERO);
-		doublefault_stack = (char *)kmem_malloc(kernel_arena,
-		    PAGE_SIZE, M_WAITOK | M_ZERO);
-		mce_stack = (char *)kmem_malloc(kernel_arena, PAGE_SIZE,
+		bootstacks[cpu] = (void *)kmem_malloc(kstack_pages * PAGE_SIZE,
 		    M_WAITOK | M_ZERO);
-		nmi_stack = (char *)kmem_malloc(kernel_arena, PAGE_SIZE,
-		    M_WAITOK | M_ZERO);
-		dpcpu = (void *)kmem_malloc(kernel_arena, DPCPU_SIZE,
-		    M_WAITOK | M_ZERO);
+		doublefault_stack = (char *)kmem_malloc(PAGE_SIZE, M_WAITOK |
+		    M_ZERO);
+		mce_stack = (char *)kmem_malloc(PAGE_SIZE, M_WAITOK | M_ZERO);
+		nmi_stack = (char *)kmem_malloc(PAGE_SIZE, M_WAITOK | M_ZERO);
+		dbg_stack = (char *)kmem_malloc(PAGE_SIZE, M_WAITOK | M_ZERO);
+		dpcpu = (void *)kmem_malloc(DPCPU_SIZE, M_WAITOK | M_ZERO);
 
 		bootSTK = (char *)bootstacks[cpu] + kstack_pages * PAGE_SIZE - 8;
 		bootAP = cpu;
