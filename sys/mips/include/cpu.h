@@ -78,6 +78,7 @@
 			".set reorder\n"				\
 			: : : "memory");
 #endif
+#define	cpu_lock_delay()	DELAY(1)
 
 /*
  * A machine-independent interface to the CPU's counter.
