@@ -20,6 +20,7 @@ device		scbus
 device		pass
 device		umass
 device		da
+device		ahci
 
 #options 	SMP
 #options 	MIPS64_NEW_PMAP
