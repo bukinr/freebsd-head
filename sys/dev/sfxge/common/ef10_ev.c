@@ -37,7 +37,7 @@ __FBSDID("$FreeBSD$");
 #include "mcdi_mon.h"
 #endif
 
-#if EFSYS_OPT_HUNTINGTON || EFSYS_OPT_MEDFORD
+#if EFSYS_OPT_HUNTINGTON || EFSYS_OPT_MEDFORD || EFSYS_OPT_MEDFORD2
 
 #if EFSYS_OPT_QSTATS
 #define	EFX_EV_QSTAT_INCR(_eep, _stat)					\
@@ -466,7 +466,7 @@ ef10_ev_qcreate(
 	__in		efx_nic_t *enp,
 	__in		unsigned int index,
 	__in		efsys_mem_t *esmp,
-	__in		size_t n,
+	__in		size_t ndescs,
 	__in		uint32_t id,
 	__in		uint32_t us,
 	__in		uint32_t flags,
@@ -480,7 +480,8 @@ ef10_ev_qcreate(
 	EFX_STATIC_ASSERT(ISP2(EFX_EVQ_MAXNEVS));
 	EFX_STATIC_ASSERT(ISP2(EFX_EVQ_MINNEVS));
 
-	if (!ISP2(n) || (n < EFX_EVQ_MINNEVS) || (n > EFX_EVQ_MAXNEVS)) {
+	if (!ISP2(ndescs) ||
+	    (ndescs < EFX_EVQ_MINNEVS) || (ndescs > EFX_EVQ_MAXNEVS)) {
 		rc = EINVAL;
 		goto fail1;
 	}
@@ -529,7 +530,8 @@ ef10_ev_qcreate(
 		 * it will choose the best settings for low latency, otherwise
 		 * it will choose the best settings for throughput.
 		 */
-		rc = efx_mcdi_init_evq_v2(enp, index, esmp, n, irq, us, flags);
+		rc = efx_mcdi_init_evq_v2(enp, index, esmp, ndescs, irq, us,
+		    flags);
 		if (rc != 0)
 			goto fail4;
 	} else {
@@ -545,7 +547,7 @@ ef10_ev_qcreate(
 		 * to choose it.)
 		 */
 		boolean_t low_latency = encp->enc_datapath_cap_evb ? 0 : 1;
-		rc = efx_mcdi_init_evq(enp, index, esmp, n, irq, us, flags,
+		rc = efx_mcdi_init_evq(enp, index, esmp, ndescs, irq, us, flags,
 		    low_latency);
 		if (rc != 0)
 			goto fail5;
@@ -574,9 +576,10 @@ ef10_ev_qdestroy(
 	efx_nic_t *enp = eep->ee_enp;
 
 	EFSYS_ASSERT(enp->en_family == EFX_FAMILY_HUNTINGTON ||
-	    enp->en_family == EFX_FAMILY_MEDFORD);
+	    enp->en_family == EFX_FAMILY_MEDFORD ||
+	    enp->en_family == EFX_FAMILY_MEDFORD2);
 
-	(void) efx_mcdi_fini_evq(eep->ee_enp, eep->ee_index);
+	(void) efx_mcdi_fini_evq(enp, eep->ee_index);
 }
 
 	__checkReturn	efx_rc_t
@@ -601,7 +604,7 @@ ef10_ev_qprime(
 		    EFE_DD_EVQ_IND_RPTR_FLAGS_HIGH,
 		    ERF_DD_EVQ_IND_RPTR,
 		    (rptr >> ERF_DD_EVQ_IND_RPTR_WIDTH));
-		EFX_BAR_TBL_WRITED(enp, ER_DD_EVQ_INDIRECT, eep->ee_index,
+		EFX_BAR_VI_WRITED(enp, ER_DD_EVQ_INDIRECT, eep->ee_index,
 		    &dword, B_FALSE);
 
 		EFX_POPULATE_DWORD_2(dword,
@@ -609,11 +612,11 @@ ef10_ev_qprime(
 		    EFE_DD_EVQ_IND_RPTR_FLAGS_LOW,
 		    ERF_DD_EVQ_IND_RPTR,
 		    rptr & ((1 << ERF_DD_EVQ_IND_RPTR_WIDTH) - 1));
-		EFX_BAR_TBL_WRITED(enp, ER_DD_EVQ_INDIRECT, eep->ee_index,
+		EFX_BAR_VI_WRITED(enp, ER_DD_EVQ_INDIRECT, eep->ee_index,
 		    &dword, B_FALSE);
 	} else {
 		EFX_POPULATE_DWORD_1(dword, ERF_DZ_EVQ_RPTR, rptr);
-		EFX_BAR_TBL_WRITED(enp, ER_DZ_EVQ_RPTR_REG, eep->ee_index,
+		EFX_BAR_VI_WRITED(enp, ER_DZ_EVQ_RPTR_REG, eep->ee_index,
 		    &dword, B_FALSE);
 	}
 
@@ -726,13 +729,19 @@ ef10_ev_qmoderate(
 			    EFE_DD_EVQ_IND_TIMER_FLAGS,
 			    ERF_DD_EVQ_IND_TIMER_MODE, mode,
 			    ERF_DD_EVQ_IND_TIMER_VAL, ticks);
-			EFX_BAR_TBL_WRITED(enp, ER_DD_EVQ_INDIRECT,
+			EFX_BAR_VI_WRITED(enp, ER_DD_EVQ_INDIRECT,
 			    eep->ee_index, &dword, 0);
 		} else {
-			EFX_POPULATE_DWORD_2(dword,
+			/*
+			 * NOTE: The TMR_REL field introduced in Medford2 is
+			 * ignored on earlier EF10 controllers. See bug66418
+			 * comment 9 for details.
+			 */
+			EFX_POPULATE_DWORD_3(dword,
 			    ERF_DZ_TC_TIMER_MODE, mode,
-			    ERF_DZ_TC_TIMER_VAL, ticks);
-			EFX_BAR_TBL_WRITED(enp, ER_DZ_EVQ_TMR_REG,
+			    ERF_DZ_TC_TIMER_VAL, ticks,
+			    ERF_FZ_TC_TMR_REL_VAL, ticks);
+			EFX_BAR_VI_WRITED(enp, ER_DZ_EVQ_TMR_REG,
 			    eep->ee_index, &dword, 0);
 		}
 	}
@@ -812,8 +821,8 @@ ef10_ev_rx_packed_stream(
 	current_id = eersp->eers_rx_read_ptr & eersp->eers_rx_mask;
 
 	/* Check for errors that invalidate checksum and L3/L4 fields */
-	if (EFX_QWORD_FIELD(*eqp, ESF_DZ_RX_ECC_ERR) != 0) {
-		/* RX frame truncated (error flag is misnamed) */
+	if (EFX_QWORD_FIELD(*eqp, ESF_DZ_RX_TRUNC_ERR) != 0) {
+		/* RX frame truncated */
 		EFX_EV_QSTAT_INCR(eep, EV_RX_FRM_TRUNC);
 		flags |= EFX_DISCARD;
 		goto deliver;
@@ -892,12 +901,23 @@ ef10_ev_rx(
 #endif
 
 	size = EFX_QWORD_FIELD(*eqp, ESF_DZ_RX_BYTES);
+	cont = EFX_QWORD_FIELD(*eqp, ESF_DZ_RX_CONT);
 	next_read_lbits = EFX_QWORD_FIELD(*eqp, ESF_DZ_RX_DSC_PTR_LBITS);
 	eth_tag_class = EFX_QWORD_FIELD(*eqp, ESF_DZ_RX_ETH_TAG_CLASS);
 	mac_class = EFX_QWORD_FIELD(*eqp, ESF_DZ_RX_MAC_CLASS);
 	l3_class = EFX_QWORD_FIELD(*eqp, ESF_DZ_RX_L3_CLASS);
-	l4_class = EFX_QWORD_FIELD(*eqp, ESF_DZ_RX_L4_CLASS);
-	cont = EFX_QWORD_FIELD(*eqp, ESF_DZ_RX_CONT);
+
+	/*
+	 * RX_L4_CLASS is 3 bits wide on Huntington and Medford, but is only
+	 * 2 bits wide on Medford2. Check it is safe to use the Medford2 field
+	 * and values for all EF10 controllers.
+	 */
+	EFX_STATIC_ASSERT(ESF_FZ_RX_L4_CLASS_LBN == ESF_DE_RX_L4_CLASS_LBN);
+	EFX_STATIC_ASSERT(ESE_FZ_L4_CLASS_TCP == ESE_DE_L4_CLASS_TCP);
+	EFX_STATIC_ASSERT(ESE_FZ_L4_CLASS_UDP == ESE_DE_L4_CLASS_UDP);
+	EFX_STATIC_ASSERT(ESE_FZ_L4_CLASS_UNKNOWN == ESE_DE_L4_CLASS_UNKNOWN);
+
+	l4_class = EFX_QWORD_FIELD(*eqp, ESF_FZ_RX_L4_CLASS);
 
 	if (EFX_QWORD_FIELD(*eqp, ESF_DZ_RX_DROP_EVENT) != 0) {
 		/* Drop this event */
@@ -939,8 +959,8 @@ ef10_ev_rx(
 	last_used_id = (eersp->eers_rx_read_ptr - 1) & eersp->eers_rx_mask;
 
 	/* Check for errors that invalidate checksum and L3/L4 fields */
-	if (EFX_QWORD_FIELD(*eqp, ESF_DZ_RX_ECC_ERR) != 0) {
-		/* RX frame truncated (error flag is misnamed) */
+	if (EFX_QWORD_FIELD(*eqp, ESF_DZ_RX_TRUNC_ERR) != 0) {
+		/* RX frame truncated */
 		EFX_EV_QSTAT_INCR(eep, EV_RX_FRM_TRUNC);
 		flags |= EFX_DISCARD;
 		goto deliver;
@@ -976,10 +996,22 @@ ef10_ev_rx(
 			flags |= EFX_CKSUM_IPV4;
 		}
 
-		if (l4_class == ESE_DZ_L4_CLASS_TCP) {
+		/*
+		 * RX_L4_CLASS is 3 bits wide on Huntington and Medford, but is
+		 * only 2 bits wide on Medford2. Check it is safe to use the
+		 * Medford2 field and values for all EF10 controllers.
+		 */
+		EFX_STATIC_ASSERT(ESF_FZ_RX_L4_CLASS_LBN ==
+		    ESF_DE_RX_L4_CLASS_LBN);
+		EFX_STATIC_ASSERT(ESE_FZ_L4_CLASS_TCP == ESE_DE_L4_CLASS_TCP);
+		EFX_STATIC_ASSERT(ESE_FZ_L4_CLASS_UDP == ESE_DE_L4_CLASS_UDP);
+		EFX_STATIC_ASSERT(ESE_FZ_L4_CLASS_UNKNOWN ==
+		    ESE_DE_L4_CLASS_UNKNOWN);
+
+		if (l4_class == ESE_FZ_L4_CLASS_TCP) {
 			EFX_EV_QSTAT_INCR(eep, EV_RX_TCP_IPV4);
 			flags |= EFX_PKT_TCP;
-		} else if (l4_class == ESE_DZ_L4_CLASS_UDP) {
+		} else if (l4_class == ESE_FZ_L4_CLASS_UDP) {
 			EFX_EV_QSTAT_INCR(eep, EV_RX_UDP_IPV4);
 			flags |= EFX_PKT_UDP;
 		} else {
@@ -991,10 +1023,22 @@ ef10_ev_rx(
 	case ESE_DZ_L3_CLASS_IP6_FRAG:
 		flags |= EFX_PKT_IPV6;
 
-		if (l4_class == ESE_DZ_L4_CLASS_TCP) {
+		/*
+		 * RX_L4_CLASS is 3 bits wide on Huntington and Medford, but is
+		 * only 2 bits wide on Medford2. Check it is safe to use the
+		 * Medford2 field and values for all EF10 controllers.
+		 */
+		EFX_STATIC_ASSERT(ESF_FZ_RX_L4_CLASS_LBN ==
+		    ESF_DE_RX_L4_CLASS_LBN);
+		EFX_STATIC_ASSERT(ESE_FZ_L4_CLASS_TCP == ESE_DE_L4_CLASS_TCP);
+		EFX_STATIC_ASSERT(ESE_FZ_L4_CLASS_UDP == ESE_DE_L4_CLASS_UDP);
+		EFX_STATIC_ASSERT(ESE_FZ_L4_CLASS_UNKNOWN ==
+		    ESE_DE_L4_CLASS_UNKNOWN);
+
+		if (l4_class == ESE_FZ_L4_CLASS_TCP) {
 			EFX_EV_QSTAT_INCR(eep, EV_RX_TCP_IPV6);
 			flags |= EFX_PKT_TCP;
-		} else if (l4_class == ESE_DZ_L4_CLASS_UDP) {
+		} else if (l4_class == ESE_FZ_L4_CLASS_UDP) {
 			EFX_EV_QSTAT_INCR(eep, EV_RX_UDP_IPV6);
 			flags |= EFX_PKT_UDP;
 		} else {
@@ -1347,9 +1391,11 @@ ef10_ev_rxlabel_init(
 	__in		efx_rxq_type_t type)
 {
 	efx_evq_rxq_state_t *eersp;
-	boolean_t packed_stream = (type >= EFX_RXQ_TYPE_PACKED_STREAM_1M) &&
-	    (type <= EFX_RXQ_TYPE_PACKED_STREAM_64K);
+#if EFSYS_OPT_RX_PACKED_STREAM
+	boolean_t packed_stream = (type == EFX_RXQ_TYPE_PACKED_STREAM);
+#endif
 
+	_NOTE(ARGUNUSED(type))
 	EFSYS_ASSERT3U(label, <, EFX_ARRAY_SIZE(eep->ee_rxq_state));
 	eersp = &eep->ee_rxq_state[label];
 
@@ -1387,8 +1433,6 @@ ef10_ev_rxlabel_init(
 		EFSYS_ASSERT3U(eersp->eers_rx_packed_stream_credits, <=,
 		    EFX_RX_PACKED_STREAM_MAX_CREDITS);
 	}
-#else
-	EFSYS_ASSERT(!packed_stream);
 #endif
 }
 
@@ -1413,4 +1457,4 @@ ef10_ev_rxlabel_fini(
 #endif
 }
 
-#endif	/* EFSYS_OPT_HUNTINGTON || EFSYS_OPT_MEDFORD */
+#endif	/* EFSYS_OPT_HUNTINGTON || EFSYS_OPT_MEDFORD || EFSYS_OPT_MEDFORD2 */

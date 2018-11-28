@@ -37,13 +37,27 @@
 extern "C" {
 #endif
 
-#if (EFSYS_OPT_HUNTINGTON && EFSYS_OPT_MEDFORD)
-#define	EF10_MAX_PIOBUF_NBUFS	MAX(HUNT_PIOBUF_NBUFS, MEDFORD_PIOBUF_NBUFS)
-#elif EFSYS_OPT_HUNTINGTON
-#define	EF10_MAX_PIOBUF_NBUFS	HUNT_PIOBUF_NBUFS
-#elif EFSYS_OPT_MEDFORD
-#define	EF10_MAX_PIOBUF_NBUFS	MEDFORD_PIOBUF_NBUFS
-#endif
+
+/* Number of hardware PIO buffers (for compile-time resource dimensions) */
+#define	EF10_MAX_PIOBUF_NBUFS	(16)
+
+#if EFSYS_OPT_HUNTINGTON
+# if (EF10_MAX_PIOBUF_NBUFS < HUNT_PIOBUF_NBUFS)
+#  error "EF10_MAX_PIOBUF_NBUFS too small"
+# endif
+#endif /* EFSYS_OPT_HUNTINGTON */
+#if EFSYS_OPT_MEDFORD
+# if (EF10_MAX_PIOBUF_NBUFS < MEDFORD_PIOBUF_NBUFS)
+#  error "EF10_MAX_PIOBUF_NBUFS too small"
+# endif
+#endif /* EFSYS_OPT_MEDFORD */
+#if EFSYS_OPT_MEDFORD2
+# if (EF10_MAX_PIOBUF_NBUFS < MEDFORD2_PIOBUF_NBUFS)
+#  error "EF10_MAX_PIOBUF_NBUFS too small"
+# endif
+#endif /* EFSYS_OPT_MEDFORD2 */
+
+
 
 /*
  * FIXME: This is just a power of 2 which fits in an MCDI v1 message, and could
@@ -52,8 +66,9 @@ extern "C" {
  */
 #define	EF10_NVRAM_CHUNK 0x80
 
-/* Alignment requirement for value written to RX WPTR:
- *  the WPTR must be aligned to an 8 descriptor boundary
+/*
+ * Alignment requirement for value written to RX WPTR: the WPTR must be aligned
+ * to an 8 descriptor boundary.
  */
 #define	EF10_RX_WPTR_ALIGN 8
 
@@ -82,7 +97,7 @@ ef10_ev_qcreate(
 	__in		efx_nic_t *enp,
 	__in		unsigned int index,
 	__in		efsys_mem_t *esmp,
-	__in		size_t n,
+	__in		size_t ndescs,
 	__in		uint32_t id,
 	__in		uint32_t us,
 	__in		uint32_t flags,
@@ -507,8 +522,7 @@ ef10_nvram_buffer_find_item_start(
 	__in_bcount(buffer_size)
 				caddr_t bufferp,
 	__in			size_t buffer_size,
-	__out			uint32_t *startp
-	);
+	__out			uint32_t *startp);
 
 extern	__checkReturn		efx_rc_t
 ef10_nvram_buffer_find_end(
@@ -516,8 +530,7 @@ ef10_nvram_buffer_find_end(
 				caddr_t bufferp,
 	__in			size_t buffer_size,
 	__in			uint32_t offset,
-	__out			uint32_t *endp
-	);
+	__out			uint32_t *endp);
 
 extern	__checkReturn	__success(return != B_FALSE)	boolean_t
 ef10_nvram_buffer_find_item(
@@ -526,8 +539,7 @@ ef10_nvram_buffer_find_item(
 	__in			size_t buffer_size,
 	__in			uint32_t offset,
 	__out			uint32_t *startp,
-	__out			uint32_t *lengthp
-	);
+	__out			uint32_t *lengthp);
 
 extern	__checkReturn		efx_rc_t
 ef10_nvram_buffer_get_item(
@@ -539,8 +551,7 @@ ef10_nvram_buffer_get_item(
 	__out_bcount_part(item_max_size, *lengthp)
 				caddr_t itemp,
 	__in			size_t item_max_size,
-	__out			uint32_t *lengthp
-	);
+	__out			uint32_t *lengthp);
 
 extern	__checkReturn		efx_rc_t
 ef10_nvram_buffer_insert_item(
@@ -550,8 +561,7 @@ ef10_nvram_buffer_insert_item(
 	__in			uint32_t offset,
 	__in_bcount(length)	caddr_t keyp,
 	__in			uint32_t length,
-	__out			uint32_t *lengthp
-	);
+	__out			uint32_t *lengthp);
 
 extern	__checkReturn		efx_rc_t
 ef10_nvram_buffer_delete_item(
@@ -560,15 +570,13 @@ ef10_nvram_buffer_delete_item(
 	__in			size_t buffer_size,
 	__in			uint32_t offset,
 	__in			uint32_t length,
-	__in			uint32_t end
-	);
+	__in			uint32_t end);
 
 extern	__checkReturn		efx_rc_t
 ef10_nvram_buffer_finish(
 	__in_bcount(buffer_size)
 				caddr_t bufferp,
-	__in			size_t buffer_size
-	);
+	__in			size_t buffer_size);
 
 #endif	/* EFSYS_OPT_NVRAM */
 
@@ -670,7 +678,7 @@ ef10_tx_qcreate(
 	__in		unsigned int index,
 	__in		unsigned int label,
 	__in		efsys_mem_t *esmp,
-	__in		size_t n,
+	__in		size_t ndescs,
 	__in		uint32_t id,
 	__in		uint16_t flags,
 	__in		efx_evq_t *eep,
@@ -681,13 +689,13 @@ extern		void
 ef10_tx_qdestroy(
 	__in		efx_txq_t *etp);
 
-extern	__checkReturn	efx_rc_t
+extern	__checkReturn		efx_rc_t
 ef10_tx_qpost(
-	__in		efx_txq_t *etp,
-	__in_ecount(n)	efx_buffer_t *eb,
-	__in		unsigned int n,
-	__in		unsigned int completed,
-	__inout		unsigned int *addedp);
+	__in			efx_txq_t *etp,
+	__in_ecount(ndescs)	efx_buffer_t *ebp,
+	__in			unsigned int ndescs,
+	__in			unsigned int completed,
+	__inout			unsigned int *addedp);
 
 extern			void
 ef10_tx_qpush(
@@ -774,6 +782,7 @@ extern	void
 ef10_tx_qdesc_tso2_create(
 	__in			efx_txq_t *etp,
 	__in			uint16_t ipv4_id,
+	__in			uint16_t outer_ipv4_id,
 	__in			uint32_t tcp_seq,
 	__in			uint16_t tcp_mss,
 	__out_ecount(count)	efx_desc_t *edp,
@@ -785,6 +794,11 @@ ef10_tx_qdesc_vlantci_create(
 	__in	uint16_t vlan_tci,
 	__out	efx_desc_t *edp);
 
+extern	void
+ef10_tx_qdesc_checksum_create(
+	__in	efx_txq_t *etp,
+	__in	uint16_t flags,
+	__out	efx_desc_t *edp);
 
 #if EFSYS_OPT_QSTATS
 
@@ -797,7 +811,7 @@ ef10_tx_qstats_update(
 
 typedef uint32_t	efx_piobuf_handle_t;
 
-#define	EFX_PIOBUF_HANDLE_INVALID	((efx_piobuf_handle_t) -1)
+#define	EFX_PIOBUF_HANDLE_INVALID	((efx_piobuf_handle_t)-1)
 
 extern	__checkReturn	efx_rc_t
 ef10_nic_pio_alloc(
@@ -956,14 +970,14 @@ ef10_rx_prefix_pktlen(
 	__in		uint8_t *buffer,
 	__out		uint16_t *lengthp);
 
-extern			void
+extern				void
 ef10_rx_qpost(
-	__in		efx_rxq_t *erp,
-	__in_ecount(n)	efsys_dma_addr_t *addrp,
-	__in		size_t size,
-	__in		unsigned int n,
-	__in		unsigned int completed,
-	__in		unsigned int added);
+	__in			efx_rxq_t *erp,
+	__in_ecount(ndescs)	efsys_dma_addr_t *addrp,
+	__in			size_t size,
+	__in			unsigned int ndescs,
+	__in			unsigned int completed,
+	__in			unsigned int added);
 
 extern			void
 ef10_rx_qpush(
@@ -985,9 +999,11 @@ ef10_rx_qcreate(
 	__in		unsigned int index,
 	__in		unsigned int label,
 	__in		efx_rxq_type_t type,
+	__in		uint32_t type_data,
 	__in		efsys_mem_t *esmp,
-	__in		size_t n,
+	__in		size_t ndescs,
 	__in		uint32_t id,
+	__in		unsigned int flags,
 	__in		efx_evq_t *eep,
 	__in		efx_rxq_t *erp);
 
@@ -1036,7 +1052,7 @@ typedef struct ef10_filter_entry_s {
  * IPv4 or IPv6 outer frame, VXLAN, GENEVE or NVGRE packet type, and unicast or
  * multicast inner frames.
  */
-#define EFX_EF10_FILTER_ENCAP_FILTERS_MAX	12
+#define	EFX_EF10_FILTER_ENCAP_FILTERS_MAX	12
 
 typedef struct ef10_filter_table_s {
 	ef10_filter_entry_t	eft_entry[EFX_EF10_FILTER_TBL_ROWS];
@@ -1161,26 +1177,22 @@ efx_mcdi_get_clock(
 
 
 extern	__checkReturn	efx_rc_t
+efx_mcdi_get_rxdp_config(
+	__in		efx_nic_t *enp,
+	__out		uint32_t *end_paddingp);
+
+extern	__checkReturn	efx_rc_t
 efx_mcdi_get_vector_cfg(
 	__in		efx_nic_t *enp,
 	__out_opt	uint32_t *vec_basep,
 	__out_opt	uint32_t *pf_nvecp,
 	__out_opt	uint32_t *vf_nvecp);
 
-extern	__checkReturn	efx_rc_t
-ef10_get_datapath_caps(
-	__in		efx_nic_t *enp);
-
 extern	__checkReturn		efx_rc_t
 ef10_get_privilege_mask(
 	__in			efx_nic_t *enp,
 	__out			uint32_t *maskp);
 
-extern	__checkReturn	efx_rc_t
-ef10_external_port_mapping(
-	__in		efx_nic_t *enp,
-	__in		uint32_t port,
-	__out		uint8_t *external_portp);
 
 #if EFSYS_OPT_RX_PACKED_STREAM
 
@@ -1203,9 +1215,9 @@ ef10_external_port_mapping(
 /* Minimum space for packet in packed stream mode */
 #define	EFX_RX_PACKED_STREAM_MIN_PACKET_SPACE		     \
 	P2ROUNDUP(EFX_RX_PACKED_STREAM_RX_PREFIX_SIZE +	     \
-		  EFX_MAC_PDU_MIN +			     \
-		  EFX_RX_PACKED_STREAM_ALIGNMENT,	     \
-		  EFX_RX_PACKED_STREAM_ALIGNMENT)
+	    EFX_MAC_PDU_MIN +				     \
+	    EFX_RX_PACKED_STREAM_ALIGNMENT,		     \
+	    EFX_RX_PACKED_STREAM_ALIGNMENT)
 
 /* Maximum number of credits */
 #define	EFX_RX_PACKED_STREAM_MAX_CREDITS 127

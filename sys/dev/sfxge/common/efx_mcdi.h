@@ -55,7 +55,7 @@ struct efx_mcdi_req_s {
 	unsigned int	emr_cmd;
 	uint8_t		*emr_in_buf;
 	size_t		emr_in_length;
-	/* Outputs: retcode, buffer, length, and length used*/
+	/* Outputs: retcode, buffer, length, and length used */
 	efx_rc_t	emr_rc;
 	uint8_t		*emr_out_buf;
 	size_t		emr_out_length;
@@ -194,11 +194,11 @@ efx_mcdi_mac_spoofing_supported(
 
 
 #if EFSYS_OPT_BIST
-#if EFSYS_OPT_HUNTINGTON || EFSYS_OPT_MEDFORD
+#if EFSYS_OPT_HUNTINGTON || EFSYS_OPT_MEDFORD || EFSYS_OPT_MEDFORD2
 extern	__checkReturn		efx_rc_t
 efx_mcdi_bist_enable_offline(
 	__in			efx_nic_t *enp);
-#endif /* EFSYS_OPT_HUNTINGTON || EFSYS_OPT_MEDFORD */
+#endif /* EFSYS_OPT_HUNTINGTON || EFSYS_OPT_MEDFORD || EFSYS_OPT_MEDFORD2 */
 extern	__checkReturn		efx_rc_t
 efx_mcdi_bist_start(
 	__in			efx_nic_t *enp,
@@ -385,6 +385,10 @@ efx_mcdi_phy_module_get_info(
 #define	MCDI_OUT_WORD(_emr, _ofst)					\
 	EFX_WORD_FIELD(*MCDI_OUT2(_emr, efx_word_t, _ofst),		\
 		    EFX_WORD_0)
+
+#define	MCDI_OUT_WORD_FIELD(_emr, _ofst, _field)			\
+	EFX_WORD_FIELD(*MCDI_OUT2(_emr, efx_word_t, _ofst),		\
+		       MC_CMD_ ## _field)
 
 #define	MCDI_OUT_DWORD(_emr, _ofst)					\
 	EFX_DWORD_FIELD(*MCDI_OUT2(_emr, efx_dword_t, _ofst),		\
