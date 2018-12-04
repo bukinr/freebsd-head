@@ -400,10 +400,11 @@
 			   0x43000000 0 0x60000000 0x7fb40000 0 0x00010000	//e1000 bar 1
 			   0x02000000 0 0x80000000 0x7fb50000 0 0x00010000>;	//ahci-hd bar 0
 
-			// PCI_DEVICE(3)  INT#(1)  CONTROLLER(PHANDLE)  CONTROLLER_DATA(3)
-			interrupt-map = < 0 0 0  1  &beripic0  0x13 0x0 0x0	//e1000
-					  0 0 0  2  &beripic0  0x14 0x0 0x0>;	//ahci
-			interrupt-map-mask = <0 0 0 7>;
+			// PCI_DEVICE(3)  INT#(1)  CONTROLLER(PHANDLE)  CONTROLLER_DATA(1)
+
+			interrupt-map = < 0x000 0 0  1  &beripic0  0x13 	//e1000
+					  0x800 0 0  1  &beripic0  0x14 >; 	//ahci
+			interrupt-map-mask = <0x800 0 0 7>;
 		};
 	};
 };
