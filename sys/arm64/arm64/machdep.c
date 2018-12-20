@@ -236,7 +236,7 @@ fill_fpregs(struct thread *td, struct fpreg *regs)
 		regs->fp_sr = pcb->pcb_fpustate.vfp_fpsr;
 	} else
 #endif
-		memset(regs->fp_q, 0, sizeof(regs->fp_q));
+		memset(regs, 0, sizeof(*regs));
 	return (0);
 }
 
@@ -656,13 +656,14 @@ sendsig(sig_t catcher, ksiginfo_t *ksi, sigset_t *mask)
 	fp = (struct sigframe *)STACKALIGN(fp);
 
 	/* Fill in the frame to copy out */
+	bzero(&frame, sizeof(frame));
 	get_mcontext(td, &frame.sf_uc.uc_mcontext, 0);
 	get_fpcontext(td, &frame.sf_uc.uc_mcontext);
 	frame.sf_si = ksi->ksi_info;
 	frame.sf_uc.uc_sigmask = *mask;
-	frame.sf_uc.uc_stack.ss_flags = (td->td_pflags & TDP_ALTSTACK) ?
-	    ((onstack) ? SS_ONSTACK : 0) : SS_DISABLE;
 	frame.sf_uc.uc_stack = td->td_sigstk;
+	frame.sf_uc.uc_stack.ss_flags = (td->td_pflags & TDP_ALTSTACK) != 0 ?
+	    (onstack ? SS_ONSTACK : 0) : SS_DISABLE;
 	mtx_unlock(&psp->ps_mtx);
 	PROC_UNLOCK(td->td_proc);
 
@@ -1004,6 +1005,7 @@ initarm(struct arm64_bootparams *abp)
 
 	boothowto = MD_FETCH(kmdp, MODINFOMD_HOWTO, int);
 	init_static_kenv(MD_FETCH(kmdp, MODINFOMD_ENVP, char *), 0);
+	link_elf_ireloc(kmdp);
 
 #ifdef FDT
 	try_load_dtb(kmdp);

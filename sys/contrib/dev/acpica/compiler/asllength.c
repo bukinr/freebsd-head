@@ -446,7 +446,7 @@ CgGenerateAmlLengths (
     {
     case PARSEOP_DEFINITION_BLOCK:
 
-        Gbl_TableLength = sizeof (ACPI_TABLE_HEADER) + Op->Asl.AmlSubtreeLength;
+        AslGbl_TableLength = sizeof (ACPI_TABLE_HEADER) + Op->Asl.AmlSubtreeLength;
         break;
 
     case PARSEOP_NAMESEG:
@@ -519,10 +519,7 @@ CgGenerateAmlLengths (
 
     case PARSEOP_EXTERNAL:
 
-        if (Gbl_DoExternals == TRUE)
-        {
-            CgGenerateAmlOpcodeLength (Op);
-        }
+        CgGenerateAmlOpcodeLength (Op);
         break;
 
     default:
@@ -568,6 +565,6 @@ LnAdjustLengthToRoot (
 
     /* Adjust the global table length */
 
-    Gbl_TableLength -= LengthDelta;
+    AslGbl_TableLength -= LengthDelta;
 }
 #endif

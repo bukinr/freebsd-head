@@ -178,6 +178,9 @@ struct pic xen_intr_pic = {
  * physical interrupt sources.
  */
 struct pic xen_intr_pirq_pic = {
+#ifdef __amd64__
+	.pic_register_sources = xenpv_register_pirqs,
+#endif
 	.pic_enable_source  = xen_intr_pirq_enable_source,
 	.pic_disable_source = xen_intr_pirq_disable_source,
 	.pic_eoi_source     = xen_intr_pirq_eoi_source,
@@ -656,7 +659,8 @@ xen_intr_init(void *dummy __unused)
 		xen_intr_pirq_eoi_map_enabled = true;
 
 	intr_register_pic(&xen_intr_pic);
-	intr_register_pic(&xen_intr_pirq_pic);
+	if (xen_pv_domain() && xen_initial_domain())
+		intr_register_pic(&xen_intr_pirq_pic);
 
 	if (bootverbose)
 		printf("Xen interrupt system initialized\n");
@@ -686,6 +690,8 @@ void
 xen_intr_alloc_irqs(void)
 {
 
+	if (num_io_irqs > UINT_MAX - NR_EVENT_CHANNELS)
+		panic("IRQ allocation overflow (num_msi_irqs too high?)");
 	first_evtchn_irq = num_io_irqs;
 	num_io_irqs += NR_EVENT_CHANNELS;
 }
