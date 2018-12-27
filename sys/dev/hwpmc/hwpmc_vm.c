@@ -119,7 +119,7 @@ pmc_vm_initialize(struct pmc_mdep *md)
 		args.mda_unit = cpu;
 		args.mda_uid = UID_ROOT;
 		args.mda_gid = GID_WHEEL;
-		args.mda_mode = 0666;
+		args.mda_mode = 0444;
 		args.mda_si_drv1 = cc;
 		error = make_dev_s(&args, &pmc_cdev[cpu], "pmc%d", cpu);
 		if (error != 0) {
@@ -144,6 +144,7 @@ pmc_vm_finalize(void)
 	CPU_FOREACH(cpu) {
 		cc = &cc_all[cpu];
 		mtx_destroy(&cc->vm_mtx);
+		osd_thread_deregister(cc->osd_id);
 		destroy_dev(pmc_cdev[cpu]);
 	}
 

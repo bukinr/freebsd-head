@@ -144,7 +144,7 @@ pmctrace_init_cpu(uint32_t cpu)
 
 	sprintf(filename, "/dev/pmc%d", cpu);
 
-	tc->fd = open(filename, O_RDWR);
+	tc->fd = open(filename, O_RDONLY);
 	if (tc->fd < 0) {
 		printf("Can't open %s\n", filename);
 		return (-1);
