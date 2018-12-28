@@ -144,8 +144,8 @@ pmc_vm_finalize(void)
 	CPU_FOREACH(cpu) {
 		cc = &cc_all[cpu];
 		mtx_destroy(&cc->vm_mtx);
-		osd_thread_deregister(cc->osd_id);
 		destroy_dev(pmc_cdev[cpu]);
+		osd_thread_deregister(cc->osd_id);
 	}
 
 	free(cc_all, M_PMC);
