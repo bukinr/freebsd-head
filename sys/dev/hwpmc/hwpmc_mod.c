@@ -1784,7 +1784,7 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 	if ((p->p_flag & P_HWPMC) == 0)
 		goto done;
 
-	pause_thread = 0;
+	pause_thread = false;
 
 	/*
 	 * Inform sampling PMC owners tracking this process.
@@ -1797,7 +1797,7 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 			pmclog_process_map_in(pm->pm_owner,
 			    pid, pkm->pm_address, fullpath);
 		if (PMC_TO_MODE(pm) == PMC_MODE_TT)
-			pause_thread = 1;
+			pause_thread = true;
 	}
 
 	/*
