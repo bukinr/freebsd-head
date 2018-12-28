@@ -5797,6 +5797,12 @@ pmc_initialize(void)
 			return (ENOSYS);
         }
 
+	error = pmc_vm_initialize(md);
+	if (error) {
+		pmc_md_finalize(md);
+		return (error);
+	}
+
 	KASSERT(md->pmd_nclass >= 1 && md->pmd_npmc >= 1,
 	    ("[pmc,%d] no classes or pmcs", __LINE__));
 
@@ -5967,8 +5973,6 @@ pmc_initialize(void)
 			    "\13TAG\14CSC");
 		}
 		printf("\n");
-
-		error = pmc_vm_initialize(md);
 	}
 
 	return (error);
