@@ -17,7 +17,7 @@ git diff -U99999999 origin/master sys/arm64/include/pmc_mdep.h sys/conf/files.ar
 # 5 -- intel pt
 git diff -U99999999 origin/master sys/amd64/include/pmc_mdep.h sys/conf/files.amd64 \
 	sys/dev/hwpmc/hwpmc_core.c sys/dev/hwpmc/hwpmc_intel.c sys/dev/hwpmc/hwpmc_pt.c \
-	sys/dev/hwpmc/hwpmc_pt.h > patch.hwpmc5
+	sys/dev/hwpmc/hwpmc_pt.h sys/x86/include/specialreg.h > patch.hwpmc5
 
 # 6 - pmctrace
 git diff -U99999999 origin/master usr.sbin/Makefile usr.sbin/pmctrace/Makefile \
