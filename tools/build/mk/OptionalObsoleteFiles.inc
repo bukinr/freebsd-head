@@ -504,6 +504,7 @@ OLD_FILES+=usr/lib32/libsdp_p.a
 .endif
 OLD_FILES+=usr/sbin/ath3kfw
 OLD_FILES+=usr/sbin/bcmfw
+OLD_FILES+=usr/sbin/bluetooth-config
 OLD_FILES+=usr/sbin/bt3cfw
 OLD_FILES+=usr/sbin/bthidcontrol
 OLD_FILES+=usr/sbin/bthidd
@@ -580,6 +581,7 @@ OLD_FILES+=usr/share/man/man5/bluetooth.protocols.5.gz
 OLD_FILES+=usr/share/man/man5/hcsecd.conf.5.gz
 OLD_FILES+=usr/share/man/man8/ath3kfw.8.gz
 OLD_FILES+=usr/share/man/man8/bcmfw.8.gz
+OLD_FILES+=usr/share/man/man8/bluetooth-config.8.gz
 OLD_FILES+=usr/share/man/man8/bt3cfw.8.gz
 OLD_FILES+=usr/share/man/man8/bthidcontrol.8.gz
 OLD_FILES+=usr/share/man/man8/bthidd.8.gz
@@ -2267,7 +2269,6 @@ OLD_FILES+=usr/libexec/cc1plus
 
 .if ${MK_DICT} == no
 OLD_FILES+=usr/share/dict/README
-OLD_FILES+=usr/share/dict/eign
 OLD_FILES+=usr/share/dict/freebsd
 OLD_FILES+=usr/share/dict/propernames
 OLD_FILES+=usr/share/dict/web2
@@ -2988,9 +2989,11 @@ OLD_FILES+=usr/share/man/man1/truss.1.gz
 .if ${MK_KERBEROS} == no
 OLD_FILES+=etc/rc.d/ipropd_master
 OLD_FILES+=etc/rc.d/ipropd_slave
+OLD_FILES+=usr/bin/asn1_compile
 OLD_FILES+=usr/bin/compile_et
 OLD_FILES+=usr/bin/hxtool
 OLD_FILES+=usr/bin/kadmin
+OLD_FILES+=usr/bin/kcc
 OLD_FILES+=usr/bin/kdestroy
 OLD_FILES+=usr/bin/kf
 OLD_FILES+=usr/bin/kgetcred
@@ -3000,6 +3003,8 @@ OLD_FILES+=usr/bin/kpasswd
 OLD_FILES+=usr/bin/krb5-config
 OLD_FILES+=usr/bin/ksu
 OLD_FILES+=usr/bin/kswitch
+OLD_FILES+=usr/bin/make-roken
+OLD_FILES+=usr/bin/slc
 OLD_FILES+=usr/bin/string2key
 OLD_FILES+=usr/bin/verify_krb5_conf
 OLD_FILES+=usr/include/asn1-common.h
