@@ -225,11 +225,11 @@ tmc_init(device_t dev)
 	switch (reg) {
 	case DEVID_CONFIGTYPE_ETR:
 		sc->dev_type = CORESIGHT_ETR;
-		dprintf(dev, "ETR configuration found\n");
+		dprintf("ETR configuration found\n");
 		break;
 	case DEVID_CONFIGTYPE_ETF:
 		sc->dev_type = CORESIGHT_ETF;
-		dprintf(dev, "ETF configuration found\n");
+		dprintf("ETF configuration found\n");
 		if (sc->etf_configured == false) {
 			tmc_configure_etf(dev);
 			sc->etf_configured = true;
@@ -292,7 +292,8 @@ tmc_disable(device_t dev, struct endpoint *endp,
 
 	KASSERT(sc->dev_type == CORESIGHT_ETR, ("Wrong dev_type"));
 
-	if (event->etr.flags & ETR_FLAG_RELEASE) {
+	if (event->etr.flags & ETR_FLAG_RELEASE &&
+	    sc->event != NULL) {
 		event->etr.flags &= ~ETR_FLAG_RELEASE;
 		nev = atomic_fetchadd_int(&sc->nev, -1);
 		if (nev == 1) {

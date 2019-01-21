@@ -50,7 +50,7 @@ __FBSDID("$FreeBSD$");
 
 #define	FUNNEL_DEBUG
 #undef FUNNEL_DEBUG
-        
+
 #ifdef FUNNEL_DEBUG
 #define	dprintf(fmt, ...)	printf(fmt, ##__VA_ARGS__)
 #else
@@ -82,7 +82,8 @@ funnel_init(device_t dev)
 	/* Unlock Coresight */
 	bus_write_4(sc->res, CORESIGHT_LAR, CORESIGHT_UNLOCK);
 
-	dprintf("Device ID: %x\n", bus_read_4(sc->res, FUNNEL_DEVICEID));
+	dprintf("%s: device ID: %x\n",
+	    __func__, bus_read_4(sc->res, FUNNEL_DEVICEID));
 
 	return (0);
 }
