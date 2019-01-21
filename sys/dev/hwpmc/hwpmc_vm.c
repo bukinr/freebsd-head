@@ -129,6 +129,7 @@ pmc_vm_initialize(struct pmc_mdep *md)
 				destroy_dev(pmc_cdev[i]);
 				osd_thread_deregister(cc->osd_id);
 			}
+			free(cc_all, M_PMC);
 			return (-1);
 		}
 	}
