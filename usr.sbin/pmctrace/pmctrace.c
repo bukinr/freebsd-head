@@ -486,7 +486,8 @@ pmctrace_run(bool user_mode, char *func_name, char *func_image)
 			 * based on mmap log entries arrival.
 			 */
 			if (started == 0 &&
-			    pmctrace_delayed_start(user_mode, func_name, func_image) == 0)
+			    pmctrace_delayed_start(user_mode,
+			    func_name, func_image) == 0)
 				started = 1;
 
 			if (user_mode && started) {
@@ -595,7 +596,8 @@ main(int argc, char *argv[])
 			}
 
 			if (pmctrace_cfg.trace_dev == NULL)
-				errx(EX_SOFTWARE, "ERROR: trace device not found");
+				errx(EX_SOFTWARE,
+				    "ERROR: trace device not found");
 			break;
 		case 't':
 			if (ev == NULL)
@@ -623,9 +625,11 @@ main(int argc, char *argv[])
 	args.pa_cpumask = cpumask;
 
 	if (user_mode && !argc)
-		errx(EX_USAGE, "ERROR: user mode requires command to be specified");
+		errx(EX_USAGE,
+		    "ERROR: user mode requires command to be specified");
 	if (supervisor_mode && argc)
-		errx(EX_USAGE, "ERROR: supervisor mode does not require command");
+		errx(EX_USAGE,
+		    "ERROR: supervisor mode does not require command");
 
 	args.pa_required |= (FLAG_HAS_PIPE | FLAG_HAS_OUTPUT_LOGFILE);
 
@@ -653,7 +657,8 @@ main(int argc, char *argv[])
 		errx(EX_SOFTWARE, "ERROR: Can't get cpus\n");
 
 	if (pmc_init() < 0)
-		err(EX_UNAVAILABLE, "ERROR: Initialization of the pmc(3) library failed");
+		err(EX_UNAVAILABLE,
+		    "ERROR: Initialization of the pmc(3) library failed");
 
 	if ((pmcstat_kq = kqueue()) < 0)
 		err(EX_OSERR, "ERROR: Cannot allocate kqueue");
@@ -662,9 +667,9 @@ main(int argc, char *argv[])
 
 	STAILQ_FOREACH(ev, &args.pa_events, ev_next) {
 		if (pmc_allocate(ev->ev_spec, ev->ev_mode,
-			ev->ev_flags, ev->ev_cpu, &ev->ev_pmcid, ev->ev_count) < 0)
-			err(EX_OSERR,
-			    "ERROR: Cannot allocate %s-mode pmc with specification \"%s\"",
+		    ev->ev_flags, ev->ev_cpu, &ev->ev_pmcid, ev->ev_count) < 0)
+			err(EX_OSERR, "ERROR: Cannot allocate %s-mode"
+			    " pmc with specification \"%s\"",
 			    PMC_IS_SYSTEM_MODE(ev->ev_mode) ?
 			    "system" : "process", ev->ev_spec);
 	}

@@ -99,7 +99,8 @@ static int cs_flags;
 #define	FLAG_CALLBACK_MEM_ACC		(1 << 3)
 
 static struct pmcstat_symbol *
-symbol_lookup(const struct mtrace_data *mdata, uint64_t ip, struct pmcstat_image **img)
+symbol_lookup(const struct mtrace_data *mdata, uint64_t ip,
+    struct pmcstat_image **img)
 {
 	struct pmcstat_image *image;
 	struct pmcstat_symbol *sym;
@@ -116,7 +117,8 @@ symbol_lookup(const struct mtrace_data *mdata, uint64_t ip, struct pmcstat_image
 		*img = image;
 
 		if (sym == NULL)
-			dprintf("cpu%d: symbol 0x%lx not found\n", mdata->cpu, newpc);
+			dprintf("cpu%d: symbol 0x%lx not found\n",
+			    mdata->cpu, newpc);
 
 		return (sym);
 	} else {
@@ -204,10 +206,10 @@ packet_monitor(void *context __unused,
 		 * message output to print to file and stdoout
 		 */
 
-		if (ocsd_pkt_str(OCSD_PROTOCOL_ETMV4I, p_packet_in, packet_str + offset,
-		    PACKET_STR_LEN - offset) == OCSD_OK) {
+		if (ocsd_pkt_str(OCSD_PROTOCOL_ETMV4I, p_packet_in,
+		    packet_str + offset, PACKET_STR_LEN - offset) == OCSD_OK) {
 			/* add in <CR> */
-			if (strlen(packet_str) == PACKET_STR_LEN - 1) /* maximum length */
+			if (strlen(packet_str) == PACKET_STR_LEN - 1)/*maxlen*/
 				packet_str[PACKET_STR_LEN - 2] = '\n';
 			else
 				strcat(packet_str,"\n");
@@ -229,7 +231,8 @@ packet_monitor(void *context __unused,
 
 static uint32_t
 cs_cs_decoder__mem_access(const void *context __unused,
-    const ocsd_vaddr_t address __unused, const ocsd_mem_space_acc_t mem_space __unused,
+    const ocsd_vaddr_t address __unused,
+    const ocsd_mem_space_acc_t mem_space __unused,
     const uint32_t req_size __unused, uint8_t *buffer __unused)
 {
 
@@ -239,35 +242,40 @@ cs_cs_decoder__mem_access(const void *context __unused,
 }
 
 static ocsd_err_t
-create_test_memory_acc(dcd_tree_handle_t handle, uint64_t base, uint64_t start, uint64_t end)
+create_test_memory_acc(dcd_tree_handle_t handle, uint64_t base,
+    uint64_t start, uint64_t end)
 {
 	ocsd_vaddr_t address;
 	uint8_t *p_mem_buffer;
 	uint32_t mem_length;
 	int ret;
 
-	dprintf("%s: base %lx start %lx end %lx\n", __func__, base, start, end);
+	dprintf("%s: base %lx start %lx end %lx\n",
+	    __func__, base, start, end);
 
 	address = (ocsd_vaddr_t)base;
 	p_mem_buffer = (uint8_t *)(base + start);
 	mem_length = (end-start);
 
 	if (cs_flags & FLAG_CALLBACK_MEM_ACC)
-		ret = ocsd_dt_add_callback_mem_acc(handle, base+start, base+end-1,
-		    OCSD_MEM_SPACE_ANY, cs_cs_decoder__mem_access, NULL);
+		ret = ocsd_dt_add_callback_mem_acc(handle, base + start,
+			base + end - 1, OCSD_MEM_SPACE_ANY,
+			cs_cs_decoder__mem_access, NULL);
 	else
-		ret = ocsd_dt_add_buffer_mem_acc(handle, address, OCSD_MEM_SPACE_ANY,
-		    p_mem_buffer, mem_length);
+		ret = ocsd_dt_add_buffer_mem_acc(handle, address,
+		    OCSD_MEM_SPACE_ANY, p_mem_buffer, mem_length);
 
 	if (ret != OCSD_OK)
-		printf("%s: can't create memory accessor: ret %d\n", __func__, ret);
+		printf("%s: can't create memory accessor: ret %d\n",
+		    __func__, ret);
 
 	return (ret);
 }
 
 static ocsd_err_t
-create_generic_decoder(dcd_tree_handle_t handle, const char *p_name, const void *p_cfg,
-    const void *p_context __unused, uint64_t base, uint64_t start, uint64_t end)
+create_generic_decoder(dcd_tree_handle_t handle, const char *p_name,
+    const void *p_cfg, const void *p_context __unused, uint64_t base,
+    uint64_t start, uint64_t end)
 { 
 	ocsd_err_t ret;
 	uint8_t CSID;
@@ -276,8 +284,8 @@ create_generic_decoder(dcd_tree_handle_t handle, const char *p_name, const void 
 
 	dprintf("%s\n", __func__);
 
-	ret = ocsd_dt_create_decoder(handle, p_name, OCSD_CREATE_FLG_FULL_DECODER,
-	    p_cfg, &CSID);
+	ret = ocsd_dt_create_decoder(handle, p_name,
+	    OCSD_CREATE_FLG_FULL_DECODER, p_cfg, &CSID);
 	if(ret != OCSD_OK)
 		return (-1);
 
@@ -325,8 +333,10 @@ create_decoder_etmv4(dcd_tree_handle_t dcd_tree_h, uint64_t base,
 }
 
 static ocsd_datapath_resp_t
-gen_trace_elem_print_lookup(const void *p_context, const ocsd_trc_index_t index_sop __unused,
-    const uint8_t trc_chan_id __unused, const ocsd_generic_trace_elem *elem __unused)
+gen_trace_elem_print_lookup(const void *p_context,
+    const ocsd_trc_index_t index_sop __unused,
+    const uint8_t trc_chan_id __unused,
+    const ocsd_generic_trace_elem *elem __unused)
 { 
 	const struct mtrace_data *mdata;
 	ocsd_datapath_resp_t resp;
@@ -339,7 +349,8 @@ gen_trace_elem_print_lookup(const void *p_context, const ocsd_trc_index_t index_
 
 #if 0
 	dprintf("%s: Idx:%d ELEM TYPE %d, st_addr %lx, en_addr %lx\n",
-	    __func__, index_sop, elem->elem_type, elem->st_addr, elem->en_addr);
+	    __func__, index_sop, elem->elem_type,
+	    elem->st_addr, elem->en_addr);
 #endif
 
 	if (elem->st_addr == 0)
@@ -391,7 +402,8 @@ cs_process_chunk(struct mtrace_data *mdata __unused, uint64_t base,
 	int dp_ret;
 	int ret;
 
-	dprintf("%s: base %lx start %lx end %lx\n", __func__, base, start, end);
+	dprintf("%s: base %lx start %lx end %lx\n",
+	    __func__, base, start, end);
 
 	bytes_this_time = 0;
 	block_index = 0;
@@ -405,8 +417,10 @@ cs_process_chunk(struct mtrace_data *mdata __unused, uint64_t base,
 	while (bytes_done < (uint32_t)block_size && (ret == OCSD_OK)) {
 
 		if (OCSD_DATA_RESP_IS_CONT(dp_ret)) {
-			dprintf("process data, block_size %d, bytes_done %d\n", block_size, bytes_done);
-			dp_ret = ocsd_dt_process_data(dcdtree_handle, OCSD_OP_DATA,
+			dprintf("process data, block_size %d, bytes_done %d\n",
+			    block_size, bytes_done);
+			dp_ret = ocsd_dt_process_data(dcdtree_handle,
+			    OCSD_OP_DATA,
 			    block_index + bytes_done,
 			    block_size - bytes_done,
 			    ((uint8_t *)p_block) + bytes_done,
@@ -414,8 +428,8 @@ cs_process_chunk(struct mtrace_data *mdata __unused, uint64_t base,
 			bytes_done += bytes_this_time;
 			dprintf("BYTES DONE %d\n", bytes_done);
 		} else if (OCSD_DATA_RESP_IS_WAIT(dp_ret)) {
-			dp_ret = ocsd_dt_process_data(dcdtree_handle, OCSD_OP_FLUSH,
-			    0, 0, NULL, NULL);
+			dp_ret = ocsd_dt_process_data(dcdtree_handle,
+			    OCSD_OP_FLUSH, 0, 0, NULL, NULL);
 		} else {
 			ret = OCSD_ERR_DATA_DECODE_FATAL;
 		}
@@ -437,26 +451,33 @@ cs_process(struct trace_cpu *tc, struct pmcstat_process *pp,
 
 	cs_init(tc);
 
-	dprintf("%s: cpu %d, cycle %d, tc->base %lx, tc->offset %lx, offset %lx, *tc->base %lx\n",
-	    __func__, cpu, cycle, (uint64_t)tc->base, (uint64_t)tc->offset, offset, *(uint64_t *)tc->base);
+	dprintf("%s: cpu %d, cycle %d, tc->base %lx, tc->offset %lx,"
+	    "offset %lx, *tc->base %lx\n",
+	    __func__, cpu, cycle, (uint64_t)tc->base,
+	    (uint64_t)tc->offset, offset, *(uint64_t *)tc->base);
 
 	if (offset == tc->offset)
 		return (0);
 
 	if (cycle == tc->cycle) {
 		if (offset > tc->offset) {
-			cs_process_chunk(mdata, (uint64_t)tc->base, tc->offset, offset);
+			cs_process_chunk(mdata, (uint64_t)tc->base,
+			    tc->offset, offset);
 			tc->offset = offset;
 		} else if (offset < tc->offset) {
-			err(EXIT_FAILURE, "cpu%d: offset already processed %lx %lx",
+			err(EXIT_FAILURE,
+			    "cpu%d: offset already processed %lx %lx",
 			    cpu, offset, tc->offset);
 		}
 	} else if (cycle > tc->cycle) {
 		if ((cycle - tc->cycle) > 1)
-			err(EXIT_FAILURE, "cpu%d: trace buffers fills up faster than"
-			    " we can process it (%d/%d). Consider setting trace filters",
+			err(EXIT_FAILURE,
+			    "cpu%d: trace buffers fills up faster than"
+			    " we can process it (%d/%d). Consider setting"
+			    " trace filters",
 			    cpu, cycle, tc->cycle);
-		cs_process_chunk(mdata, (uint64_t)tc->base, tc->offset, tc->bufsize);
+		cs_process_chunk(mdata, (uint64_t)tc->base,
+		    tc->offset, tc->bufsize);
 		tc->offset = 0;
 		tc->cycle += 1;
 	}
@@ -491,7 +512,8 @@ cs_init(struct trace_cpu *tc)
 	start = (uint64_t)tc->base;
 	end = (uint64_t)tc->base + tc->bufsize;
 
-	ret = create_decoder_etmv4(dcdtree_handle, (uint64_t)tc->base, start, end);
+	ret = create_decoder_etmv4(dcdtree_handle,
+	    (uint64_t)tc->base, start, end);
 	if (ret != OCSD_OK) {
 		printf("can't create decoder: base %lx start %lx end %lx\n",
 		    (uint64_t)tc->base, start, end);
@@ -505,7 +527,8 @@ cs_init(struct trace_cpu *tc)
 	if (cs_flags & FLAG_FORMAT)
 		ocsd_dt_set_gen_elem_printer(dcdtree_handle);
 	else
-		ocsd_dt_set_gen_elem_outfn(dcdtree_handle, gen_trace_elem_print_lookup,
+		ocsd_dt_set_gen_elem_outfn(dcdtree_handle,
+		    gen_trace_elem_print_lookup,
 		    (const struct mtrace_data *)&tc->mdata);
 
 	attach_raw_printers(dcdtree_handle);

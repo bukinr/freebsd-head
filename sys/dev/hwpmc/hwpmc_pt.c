@@ -82,7 +82,8 @@ extern struct cdev *pmc_cdev[MAXCPU];
  * Intel PT support.
  */
 
-#define	PT_CAPS	(PMC_CAP_READ | PMC_CAP_INTERRUPT | PMC_CAP_SYSTEM | PMC_CAP_USER)
+#define	PT_CAPS	(PMC_CAP_READ | PMC_CAP_INTERRUPT |\
+		 PMC_CAP_SYSTEM | PMC_CAP_USER)
 
 #define	PMC_PT_DEBUG
 #undef	PMC_PT_DEBUG
@@ -391,7 +392,10 @@ pt_buffer_prepare(uint32_t cpu, struct pmc *pm,
 		return (-1);
 	}
 
-	/* Enable FUP, TIP, TIP.PGE, TIP.PGD, TNT, MODE.Exec and MODE.TSX packets */
+	/*
+	 * Enable FUP, TIP, TIP.PGE, TIP.PGD, TNT,
+	 * MODE.Exec and MODE.TSX packets
+	 */
 	if (pm_pta->flags & INTEL_PT_FLAG_BRANCHES)
 		pt_ext->rtit_ctl |= RTIT_CTL_BRANCHEN;
 

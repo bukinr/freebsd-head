@@ -201,7 +201,8 @@ dump_packets(struct mtrace_data *mdata, struct pt_packet_decoder *decoder,
 	while (1) {
 		error = pt_pkt_get_offset(decoder, &offset);
 		if (error < 0)
-			errx(EX_SOFTWARE, "ERROR: can't get offset, err %d\n", error);
+			errx(EX_SOFTWARE,
+			    "ERROR: can't get offset, err %d\n", error);
 
 		error = pt_pkt_next(decoder, &packet, sizeof(packet));
 		if (error < 0) {
@@ -225,7 +226,8 @@ dump_packets(struct mtrace_data *mdata, struct pt_packet_decoder *decoder,
 		case ppt_tnt_8:
 		case ppt_tnt_64:
 			if (ipt_flags & FLAG_BRANCH_TNT)
-				print_tnt_payload(mdata, offset, &packet.payload.tnt);
+				print_tnt_payload(mdata, offset,
+				    &packet.payload.tnt);
 			break;
 		case ppt_mode:
 		case ppt_pip:
@@ -233,12 +235,14 @@ dump_packets(struct mtrace_data *mdata, struct pt_packet_decoder *decoder,
 		case ppt_cbr:
 			break;
 		case ppt_tsc:
-			printf("cpu%d: TSC %ld\n", mdata->cpu, packet.payload.tsc.tsc);
+			printf("cpu%d: TSC %ld\n", mdata->cpu,
+			    packet.payload.tsc.tsc);
 			break;
 		case ppt_tma:
 			break;
 		case ppt_mtc:
-			printf("cpu%d: MTC %x\n", mdata->cpu, packet.payload.mtc.ctc);
+			printf("cpu%d: MTC %x\n", mdata->cpu,
+			    packet.payload.mtc.ctc);
 			break;
 		case ppt_cyc:
 		case ppt_stop:
@@ -272,7 +276,8 @@ ipt_process_chunk(struct mtrace_data *mdata, uint64_t base,
 
 	error = pt_cpu_read(&config.cpu);
 	if (error < 0)
-		errx(EX_SOFTWARE, "ERROR: pt_cpu_read failed, err %d\n", error);
+		errx(EX_SOFTWARE,
+		    "ERROR: pt_cpu_read failed, err %d\n", error);
 	error = pt_cpu_errata(&config.errata, &config.cpu);
 	if (error < 0)
 		errx(EX_SOFTWARE, "ERROR: can't get errata, err %d\n", error);
@@ -294,7 +299,8 @@ ipt_process_chunk(struct mtrace_data *mdata, uint64_t base,
 		errx(EX_SOFTWARE, "ERROR: sync_set failed, err %d\n", error);
 	error = pt_pkt_sync_forward(decoder);
 	if (error < 0 && error != -pte_eos)
-		errx(EX_SOFTWARE, "ERROR: sync_forward failed, err %d\n", error);
+		errx(EX_SOFTWARE,
+		    "ERROR: sync_forward failed, err %d\n", error);
 
 	while (1) {
 		error = dump_packets(mdata, decoder, &config);
@@ -328,21 +334,27 @@ ipt_process(struct trace_cpu *tc, struct pmcstat_process *pp,
 
 	if (cycle == tc->cycle) {
 		if (offset > tc->offset) {
-			ipt_process_chunk(mdata, (uint64_t)tc->base, tc->offset, offset);
+			ipt_process_chunk(mdata, (uint64_t)tc->base,
+			    tc->offset, offset);
 			tc->offset = offset;
 		} else if (offset < tc->offset) {
-			err(EXIT_FAILURE, "cpu%d: offset already processed %lx %lx",
+			err(EXIT_FAILURE,
+			    "cpu%d: offset already processed %lx %lx",
 			    cpu, offset, tc->offset);
 		}
 	} else if (cycle > tc->cycle) {
 		if ((cycle - tc->cycle) > 1)
-			err(EXIT_FAILURE, "cpu%d: trace buffers fills up faster than"
-			    " we can process it (%d/%d). Consider setting trace filters",
+			err(EXIT_FAILURE,
+			    "cpu%d: trace buffers fills up faster than"
+			    " we can process it (%d/%d). Consider setting"
+			    " trace filters",
 			    cpu, cycle, tc->cycle);
-		ipt_process_chunk(mdata, (uint64_t)tc->base, tc->offset, tc->bufsize);
+		ipt_process_chunk(mdata, (uint64_t)tc->base,
+		    tc->offset, tc->bufsize);
 		tc->offset = 0;
 		tc->cycle += 1;
-		ipt_process_chunk(mdata, (uint64_t)tc->base, tc->offset, offset);
+		ipt_process_chunk(mdata, (uint64_t)tc->base,
+		    tc->offset, offset);
 		tc->offset = offset;
 	}
 
