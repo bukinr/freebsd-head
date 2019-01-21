@@ -125,6 +125,7 @@ pmc_vm_initialize(struct pmc_mdep *md)
 		if (error != 0) {
 			for (i = 0; i < cpu; i++)
 				destroy_dev(pmc_cdev[cpu]);
+			osd_thread_deregister(cc->osd_id);
 			return (-1);
 		}
 	}
