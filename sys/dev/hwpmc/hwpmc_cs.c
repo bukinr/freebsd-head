@@ -86,7 +86,8 @@ extern struct cdev *pmc_cdev[MAXCPU];
  * interrupt provided.
  */
 
-#define	CORESIGHT_CAPS (PMC_CAP_READ | PMC_CAP_INTERRUPT | PMC_CAP_SYSTEM | PMC_CAP_USER)
+#define	CORESIGHT_CAPS (PMC_CAP_READ | PMC_CAP_INTERRUPT |\
+			PMC_CAP_SYSTEM | PMC_CAP_USER)
 
 #define	PMC_CORESIGHT_DEBUG
 #undef	PMC_CORESIGHT_DEBUG
@@ -171,7 +172,8 @@ coresight_buffer_allocate(uint32_t cpu,
 	}
 	VM_OBJECT_WUNLOCK(obj);
 
-	map = malloc(sizeof(struct pmc_vm_map), M_CORESIGHT, M_WAITOK | M_ZERO);
+	map = malloc(sizeof(struct pmc_vm_map),
+	    M_CORESIGHT, M_WAITOK | M_ZERO);
 	map->t = curthread;
 	map->obj = obj;
 	map->buf = (void *)coresight_buf;
@@ -484,6 +486,7 @@ coresight_trace_config(int cpu, int ri, struct pmc *pm,
 {
 	struct coresight_event *event;
 	struct coresight_cpu *coresight_pc;
+	enum pmc_mode mode;
 	int i;
 
 	dprintf("%s\n", __func__);
@@ -498,7 +501,6 @@ coresight_trace_config(int cpu, int ri, struct pmc *pm,
 
 	event->naddr = nranges;
 
-	enum pmc_mode mode;
 	mode = PMC_TO_MODE(pm);
 	if (mode == PMC_MODE_ST)
 		event->excp_level = 1;
