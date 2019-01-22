@@ -123,12 +123,14 @@ pmc_vm_initialize(struct pmc_mdep *md)
 		args.mda_si_drv1 = cc;
 		error = make_dev_s(&args, &pmc_cdev[cpu], "pmc%d", cpu);
 		if (error != 0) {
-			for (i = 0; i < cpu; i++) {
+			for (i = 0; i <= cpu; i++) {
 				cc = &cc_all[i];
 				mtx_destroy(&cc->vm_mtx);
-				destroy_dev(pmc_cdev[i]);
+				if (i != cpu)
+					destroy_dev(pmc_cdev[i]);
 				osd_thread_deregister(cc->osd_id);
 			}
+
 			free(cc_all, M_PMC);
 			return (-1);
 		}
