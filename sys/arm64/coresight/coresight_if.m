@@ -37,6 +37,12 @@ INTERFACE coresight;
 
 METHOD int init {
 	device_t dev;
+	struct endpoint *endp;
+	struct coresight_event *event;
+};
+
+METHOD int fini {
+	device_t dev;
 };
 
 METHOD int enable {

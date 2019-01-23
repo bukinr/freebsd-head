@@ -275,7 +275,6 @@ coresight_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	 * TODO: should be delivered from pmctrace
 	 */
 	event->etm.trace_id = 0x10;
-	event->etr.flags = ETR_FLAG_ALLOCATE;
 
 	return (0);
 }
@@ -586,8 +585,7 @@ coresight_release_pmc(int cpu, int ri, struct pmc *pm)
 	KASSERT(phw->phw_pmc == NULL,
 	    ("[coresight,%d] PHW pmc %p non-NULL", __LINE__, phw->phw_pmc));
 
-	event->etr.flags = ETR_FLAG_RELEASE;
-	coresight_disable(cpu, event);
+	coresight_fini(cpu, event);
 
 	mode = PMC_TO_MODE(pm);
 	if (mode == PMC_MODE_TT)

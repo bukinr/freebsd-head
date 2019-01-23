@@ -183,7 +183,8 @@ etm_prepare(device_t dev, struct coresight_event *event)
 }
 
 static int
-etm_init(device_t dev)
+etm_init(device_t dev, struct endpoint *endp,
+    struct coresight_event *event)
 {
 	struct etm_softc *sc;
 	uint32_t reg;

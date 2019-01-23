@@ -207,9 +207,11 @@ tmc_configure_etr(device_t dev, struct endpoint *endp,
 }
 
 static int
-tmc_init(device_t dev)
+tmc_init(device_t dev, struct endpoint *endp,
+    struct coresight_event *event)
 {
 	struct tmc_softc *sc;
+	uint32_t nev;
 	uint32_t reg;
 
 	sc = device_get_softc(dev);
@@ -240,6 +242,41 @@ tmc_init(device_t dev)
 		break;
 	}
 
+	if (sc->dev_type != CORESIGHT_ETR)
+		return (0);
+
+	/*
+	 * TMC component disallows to continue trace operation
+	 * from specific place in the buffer, so we enable it
+	 * here.
+	 */
+	nev = atomic_fetchadd_int(&sc->nev, 1);
+	if (nev == 0) {
+		sc->event = event;
+		tmc_stop(dev);
+		tmc_configure_etr(dev, endp, event);
+		tmc_start(dev);
+	}
+
+	return (0);
+}
+
+static int
+tmc_fini(device_t dev)
+{
+	struct tmc_softc *sc;
+	uint32_t nev;
+
+	sc = device_get_softc(dev);
+	if (sc->dev_type != CORESIGHT_ETR)
+		return (0);
+
+	nev = atomic_fetchadd_int(&sc->nev, -1);
+	if (nev == 1) {
+		tmc_stop(dev);
+		sc->event = NULL;
+	}
+
 	return (0);
 }
 
@@ -248,31 +285,13 @@ tmc_enable(device_t dev, struct endpoint *endp,
     struct coresight_event *event)
 {
 	struct tmc_softc *sc;
-	uint32_t nev;
 
 	sc = device_get_softc(dev);
 
 	if (sc->dev_type == CORESIGHT_ETF)
 		return (0);
 
-	KASSERT(sc->dev_type == CORESIGHT_ETR,
-	    ("Wrong dev_type"));
-
-	/*
-	 * Multiple CPUs can call this same time.
-	 * We allow only one running configuration.
-	 */
-
-	if (event->etr.flags & ETR_FLAG_ALLOCATE) {
-		event->etr.flags &= ~ETR_FLAG_ALLOCATE;
-		nev = atomic_fetchadd_int(&sc->nev, 1);
-		if (nev == 0) {
-			sc->event = event;
-			tmc_stop(dev);
-			tmc_configure_etr(dev, endp, event);
-			tmc_start(dev);
-		}
-	}
+	KASSERT(sc->dev_type == CORESIGHT_ETR, ("Wrong dev_type"));
 
 	return (0);
 }
@@ -282,7 +301,6 @@ tmc_disable(device_t dev, struct endpoint *endp,
     struct coresight_event *event)
 {
 	struct tmc_softc *sc;
-	uint32_t nev;
 
 	sc = device_get_softc(dev);
 
@@ -291,16 +309,6 @@ tmc_disable(device_t dev, struct endpoint *endp,
 		return;
 
 	KASSERT(sc->dev_type == CORESIGHT_ETR, ("Wrong dev_type"));
-
-	if (event->etr.flags & ETR_FLAG_RELEASE &&
-	    sc->event != NULL) {
-		event->etr.flags &= ~ETR_FLAG_RELEASE;
-		nev = atomic_fetchadd_int(&sc->nev, -1);
-		if (nev == 1) {
-			tmc_stop(dev);
-			sc->event = NULL;
-		}
-	}
 }
 
 static int
@@ -381,6 +389,7 @@ static device_method_t tmc_methods[] = {
 
 	/* Coresight interface */
 	DEVMETHOD(coresight_init,	tmc_init),
+	DEVMETHOD(coresight_fini,	tmc_fini),
 	DEVMETHOD(coresight_enable,	tmc_enable),
 	DEVMETHOD(coresight_disable,	tmc_disable),
 	DEVMETHOD(coresight_read,	tmc_read),

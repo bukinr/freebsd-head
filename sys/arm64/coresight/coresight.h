@@ -130,6 +130,7 @@ struct endpoint * coresight_get_output_endpoint(struct coresight_platform_data *
 struct coresight_device * coresight_get_output_device(struct endpoint *endp, struct endpoint **);
 int coresight_register(struct coresight_desc *desc);
 int coresight_init_event(int cpu, struct coresight_event *event);
+void coresight_fini(int cpu, struct coresight_event *event);
 void coresight_enable(int cpu, struct coresight_event *event);
 void coresight_disable(int cpu, struct coresight_event *event);
 void coresight_read(int cpu, struct coresight_event *event);
