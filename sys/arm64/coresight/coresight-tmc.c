@@ -207,11 +207,9 @@ tmc_configure_etr(device_t dev, struct endpoint *endp,
 }
 
 static int
-tmc_init(device_t dev, struct endpoint *endp,
-    struct coresight_event *event)
+tmc_init(device_t dev)
 {
 	struct tmc_softc *sc;
-	uint32_t nev;
 	uint32_t reg;
 
 	sc = device_get_softc(dev);
@@ -242,6 +240,17 @@ tmc_init(device_t dev, struct endpoint *endp,
 		break;
 	}
 
+	return (0);
+}
+
+static int
+tmc_allocate(device_t dev, struct endpoint *endp,
+    struct coresight_event *event)
+{
+	struct tmc_softc *sc;
+	uint32_t nev;
+
+	sc = device_get_softc(dev);
 	if (sc->dev_type != CORESIGHT_ETR)
 		return (0);
 
@@ -262,7 +271,8 @@ tmc_init(device_t dev, struct endpoint *endp,
 }
 
 static int
-tmc_fini(device_t dev)
+tmc_release(device_t dev, struct endpoint *endp,
+    struct coresight_event *event)
 {
 	struct tmc_softc *sc;
 	uint32_t nev;
@@ -389,7 +399,8 @@ static device_method_t tmc_methods[] = {
 
 	/* Coresight interface */
 	DEVMETHOD(coresight_init,	tmc_init),
-	DEVMETHOD(coresight_fini,	tmc_fini),
+	DEVMETHOD(coresight_allocate,	tmc_allocate),
+	DEVMETHOD(coresight_release,	tmc_release),
 	DEVMETHOD(coresight_enable,	tmc_enable),
 	DEVMETHOD(coresight_disable,	tmc_disable),
 	DEVMETHOD(coresight_read,	tmc_read),

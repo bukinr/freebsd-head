@@ -110,27 +110,39 @@ coresight_init_event(int cpu, struct coresight_event *event)
 	TAILQ_FOREACH(cs_dev, &cs_devs, link) {
 		if (cs_dev->dev_type == CORESIGHT_CPU_DEBUG &&
 		    cs_dev->pdata->cpu == cpu)
-			CORESIGHT_INIT(cs_dev->dev, NULL, event);
+			CORESIGHT_INIT(cs_dev->dev);
 	}
 
 	/* Init all devices in the path */
 	LIST_FOREACH(endp, &event->endplist, endplink) {
 		cs_dev = endp->cs_dev;
-		CORESIGHT_INIT(cs_dev->dev, endp, event);
+		CORESIGHT_INIT(cs_dev->dev);
 	}
 
 	return (0);
 }
 
 void
-coresight_fini(int cpu, struct coresight_event *event)
+coresight_allocate(int cpu, struct coresight_event *event)
 {
 	struct coresight_device *cs_dev;
 	struct endpoint *endp;
 
 	LIST_FOREACH(endp, &event->endplist, endplink) {
 		cs_dev = endp->cs_dev;
-		CORESIGHT_FINI(cs_dev->dev);
+		CORESIGHT_ALLOCATE(cs_dev->dev, endp, event);
+	}
+}
+
+void
+coresight_release(int cpu, struct coresight_event *event)
+{
+	struct coresight_device *cs_dev;
+	struct endpoint *endp;
+
+	LIST_FOREACH(endp, &event->endplist, endplink) {
+		cs_dev = endp->cs_dev;
+		CORESIGHT_RELEASE(cs_dev->dev, endp, event);
 	}
 }
 

@@ -271,10 +271,11 @@ coresight_buffer_prepare(uint32_t cpu, struct pmc *pm,
 	coresight_init_event(cpu, event);
 
 	/*
-	 * Set a trace ID
-	 * TODO: should be delivered from pmctrace
+	 * Set a trace ID required for ETM component.
+	 * TODO: this should be derived from pmctrace.
 	 */
 	event->etm.trace_id = 0x10;
+	coresight_allocate(cpu, event);
 
 	return (0);
 }
@@ -585,16 +586,17 @@ coresight_release_pmc(int cpu, int ri, struct pmc *pm)
 	KASSERT(phw->phw_pmc == NULL,
 	    ("[coresight,%d] PHW pmc %p non-NULL", __LINE__, phw->phw_pmc));
 
-	coresight_fini(cpu, event);
-
 	mode = PMC_TO_MODE(pm);
 	if (mode == PMC_MODE_TT)
-		for (i = 0; i < pmc_cpu_max(); i++)
+		for (i = 0; i < pmc_cpu_max(); i++) {
+			coresight_release(cpu, event);
 			coresight_buffer_deallocate(i,
 			    &pm_coresight->coresight_buffers[i]);
-	else
+	} else {
+		coresight_release(cpu, event);
 		coresight_buffer_deallocate(cpu,
 		    &pm_coresight->coresight_buffers[cpu]);
+	}
 
 	if (mode == PMC_MODE_ST)
 		coresight_pc->flags &= ~FLAG_CORESIGHT_ALLOCATED;

@@ -73,8 +73,7 @@ static struct resource_spec funnel_spec[] = {
 };
 
 static int
-funnel_init(device_t dev, struct endpoint *endp,
-    struct coresight_event *event)
+funnel_init(device_t dev)
 {
 	struct funnel_softc *sc;
 

@@ -66,8 +66,7 @@ static struct resource_spec replicator_spec[] = {
 };
 
 static int
-replicator_init(device_t dev, struct endpoint *endp,
-    struct coresight_event *event)
+replicator_init(device_t dev)
 {
 	struct replicator_softc *sc;
 

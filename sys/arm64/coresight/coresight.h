@@ -101,9 +101,6 @@ struct etr_state {
 	uint32_t low;
 	uint32_t high;
 	uint32_t bufsize;
-	uint32_t flags;
-#define	ETR_FLAG_ALLOCATE	(1 << 0)
-#define	ETR_FLAG_RELEASE	(1 << 1)
 };
 
 struct coresight_event {
@@ -126,11 +123,14 @@ struct etm_config {
 };
 
 struct coresight_platform_data * coresight_get_platform_data(device_t dev);
-struct endpoint * coresight_get_output_endpoint(struct coresight_platform_data *pdata);
-struct coresight_device * coresight_get_output_device(struct endpoint *endp, struct endpoint **);
+struct endpoint *
+    coresight_get_output_endpoint(struct coresight_platform_data *pdata);
+struct coresight_device *
+    coresight_get_output_device(struct endpoint *endp, struct endpoint **);
 int coresight_register(struct coresight_desc *desc);
 int coresight_init_event(int cpu, struct coresight_event *event);
-void coresight_fini(int cpu, struct coresight_event *event);
+void coresight_allocate(int cpu, struct coresight_event *event);
+void coresight_release(int cpu, struct coresight_event *event);
 void coresight_enable(int cpu, struct coresight_event *event);
 void coresight_disable(int cpu, struct coresight_event *event);
 void coresight_read(int cpu, struct coresight_event *event);

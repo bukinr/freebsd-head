@@ -75,8 +75,7 @@ static struct resource_spec debug_spec[] = {
 };
 
 static int
-debug_init(device_t dev, struct endpoint *endp,
-    struct coresight_event *event)
+debug_init(device_t dev)
 {
 	struct debug_softc *sc;
 	uint32_t reg;
