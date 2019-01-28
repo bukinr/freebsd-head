@@ -110,7 +110,7 @@ static struct trace_dev trace_devs[] = {
 #elif defined(__aarch64__)
 	{ "coresight",	&cs_methods },
 #endif
-	{ NULL,	NULL }
+	{ NULL,	NULL },
 };
 
 static struct pmctrace_config pmctrace_cfg;
@@ -559,7 +559,7 @@ main(int argc, char *argv[])
 	pmctrace_setup_cpumask(&cpumask);
 
 	while ((option = getopt(argc, argv,
-	    "htu:s:i:f:")) != -1)
+	    "htusi:f:")) != -1)
 		switch (option) {
 		case 'i':
 			func_image = strdup(optarg);
@@ -582,22 +582,10 @@ main(int argc, char *argv[])
 				ev->ev_mode = PMC_MODE_ST;
 				supervisor_mode = 1;
 			}
-			ev->ev_spec = strdup(optarg);
+			ev->ev_spec = __DECONST(char *, trace_devs[0].ev_spec);
 			if (ev->ev_spec == NULL)
-				errx(EX_SOFTWARE, "ERROR: Out of memory.");
-
-			for (i = 0; trace_devs[i].ev_spec != NULL; i++) {
-				if (strncmp(trace_devs[i].ev_spec, ev->ev_spec,
-				    strlen(trace_devs[i].ev_spec)) == 0) {
-					/* found */
-					pmctrace_cfg.trace_dev = &trace_devs[i];
-					break;
-				}
-			}
-
-			if (pmctrace_cfg.trace_dev == NULL)
-				errx(EX_SOFTWARE,
-				    "ERROR: trace device not found");
+				errx(EX_SOFTWARE, "Trace device not found");
+			pmctrace_cfg.trace_dev = &trace_devs[0];
 			break;
 		case 't':
 			if (ev == NULL)
