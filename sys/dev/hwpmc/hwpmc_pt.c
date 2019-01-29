@@ -74,7 +74,8 @@ __FBSDID("$FreeBSD$");
 #include <x86/x86_var.h>
 
 static MALLOC_DEFINE(M_PT, "pt", "PT driver");
-static uint64_t pt_xsave_mask;
+
+#define	PT_XSAVE_MASK	(XFEATURE_ENABLED_X87 | XFEATURE_ENABLED_SSE)
 
 extern struct cdev *pmc_cdev[MAXCPU];
 
@@ -154,12 +155,20 @@ xsaves(char *addr, uint64_t mask)
 static void
 pt_save_restore(struct pt_cpu *pt_pc, bool save)
 {
-	uint64_t val;
+	u_long xcr0;
+	u_long cr0;
+	u_long xss;
 
-	clts();
-	val = rxcr(XCR0);
-	load_xcr(XCR0, pt_xsave_mask);
-	wrmsr(MSR_IA32_XSS, XFEATURE_ENABLED_PT);
+	KASSERT((curthread)->td_critnest >= 1, ("Not in critical section"));
+
+	cr0 = rcr0();
+	if (cr0 & CR0_TS)
+		clts();
+	xcr0 = rxcr(XCR0);
+	if ((xcr0 & PT_XSAVE_MASK) != PT_XSAVE_MASK)
+		load_xcr(XCR0, xcr0 | PT_XSAVE_MASK);
+	xss = rdmsr(MSR_IA32_XSS);
+	wrmsr(MSR_IA32_XSS, xss | XFEATURE_ENABLED_PT);
 	if (save) {
 		KASSERT((rdmsr(MSR_IA32_RTIT_CTL) & RTIT_CTL_TRACEEN) != 0,
 		    ("%s: PT is disabled", __func__));
@@ -169,8 +178,11 @@ pt_save_restore(struct pt_cpu *pt_pc, bool save)
 		    ("%s: PT is enabled", __func__));
 		xrstors((char *)&pt_pc->save_area, XFEATURE_ENABLED_PT);
 	}
-	load_xcr(XCR0, val);
-	load_cr0(rcr0() | CR0_TS);
+	wrmsr(MSR_IA32_XSS, xss);
+	if ((xcr0 & PT_XSAVE_MASK) != PT_XSAVE_MASK)
+		load_xcr(XCR0, xcr0);
+	if (cr0 & CR0_TS)
+		load_cr0(cr0);
 }
 
 static void
@@ -644,7 +656,7 @@ pt_pcpu_init(struct pmc_mdep *md, int cpu)
 	}
 
 	cpuid_count(0xd, 0x0, cp);
-	if ((cp[0] & pt_xsave_mask) != pt_xsave_mask) {
+	if ((cp[0] & PT_XSAVE_MASK) != PT_XSAVE_MASK) {
 		printf("Intel PT: CPU0 does not support X87 or SSE: %x", cp[0]);
 		return (ENXIO);
 	}
@@ -902,8 +914,6 @@ pmc_pt_initialize(struct pmc_mdep *md, int maxcpu)
 	struct pmc_classdep *pcd;
 
 	dprintf("%s\n", __func__);
-
-	pt_xsave_mask = XFEATURE_ENABLED_X87 | XFEATURE_ENABLED_SSE;
 
 	KASSERT(md != NULL, ("[pt,%d] md is NULL", __LINE__));
 	KASSERT(md->pmd_nclass >= 1, ("[pt,%d] dubious md->nclass %d",
