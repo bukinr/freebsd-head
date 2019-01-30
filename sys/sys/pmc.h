@@ -882,6 +882,7 @@ struct pmc_process {
 	LIST_ENTRY(pmc_process) pp_next;	/* hash chain */
 	LIST_HEAD(,pmc_thread) pp_tds;		/* list of threads */
 	struct mtx	*pp_tdslock;		/* lock on pp_tds thread list */
+	struct mtx	*pp_tslock;		/* thread sleep lock */
 	int		pp_refcnt;		/* reference count */
 	uint32_t	pp_flags;		/* flags PMC_PP_* */
 	struct proc	*pp_proc;		/* target process */

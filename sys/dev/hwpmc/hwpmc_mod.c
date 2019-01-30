@@ -105,6 +105,7 @@ pmc_value_t		*pmc_pcpu_saved; /* saved PMC values: CSW handling */
 #define	PMC_PCPU_SAVED(C,R)	pmc_pcpu_saved[(R) + md->pmd_npmc*(C)]
 
 struct mtx_pool		*pmc_mtxpool;
+struct mtx_pool		*pmc_mtxpool_sleep;
 static int		*pmc_pmcdisp;	 /* PMC row dispositions */
 
 #define	PMC_ROW_DISP_IS_FREE(R)		(pmc_pmcdisp[(R)] == 0)
@@ -1765,6 +1766,7 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 	struct proc *p;
 	bool pause_thread;
 
+	pause_thread = false;
 	freepath = fullpath = NULL;
 	MPASS(!in_epoch(global_epoch_preempt));
 	pmc_getfilename((struct vnode *) pkm->pm_file, &fullpath, &freepath);
@@ -1784,8 +1786,6 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 	if ((p->p_flag & P_HWPMC) == 0)
 		goto done;
 
-	pause_thread = false;
-
 	/*
 	 * Inform sampling PMC owners tracking this process.
 	 */
@@ -1800,6 +1800,11 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 			pause_thread = true;
 	}
 
+  done:
+	if (freepath)
+		free(freepath, M_TEMP);
+	PMC_EPOCH_EXIT();
+
 	/*
 	 * pmclog entry with mmap information just scheduled to ship
 	 * to userspace. This not yet received by pmctrace application.
@@ -1808,17 +1813,11 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 	 * tracing operation and finally unsuspend this thread.
 	 */
 	if (pause_thread) {
-		PROC_LOCK(td->td_proc);
-		PROC_SLOCK(td->td_proc);
-		thread_suspend_switch(td, td->td_proc);
-		PROC_SUNLOCK(td->td_proc);
-		PROC_UNLOCK(td->td_proc);
+		mtx_lock(pp->pp_tslock);
+		msleep(__DECONST(void *, pp), pp->pp_tslock,
+		    PWAIT, "pmc-mmap", 0);
+		mtx_unlock(pp->pp_tslock);
 	}
-
-  done:
-	if (freepath)
-		free(freepath, M_TEMP);
-	PMC_EPOCH_EXIT();
 }
 
 
@@ -2643,6 +2642,7 @@ pmc_find_process_descriptor(struct proc *p, uint32_t mode)
 		ppnew->pp_proc = p;
 		LIST_INIT(&ppnew->pp_tds);
 		ppnew->pp_tdslock = mtx_pool_find(pmc_mtxpool, ppnew);
+		ppnew->pp_tslock = mtx_pool_find(pmc_mtxpool_sleep, ppnew);
 		LIST_INSERT_HEAD(pph, ppnew, pp_next);
 		mtx_unlock_spin(&pmc_processhash_mtx);
 		pp = ppnew;
@@ -4385,6 +4385,7 @@ pmc_syscall_handler(struct thread *td, void *syscall_args)
 	case PMC_OP_THREAD_UNSUSPEND:
 	{
 		struct pmc_op_proc_unsuspend u;
+		struct pmc_process *pp;
 		struct proc *p;
 		struct pmc *pm;
 
@@ -4404,9 +4405,12 @@ pmc_syscall_handler(struct thread *td, void *syscall_args)
 		if ((p->p_flag & P_HWPMC) == 0)
 			break;
 
-		PROC_SLOCK(p);
-		thread_unsuspend(p);
-		PROC_SUNLOCK(p);
+		if ((pp = pmc_find_process_descriptor(p, 0)) == NULL) {
+			PROC_UNLOCK(p);
+			break;
+		}
+
+		wakeup(__DECONST(void *, pp));
 		PROC_UNLOCK(p);
 	}
 	break;
@@ -5924,6 +5928,8 @@ pmc_initialize(void)
 	/* allocate a pool of spin mutexes */
 	pmc_mtxpool = mtx_pool_create("pmc-leaf", pmc_mtxpool_size,
 	    MTX_SPIN);
+	pmc_mtxpool_sleep = mtx_pool_create("pmc-sleep", pmc_mtxpool_size,
+	    MTX_DEF);
 
 	PMCDBG4(MOD,INI,1, "pmc_ownerhash=%p, mask=0x%lx "
 	    "targethash=%p mask=0x%lx", pmc_ownerhash, pmc_ownerhashmask,
@@ -6041,6 +6047,8 @@ pmc_cleanup(void)
 
 	if (pmc_mtxpool)
 		mtx_pool_destroy(&pmc_mtxpool);
+	if (pmc_mtxpool_sleep)
+		mtx_pool_destroy(&pmc_mtxpool_sleep);
 
 	mtx_destroy(&pmc_processhash_mtx);
 	taskqgroup_config_gtask_deinit(&free_gtask);
