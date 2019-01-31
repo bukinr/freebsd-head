@@ -2913,6 +2913,12 @@ pmc_release_pmc_descriptor(struct pmc *pm)
 		LIST_FOREACH_SAFE(ptgt, &pm->pm_targets, pt_next, tmp) {
 			pp = ptgt->pt_process;
 
+			/*
+			 * Owner of this pmc descriptor is terminated.
+			 * If any tracing target thread that associated with
+			 * this pmc descriptor is sleeping, then release it
+			 * from sleeping.
+			 */
 			wakeup(pp);
 
 			pmc_unlink_target_process(pm, pp); /* frees 'ptgt' */
