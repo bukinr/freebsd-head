@@ -533,12 +533,12 @@ struct pmc_op_getpmcinfo {
 };
 
 /*
- * OP PROC_UNSUSPEND
+ * OP THREAD_WAKEUP
  *
- * Unsuspend all threads of proc.
+ * Wakeup a sleeping thread.
  */
 
-struct pmc_op_proc_unsuspend {
+struct pmc_op_thread_wakeup {
 	pmc_id_t	pm_pmcid;
 	pid_t		pm_pid;
 };

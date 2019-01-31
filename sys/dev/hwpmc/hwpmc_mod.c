@@ -1810,7 +1810,7 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 	 * to userspace. This not yet received by pmctrace application.
 	 * Put this thread on pause before we continue. Once user process
 	 * receive log entry, it can reconfigure tracing filters, start
-	 * tracing operation and finally unsuspend this thread.
+	 * tracing operation and finally wakeup this thread.
 	 */
 	if (pp != NULL && pause_thread == true) {
 		pp->pp_refcnt++;
@@ -4394,7 +4394,7 @@ pmc_syscall_handler(struct thread *td, void *syscall_args)
 
 	case PMC_OP_THREAD_WAKEUP:
 	{
-		struct pmc_op_proc_unsuspend u;
+		struct pmc_op_thread_wakeup u;
 		struct pmc_process *pp;
 		struct proc *p;
 		struct pmc *pm;

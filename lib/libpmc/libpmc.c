@@ -1967,9 +1967,9 @@ pmc_read(pmc_id_t pmc, pmc_value_t *value)
 }
 
 int
-pmc_proc_unsuspend(pmc_id_t pmc, pid_t pid)
+pmc_thread_wakeup(pmc_id_t pmc, pid_t pid)
 {
-	struct pmc_op_proc_unsuspend u;
+	struct pmc_op_thread_wakeup u;
 
 	u.pm_pmcid = pmc;
 	u.pm_pid = pid;

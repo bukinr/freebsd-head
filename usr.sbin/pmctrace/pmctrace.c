@@ -493,7 +493,7 @@ pmctrace_run(bool user_mode, char *func_name, char *func_image)
 			if (user_mode && started) {
 				pt = SLIST_FIRST(&args.pa_targets);
 				ev = STAILQ_FIRST(&args.pa_events);
-				pmc_proc_unsuspend(ev->ev_pmcid, pt->pt_pid);
+				pmc_thread_wakeup(ev->ev_pmcid, pt->pt_pid);
 			}
 
 			break;
