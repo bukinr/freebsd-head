@@ -1812,9 +1812,9 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 	 * receive log entry, it can reconfigure tracing filters, start
 	 * tracing operation and finally unsuspend this thread.
 	 */
-	if (pause_thread) {
-		mtx_lock(pp->pp_tslock);
+	if (pp != NULL && pause_thread == true) {
 		pp->pp_refcnt++;
+		mtx_lock(pp->pp_tslock);
 		msleep(pp, pp->pp_tslock, PWAIT, "pmc-mmap", 0);
 		mtx_unlock(pp->pp_tslock);
 		pp->pp_refcnt--;
