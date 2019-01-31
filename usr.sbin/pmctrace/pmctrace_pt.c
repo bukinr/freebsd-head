@@ -93,7 +93,7 @@ static int ipt_flags;
 #define	FLAG_BRANCH_TNT		(1 << 0)	/* Taken/Not Taken */
 
 static struct pmcstat_symbol *
-symbol_lookup(struct mtrace_data *mdata)
+symbol_lookup(struct mtrace_data *mdata, struct pmcstat_image **image0)
 {
 	struct pmcstat_image *image;
 	struct pmcstat_symbol *sym;
@@ -109,6 +109,8 @@ symbol_lookup(struct mtrace_data *mdata)
 	map = pmcstat_process_find_map(mdata->pp, ip);
 	if (map != NULL) {
 		image = map->ppm_image;
+		if (image0 != NULL)
+			*image0 = image;
 		newpc = ip - (map->ppm_lowpc +
 			(image->pi_vaddr - image->pi_start));
 		sym = pmcstat_symbol_search(image, newpc);
@@ -149,6 +151,7 @@ static int
 print_ip_payload(struct mtrace_data *mdata, uint64_t offset __unused,
     const struct pt_packet_ip *packet)
 {
+	struct pmcstat_image *image;
 	struct pmcstat_symbol *sym;
 
 	switch (packet->ipc) {
@@ -169,7 +172,7 @@ print_ip_payload(struct mtrace_data *mdata, uint64_t offset __unused,
 	case pt_ipc_sext_48:
 		mdata->ip &= ~0xffffffffffffUL;
 		mdata->ip |= (packet->ip & 0xffffffffffffUL);
-		symbol_lookup(mdata);
+		symbol_lookup(mdata, NULL);
 	case pt_ipc_full:
 		mdata->ip = packet->ip;
 		break;
@@ -178,9 +181,10 @@ print_ip_payload(struct mtrace_data *mdata, uint64_t offset __unused,
 		return (0);
 	}
 
-	sym = symbol_lookup(mdata);
+	sym = symbol_lookup(mdata, &image);
 	if (sym) {
-		printf("cpu%d:  IP 0x%lx %s\n", mdata->cpu, mdata->ip,
+		printf("cpu%d:  IP 0x%lx %s %s\n", mdata->cpu, mdata->ip,
+		    pmcstat_string_unintern(image->pi_name),
 		    pmcstat_string_unintern(sym->ps_name));
 	} else
 		dprintf("cpu%d: 0x%lx not found\n", mdata->cpu, mdata->ip);
