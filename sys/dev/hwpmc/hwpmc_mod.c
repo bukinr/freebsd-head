@@ -4392,7 +4392,7 @@ pmc_syscall_handler(struct thread *td, void *syscall_args)
 	}
 	break;
 
-	case PMC_OP_THREAD_UNSUSPEND:
+	case PMC_OP_THREAD_WAKEUP:
 	{
 		struct pmc_op_proc_unsuspend u;
 		struct pmc_process *pp;

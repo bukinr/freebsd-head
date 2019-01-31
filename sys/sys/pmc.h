@@ -357,7 +357,7 @@ enum pmc_event {
 	__PMC_OP(CLOSELOG, "Close log file")				\
 	__PMC_OP(GETDYNEVENTINFO, "Get dynamic events list")		\
 	__PMC_OP(LOG_KERNEL_MAP, "Log kernel mappings")			\
-	__PMC_OP(THREAD_UNSUSPEND, "Thread unsuspend")			\
+	__PMC_OP(THREAD_WAKEUP, "Thread wakeup")			\
 	__PMC_OP(TRACE_READ, "Read trace buffer pointer")		\
 	__PMC_OP(TRACE_CONFIG, "Setup trace IP ranges")
 

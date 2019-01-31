@@ -1974,7 +1974,7 @@ pmc_proc_unsuspend(pmc_id_t pmc, pid_t pid)
 	u.pm_pmcid = pmc;
 	u.pm_pid = pid;
 
-	return (PMC_CALL(THREAD_UNSUSPEND, &u));
+	return (PMC_CALL(THREAD_WAKEUP, &u));
 }
 
 int
