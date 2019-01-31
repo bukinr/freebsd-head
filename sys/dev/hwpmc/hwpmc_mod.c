@@ -1762,7 +1762,7 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 	char *fullpath, *freepath;
 	const struct pmc *pm;
 	struct pmc_owner *po;
-	const struct pmc_process *pp;
+	struct pmc_process *pp;
 	struct proc *p;
 	bool pause_thread;
 
@@ -1814,9 +1814,10 @@ pmc_process_mmap(struct thread *td, struct pmckern_map_in *pkm)
 	 */
 	if (pause_thread) {
 		mtx_lock(pp->pp_tslock);
-		msleep(__DECONST(void *, pp), pp->pp_tslock,
-		    PWAIT, "pmc-mmap", 0);
+		pp->pp_refcnt++;
+		msleep(pp, pp->pp_tslock, PWAIT, "pmc-mmap", 0);
 		mtx_unlock(pp->pp_tslock);
+		pp->pp_refcnt--;
 	}
 }
 
@@ -2911,6 +2912,9 @@ pmc_release_pmc_descriptor(struct pmc *pm)
 		 */
 		LIST_FOREACH_SAFE(ptgt, &pm->pm_targets, pt_next, tmp) {
 			pp = ptgt->pt_process;
+
+			wakeup(pp);
+
 			pmc_unlink_target_process(pm, pp); /* frees 'ptgt' */
 
 			PMCDBG1(PMC,REL,3, "pp->refcnt=%d", pp->pp_refcnt);
@@ -4405,12 +4409,9 @@ pmc_syscall_handler(struct thread *td, void *syscall_args)
 		if ((p->p_flag & P_HWPMC) == 0)
 			break;
 
-		if ((pp = pmc_find_process_descriptor(p, 0)) == NULL) {
-			PROC_UNLOCK(p);
-			break;
-		}
+		if ((pp = pmc_find_process_descriptor(p, 0)) != NULL)
+			wakeup(pp);
 
-		wakeup(__DECONST(void *, pp));
 		PROC_UNLOCK(p);
 	}
 	break;
