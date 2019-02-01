@@ -28,3 +28,6 @@ git diff -U99999999 origin/master usr.sbin/pmctrace/pmctrace_pt.* > patch.hwpmc7
 
 # 8 - pmctrace CS
 git diff -U99999999 origin/master usr.sbin/pmctrace/pmctrace_cs.* > patch.hwpmc8
+
+# 9 - pmcstat libpmcstat
+git diff -U99999999 origin/master lib/libpmcstat usr.sbin/pmcstat > patch.hwpmc9
