@@ -515,7 +515,7 @@ pmcstat_process_log(void)
 		return (pmcstat_print_log());
 	else
 		return (pmcstat_analyze_log(&args, plugins, &pmcstat_stats, pmcstat_kernproc,
-		    pmcstat_mergepmc, &pmcstat_npmcs, &ps_samples_period));
+		    pmcstat_mergepmc, &pmcstat_npmcs, &ps_samples_period, NULL));
 }
 
 /*

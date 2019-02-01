@@ -377,7 +377,8 @@ int pmcstat_analyze_log(struct pmcstat_args *args,
     struct pmcstat_process *pmcstat_kernproc,
     int pmcstat_mergepmc,
     int *pmcstat_npmcs,
-    int *ps_samples_period);
+    int *ps_samples_period,
+    int *map_in_count);
 
 int pmcstat_open_log(const char *_p, int _mode);
 int pmcstat_close_log(struct pmcstat_args *args);

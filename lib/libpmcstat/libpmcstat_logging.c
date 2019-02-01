@@ -192,7 +192,8 @@ pmcstat_analyze_log(struct pmcstat_args *args,
     struct pmcstat_process *pmcstat_kernproc,
     int pmcstat_mergepmc,
     int *pmcstat_npmcs,
-    int *ps_samples_period)
+    int *ps_samples_period,
+    int *map_in_count)
 {
 	uint32_t cpu, cpuflags;
 	pid_t pid;
@@ -221,6 +222,8 @@ pmcstat_analyze_log(struct pmcstat_args *args,
 			break;
 
 		case PMCLOG_TYPE_MAP_IN:
+			if (map_in_count)
+				*map_in_count += 1;
 			/*
 			 * Introduce an address range mapping for a
 			 * userland process or the kernel (pid == -1).

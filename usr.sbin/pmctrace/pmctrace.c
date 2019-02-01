@@ -431,6 +431,7 @@ pmctrace_run(bool user_mode, char *func_name, char *func_image)
 	int stopping;
 	int running;
 	int started;
+	int map_in_count;
 	int c;
 
 	stopping = 0;
@@ -476,21 +477,22 @@ pmctrace_run(bool user_mode, char *func_name, char *func_image)
 			stopping = 1;
 			break;
 		case EVFILT_READ:
+			map_in_count = 0;
 			args.pa_flags |= FLAG_DO_ANALYSIS;
 			pmcstat_analyze_log(&args, plugins, &pmcstat_stats,
 			    pmcstat_kernproc, pmcstat_mergepmc, &pmcstat_npmcs,
-			    &ps_samples_period);
+			    &ps_samples_period, &map_in_count);
 
 			/*
-			 * Try start PMCs. This may or may not happen
-			 * based on mmap log entries arrival.
+			 * Try to start PMCs. This may or may not happen
+			 * (it depends if we received required mmap log)
 			 */
 			if (started == 0 &&
 			    pmctrace_delayed_start(user_mode,
 			    func_name, func_image) == 0)
 				started = 1;
 
-			if (user_mode && started) {
+			if (user_mode == 1 && map_in_count > 0) {
 				pt = SLIST_FIRST(&args.pa_targets);
 				ev = STAILQ_FIRST(&args.pa_events);
 				pmc_thread_wakeup(ev->ev_pmcid, pt->pt_pid);
