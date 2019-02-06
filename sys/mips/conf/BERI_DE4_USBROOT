@@ -13,6 +13,7 @@ makeoptions	MODULES_OVERRIDE=""
 
 device		pci
 device		em
+device		iflib
 
 nooptions	ROOTDEVNAME
 options 	ROOTDEVNAME=\"ufs:/dev/da0\"
