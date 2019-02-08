@@ -514,8 +514,9 @@ pmcstat_process_log(void)
 	if (args.pa_flags & FLAG_DO_PRINT)
 		return (pmcstat_print_log());
 	else
-		return (pmcstat_analyze_log(&args, plugins, &pmcstat_stats, pmcstat_kernproc,
-		    pmcstat_mergepmc, &pmcstat_npmcs, &ps_samples_period, NULL));
+		return (pmcstat_analyze_log(&args, plugins, &pmcstat_stats,
+		    pmcstat_kernproc, pmcstat_mergepmc, &pmcstat_npmcs,
+		    &ps_samples_period, NULL));
 }
 
 /*
