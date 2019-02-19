@@ -86,9 +86,9 @@
 		 * Memory is reserved for device-model,
 		 * see beri,mgr device below.
 		 */
-		reg = <0x00000000 0x10000000>,		// 256M at 0x0
-			/* 0x10000000 - 0x20000000 reserved for device model */
-		      <0x20000000 0x20000000>;		// 768M-256M at 0x20000000
+		reg = <0x00000000 0x10000000>,	// 256M at 0x0
+		/* 0x10000000 - 0x20000000 reserved for device model */
+		      <0x20000000 0x20000000>;	// 768M-256M at 0x20000000
 	};
 
 	cpuintc: cpuintc@0 {
