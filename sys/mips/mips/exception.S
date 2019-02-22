@@ -183,7 +183,7 @@ VECTOR(MipsException, unknown)
 	and	k0, k0, 0xffff
 	beqz	k0, 1f
 	nop
-	dli	k0, 0xffffffffb0001000
+	dli	k0, 0xffffffff90001000
 	jr	k0
 	nop
 1:

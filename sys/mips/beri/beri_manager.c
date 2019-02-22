@@ -128,7 +128,7 @@ dm_release(struct berimgr_softc *sc)
 
 	se->pir = 1;
 	mips_sync();
-	se->entry_addr = 0xffffffffb0000000;
+	se->entry_addr = 0xffffffff90000000;
 	mips_sync();
 
 	printf("%s: cpu released\n", __func__);
