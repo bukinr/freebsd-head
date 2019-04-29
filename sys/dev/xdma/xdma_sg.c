@@ -238,8 +238,8 @@ xdma_prep_sg(xdma_channel_t *xchan, uint32_t xr_num,
 		return (-1);
 	}
 
+	/* Allocate buffers if required. */
 	if ((xchan->caps & XCHAN_CAP_NOBUFS) == 0) {
-		/* Allocate bufs. */
 		ret = xchan_bufs_alloc(xchan);
 		if (ret != 0) {
 			device_printf(xdma->dev,
