@@ -299,7 +299,7 @@ static int
 softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 {
 	struct softdma_softc *sc;
-	uint64_t read_lo;
+	uint64_t addr;
 	uint64_t buf;
 	uint32_t word;
 	uint32_t missing;
@@ -319,26 +319,26 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 	got_bits = 0;
 	buf = 0;
 
-	read_lo = desc->src_addr;
+	addr = desc->src_addr;
 	len = desc->len;
 
-	if (read_lo & 1) {
-		buf = (buf << 8) | *(uint8_t *)read_lo;
+	if (addr & 1) {
+		buf = (buf << 8) | *(uint8_t *)addr;
 		got_bits += 8;
-		read_lo += 1;
+		addr += 1;
 		len -= 1;
 	}
 
-	if (len >= 2 && read_lo & 2) {
-		buf = (buf << 16) | *(uint16_t *)read_lo;
+	if (len >= 2 && addr & 2) {
+		buf = (buf << 16) | *(uint16_t *)addr;
 		got_bits += 16;
-		read_lo += 2;
+		addr += 2;
 		len -= 2;
 	}
 
 	while (len >= 4) {
-		buf = (buf << 32) | (uint64_t)*(uint32_t *)read_lo;
-		read_lo += 4;
+		buf = (buf << 32) | (uint64_t)*(uint32_t *)addr;
+		addr += 4;
 		len -= 4;
 		word = (uint32_t)((buf >> got_bits) & 0xffffffff);
 
@@ -351,16 +351,16 @@ softdma_process_tx(struct softdma_channel *chan, struct softdma_desc *desc)
 	}
 
 	if (len & 2) {
-		buf = (buf << 16) | *(uint16_t *)read_lo;
+		buf = (buf << 16) | *(uint16_t *)addr;
 		got_bits += 16;
-		read_lo += 2;
+		addr += 2;
 		len -= 2;
 	}
 
 	if (len & 1) {
-		buf = (buf << 8) | *(uint8_t *)read_lo;
+		buf = (buf << 8) | *(uint8_t *)addr;
 		got_bits += 8;
-		read_lo += 1;
+		addr += 1;
 		len -= 1;
 	}
 
