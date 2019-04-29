@@ -448,8 +448,6 @@ softdma_process_rx(struct softdma_channel *chan, struct softdma_desc *desc)
 			break;
 		}
 
-		//printf("%s: dst %lx\n", __func__, desc->dst_addr);
-
 		if (empty == 0) {
 			*(uint32_t *)(desc->dst_addr + dst_offs) = data;
 			dst_offs += 4;
@@ -743,8 +741,6 @@ softdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 	chan = (struct softdma_channel *)xchan->chan;
 
 	enqueued = 0;
-
-	//printf("%s: %d\n", __func__, sg_n);
 
 	for (i = 0; i < sg_n; i++) {
 		len = (uint32_t)sg[i].len;
