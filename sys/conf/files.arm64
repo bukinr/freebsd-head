@@ -49,6 +49,7 @@ arm/allwinner/if_awg.c		optional	awg ext_resources syscon aw_sid nvmem fdt
 
 # Allwinner clock driver
 arm/allwinner/clkng/aw_ccung.c		optional	aw_ccu fdt
+arm/allwinner/clkng/aw_clk_frac.c	optional	aw_ccu fdt
 arm/allwinner/clkng/aw_clk_nkmp.c	optional	aw_ccu fdt
 arm/allwinner/clkng/aw_clk_nm.c		optional	aw_ccu fdt
 arm/allwinner/clkng/aw_clk_prediv_mux.c	optional	aw_ccu fdt
@@ -258,12 +259,6 @@ kern/pic_if.m			optional	intrng
 kern/subr_devmap.c		standard
 kern/subr_intr.c		optional	intrng
 libkern/bcmp.c			standard
-libkern/ffs.c			standard
-libkern/ffsl.c			standard
-libkern/ffsll.c			standard
-libkern/fls.c			standard
-libkern/flsl.c			standard
-libkern/flsll.c			standard
 libkern/memcmp.c		standard
 libkern/memset.c		standard
 libkern/arm64/crc32c_armv8.S	standard
