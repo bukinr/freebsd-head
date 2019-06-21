@@ -62,7 +62,6 @@ options 		BOOTHOWTO=RB_SINGLE
 # Pseudo devices
 
 device		loop
-device		random
 device		pty
 device		md
 device		gpio
