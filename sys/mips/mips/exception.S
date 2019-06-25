@@ -102,6 +102,16 @@ dtrace_invop_calltrap_addr:
 VECTOR(MipsTLBMiss, unknown)
 	.set push
 	.set noat
+#if defined(CPU_BERI) && !defined(SMP)
+	mfc0	k0, $15, 6
+	and	k0, k0, 0xffff
+	beqz	k0, 1f
+	nop
+	dli	k0, 0xffffffff90002000
+	jr	k0
+	nop
+1:
+#endif
 	j	MipsDoTLBMiss
 	MFC0	k0, MIPS_COP_0_BAD_VADDR	# get the fault address
 	.set pop
@@ -1251,6 +1261,18 @@ sintrcnt:
  */
 	.text
 VECTOR(MipsCache, unknown)
+#if 0
+#if defined(CPU_BERI) && !defined(SMP)
+	mfc0	k0, $15, 6
+	and	k0, k0, 0xffff
+	beqz	k0, 1f
+	nop
+	dli	k0, 0xffffffff90003000
+	jr	k0
+	nop
+1:
+#endif
+#endif
 	PTR_LA	k0, _C_LABEL(MipsCacheException)
 	li	k1, MIPS_KSEG0_PHYS_MASK
 	and	k0, k1
