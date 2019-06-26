@@ -3699,3 +3699,45 @@ pmap_is_valid_memattr(pmap_t pmap __unused, vm_memattr_t mode)
 		return (FALSE);
 	}
 }
+
+/* iommu */
+
+void
+iommu_kenter_attr(pmap_t p, vm_offset_t va,
+    vm_paddr_t pa, vm_memattr_t ma)
+{
+	pt_entry_t *pte;
+	pt_entry_t opte, npte;
+
+	pte = pmap_pte(p, va);
+	if (pte == NULL) {
+		printf("%s: pte %p\n", __func__, pte);
+		pmap_allocpte(p, va, 0);
+		pte = pmap_pte(p, va);
+		printf("%s: pte (again) %p\n", __func__, pte);
+	}
+	pte = (void *)((uint64_t)pte & ~(1ull << 59));
+	opte = *pte;
+	npte = TLBLO_PA_TO_PFN(pa) | PTE_C(ma) | PTE_D | PTE_V | PTE_G;
+	*pte = npte;
+	//printf("pte %p opte %lx npte %lx\n", pte, opte, npte);
+	if (pte_test(&opte, PTE_V) && opte != npte) {
+		printf("reusing page %lx\n", va);
+		//panic("page %lx update required\n", va);
+		//pmap_update_page(p, va, npte);
+	}
+}
+
+void
+iommu_kenter_device(pmap_t p, vm_offset_t va, vm_size_t size, vm_paddr_t pa)
+{
+
+	KASSERT((size & PAGE_MASK) == 0,
+	    ("%s: device mapping not page-sized", __func__));
+
+	for (; size > 0; size -= PAGE_SIZE) {
+		iommu_kenter_attr(p, va, pa, VM_MEMATTR_UNCACHEABLE);
+		va += PAGE_SIZE;
+		pa += PAGE_SIZE;
+	}
+}
