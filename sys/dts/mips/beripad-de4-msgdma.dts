@@ -178,6 +178,12 @@
 			status = "okay";
 		};
 
+		iommu {
+			compatible = "beri,iommu";
+			reg = <0x7fb60000 0x10000>;
+			status = "okay";
+		};
+
 		sdcard@7f008000 {
 			compatible = "altera,sdcard_11_2011";
 			reg = <0x7f008000 0x400>;
