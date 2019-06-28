@@ -69,14 +69,6 @@ iommu_remove_entry(xdma_channel_t *xchan, vm_offset_t va)
 	va1 = va & ~(PAGE_SIZE - 1);
 
 	beri_iommu_invalidate(va);
-#if 0
-	int err;
-	printf("%s: %lx\n", __func__, va1);
-
-	err = dm_invalidate_tlb(va, 8192);
-	if (err)
-		printf("%s: failed\n", __func__);
-#endif
 
 	vmem_free(vmem, va1, 8192);
 }
@@ -117,15 +109,6 @@ iommu_init(void)
 	segmap = (void *)MIPS_PHYS_TO_XKPHYS_UNCACHED(addr);
 	for (i = 0; i < 512; i++)
 		segmap[i] = NULL;
-
-#if 0
-	addr += 0x1000;
-	for (i = 0; i < 512; i++) {
-		segmap[i] = (void *)MIPS_PHYS_TO_XKPHYS_UNCACHED(addr);
-		*segmap[i] = 0;
-		addr += 0x1000;
-	}
-#endif
 
 	printf("allocating vmem\n");
 
