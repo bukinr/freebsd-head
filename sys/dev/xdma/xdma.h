@@ -37,6 +37,11 @@
 #include <sys/proc.h>
 #include <sys/vmem.h>
 
+#include <vm/vm.h>
+#include <vm/vm_extern.h>
+#include <vm/vm_kern.h>
+#include <vm/pmap.h>
+
 enum xdma_direction {
 	XDMA_MEM_TO_MEM,
 	XDMA_MEM_TO_DEV,
@@ -95,6 +100,7 @@ struct xchan_buf {
 struct xdma_request {
 	struct mbuf			*m;
 	struct bio			*bp;
+	vm_offset_t			iommu_addr;
 	enum xdma_operation_type	operation;
 	enum xdma_request_type		req_type;
 	enum xdma_direction		direction;
@@ -121,6 +127,11 @@ struct xdma_sglist {
 	bool				last;
 };
 
+struct xdma_iommu {
+	struct pmap p;
+	vmem_t *vmem;
+};
+
 struct xdma_channel {
 	xdma_controller_t		*xdma;
 	vmem_t				*vmem;
@@ -138,6 +149,7 @@ struct xdma_channel {
 #define	XCHAN_CAP_BUSDMA		(1 << 0)
 #define	XCHAN_CAP_NOSEG			(1 << 1)
 #define	XCHAN_CAP_NOBUFS		(1 << 2)
+#define	XCHAN_CAP_IOMMU			(1 << 3)
 
 	/* A real hardware driver channel. */
 	void				*chan;
@@ -171,6 +183,10 @@ struct xdma_channel {
 	TAILQ_HEAD(, xdma_request)	queue_in;
 	TAILQ_HEAD(, xdma_request)	queue_out;
 	TAILQ_HEAD(, xdma_request)	processing;
+
+	/* iommu */
+	struct xdma_iommu		*xio;
+	int				iommu;
 };
 
 typedef struct xdma_channel xdma_channel_t;
@@ -270,5 +286,13 @@ void xchan_bank_init(xdma_channel_t *xchan);
 int xchan_bank_free(xdma_channel_t *xchan);
 struct xdma_request * xchan_bank_get(xdma_channel_t *xchan);
 int xchan_bank_put(xdma_channel_t *xchan, struct xdma_request *xr);
+
+/* iommu */
+
+void iommu_add_entry(xdma_channel_t *xchan, vm_offset_t *va,
+    vm_size_t size, vm_paddr_t pa);
+void iommu_remove_entry(xdma_channel_t *xchan, vm_offset_t va);
+int iommu_init(void);
+int xdma_iommu_init(struct xdma_iommu *xio);
 
 #endif /* !_DEV_XDMA_XDMA_H_ */

@@ -85,6 +85,9 @@ __FBSDID("$FreeBSD$");
 #include <machine/resource.h>
 #include <sys/rman.h>
 
+#include <dev/ofw/ofw_bus.h>
+#include <dev/ofw/ofw_bus_subr.h>
+
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
 
@@ -1328,6 +1331,19 @@ atse_attach(device_t dev)
 	if (sc->xchan_rx == NULL) {
 		device_printf(dev, "Can't alloc virtual DMA channel.\n");
 		return (ENXIO);
+	}
+
+	phandle_t node;
+	node = ofw_bus_get_node(sc->dev);
+
+	if (OF_getproplen(node, "iommu") >= 0) {
+		xdma_iommu_init(&sc->xio);
+
+		sc->xchan_rx->iommu = 1;
+		sc->xchan_tx->iommu = 1;
+
+		sc->xchan_rx->xio = &sc->xio;
+		sc->xchan_tx->xio = &sc->xio;
 	}
 
 	/* Setup interrupt handler. */

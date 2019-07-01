@@ -455,6 +455,8 @@ struct atse_softc {
 
 	struct buf_ring		*br;
 	struct mtx		br_mtx;
+
+	struct xdma_iommu	xio;
 };
 
 
