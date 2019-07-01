@@ -35,5 +35,6 @@
 #define	_MIPS_BERI_BERI_IOMMU_
 
 void beri_iommu_invalidate(vm_offset_t addr);
+void beri_iommu_set_base(vm_offset_t addr);
 
 #endif /* !_MIPS_BERI_BERI_IOMMU_ */

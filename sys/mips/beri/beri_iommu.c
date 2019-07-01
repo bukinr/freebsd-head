@@ -72,6 +72,9 @@ static struct resource_spec beri_iommu_spec[] = {
 	{ -1, 0 }
 };
 
+#define	IOMMU_INVALIDATE	0x00
+#define	IOMMU_SET_BASE		0x08
+
 void
 beri_iommu_invalidate(vm_offset_t addr)
 {
@@ -81,7 +84,19 @@ beri_iommu_invalidate(vm_offset_t addr)
 	if (sc == NULL)
 		return;
 
-	bus_write_8(sc->res[0], 0x0, htole64(addr));
+	bus_write_8(sc->res[0], IOMMU_INVALIDATE, htole64(addr));
+}
+
+void
+beri_iommu_set_base(vm_offset_t addr)
+{
+	struct beri_iommu_softc *sc;
+
+	sc = beri_iommu_sc;
+	if (sc == NULL)
+		return;
+
+	bus_write_8(sc->res[0], IOMMU_SET_BASE, htole64(addr));
 }
 
 static int
