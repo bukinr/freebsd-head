@@ -58,30 +58,31 @@ __FBSDID("$FreeBSD$");
 
 #include <dev/xdma/xdma.h>
 
-struct pmap msgdma_pmap;
-vmem_t *vmem;
-
 void
 iommu_remove_entry(xdma_channel_t *xchan, vm_offset_t va)
 {
+	struct xdma_iommu *xio;
 	vm_offset_t va1;
 
 	va1 = va & ~(PAGE_SIZE - 1);
+	xio = xchan->xio;
 
 	beri_iommu_invalidate(va);
 
-	vmem_free(vmem, va1, 8192);
+	vmem_free(xio->vmem, va1, 8192);
 }
 
 void
 iommu_add_entry(xdma_channel_t *xchan, vm_offset_t *va,
     vm_size_t size, vm_paddr_t pa)
 {
+	struct xdma_iommu *xio;
 	vm_offset_t addr;
 
 	size = roundup2(size, PAGE_SIZE * 2);
+	xio = xchan->xio;
 
-	if (vmem_alloc(vmem, size,
+	if (vmem_alloc(xio->vmem, size,
 	    M_BESTFIT | M_NOWAIT, &addr)) {
 		panic("cant allocate memory\n");
 	}
@@ -92,11 +93,11 @@ iommu_add_entry(xdma_channel_t *xchan, vm_offset_t *va,
 
 	printf("%s: va %lx size %lx pa %lx\n",
 	    __func__, addr, size, pa);
-	iommu_kenter_device(&msgdma_pmap, addr, size, pa);
+	iommu_kenter_device(&xio->p, addr, size, pa);
 }
 
 int
-iommu_init(void)
+xdma_iommu_init(struct xdma_iommu *xio)
 {
 	pd_entry_t *segmap;
 	uint64_t addr;
@@ -112,14 +113,16 @@ iommu_init(void)
 
 	printf("allocating vmem\n");
 
-	vmem = vmem_create("xDMA vmem", 0, 0, PAGE_SIZE * 2,
+	xio->vmem = vmem_create("xDMA vmem", 0, 0, PAGE_SIZE * 2,
 	    PAGE_SIZE * 2, M_BESTFIT | M_WAITOK);
-	if (vmem == NULL)
+	if (xio->vmem == NULL)
 		return (-1);
 
-	vmem_add(vmem, 0xC000000000000000, (1ULL << 39), 0);
+	vmem_add(xio->vmem, 0xC000000000000000, (1ULL << 39), 0);
 
-	msgdma_pmap.pm_segtab = segmap;
+	xio->p.pm_segtab = segmap;
+
+	beri_iommu_set_base((uintptr_t)segmap);
 
 	return (0);
 }
