@@ -23,6 +23,8 @@ device		pass
 device		umass
 device		da
 device		ahci
+device		syscon
+device		ext_resources
 
 #options 	SMP
 #options 	MIPS64_NEW_PMAP
