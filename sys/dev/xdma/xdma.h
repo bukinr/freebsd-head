@@ -186,7 +186,6 @@ struct xdma_channel {
 
 	/* iommu */
 	struct xdma_iommu		*xio;
-	int				iommu;
 };
 
 typedef struct xdma_channel xdma_channel_t;
