@@ -422,7 +422,11 @@ msgdma_channel_alloc(device_t dev, struct xdma_channel *xchan)
 		if (chan->used == 0) {
 			chan->xchan = xchan;
 			xchan->chan = (void *)chan;
-			xchan->caps |= XCHAN_CAP_BUSDMA;
+			if (xchan->caps & XCHAN_CAP_IOMMU) {
+				xchan->caps |= XCHAN_CAP_NOBUFS;
+				xchan->caps |= XCHAN_CAP_NOSEG;
+			} else
+				xchan->caps |= XCHAN_CAP_BUSDMA;
 			chan->index = i;
 			chan->sc = sc;
 			chan->used = 1;
