@@ -98,19 +98,12 @@ iommu_add_entry(xdma_channel_t *xchan, vm_offset_t *va,
 int
 xdma_iommu_init(struct xdma_iommu *xio)
 {
-	pd_entry_t *segmap;
-	uint64_t addr;
-	int i;
-
-	addr = 0x11000000;
 
 	printf("%s\n", __func__);
 
-	segmap = (void *)MIPS_PHYS_TO_XKPHYS_UNCACHED(addr);
-	for (i = 0; i < 512; i++)
-		segmap[i] = NULL;
+	pmap_pinit(&xio->p);
 
-	printf("allocating vmem\n");
+	printf("%s: %lx\n", __func__, (uintptr_t)xio->p.pm_segtab);
 
 	xio->vmem = vmem_create("xDMA vmem", 0, 0, PAGE_SIZE * 2,
 	    PAGE_SIZE * 2, M_BESTFIT | M_WAITOK);
@@ -119,9 +112,7 @@ xdma_iommu_init(struct xdma_iommu *xio)
 
 	vmem_add(xio->vmem, 0xC000000000000000, (1ULL << 39), 0);
 
-	xio->p.pm_segtab = segmap;
-
-	beri_iommu_set_base((uintptr_t)segmap);
+	beri_iommu_set_base((uintptr_t)xio->p.pm_segtab);
 
 	return (0);
 }

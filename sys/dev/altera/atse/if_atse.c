@@ -1339,7 +1339,8 @@ atse_attach(device_t dev)
 	}
 
 	if (OF_getproplen(node, "iommu") >= 0) {
-		xdma_iommu_init(&sc->xio);
+		if (sc->xio.p.pm_segtab == NULL)
+			xdma_iommu_init(&sc->xio);
 		sc->xchan_rx->xio = &sc->xio;
 		sc->xchan_tx->xio = &sc->xio;
 	}
