@@ -1275,10 +1275,13 @@ atse_attach(device_t dev)
 	struct atse_softc *sc;
 	struct ifnet *ifp;
 	uint32_t caps;
+	phandle_t node;
 	int error;
 
 	sc = device_get_softc(dev);
 	sc->dev = dev;
+
+	node = ofw_bus_get_node(sc->dev);
 
 	/* Get xDMA controller */
 	sc->xdma_tx = xdma_ofw_get(sc->dev, "tx");
@@ -1294,6 +1297,8 @@ atse_attach(device_t dev)
 	 * Embedded Peripherals IP User Guide.
 	 */
 	caps = XCHAN_CAP_NOSEG;
+	if (OF_getproplen(node, "iommu") >= 0)
+		caps |= XCHAN_CAP_IOMMU;
 
 	/* Alloc xDMA virtual channel. */
 	sc->xchan_tx = xdma_channel_alloc(sc->xdma_tx, caps);
@@ -1333,15 +1338,8 @@ atse_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	phandle_t node;
-	node = ofw_bus_get_node(sc->dev);
-
 	if (OF_getproplen(node, "iommu") >= 0) {
 		xdma_iommu_init(&sc->xio);
-
-		sc->xchan_rx->iommu = 1;
-		sc->xchan_tx->iommu = 1;
-
 		sc->xchan_rx->xio = &sc->xio;
 		sc->xchan_tx->xio = &sc->xio;
 	}
