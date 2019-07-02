@@ -347,13 +347,14 @@ xchan_seg_done(xdma_channel_t *xchan,
 				bus_dmamap_sync(xchan->dma_tag_bufs, b->map, 
 				    BUS_DMASYNC_POSTREAD);
 			bus_dmamap_unload(xchan->dma_tag_bufs, b->map);
-		} else {
-			if ((xchan->caps & XCHAN_CAP_NOBUFS) == 0 &&
-			    xr->req_type == XR_TYPE_MBUF &&
-			    xr->direction == XDMA_DEV_TO_MEM)
-				m_copyback(xr->m, 0, st->transferred,
-				    (void *)xr->buf.vaddr);
-		}
+		} else if ((xchan->caps & XCHAN_CAP_NOBUFS) == 0) {
+				if (xr->req_type == XR_TYPE_MBUF &&
+				    xr->direction == XDMA_DEV_TO_MEM)
+					m_copyback(xr->m, 0, st->transferred,
+					    (void *)xr->buf.vaddr);
+		} else if (xchan->caps & XCHAN_CAP_IOMMU)
+			iommu_remove_entry(xchan, xr->iommu_addr);
+
 		xr->status.error = st->error;
 		xr->status.transferred = st->transferred;
 
@@ -485,6 +486,8 @@ _xdma_load_data(xdma_channel_t *xchan, struct xdma_request *xr,
 	xdma_controller_t *xdma;
 	struct mbuf *m;
 	uint32_t nsegs;
+	vm_offset_t va;
+	bus_addr_t pa;
 
 	xdma = xchan->xdma;
 
@@ -495,10 +498,20 @@ _xdma_load_data(xdma_channel_t *xchan, struct xdma_request *xr,
 	switch (xr->req_type) {
 	case XR_TYPE_MBUF:
 		if ((xchan->caps & XCHAN_CAP_NOBUFS) == 0) {
+			/* Bounce buffer */
 			if (xr->direction == XDMA_MEM_TO_DEV)
 				m_copydata(m, 0, m->m_pkthdr.len,
 				    (void *)xr->buf.vaddr);
 			seg[0].ds_addr = (bus_addr_t)xr->buf.paddr;
+		} else if (xchan->caps & XCHAN_CAP_IOMMU) {
+			va = mtod(m, bus_addr_t);
+			pa = vtophys(va);
+			va = 0;
+			iommu_add_entry(xchan, &va,
+			    m->m_pkthdr.len, pa);
+			/* Assuming that nsegs is 1 */
+			xr->iommu_addr = va;
+			seg[0].ds_addr = va;
 		} else
 			seg[0].ds_addr = mtod(m, bus_addr_t);
 		seg[0].ds_len = m->m_pkthdr.len;
