@@ -47,7 +47,6 @@ __FBSDID("$FreeBSD$");
 #include <vm/vm_extern.h>
 #include <vm/vm_page.h>
 
-#include <mips/beri/beri_manager.h>
 #include <mips/beri/beri_iommu.h>
 
 #ifdef FDT
