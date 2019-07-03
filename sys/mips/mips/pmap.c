@@ -98,6 +98,7 @@ __FBSDID("$FreeBSD$");
 #include <machine/cache.h>
 #include <machine/md_var.h>
 #include <machine/tlb.h>
+#include <machine/cpuregs.h>
 
 #undef PMAP_DEBUG
 
@@ -3707,6 +3708,7 @@ iommu_kenter_attr(pmap_t p, vm_offset_t va,
     vm_paddr_t pa, vm_memattr_t ma)
 {
 	pt_entry_t *pte;
+	vm_offset_t addr;
 	pt_entry_t opte, npte;
 
 	pte = pmap_pte(p, va);
@@ -3716,7 +3718,12 @@ iommu_kenter_attr(pmap_t p, vm_offset_t va,
 		pte = pmap_pte(p, va);
 		printf("%s: pte (again) %p\n", __func__, pte);
 	}
-	pte = (void *)((uint64_t)pte & ~(1ull << 59));
+
+	addr = (vm_offset_t)pte;
+	addr &= ~((unsigned long long)MIPS_CCA_CACHED << 59);
+	addr |= ((unsigned long long)MIPS_CCA_UNCACHED << 59);
+	pte = (pt_entry_t *)addr;
+
 	opte = *pte;
 	npte = TLBLO_PA_TO_PFN(pa) | PTE_C(ma) | PTE_D | PTE_V | PTE_G;
 	*pte = npte;
