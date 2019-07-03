@@ -68,7 +68,7 @@ iommu_remove_entry(xdma_channel_t *xchan, vm_offset_t va)
 
 	beri_iommu_invalidate(va);
 
-	vmem_free(xio->vmem, va1, 8192);
+	vmem_free(xio->vmem, va1, PAGE_SIZE);
 }
 
 void
@@ -78,7 +78,7 @@ iommu_add_entry(xdma_channel_t *xchan, vm_offset_t *va,
 	struct xdma_iommu *xio;
 	vm_offset_t addr;
 
-	size = roundup2(size, PAGE_SIZE * 2);
+	size = roundup2(size, PAGE_SIZE);
 	xio = xchan->xio;
 
 	if (vmem_alloc(xio->vmem, size,
@@ -105,8 +105,8 @@ xdma_iommu_init(struct xdma_iommu *xio)
 
 	printf("%s: %lx\n", __func__, (uintptr_t)xio->p.pm_segtab);
 
-	xio->vmem = vmem_create("xDMA vmem", 0, 0, PAGE_SIZE * 2,
-	    PAGE_SIZE * 2, M_BESTFIT | M_WAITOK);
+	xio->vmem = vmem_create("xDMA vmem", 0, 0, PAGE_SIZE,
+	    PAGE_SIZE, M_BESTFIT | M_WAITOK);
 	if (xio->vmem == NULL)
 		return (-1);
 
