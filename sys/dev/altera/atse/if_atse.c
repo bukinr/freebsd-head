@@ -1339,8 +1339,7 @@ atse_attach(device_t dev)
 	}
 
 	if (OF_getproplen(node, "iommu") >= 0) {
-		if (sc->xio.p.pm_segtab == NULL)
-			xdma_iommu_init(&sc->xio);
+		xdma_iommu_init(&sc->xio);
 		sc->xchan_rx->xio = &sc->xio;
 		sc->xchan_tx->xio = &sc->xio;
 	}
@@ -1472,6 +1471,7 @@ atse_detach(device_t dev)
 
 	mtx_destroy(&sc->atse_mtx);
 
+	xdma_iommu_release(&sc->xio);
 	xdma_channel_free(sc->xchan_tx);
 	xdma_channel_free(sc->xchan_rx);
 	xdma_put(sc->xdma_tx);

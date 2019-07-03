@@ -116,3 +116,18 @@ xdma_iommu_init(struct xdma_iommu *xio)
 
 	return (0);
 }
+
+int
+xdma_iommu_release(struct xdma_iommu *xio)
+{
+
+	printf("%s\n", __func__);
+
+	pmap_release(&xio->p);
+
+	vmem_destroy(xio->vmem);
+
+	beri_iommu_set_base(0);
+
+	return (0);
+}

@@ -293,5 +293,6 @@ void iommu_add_entry(xdma_channel_t *xchan, vm_offset_t *va,
 void iommu_remove_entry(xdma_channel_t *xchan, vm_offset_t va);
 int iommu_init(void);
 int xdma_iommu_init(struct xdma_iommu *xio);
+int xdma_iommu_release(struct xdma_iommu *xio);
 
 #endif /* !_DEV_XDMA_XDMA_H_ */
