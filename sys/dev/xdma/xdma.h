@@ -288,10 +288,9 @@ int xchan_bank_put(xdma_channel_t *xchan, struct xdma_request *xr);
 
 /* iommu */
 
-void iommu_add_entry(xdma_channel_t *xchan, vm_offset_t *va,
+void xdma_iommu_add_entry(xdma_channel_t *xchan, vm_offset_t *va,
     vm_size_t size, vm_paddr_t pa);
-void iommu_remove_entry(xdma_channel_t *xchan, vm_offset_t va);
-int iommu_init(void);
+void xdma_iommu_remove_entry(xdma_channel_t *xchan, vm_offset_t va);
 int xdma_iommu_init(struct xdma_iommu *xio);
 int xdma_iommu_release(struct xdma_iommu *xio);
 

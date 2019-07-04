@@ -58,7 +58,7 @@ __FBSDID("$FreeBSD$");
 #include <dev/xdma/xdma.h>
 
 void
-iommu_remove_entry(xdma_channel_t *xchan, vm_offset_t va)
+xdma_iommu_remove_entry(xdma_channel_t *xchan, vm_offset_t va)
 {
 	struct xdma_iommu *xio;
 	vm_offset_t va1;
@@ -72,7 +72,7 @@ iommu_remove_entry(xdma_channel_t *xchan, vm_offset_t va)
 }
 
 void
-iommu_add_entry(xdma_channel_t *xchan, vm_offset_t *va,
+xdma_iommu_add_entry(xdma_channel_t *xchan, vm_offset_t *va,
     vm_size_t size, vm_paddr_t pa)
 {
 	struct xdma_iommu *xio;

@@ -353,7 +353,7 @@ xchan_seg_done(xdma_channel_t *xchan,
 				m_copyback(xr->m, 0, st->transferred,
 				    (void *)xr->buf.vaddr);
 		} else if (xchan->caps & XCHAN_CAP_IOMMU)
-			iommu_remove_entry(xchan, xr->iommu_addr);
+			xdma_iommu_remove_entry(xchan, xr->iommu_addr);
 
 		xr->status.error = st->error;
 		xr->status.transferred = st->transferred;
@@ -508,7 +508,7 @@ _xdma_load_data(xdma_channel_t *xchan, struct xdma_request *xr,
 			va = mtod(m, bus_addr_t);
 			pa = vtophys(va);
 			va = 0;
-			iommu_add_entry(xchan, &va,
+			xdma_iommu_add_entry(xchan, &va,
 			    m->m_pkthdr.len, pa);
 			/* Assuming that nsegs is 1 */
 			xr->iommu_addr = va;
