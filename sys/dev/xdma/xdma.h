@@ -148,7 +148,7 @@ struct xdma_channel {
 	uint32_t			caps;
 #define	XCHAN_CAP_BUSDMA		(1 << 0)
 #define	XCHAN_CAP_NOSEG			(1 << 1)
-#define	XCHAN_CAP_NOBUFS		(1 << 2)
+#define	XCHAN_CAP_BOUNCE		(1 << 2)
 #define	XCHAN_CAP_IOMMU			(1 << 3)
 
 	/* A real hardware driver channel. */
