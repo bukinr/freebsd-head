@@ -352,8 +352,12 @@ xchan_seg_done(xdma_channel_t *xchan,
 			    xr->direction == XDMA_DEV_TO_MEM)
 				m_copyback(xr->m, 0, st->transferred,
 				    (void *)xr->buf.vaddr);
-		} else if (xchan->caps & XCHAN_CAP_IOMMU)
-			xdma_iommu_remove_entry(xchan, xr->iommu_addr);
+		} else if (xchan->caps & XCHAN_CAP_IOMMU) {
+			if (xr->direction == XDMA_MEM_TO_DEV)
+				xdma_iommu_remove_entry(xchan, xr->src_addr);
+			else
+				xdma_iommu_remove_entry(xchan, xr->dst_addr);
+		}
 
 		xr->status.error = st->error;
 		xr->status.transferred = st->transferred;
@@ -486,7 +490,7 @@ _xdma_load_data(xdma_channel_t *xchan, struct xdma_request *xr,
 	xdma_controller_t *xdma;
 	struct mbuf *m;
 	uint32_t nsegs;
-	vm_offset_t va;
+	vm_offset_t va, addr;
 	bus_addr_t pa;
 
 	xdma = xchan->xdma;
@@ -503,13 +507,18 @@ _xdma_load_data(xdma_channel_t *xchan, struct xdma_request *xr,
 				    (void *)xr->buf.vaddr);
 			seg[0].ds_addr = (bus_addr_t)xr->buf.paddr;
 		} else if (xchan->caps & XCHAN_CAP_IOMMU) {
-			va = mtod(m, bus_addr_t);
-			pa = vtophys(va);
-			va = 0;
+			addr = mtod(m, bus_addr_t);
+			pa = vtophys(addr);
 			xdma_iommu_add_entry(xchan, &va,
 			    m->m_pkthdr.len, pa);
-			/* Assuming that nsegs is 1 */
-			xr->iommu_addr = va;
+			/*
+			 * Save VA so we can unload data later
+			 * after this transfer complete.
+			 */
+			if (xr->direction == XDMA_MEM_TO_DEV)
+				xr->src_addr = va;
+			else
+				xr->dst_addr = va;
 			seg[0].ds_addr = va;
 		} else
 			seg[0].ds_addr = mtod(m, bus_addr_t);

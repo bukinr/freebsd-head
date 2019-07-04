@@ -100,7 +100,6 @@ struct xchan_buf {
 struct xdma_request {
 	struct mbuf			*m;
 	struct bio			*bp;
-	vm_offset_t			iommu_addr;
 	enum xdma_operation_type	operation;
 	enum xdma_request_type		req_type;
 	enum xdma_direction		direction;
@@ -287,7 +286,6 @@ struct xdma_request * xchan_bank_get(xdma_channel_t *xchan);
 int xchan_bank_put(xdma_channel_t *xchan, struct xdma_request *xr);
 
 /* iommu */
-
 void xdma_iommu_add_entry(xdma_channel_t *xchan, vm_offset_t *va,
     vm_size_t size, vm_paddr_t pa);
 void xdma_iommu_remove_entry(xdma_channel_t *xchan, vm_offset_t va);
