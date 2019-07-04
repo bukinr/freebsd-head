@@ -497,9 +497,7 @@ _xdma_load_data(xdma_channel_t *xchan, struct xdma_request *xr,
 
 	switch (xr->req_type) {
 	case XR_TYPE_MBUF:
-		if (xchan->caps & XCHAN_CAP_BUSDMA)
-			seg[0].ds_addr = mtod(m, bus_addr_t);
-		else if (xchan->caps & XCHAN_CAP_BOUNCE) {
+		if (xchan->caps & XCHAN_CAP_BOUNCE) {
 			if (xr->direction == XDMA_MEM_TO_DEV)
 				m_copydata(m, 0, m->m_pkthdr.len,
 				    (void *)xr->buf.vaddr);
@@ -513,7 +511,8 @@ _xdma_load_data(xdma_channel_t *xchan, struct xdma_request *xr,
 			/* Assuming that nsegs is 1 */
 			xr->iommu_addr = va;
 			seg[0].ds_addr = va;
-		}
+		} else
+			seg[0].ds_addr = mtod(m, bus_addr_t);
 		seg[0].ds_len = m->m_pkthdr.len;
 		break;
 	case XR_TYPE_BIO:
