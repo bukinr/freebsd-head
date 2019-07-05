@@ -98,7 +98,6 @@ __FBSDID("$FreeBSD$");
 #include <machine/cache.h>
 #include <machine/md_var.h>
 #include <machine/tlb.h>
-#include <machine/cpuregs.h>
 
 #undef PMAP_DEBUG
 
@@ -177,7 +176,6 @@ static void pmap_invalidate_all(pmap_t pmap);
 static void pmap_invalidate_page(pmap_t pmap, vm_offset_t va);
 static void _pmap_unwire_ptp(pmap_t pmap, vm_offset_t va, vm_page_t m);
 
-static vm_page_t pmap_allocpte(pmap_t pmap, vm_offset_t va, u_int flags);
 static vm_page_t _pmap_allocpte(pmap_t pmap, unsigned ptepindex, u_int flags);
 static int pmap_unuse_pt(pmap_t, vm_offset_t, pd_entry_t);
 static pt_entry_t init_pte_prot(vm_page_t m, vm_prot_t access, vm_prot_t prot);
@@ -1217,7 +1215,7 @@ _pmap_allocpte(pmap_t pmap, unsigned ptepindex, u_int flags)
 	return (m);
 }
 
-static vm_page_t
+vm_page_t
 pmap_allocpte(pmap_t pmap, vm_offset_t va, u_int flags)
 {
 	unsigned ptepindex;
@@ -3698,53 +3696,5 @@ pmap_is_valid_memattr(pmap_t pmap __unused, vm_memattr_t mode)
 		return (TRUE);
 	default:
 		return (FALSE);
-	}
-}
-
-/* iommu */
-
-void
-iommu_kenter_attr(pmap_t p, vm_offset_t va,
-    vm_paddr_t pa, vm_memattr_t ma)
-{
-	pt_entry_t *pte;
-	vm_offset_t addr;
-	pt_entry_t opte, npte;
-
-	pte = pmap_pte(p, va);
-	if (pte == NULL) {
-		printf("%s: pte %p\n", __func__, pte);
-		pmap_allocpte(p, va, 0);
-		pte = pmap_pte(p, va);
-		printf("%s: pte (again) %p\n", __func__, pte);
-	}
-
-	addr = (vm_offset_t)pte;
-	addr &= ~((unsigned long long)MIPS_CCA_CACHED << 59);
-	addr |= ((unsigned long long)MIPS_CCA_UNCACHED << 59);
-	pte = (pt_entry_t *)addr;
-
-	opte = *pte;
-	npte = TLBLO_PA_TO_PFN(pa) | PTE_C(ma) | PTE_D | PTE_V | PTE_G;
-	*pte = npte;
-	//printf("pte %p opte %lx npte %lx\n", pte, opte, npte);
-	if (pte_test(&opte, PTE_V) && opte != npte) {
-		printf("reusing page %lx\n", va);
-		//panic("page %lx update required\n", va);
-		//pmap_update_page(p, va, npte);
-	}
-}
-
-void
-iommu_kenter_device(pmap_t p, vm_offset_t va, vm_size_t size, vm_paddr_t pa)
-{
-
-	KASSERT((size & PAGE_MASK) == 0,
-	    ("%s: device mapping not page-sized", __func__));
-
-	for (; size > 0; size -= PAGE_SIZE) {
-		iommu_kenter_attr(p, va, pa, VM_MEMATTR_UNCACHEABLE);
-		va += PAGE_SIZE;
-		pa += PAGE_SIZE;
 	}
 }
