@@ -1341,8 +1341,11 @@ atse_attach(device_t dev)
 	}
 
 	if (OF_getproplen(node, "beri,iommu") >= 0) {
-		xdma_iommu_init(&sc->xio);
+		sc->xio.platform_iommu_init = beri_iommu_init;
+		sc->xio.platform_iommu_release = beri_iommu_release;
 		sc->xio.platform_iommu_enter = beri_iommu_enter;
+		sc->xio.platform_iommu_remove = beri_iommu_remove;
+		xdma_iommu_init(&sc->xio);
 		sc->xchan_rx->xio = &sc->xio;
 		sc->xchan_tx->xio = &sc->xio;
 	}

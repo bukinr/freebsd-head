@@ -47,8 +47,6 @@ __FBSDID("$FreeBSD$");
 #include <vm/vm_extern.h>
 #include <vm/vm_page.h>
 
-#include <mips/beri/beri_iommu.h>
-
 #ifdef FDT
 #include <dev/fdt/fdt_common.h>
 #include <dev/ofw/ofw_bus.h>
@@ -84,7 +82,7 @@ xdma_iommu_remove_entry(xdma_channel_t *xchan, vm_offset_t va)
 	va1 = va & ~(PAGE_SIZE - 1);
 	xio = xchan->xio;
 
-	beri_iommu_invalidate(va);
+	xio->platform_iommu_remove(xio, va);
 
 	vmem_free(xio->vmem, va1, PAGE_SIZE);
 }
@@ -118,19 +116,14 @@ int
 xdma_iommu_init(struct xdma_iommu *xio)
 {
 
-	printf("%s\n", __func__);
-
 	pmap_pinit(&xio->p);
-
-	printf("%s: %lx\n", __func__, (uintptr_t)xio->p.pm_segtab);
 
 	xio->vmem = vmem_create("xDMA vmem", 0, 0, PAGE_SIZE,
 	    PAGE_SIZE, M_BESTFIT | M_WAITOK);
 	if (xio->vmem == NULL)
 		return (-1);
 
-	vmem_add(xio->vmem, 0xC000000000000000, (1ULL << 39), 0);
-	beri_iommu_set_base((uintptr_t)xio->p.pm_segtab);
+	xio->platform_iommu_init(xio);
 
 	return (0);
 }
@@ -139,13 +132,11 @@ int
 xdma_iommu_release(struct xdma_iommu *xio)
 {
 
-	printf("%s\n", __func__);
-
 	pmap_release(&xio->p);
 
 	vmem_destroy(xio->vmem);
 
-	beri_iommu_set_base(0);
+	xio->platform_iommu_release(xio);
 
 	return (0);
 }

@@ -60,6 +60,7 @@ __FBSDID("$FreeBSD$");
 #include <vm/vm_extern.h>
 #include <vm/vm_page.h>
 
+#include <dev/xdma/xdma.h>
 #include <mips/beri/beri_iommu.h>
 
 struct beri_iommu_softc {
@@ -102,6 +103,29 @@ beri_iommu_set_base(vm_offset_t addr)
 		return;
 
 	bus_write_8(sc->res[0], IOMMU_SET_BASE, htole64(addr));
+}
+
+void
+beri_iommu_release(struct xdma_iommu *xio)
+{
+
+	beri_iommu_set_base(0);
+}
+
+void
+beri_iommu_init(struct xdma_iommu *xio)
+{
+
+	vmem_add(xio->vmem, 0xC000000000000000, (1ULL << 39), 0);
+
+	beri_iommu_set_base((uintptr_t)xio->p.pm_segtab);
+}
+
+void
+beri_iommu_remove(struct xdma_iommu *xio, vm_offset_t va)
+{
+
+	beri_iommu_invalidate(va);
 }
 
 void
