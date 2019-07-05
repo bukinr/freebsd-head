@@ -57,7 +57,7 @@ __FBSDID("$FreeBSD$");
 
 #include <dev/xdma/xdma.h>
 
-void
+static void
 iommu_kenter_attr(pmap_t p, vm_offset_t va,
     vm_paddr_t pa, vm_memattr_t ma)
 {
@@ -89,7 +89,7 @@ iommu_kenter_attr(pmap_t p, vm_offset_t va,
 	}
 }
 
-void
+static void
 iommu_kenter_device(pmap_t p, vm_offset_t va, vm_size_t size, vm_paddr_t pa)
 {
 
