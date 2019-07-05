@@ -85,6 +85,8 @@ __FBSDID("$FreeBSD$");
 #include <machine/resource.h>
 #include <sys/rman.h>
 
+#include <mips/beri/beri_iommu.h>
+
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
 
@@ -1297,7 +1299,7 @@ atse_attach(device_t dev)
 	 * Embedded Peripherals IP User Guide.
 	 */
 	caps = XCHAN_CAP_NOSEG;
-	if (OF_getproplen(node, "iommu") >= 0)
+	if (OF_getproplen(node, "beri,iommu") >= 0)
 		caps |= XCHAN_CAP_IOMMU;
 
 	/* Alloc xDMA virtual channel. */
@@ -1338,8 +1340,9 @@ atse_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	if (OF_getproplen(node, "iommu") >= 0) {
+	if (OF_getproplen(node, "beri,iommu") >= 0) {
 		xdma_iommu_init(&sc->xio);
+		sc->xio.platform_iommu_enter = beri_iommu_enter;
 		sc->xchan_rx->xio = &sc->xio;
 		sc->xchan_tx->xio = &sc->xio;
 	}

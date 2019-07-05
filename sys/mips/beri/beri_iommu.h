@@ -34,7 +34,13 @@
 #ifndef	_MIPS_BERI_BERI_IOMMU_
 #define	_MIPS_BERI_BERI_IOMMU_
 
+#include <vm/vm.h>
+#include <vm/pmap.h>
+#include <vm/vm_extern.h>
+#include <vm/vm_page.h>
+
 void beri_iommu_invalidate(vm_offset_t addr);
 void beri_iommu_set_base(vm_offset_t addr);
+void beri_iommu_enter(pmap_t p, vm_offset_t va, vm_paddr_t pa);
 
 #endif /* !_MIPS_BERI_BERI_IOMMU_ */

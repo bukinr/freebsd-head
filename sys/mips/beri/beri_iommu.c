@@ -55,6 +55,11 @@ __FBSDID("$FreeBSD$");
 #include <machine/cpu.h>
 #include <machine/intr.h>
 
+#include <vm/vm.h>
+#include <vm/pmap.h>
+#include <vm/vm_extern.h>
+#include <vm/vm_page.h>
+
 #include <mips/beri/beri_iommu.h>
 
 struct beri_iommu_softc {
@@ -97,6 +102,33 @@ beri_iommu_set_base(vm_offset_t addr)
 		return;
 
 	bus_write_8(sc->res[0], IOMMU_SET_BASE, htole64(addr));
+}
+
+void
+beri_iommu_enter(pmap_t p, vm_offset_t va, vm_paddr_t pa)
+{
+	pt_entry_t *pte;
+	vm_offset_t addr;
+	pt_entry_t opte, npte;
+	vm_memattr_t ma;
+
+	pte = pmap_pte(p, va);
+	if (pte == NULL) {
+		pmap_allocpte(p, va, 0);
+		pte = pmap_pte(p, va);
+	}
+
+	addr = (vm_offset_t)pte;
+	addr &= ~((unsigned long long)MIPS_CCA_CACHED << 59);
+	addr |= ((unsigned long long)MIPS_CCA_UNCACHED << 59);
+	pte = (pt_entry_t *)addr;
+
+	ma = VM_MEMATTR_UNCACHEABLE;
+	opte = *pte;
+	npte = TLBLO_PA_TO_PFN(pa) | PTE_C(ma) | PTE_D | PTE_V | PTE_G;
+	*pte = npte;
+	if (pte_test(&opte, PTE_V) && opte != npte)
+		beri_iommu_invalidate(va);
 }
 
 static int

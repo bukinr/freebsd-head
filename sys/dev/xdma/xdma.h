@@ -129,6 +129,7 @@ struct xdma_sglist {
 struct xdma_iommu {
 	struct pmap p;
 	vmem_t *vmem;
+	void (*platform_iommu_enter)(pmap_t p, vm_offset_t va, vm_paddr_t pa);
 };
 
 struct xdma_channel {

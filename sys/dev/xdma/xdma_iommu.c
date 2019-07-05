@@ -58,46 +58,18 @@ __FBSDID("$FreeBSD$");
 #include <dev/xdma/xdma.h>
 
 static void
-iommu_kenter_attr(pmap_t p, vm_offset_t va,
-    vm_paddr_t pa, vm_memattr_t ma)
+xdma_iommu_enter(struct xdma_iommu *xio, vm_offset_t va,
+    vm_size_t size, vm_paddr_t pa)
 {
-	pt_entry_t *pte;
-	vm_offset_t addr;
-	pt_entry_t opte, npte;
+	pmap_t p;
 
-	pte = pmap_pte(p, va);
-	if (pte == NULL) {
-		printf("%s: pte %p\n", __func__, pte);
-		pmap_allocpte(p, va, 0);
-		pte = pmap_pte(p, va);
-		printf("%s: pte (again) %p\n", __func__, pte);
-	}
-
-	addr = (vm_offset_t)pte;
-	addr &= ~((unsigned long long)MIPS_CCA_CACHED << 59);
-	addr |= ((unsigned long long)MIPS_CCA_UNCACHED << 59);
-	pte = (pt_entry_t *)addr;
-
-	opte = *pte;
-	npte = TLBLO_PA_TO_PFN(pa) | PTE_C(ma) | PTE_D | PTE_V | PTE_G;
-	*pte = npte;
-	//printf("pte %p opte %lx npte %lx\n", pte, opte, npte);
-	if (pte_test(&opte, PTE_V) && opte != npte) {
-		printf("reusing page %lx\n", va);
-		//panic("page %lx update required\n", va);
-		//pmap_update_page(p, va, npte);
-	}
-}
-
-static void
-iommu_kenter_device(pmap_t p, vm_offset_t va, vm_size_t size, vm_paddr_t pa)
-{
+	p = &xio->p;
 
 	KASSERT((size & PAGE_MASK) == 0,
 	    ("%s: device mapping not page-sized", __func__));
 
 	for (; size > 0; size -= PAGE_SIZE) {
-		iommu_kenter_attr(p, va, pa, VM_MEMATTR_UNCACHEABLE);
+		xio->platform_iommu_enter(p, va, pa);
 		va += PAGE_SIZE;
 		pa += PAGE_SIZE;
 	}
@@ -129,7 +101,7 @@ xdma_iommu_add_entry(xdma_channel_t *xchan, vm_offset_t *va,
 
 	if (vmem_alloc(xio->vmem, size,
 	    M_BESTFIT | M_NOWAIT, &addr)) {
-		panic("cant allocate memory\n");
+		panic("Could not allocate virtual address.\n");
 	}
 
 	addr |= pa & (PAGE_SIZE - 1);
@@ -138,7 +110,8 @@ xdma_iommu_add_entry(xdma_channel_t *xchan, vm_offset_t *va,
 
 	printf("%s: va %lx size %lx pa %lx\n",
 	    __func__, addr, size, pa);
-	iommu_kenter_device(&xio->p, addr, size, pa);
+
+	xdma_iommu_enter(xio, addr, size, pa);
 }
 
 int
@@ -157,7 +130,6 @@ xdma_iommu_init(struct xdma_iommu *xio)
 		return (-1);
 
 	vmem_add(xio->vmem, 0xC000000000000000, (1ULL << 39), 0);
-
 	beri_iommu_set_base((uintptr_t)xio->p.pm_segtab);
 
 	return (0);

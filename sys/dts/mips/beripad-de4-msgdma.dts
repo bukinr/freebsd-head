@@ -345,6 +345,7 @@
 			       <&dm_msgdma1 1 1 0xffffffff>;
 			dma-names = "tx", "rx";
 			status = "okay";
+			beri,iommu;
 		};
 
 		touchscreen@70400000 {
