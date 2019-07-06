@@ -34,18 +34,6 @@
 #ifndef	_MIPS_BERI_BERI_IOMMU_
 #define	_MIPS_BERI_BERI_IOMMU_
 
-#include <vm/vm.h>
-#include <vm/pmap.h>
-#include <vm/vm_extern.h>
-#include <vm/vm_page.h>
-
-#include <dev/xdma/xdma.h>
-
-void beri_iommu_invalidate(vm_offset_t addr);
-void beri_iommu_set_base(vm_offset_t addr);
-void beri_iommu_enter(pmap_t p, vm_offset_t va, vm_paddr_t pa);
-void beri_iommu_init(struct xdma_iommu *xio);
-void beri_iommu_release(struct xdma_iommu *xio);
-void beri_iommu_remove(struct xdma_iommu *xio, vm_offset_t va);
+extern struct xdma_iommu_methods beri_dm_iommu;
 
 #endif /* !_MIPS_BERI_BERI_IOMMU_ */

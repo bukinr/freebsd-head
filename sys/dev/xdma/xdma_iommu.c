@@ -59,15 +59,17 @@ static void
 xdma_iommu_enter(struct xdma_iommu *xio, vm_offset_t va,
     vm_size_t size, vm_paddr_t pa)
 {
+	struct xdma_iommu_methods *m;
 	pmap_t p;
 
 	p = &xio->p;
+	m = xio->methods;
 
 	KASSERT((size & PAGE_MASK) == 0,
 	    ("%s: device mapping not page-sized", __func__));
 
 	for (; size > 0; size -= PAGE_SIZE) {
-		xio->platform_iommu_enter(p, va, pa);
+		m->iommu_enter(p, va, pa);
 		va += PAGE_SIZE;
 		pa += PAGE_SIZE;
 	}
@@ -76,14 +78,16 @@ xdma_iommu_enter(struct xdma_iommu *xio, vm_offset_t va,
 void
 xdma_iommu_remove_entry(xdma_channel_t *xchan, vm_offset_t va)
 {
+	struct xdma_iommu_methods *m;
 	struct xdma_iommu *xio;
 	vm_offset_t va1;
 
-	va1 = va & ~(PAGE_SIZE - 1);
 	xio = xchan->xio;
+	m = xio->methods;
 
-	xio->platform_iommu_remove(xio, va);
+	m->iommu_remove(xio, va);
 
+	va1 = va & ~(PAGE_SIZE - 1);
 	vmem_free(xio->vmem, va1, PAGE_SIZE);
 }
 
@@ -115,6 +119,9 @@ xdma_iommu_add_entry(xdma_channel_t *xchan, vm_offset_t *va,
 int
 xdma_iommu_init(struct xdma_iommu *xio)
 {
+	struct xdma_iommu_methods *m;
+
+	m = xio->methods;
 
 	pmap_pinit(&xio->p);
 
@@ -123,7 +130,7 @@ xdma_iommu_init(struct xdma_iommu *xio)
 	if (xio->vmem == NULL)
 		return (-1);
 
-	xio->platform_iommu_init(xio);
+	m->iommu_init(xio);
 
 	return (0);
 }
@@ -131,12 +138,15 @@ xdma_iommu_init(struct xdma_iommu *xio)
 int
 xdma_iommu_release(struct xdma_iommu *xio)
 {
+	struct xdma_iommu_methods *m;
+
+	m = xio->methods;
 
 	pmap_release(&xio->p);
 
 	vmem_destroy(xio->vmem);
 
-	xio->platform_iommu_release(xio);
+	m->iommu_release(xio);
 
 	return (0);
 }

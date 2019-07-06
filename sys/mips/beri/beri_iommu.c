@@ -81,7 +81,7 @@ static struct resource_spec beri_iommu_spec[] = {
 #define	IOMMU_INVALIDATE	0x00
 #define	IOMMU_SET_BASE		0x08
 
-void
+static void
 beri_iommu_invalidate(vm_offset_t addr)
 {
 	struct beri_iommu_softc *sc;
@@ -93,7 +93,7 @@ beri_iommu_invalidate(vm_offset_t addr)
 	bus_write_8(sc->res[0], IOMMU_INVALIDATE, htole64(addr));
 }
 
-void
+static void
 beri_iommu_set_base(vm_offset_t addr)
 {
 	struct beri_iommu_softc *sc;
@@ -105,14 +105,14 @@ beri_iommu_set_base(vm_offset_t addr)
 	bus_write_8(sc->res[0], IOMMU_SET_BASE, htole64(addr));
 }
 
-void
+static void
 beri_iommu_release(struct xdma_iommu *xio)
 {
 
 	beri_iommu_set_base(0);
 }
 
-void
+static void
 beri_iommu_init(struct xdma_iommu *xio)
 {
 
@@ -121,14 +121,14 @@ beri_iommu_init(struct xdma_iommu *xio)
 	beri_iommu_set_base((uintptr_t)xio->p.pm_segtab);
 }
 
-void
+static void
 beri_iommu_remove(struct xdma_iommu *xio, vm_offset_t va)
 {
 
 	beri_iommu_invalidate(va);
 }
 
-void
+static void
 beri_iommu_enter(pmap_t p, vm_offset_t va, vm_paddr_t pa)
 {
 	pt_entry_t *pte;
@@ -205,6 +205,13 @@ beri_iommu_detach(device_t dev)
 
 	return (0);
 }
+
+struct xdma_iommu_methods beri_dm_iommu = {
+	.iommu_init = beri_iommu_init,
+	.iommu_release = beri_iommu_release,
+	.iommu_enter = beri_iommu_enter,
+	.iommu_remove = beri_iommu_remove,
+};
 
 static device_method_t beri_iommu_methods[] = {
 	DEVMETHOD(device_probe,		beri_iommu_probe),
