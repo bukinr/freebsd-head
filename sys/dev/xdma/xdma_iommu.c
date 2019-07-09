@@ -55,6 +55,15 @@ __FBSDID("$FreeBSD$");
 
 #include <dev/xdma/xdma.h>
 
+#define XDMA_IOMMU_DEBUG
+#undef XDMA_IOMMU_DEBUG
+
+#ifdef XDMA_IOMMU_DEBUG
+#define dprintf(fmt, ...)  printf(fmt, ##__VA_ARGS__)
+#else
+#define dprintf(fmt, ...)
+#endif
+
 static void
 xdma_iommu_enter(struct xdma_iommu *xio, vm_offset_t va,
     vm_size_t size, vm_paddr_t pa)
@@ -65,6 +74,8 @@ xdma_iommu_enter(struct xdma_iommu *xio, vm_offset_t va,
 	p = &xio->p;
 	m = xio->methods;
 
+	KASSERT(m != NULL && m->iommu_enter != NULL,
+	    ("%s: method is not initialized", __func__));
 	KASSERT((size & PAGE_MASK) == 0,
 	    ("%s: device mapping not page-sized", __func__));
 
@@ -84,6 +95,9 @@ xdma_iommu_remove_entry(xdma_channel_t *xchan, vm_offset_t va)
 
 	xio = xchan->xio;
 	m = xio->methods;
+
+	KASSERT(m != NULL && m->iommu_remove != NULL,
+	    ("%s: method is not initialized", __func__));
 
 	m->iommu_remove(xio, va);
 
@@ -110,7 +124,7 @@ xdma_iommu_add_entry(xdma_channel_t *xchan, vm_offset_t *va,
 
 	*va = addr;
 
-	printf("%s: va %lx size %lx pa %lx\n",
+	dprintf("%s: va %lx size %lx pa %lx\n",
 	    __func__, addr, size, pa);
 
 	xdma_iommu_enter(xio, addr, size, pa);
@@ -123,10 +137,13 @@ xdma_iommu_init(struct xdma_iommu *xio)
 
 	m = xio->methods;
 
+	KASSERT(m != NULL && m->iommu_init != NULL,
+	    ("%s: method is not initialized", __func__));
+
 	pmap_pinit(&xio->p);
 
 	xio->vmem = vmem_create("xDMA vmem", 0, 0, PAGE_SIZE,
-	    PAGE_SIZE, M_BESTFIT | M_WAITOK);
+	    PAGE_SIZE, M_FIRSTFIT | M_WAITOK);
 	if (xio->vmem == NULL)
 		return (-1);
 
@@ -141,6 +158,9 @@ xdma_iommu_release(struct xdma_iommu *xio)
 	struct xdma_iommu_methods *m;
 
 	m = xio->methods;
+
+	KASSERT(m != NULL && m->iommu_release != NULL,
+	    ("%s: method is not initialized", __func__));
 
 	pmap_release(&xio->p);
 
