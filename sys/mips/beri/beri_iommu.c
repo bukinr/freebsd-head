@@ -51,6 +51,7 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
 
+#include <machine/cache.h>
 #include <machine/bus.h>
 #include <machine/cpu.h>
 #include <machine/intr.h>
@@ -63,8 +64,13 @@ __FBSDID("$FreeBSD$");
 #include <dev/xdma/xdma.h>
 #include <mips/beri/beri_iommu.h>
 
+#define	IOMMU_INVALIDATE	0x00
+#define	IOMMU_SET_BASE		0x08
+
+#define pmap_pde_index(v)       (((v) >> PDRSHIFT) & (NPDEPG - 1))
+
 struct beri_iommu_softc {
-	struct resource		*res[3];
+	struct resource		*res[1];
 	device_t		dev;
 	bus_space_tag_t		bst_data;
 	bus_space_handle_t	bsh_data;
@@ -77,9 +83,6 @@ static struct resource_spec beri_iommu_spec[] = {
 	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },
 	{ -1, 0 }
 };
-
-#define	IOMMU_INVALIDATE	0x00
-#define	IOMMU_SET_BASE		0x08
 
 static void
 beri_iommu_invalidate(vm_offset_t addr)
@@ -133,8 +136,11 @@ beri_iommu_enter(pmap_t p, vm_offset_t va, vm_paddr_t pa)
 {
 	pt_entry_t *pte;
 	vm_offset_t addr;
+	vm_offset_t pde;
 	pt_entry_t opte, npte;
 	vm_memattr_t ma;
+
+	//printf("%s: va %lx pa %lx\n", __func__, va, pa);
 
 	pte = pmap_pte(p, va);
 	if (pte == NULL) {
@@ -142,6 +148,14 @@ beri_iommu_enter(pmap_t p, vm_offset_t va, vm_paddr_t pa)
 		pte = pmap_pte(p, va);
 	}
 
+	/* Write back, invalidate pde and make it uncached. */
+	pde = (vm_offset_t)p->pm_segtab[pmap_pde_index(va)];
+	mips_dcache_wbinv_range(pde, sizeof(vm_offset_t));
+	pde &= ~((unsigned long long)MIPS_CCA_CACHED << 59);
+	pde |= ((unsigned long long)MIPS_CCA_UNCACHED << 59);
+	p->pm_segtab[pmap_pde_index(va)] = (void *)pde;
+
+	/* Make pte pointer uncached. */
 	addr = (vm_offset_t)pte;
 	addr &= ~((unsigned long long)MIPS_CCA_CACHED << 59);
 	addr |= ((unsigned long long)MIPS_CCA_UNCACHED << 59);
