@@ -140,17 +140,17 @@ beri_iommu_enter(pmap_t p, vm_offset_t va, vm_paddr_t pa)
 	pt_entry_t opte, npte;
 	vm_memattr_t ma;
 
-	//printf("%s: va %lx pa %lx\n", __func__, va, pa);
-
 	pte = pmap_pte(p, va);
 	if (pte == NULL) {
 		pmap_allocpte(p, va, 0);
 		pte = pmap_pte(p, va);
 	}
 
-	/* Write back, invalidate pde and make it uncached. */
+	/* Write back, invalidate pde. */
 	pde = (vm_offset_t)p->pm_segtab[pmap_pde_index(va)];
 	mips_dcache_wbinv_range(pde, sizeof(vm_offset_t));
+
+	/* Make pde pointer uncached. */
 	pde &= ~((unsigned long long)MIPS_CCA_CACHED << 59);
 	pde |= ((unsigned long long)MIPS_CCA_UNCACHED << 59);
 	p->pm_segtab[pmap_pde_index(va)] = (void *)pde;
