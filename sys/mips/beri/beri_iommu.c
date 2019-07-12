@@ -119,7 +119,8 @@ static void
 beri_iommu_init(struct xdma_iommu *xio)
 {
 
-	vmem_add(xio->vmem, 0xC000000000000000, (1ULL << 39), 0);
+	//vmem_add(xio->vmem, 0xC000000000000000, (1ULL << 39), 0);
+	vmem_add(xio->vmem, 0x0, (1 << 30), 0);
 
 	beri_iommu_set_base((uintptr_t)xio->p.pm_segtab);
 }
@@ -140,8 +141,14 @@ beri_iommu_enter(pmap_t p, vm_offset_t va, vm_paddr_t pa)
 	pt_entry_t opte, npte;
 	vm_memattr_t ma;
 
+	vm_page_t m;
+	m = PHYS_TO_VM_PAGE(pa);
+	pmap_enter(p, va, m, VM_PROT_READ | VM_PROT_WRITE, 0, 0);
+
 	pte = pmap_pte(p, va);
 	if (pte == NULL) {
+		panic("pte is NULL\n");
+
 		pmap_allocpte(p, va, 0);
 		pte = pmap_pte(p, va);
 	}
