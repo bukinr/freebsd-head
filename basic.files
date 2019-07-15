@@ -23,6 +23,7 @@ bin/tcsh
 dev
 etc/defaults/rc.conf
 etc/devd.conf
+etc/fstab
 etc/gettytab
 etc/group
 etc/login.conf
@@ -41,6 +42,7 @@ etc/passwd
 etc/pccard_ether
 etc/protocols
 etc/pwd.db
+etc/rc.conf
 etc/ttys
 etc/rc
 etc/rc.d
@@ -100,13 +102,18 @@ lib/libnv.so.0
 lib/libpcap.so.8
 lib/libsbuf.so.6
 lib/libthr.so.3
-lib/libufs.so.6
+lib/libufs.so.7
 lib/libutil.so.9
 lib/libxo.so.0
 lib/libz.so.6
 libexec/ld-elf.so.1
 mnt
 root
+root/d
+root/detach.sh
+root/e
+root/run.sh
+root/test.sh
 sbin/dhclient
 sbin/dhclient-script
 sbin/dmesg
@@ -182,6 +189,7 @@ usr/lib/libbsm.so.3
 usr/lib/libblacklist.so.0
 usr/lib/libbz2.so.4
 usr/lib/libcom_err.so.5
+usr/lib/libdevctl.so.5
 usr/lib/libdevinfo.so.6
 usr/lib/libelf.so
 usr/lib/libgnuregex.so.5
@@ -226,9 +234,11 @@ usr/lib/libprivateldns.so.5
 usr/lib/libprivatessh.so.5
 usr/libexec/getty
 usr/libexec/sftp-server
+usr/sbin/bm
 usr/sbin/arp
 usr/sbin/chown
 usr/sbin/devinfo
+usr/sbin/devctl
 usr/sbin/diskinfo
 usr/sbin/iostat
 usr/sbin/ip6addrctl
