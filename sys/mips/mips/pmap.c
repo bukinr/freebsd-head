@@ -176,6 +176,7 @@ static void pmap_invalidate_all(pmap_t pmap);
 static void pmap_invalidate_page(pmap_t pmap, vm_offset_t va);
 static void _pmap_unwire_ptp(pmap_t pmap, vm_offset_t va, vm_page_t m);
 
+static vm_page_t pmap_allocpte(pmap_t pmap, vm_offset_t va, u_int flags);
 static vm_page_t _pmap_allocpte(pmap_t pmap, unsigned ptepindex, u_int flags);
 static int pmap_unuse_pt(pmap_t, vm_offset_t, pd_entry_t);
 static pt_entry_t init_pte_prot(vm_page_t m, vm_prot_t access, vm_prot_t prot);
@@ -1215,7 +1216,7 @@ _pmap_allocpte(pmap_t pmap, unsigned ptepindex, u_int flags)
 	return (m);
 }
 
-vm_page_t
+static vm_page_t
 pmap_allocpte(pmap_t pmap, vm_offset_t va, u_int flags)
 {
 	unsigned ptepindex;

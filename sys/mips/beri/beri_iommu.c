@@ -140,18 +140,14 @@ beri_iommu_enter(pmap_t p, vm_offset_t va, vm_paddr_t pa)
 	vm_offset_t pde;
 	pt_entry_t opte, npte;
 	vm_memattr_t ma;
-
 	vm_page_t m;
+
 	m = PHYS_TO_VM_PAGE(pa);
 	pmap_enter(p, va, m, VM_PROT_READ | VM_PROT_WRITE, 0, 0);
 
 	pte = pmap_pte(p, va);
-	if (pte == NULL) {
+	if (pte == NULL)
 		panic("pte is NULL\n");
-
-		pmap_allocpte(p, va, 0);
-		pte = pmap_pte(p, va);
-	}
 
 	/* Write back, invalidate pde. */
 	pde = (vm_offset_t)p->pm_segtab[pmap_pde_index(va)];
