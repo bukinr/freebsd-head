@@ -20,10 +20,10 @@ options         FDT
 hints		"BERI_DE4.hints"	# Flash partitions still use hints.
 
 device		altera_atse
-device		altera_avgen
+#device		altera_avgen
 device		altera_jtag_uart
-device		altera_sdcard
-device		terasic_de4led
+#device		altera_sdcard
+#device		terasic_de4led
 #device		terasic_mtl
 
 device		bpf
@@ -43,7 +43,7 @@ options 	INTRNG
 #
 # DMA support
 #
-options		ALTERA_MSGDMA_DESC_PF_STD
+options		ALTERA_MSGDMA_DESC_PF_EXT
 device		xdma
 device		altera_softdma
 device		altera_msgdma
@@ -54,5 +54,5 @@ device		altera_msgdma
 #options	USB_DEBUG
 #options	USB_REQ_DEBUG
 #options	USB_VERBOSE
-device		usb
-device		saf1761otg
+#device		usb
+#device		saf1761otg
