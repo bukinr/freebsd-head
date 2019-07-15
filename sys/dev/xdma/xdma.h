@@ -38,8 +38,6 @@
 #include <sys/vmem.h>
 
 #include <vm/vm.h>
-#include <vm/vm_extern.h>
-#include <vm/vm_kern.h>
 #include <vm/pmap.h>
 
 enum xdma_direction {
