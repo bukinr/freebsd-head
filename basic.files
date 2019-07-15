@@ -82,7 +82,7 @@ lib/libc.so.7
 lib/libcasper.so.1
 lib/casper/libcap_dns.so.2
 lib/libcrypt.so.5
-lib/libcrypto.so.8
+lib/libcrypto.so.111
 lib/libdevstat.so.7
 lib/libedit.so.7
 lib/libelf.so.2
@@ -94,6 +94,8 @@ lib/libkvm.so.7
 lib/libm.so.5
 lib/libmd.so.6
 lib/libncursesw.so.8
+lib/libibverbs.so.1
+lib/libmlx5.so.1
 lib/libnv.so.0
 lib/libpcap.so.8
 lib/libsbuf.so.6
@@ -177,8 +179,8 @@ usr/lib32
 usr/lib32/libcap_dns.so.2
 usr/lib/libasn1.so.11
 usr/lib/libbsm.so.3
+usr/lib/libblacklist.so.0
 usr/lib/libbz2.so.4
-usr/lib/libcrypto.so.111
 usr/lib/libcom_err.so.5
 usr/lib/libdevinfo.so.6
 usr/lib/libelf.so
@@ -194,6 +196,7 @@ usr/lib/libopie.so.8
 usr/lib/libpam.so.6
 usr/lib/libprocstat.so.1
 usr/lib/libroken.so.11
+usr/lib/libssl.so.111
 usr/lib/libusb.so.3
 usr/lib/libwind.so.11
 usr/lib/libwrap.so.6
