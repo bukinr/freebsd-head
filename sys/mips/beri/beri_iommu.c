@@ -2,7 +2,6 @@
  * SPDX-License-Identifier: BSD-2-Clause
  *
  * Copyright (c) 2019 Ruslan Bukin <br@bsdpad.com>
- * All rights reserved.
  *
  * This software was developed by SRI International and the University of
  * Cambridge Computer Laboratory (Department of Computer Science and
@@ -206,8 +205,6 @@ beri_iommu_attach(device_t dev)
 
 	sc = device_get_softc(dev);
 	sc->dev = dev;
-
-	printf("%s: nameunit %s\n", __func__, device_get_nameunit(sc->dev));
 
 	if (bus_alloc_resources(dev, beri_iommu_spec, sc->res)) {
 		device_printf(dev, "could not allocate resources\n");

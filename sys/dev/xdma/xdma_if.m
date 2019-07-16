@@ -1,5 +1,5 @@
 #-
-# Copyright (c) 2016-2018 Ruslan Bukin <br@bsdpad.com>
+# Copyright (c) 2016-2019 Ruslan Bukin <br@bsdpad.com>
 # All rights reserved.
 #
 # This software was developed by SRI International and the University of
@@ -115,16 +115,26 @@ METHOD int channel_control {
 };
 
 # IOMMU interface
+
+#
+# Initialize pmap
+#
 METHOD int iommu_init {
 	device_t dev;
 	struct xdma_iommu *xio;
 };
 
+#
+# Release pmap
+#
 METHOD int iommu_release {
 	device_t dev;
 	struct xdma_iommu *xio;
 };
 
+#
+# Enter mapping
+#
 METHOD int iommu_enter {
 	device_t dev;
 	struct xdma_iommu *xio;
@@ -132,6 +142,9 @@ METHOD int iommu_enter {
 	vm_offset_t pa;
 };
 
+#
+# Remove mapping
+#
 METHOD int iommu_remove {
 	device_t dev;
 	struct xdma_iommu *xio;
