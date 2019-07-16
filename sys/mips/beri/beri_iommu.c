@@ -62,7 +62,6 @@ __FBSDID("$FreeBSD$");
 #include <vm/vm_page.h>
 
 #include <dev/xdma/xdma.h>
-#include <mips/beri/beri_iommu.h>
 
 #include "xdma_if.h"
 
