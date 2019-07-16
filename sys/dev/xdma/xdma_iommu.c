@@ -54,6 +54,7 @@ __FBSDID("$FreeBSD$");
 #endif
 
 #include <dev/xdma/xdma.h>
+#include "xdma_if.h"
 
 #define XDMA_IOMMU_DEBUG
 #undef XDMA_IOMMU_DEBUG
@@ -68,19 +69,15 @@ static void
 xdma_iommu_enter(struct xdma_iommu *xio, vm_offset_t va,
     vm_size_t size, vm_paddr_t pa)
 {
-	struct xdma_iommu_methods *m;
 	pmap_t p;
 
 	p = &xio->p;
-	m = xio->methods;
 
-	KASSERT(m != NULL && m->iommu_enter != NULL,
-	    ("%s: method is not initialized", __func__));
 	KASSERT((size & PAGE_MASK) == 0,
 	    ("%s: device mapping not page-sized", __func__));
 
 	for (; size > 0; size -= PAGE_SIZE) {
-		m->iommu_enter(p, va, pa);
+		XDMA_IOMMU_ENTER(xio->dev, xio, va, pa);
 		va += PAGE_SIZE;
 		pa += PAGE_SIZE;
 	}
@@ -89,17 +86,12 @@ xdma_iommu_enter(struct xdma_iommu *xio, vm_offset_t va,
 void
 xdma_iommu_remove_entry(xdma_channel_t *xchan, vm_offset_t va)
 {
-	struct xdma_iommu_methods *m;
 	struct xdma_iommu *xio;
 	vm_offset_t va1;
 
 	xio = xchan->xio;
-	m = xio->methods;
 
-	KASSERT(m != NULL && m->iommu_remove != NULL,
-	    ("%s: method is not initialized", __func__));
-
-	m->iommu_remove(xio, va);
+	XDMA_IOMMU_REMOVE(xio->dev, xio, va);
 
 	va1 = va & ~(PAGE_SIZE - 1);
 	vmem_free(xio->vmem, va1, PAGE_SIZE);
@@ -133,12 +125,6 @@ xdma_iommu_add_entry(xdma_channel_t *xchan, vm_offset_t *va,
 int
 xdma_iommu_init(struct xdma_iommu *xio)
 {
-	struct xdma_iommu_methods *m;
-
-	m = xio->methods;
-
-	KASSERT(m != NULL && m->iommu_init != NULL,
-	    ("%s: method is not initialized", __func__));
 
 	pmap_pinit(&xio->p);
 
@@ -147,7 +133,7 @@ xdma_iommu_init(struct xdma_iommu *xio)
 	if (xio->vmem == NULL)
 		return (-1);
 
-	m->iommu_init(xio);
+	XDMA_IOMMU_INIT(xio->dev, xio);
 
 	return (0);
 }
@@ -155,18 +141,12 @@ xdma_iommu_init(struct xdma_iommu *xio)
 int
 xdma_iommu_release(struct xdma_iommu *xio)
 {
-	struct xdma_iommu_methods *m;
-
-	m = xio->methods;
-
-	KASSERT(m != NULL && m->iommu_release != NULL,
-	    ("%s: method is not initialized", __func__));
 
 	pmap_release(&xio->p);
 
 	vmem_destroy(xio->vmem);
 
-	m->iommu_release(xio);
+	XDMA_IOMMU_RELEASE(xio->dev, xio);
 
 	return (0);
 }

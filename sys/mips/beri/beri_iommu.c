@@ -64,10 +64,12 @@ __FBSDID("$FreeBSD$");
 #include <dev/xdma/xdma.h>
 #include <mips/beri/beri_iommu.h>
 
+#include "xdma_if.h"
+
 #define	IOMMU_INVALIDATE	0x00
 #define	IOMMU_SET_BASE		0x08
 
-#define pmap_pde_index(v)       (((v) >> PDRSHIFT) & (NPDEPG - 1))
+#define	pmap_pde_index(v)	(((v) >> PDRSHIFT) & (NPDEPG - 1))
 
 struct beri_iommu_softc {
 	struct resource		*res[1];
@@ -77,70 +79,78 @@ struct beri_iommu_softc {
 	uint32_t		offs;
 };
 
-struct beri_iommu_softc *beri_iommu_sc;
-
 static struct resource_spec beri_iommu_spec[] = {
 	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },
 	{ -1, 0 }
 };
 
 static void
-beri_iommu_invalidate(vm_offset_t addr)
+beri_iommu_invalidate(struct beri_iommu_softc *sc, vm_offset_t addr)
 {
-	struct beri_iommu_softc *sc;
-
-	sc = beri_iommu_sc;
-	if (sc == NULL)
-		return;
 
 	bus_write_8(sc->res[0], IOMMU_INVALIDATE, htole64(addr));
 }
 
 static void
-beri_iommu_set_base(vm_offset_t addr)
+beri_iommu_set_base(struct beri_iommu_softc *sc, vm_offset_t addr)
 {
-	struct beri_iommu_softc *sc;
-
-	sc = beri_iommu_sc;
-	if (sc == NULL)
-		return;
 
 	bus_write_8(sc->res[0], IOMMU_SET_BASE, htole64(addr));
 }
 
-static void
-beri_iommu_release(struct xdma_iommu *xio)
+static int
+beri_iommu_release(device_t dev, struct xdma_iommu *xio)
 {
+	struct beri_iommu_softc *sc;
 
-	beri_iommu_set_base(0);
+	sc = device_get_softc(dev);
+
+	beri_iommu_set_base(sc, 0);
+
+	return (0);
 }
 
-static void
-beri_iommu_init(struct xdma_iommu *xio)
+static int
+beri_iommu_init(device_t dev, struct xdma_iommu *xio)
 {
+	struct beri_iommu_softc *sc;
 
-	//vmem_add(xio->vmem, 0xC000000000000000, (1ULL << 39), 0);
+	sc = device_get_softc(dev);
+
 	vmem_add(xio->vmem, 0x0, (1 << 30), 0);
 
-	beri_iommu_set_base((uintptr_t)xio->p.pm_segtab);
+	beri_iommu_set_base(sc, (uintptr_t)xio->p.pm_segtab);
+
+	return (0);
 }
 
-static void
-beri_iommu_remove(struct xdma_iommu *xio, vm_offset_t va)
+static int
+beri_iommu_remove(device_t dev, struct xdma_iommu *xio, vm_offset_t va)
 {
+	struct beri_iommu_softc *sc;
 
-	beri_iommu_invalidate(va);
+	sc = device_get_softc(dev);
+
+	beri_iommu_invalidate(sc, va);
+
+	return (0);
 }
 
-static void
-beri_iommu_enter(pmap_t p, vm_offset_t va, vm_paddr_t pa)
+static int
+beri_iommu_enter(device_t dev, struct xdma_iommu *xio, vm_offset_t va,
+    vm_paddr_t pa)
 {
+	struct beri_iommu_softc *sc;
 	pt_entry_t *pte;
 	vm_offset_t addr;
 	vm_offset_t pde;
 	pt_entry_t opte, npte;
+	pmap_t p;
 	vm_memattr_t ma;
 	vm_page_t m;
+
+	sc = device_get_softc(dev);
+	p = &xio->p;
 
 	m = PHYS_TO_VM_PAGE(pa);
 	pmap_enter(p, va, m, VM_PROT_READ | VM_PROT_WRITE, 0, 0);
@@ -169,7 +179,9 @@ beri_iommu_enter(pmap_t p, vm_offset_t va, vm_paddr_t pa)
 	npte = TLBLO_PA_TO_PFN(pa) | PTE_C(ma) | PTE_D | PTE_V | PTE_G;
 	*pte = npte;
 	if (pte_test(&opte, PTE_V) && opte != npte)
-		beri_iommu_invalidate(va);
+		beri_iommu_invalidate(sc, va);
+
+	return (0);
 }
 
 static int
@@ -191,6 +203,7 @@ static int
 beri_iommu_attach(device_t dev)
 {
 	struct beri_iommu_softc *sc;
+	phandle_t xref, node;
 
 	sc = device_get_softc(dev);
 	sc->dev = dev;
@@ -206,7 +219,9 @@ beri_iommu_attach(device_t dev)
 	sc->bst_data = rman_get_bustag(sc->res[0]);
 	sc->bsh_data = rman_get_bushandle(sc->res[0]);
 
-	beri_iommu_sc = sc;
+	node = ofw_bus_get_node(dev);
+	xref = OF_xref_from_node(node);
+	OF_device_register_xref(xref, dev);
 
 	return (0);
 }
@@ -223,17 +238,19 @@ beri_iommu_detach(device_t dev)
 	return (0);
 }
 
-struct xdma_iommu_methods beri_dm_iommu = {
-	.iommu_init = beri_iommu_init,
-	.iommu_release = beri_iommu_release,
-	.iommu_enter = beri_iommu_enter,
-	.iommu_remove = beri_iommu_remove,
-};
-
 static device_method_t beri_iommu_methods[] = {
+
+	/* xDMA IOMMU interface */
+	DEVMETHOD(xdma_iommu_init,	beri_iommu_init),
+	DEVMETHOD(xdma_iommu_release,	beri_iommu_release),
+	DEVMETHOD(xdma_iommu_enter,	beri_iommu_enter),
+	DEVMETHOD(xdma_iommu_remove,	beri_iommu_remove),
+
+	/* Device interface */
 	DEVMETHOD(device_probe,		beri_iommu_probe),
 	DEVMETHOD(device_attach,	beri_iommu_attach),
 	DEVMETHOD(device_detach,	beri_iommu_detach),
+
 	{ 0, 0 }
 };
 

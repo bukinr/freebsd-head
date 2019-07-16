@@ -1278,6 +1278,7 @@ atse_attach(device_t dev)
 	struct ifnet *ifp;
 	uint32_t caps;
 	phandle_t node;
+	pcell_t prop;
 	int error;
 
 	sc = device_get_softc(dev);
@@ -1299,8 +1300,12 @@ atse_attach(device_t dev)
 	 * Embedded Peripherals IP User Guide.
 	 */
 	caps = XCHAN_CAP_NOSEG;
-	if (OF_getproplen(node, "beri,iommu") >= 0)
+	if (OF_getproplen(node, "beri-iommu") > 0) {
 		caps |= XCHAN_CAP_IOMMU;
+		OF_getencprop(node, "beri-iommu", &prop, sizeof(prop));
+		sc->xio.dev = OF_device_from_xref(prop);
+		xdma_iommu_init(&sc->xio);
+	}
 
 	/* Alloc xDMA virtual channel. */
 	sc->xchan_tx = xdma_channel_alloc(sc->xdma_tx, caps);
@@ -1340,15 +1345,15 @@ atse_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	if (OF_getproplen(node, "beri,iommu") >= 0) {
-		sc->xio.methods = &beri_dm_iommu;
-		xdma_iommu_init(&sc->xio);
+	if (sc->xchan_rx->caps & XCHAN_CAP_IOMMU)
 		sc->xchan_rx->xio = &sc->xio;
+
+	if (sc->xchan_tx->caps & XCHAN_CAP_IOMMU)
 		sc->xchan_tx->xio = &sc->xio;
-	}
 
 	/* Setup interrupt handler. */
-	error = xdma_setup_intr(sc->xchan_rx, atse_xdma_rx_intr, sc, &sc->ih_rx);
+	error = xdma_setup_intr(sc->xchan_rx, atse_xdma_rx_intr,
+	    sc, &sc->ih_rx);
 	if (error) {
 		device_printf(sc->dev,
 		    "Can't setup xDMA interrupt handler.\n");

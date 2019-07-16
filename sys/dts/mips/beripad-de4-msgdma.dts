@@ -178,7 +178,7 @@
 			status = "okay";
 		};
 
-		iommu {
+		iommu: iommu@7fb60000 {
 			compatible = "beri,iommu";
 			reg = <0x7fb60000 0x10000>;
 			status = "okay";
@@ -345,7 +345,7 @@
 			       <&dm_msgdma1 1 1 0xffffffff>;
 			dma-names = "tx", "rx";
 			status = "okay";
-			beri,iommu;
+			beri-iommu = <&iommu>;
 		};
 
 		touchscreen@70400000 {

@@ -113,3 +113,27 @@ METHOD int channel_control {
 	struct xdma_channel *xchan;
 	int cmd;
 };
+
+# IOMMU interface
+METHOD int iommu_init {
+	device_t dev;
+	struct xdma_iommu *xio;
+};
+
+METHOD int iommu_release {
+	device_t dev;
+	struct xdma_iommu *xio;
+};
+
+METHOD int iommu_enter {
+	device_t dev;
+	struct xdma_iommu *xio;
+	vm_offset_t va;
+	vm_offset_t pa;
+};
+
+METHOD int iommu_remove {
+	device_t dev;
+	struct xdma_iommu *xio;
+	vm_offset_t va;
+};
