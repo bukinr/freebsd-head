@@ -497,7 +497,7 @@ msgdma_channel_submit_sg(device_t dev, struct xdma_channel *xchan,
 		dst_addr_lo = sg[i].dst_addr;
 		len = (uint32_t)sg[i].len;
 
-		dprintf("%s: src %x dst %x len %d\n", __func__,
+		dprintf("%s: src %lx dst %lx len %d\n", __func__,
 		    src_addr_lo, dst_addr_lo, len);
 
 		desc = chan->descs[chan->idx_head];

@@ -94,7 +94,7 @@ xdma_iommu_remove_entry(xdma_channel_t *xchan, vm_offset_t va)
 	struct xdma_iommu *xio;
 	vm_offset_t va1;
 
-	xio = xchan->xio;
+	xio = &xchan->xio;
 
 	XDMA_IOMMU_REMOVE(xio->dev, xio, va);
 
@@ -110,7 +110,7 @@ xdma_iommu_add_entry(xdma_channel_t *xchan, vm_offset_t *va,
 	vm_offset_t addr;
 
 	size = roundup2(size, PAGE_SIZE);
-	xio = xchan->xio;
+	xio = &xchan->xio;
 
 	if (vmem_alloc(xio->vmem, size,
 	    M_BESTFIT | M_NOWAIT, &addr)) {

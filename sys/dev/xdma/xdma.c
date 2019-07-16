@@ -77,10 +77,25 @@ xdma_channel_t *
 xdma_channel_alloc(xdma_controller_t *xdma, uint32_t caps)
 {
 	xdma_channel_t *xchan;
+	phandle_t node;
+	pcell_t prop;
+	struct xdma_iommu *xio;
 	int ret;
+
+	node = ofw_bus_get_node(xdma->dma_dev);
 
 	xchan = malloc(sizeof(xdma_channel_t), M_XDMA, M_WAITOK | M_ZERO);
 	xchan->xdma = xdma;
+
+	/* Check if this dma controller supports IOMMU. */
+	if (OF_getproplen(node, "xdma,iommu") > 0) {
+		caps |= XCHAN_CAP_IOMMU;
+		OF_getencprop(node, "xdma,iommu", &prop, sizeof(prop));
+		xio = &xchan->xio;
+		xio->dev = OF_device_from_xref(prop);
+		xdma_iommu_init(xio);
+	}
+
 	xchan->caps = caps;
 
 	XDMA_LOCK();
@@ -138,6 +153,9 @@ xdma_channel_free(xdma_channel_t *xchan)
 
 	if (xchan->flags & XCHAN_TYPE_SG)
 		xdma_channel_free_sg(xchan);
+
+	if (xchan->caps & XCHAN_CAP_IOMMU)
+		xdma_iommu_release(&xchan->xio);
 
 	xdma_teardown_all_intr(xchan);
 

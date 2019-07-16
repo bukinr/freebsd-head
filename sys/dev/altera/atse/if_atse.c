@@ -85,9 +85,6 @@ __FBSDID("$FreeBSD$");
 #include <machine/resource.h>
 #include <sys/rman.h>
 
-#include <dev/ofw/ofw_bus.h>
-#include <dev/ofw/ofw_bus_subr.h>
-
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
 
@@ -1275,14 +1272,10 @@ atse_attach(device_t dev)
 	struct atse_softc *sc;
 	struct ifnet *ifp;
 	uint32_t caps;
-	phandle_t node;
-	pcell_t prop;
 	int error;
 
 	sc = device_get_softc(dev);
 	sc->dev = dev;
-
-	node = ofw_bus_get_node(sc->dev);
 
 	/* Get xDMA controller */
 	sc->xdma_tx = xdma_ofw_get(sc->dev, "tx");
@@ -1298,12 +1291,6 @@ atse_attach(device_t dev)
 	 * Embedded Peripherals IP User Guide.
 	 */
 	caps = XCHAN_CAP_NOSEG;
-	if (OF_getproplen(node, "beri-iommu") > 0) {
-		caps |= XCHAN_CAP_IOMMU;
-		OF_getencprop(node, "beri-iommu", &prop, sizeof(prop));
-		sc->xio.dev = OF_device_from_xref(prop);
-		xdma_iommu_init(&sc->xio);
-	}
 
 	/* Alloc xDMA virtual channel. */
 	sc->xchan_tx = xdma_channel_alloc(sc->xdma_tx, caps);
@@ -1343,15 +1330,8 @@ atse_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	if (sc->xchan_rx->caps & XCHAN_CAP_IOMMU)
-		sc->xchan_rx->xio = &sc->xio;
-
-	if (sc->xchan_tx->caps & XCHAN_CAP_IOMMU)
-		sc->xchan_tx->xio = &sc->xio;
-
 	/* Setup interrupt handler. */
-	error = xdma_setup_intr(sc->xchan_rx, atse_xdma_rx_intr,
-	    sc, &sc->ih_rx);
+	error = xdma_setup_intr(sc->xchan_rx, atse_xdma_rx_intr, sc, &sc->ih_rx);
 	if (error) {
 		device_printf(sc->dev,
 		    "Can't setup xDMA interrupt handler.\n");
@@ -1477,7 +1457,6 @@ atse_detach(device_t dev)
 
 	mtx_destroy(&sc->atse_mtx);
 
-	xdma_iommu_release(&sc->xio);
 	xdma_channel_free(sc->xchan_tx);
 	xdma_channel_free(sc->xchan_rx);
 	xdma_put(sc->xdma_tx);

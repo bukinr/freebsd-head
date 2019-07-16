@@ -178,9 +178,15 @@
 			status = "okay";
 		};
 
-		iommu: iommu@7fb60000 {
+		iommu0: iommu@7fb60000 {
 			compatible = "beri,iommu";
 			reg = <0x7fb60000 0x100>;
+			status = "okay";
+		};
+
+		iommu1: iommu@7fb60100 {
+			compatible = "beri,iommu";
+			reg = <0x7fb60100 0x100>;
 			status = "okay";
 		};
 
@@ -326,6 +332,7 @@
 			interrupts = <18>;
 			interrupt-parent = <&beripic0>;
 			#dma-cells = <3>;
+			xdma,iommu = <&iommu0>;
 		};
 
 		dm_msgdma1: msgdma@7fb04000 { 
@@ -336,6 +343,7 @@
 			interrupts = <17>;
 			interrupt-parent = <&beripic0>;
 			#dma-cells = <3>;
+			xdma,iommu = <&iommu1>;
 		};
 
 		dm_ethernet@7f005000 {
@@ -345,7 +353,6 @@
 			       <&dm_msgdma1 1 1 0xffffffff>;
 			dma-names = "tx", "rx";
 			status = "okay";
-			beri-iommu = <&iommu>;
 		};
 
 		touchscreen@70400000 {

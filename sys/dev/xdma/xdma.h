@@ -183,7 +183,7 @@ struct xdma_channel {
 	TAILQ_HEAD(, xdma_request)	processing;
 
 	/* iommu */
-	struct xdma_iommu		*xio;
+	struct xdma_iommu		xio;
 };
 
 typedef struct xdma_channel xdma_channel_t;
