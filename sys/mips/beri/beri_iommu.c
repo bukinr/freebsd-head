@@ -115,7 +115,7 @@ beri_iommu_init(device_t dev, struct xdma_iommu *xio)
 
 	sc = device_get_softc(dev);
 
-	vmem_add(xio->vmem, 0x0, (1 << 30), 0);
+	vmem_add(xio->vmem, VM_MINUSER_ADDRESS, VM_MAXUSER_ADDRESS, 0);
 
 	beri_iommu_set_base(sc, (uintptr_t)xio->p.pm_segtab);
 
