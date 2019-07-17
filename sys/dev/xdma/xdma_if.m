@@ -117,7 +117,7 @@ METHOD int channel_control {
 # IOMMU interface
 
 #
-# Initialize pmap
+# pmap is initialized
 #
 METHOD int iommu_init {
 	device_t dev;
@@ -125,7 +125,7 @@ METHOD int iommu_init {
 };
 
 #
-# Release pmap
+# pmap is released
 #
 METHOD int iommu_release {
 	device_t dev;
@@ -133,7 +133,7 @@ METHOD int iommu_release {
 };
 
 #
-# Enter mapping
+# Mapping entered
 #
 METHOD int iommu_enter {
 	device_t dev;
@@ -143,7 +143,7 @@ METHOD int iommu_enter {
 };
 
 #
-# Remove mapping
+# Mapping removed
 #
 METHOD int iommu_remove {
 	device_t dev;
