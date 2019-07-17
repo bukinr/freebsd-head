@@ -61,15 +61,6 @@ __FBSDID("$FreeBSD$");
 #include <dev/xdma/xdma.h>
 #include "xdma_if.h"
 
-#define XDMA_IOMMU_DEBUG
-#undef XDMA_IOMMU_DEBUG
-
-#ifdef XDMA_IOMMU_DEBUG
-#define dprintf(fmt, ...)  printf(fmt, ##__VA_ARGS__)
-#else
-#define dprintf(fmt, ...)
-#endif
-
 static void
 xdma_iommu_enter(struct xdma_iommu *xio, vm_offset_t va,
     vm_size_t size, vm_paddr_t pa)
@@ -118,10 +109,8 @@ xdma_iommu_add_entry(xdma_channel_t *xchan, vm_offset_t *va,
 
 	addr |= pa & (PAGE_SIZE - 1);
 
-	*va = addr;
-
-	dprintf("%s: va %lx size %lx pa %lx\n",
-	    __func__, addr, size, pa);
+	if (va)
+		*va = addr;
 
 	xdma_iommu_enter(xio, addr, size, pa);
 }
