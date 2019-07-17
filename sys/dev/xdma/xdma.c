@@ -70,6 +70,35 @@ static struct mtx xdma_mtx;
 
 #define	FDT_REG_CELLS	4
 
+#ifdef FDT
+static int
+xdma_get_iommu_fdt(xdma_controller_t *xdma, xdma_channel_t *xchan)
+{
+	struct xdma_iommu *xio;
+	phandle_t node;
+	pcell_t prop;
+	size_t len;
+
+	node = ofw_bus_get_node(xdma->dma_dev);
+	if (OF_getproplen(node, "xdma,iommu") > 0) {
+		len = OF_getencprop(node, "xdma,iommu", &prop, sizeof(prop));
+		if (len != sizeof(prop)) {
+			device_printf(xdma->dev,
+			    "%s: Can't get iommu device node\n", __func__);
+			return (0);
+		}
+
+		xio = &xchan->xio;
+		xio->dev = OF_device_from_xref(prop);
+
+		/* Found */
+		return (1);
+	}
+
+	return (0);
+}
+#endif
+
 /*
  * Allocate virtual xDMA channel.
  */
@@ -77,31 +106,16 @@ xdma_channel_t *
 xdma_channel_alloc(xdma_controller_t *xdma, uint32_t caps)
 {
 	xdma_channel_t *xchan;
-	struct xdma_iommu *xio;
-	phandle_t node;
-	pcell_t prop;
-	size_t len;
 	int ret;
 
 	xchan = malloc(sizeof(xdma_channel_t), M_XDMA, M_WAITOK | M_ZERO);
 	xchan->xdma = xdma;
 
+#ifdef FDT
 	/* Check if this DMA controller supports IOMMU. */
-	node = ofw_bus_get_node(xdma->dma_dev);
-	if (OF_getproplen(node, "xdma,iommu") > 0) {
-		len = OF_getencprop(node, "xdma,iommu", &prop, sizeof(prop));
-		if (len != sizeof(prop)) {
-			device_printf(xdma->dev,
-			    "%s: Can't get xdma,iommu\n", __func__);
-			free(xchan, M_XDMA);
-			return (NULL);
-		}
-
-		xio = &xchan->xio;
-		xio->dev = OF_device_from_xref(prop);
-
+	if (xdma_get_iommu_fdt(xdma, xchan))
 		caps |= XCHAN_CAP_IOMMU;
-	}
+#endif
 
 	xchan->caps = caps;
 
@@ -132,7 +146,7 @@ xdma_channel_alloc(xdma_controller_t *xdma, uint32_t caps)
 	TAILQ_INIT(&xchan->processing);
 
 	if (xchan->caps & XCHAN_CAP_IOMMU)
-		xdma_iommu_init(xio);
+		xdma_iommu_init(&xchan->xio);
 
 	TAILQ_INSERT_TAIL(&xdma->channels, xchan, xchan_next);
 

@@ -92,14 +92,13 @@ void
 xdma_iommu_remove_entry(xdma_channel_t *xchan, vm_offset_t va)
 {
 	struct xdma_iommu *xio;
-	vm_offset_t va1;
 
 	xio = &xchan->xio;
 
 	XDMA_IOMMU_REMOVE(xio->dev, xio, va);
 
-	va1 = va & ~(PAGE_SIZE - 1);
-	vmem_free(xio->vmem, va1, PAGE_SIZE);
+	va &= ~(PAGE_SIZE - 1);
+	vmem_free(xio->vmem, va, PAGE_SIZE);
 }
 
 void
