@@ -130,13 +130,35 @@ xdma_iommu_add_entry(xdma_channel_t *xchan, vm_offset_t *va,
 int
 xdma_iommu_init(struct xdma_iommu *xio)
 {
+#ifdef FDT
+	phandle_t mem_node, node;
+	pcell_t mem_handle;
+#endif
 
 	pmap_pinit(&xio->p);
+
+#ifdef FDT
+	node = ofw_bus_get_node(xio->dev);
+	if (!OF_hasprop(node, "va-region"))
+		return (ENXIO);
+
+	if (OF_getencprop(node, "va-region", (void *)&mem_handle,
+	    sizeof(mem_handle)) <= 0)
+		return (ENXIO);
+#endif
 
 	xio->vmem = vmem_create("xDMA vmem", 0, 0, PAGE_SIZE,
 	    PAGE_SIZE, M_FIRSTFIT | M_WAITOK);
 	if (xio->vmem == NULL)
-		return (-1);
+		return (ENXIO);
+
+#ifdef FDT
+	mem_node = OF_node_from_xref(mem_handle);
+	if (xdma_handle_mem_node(xio->vmem, mem_node) != 0) {
+		vmem_destroy(xio->vmem);
+		return (ENXIO);
+	}
+#endif
 
 	XDMA_IOMMU_INIT(xio->dev, xio);
 

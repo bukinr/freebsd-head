@@ -37,6 +37,11 @@
 #include <sys/proc.h>
 #include <sys/vmem.h>
 
+#ifdef FDT
+#include <dev/fdt/fdt_common.h>
+#include <dev/ofw/openfirm.h>
+#endif
+
 #include <vm/vm.h>
 #include <vm/pmap.h>
 
@@ -229,6 +234,9 @@ xdma_controller_t *xdma_ofw_get(device_t dev, const char *prop);
 int xdma_put(xdma_controller_t *xdma);
 vmem_t * xdma_get_memory(device_t dev);
 void xdma_put_memory(vmem_t *vmem);
+#ifdef FDT
+int xdma_handle_mem_node(vmem_t *vmem, phandle_t memory);
+#endif
 
 /* xDMA channel ops */
 xdma_channel_t * xdma_channel_alloc(xdma_controller_t *, uint32_t caps);

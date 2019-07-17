@@ -334,7 +334,7 @@ xdma_ofw_md_data(xdma_controller_t *xdma, pcell_t *cells, int ncells)
 	return (ret);
 }
 
-static int
+int
 xdma_handle_mem_node(vmem_t *vmem, phandle_t memory)
 {
 	pcell_t reg[FDT_REG_CELLS * FDT_MEM_REGIONS];

@@ -178,15 +178,27 @@
 			status = "okay";
 		};
 
+		va_space0: iommu-va@7fb60000 {
+			compatible = "beri,iommu-va-space";
+			reg = <0x0 0x20000000>;
+		};
+
+		va_space1: iommu-va@7fb60100 {
+			compatible = "beri,iommu-va-space";
+			reg = <0x20000000 0x20000000>;
+		};
+
 		iommu0: iommu@7fb60000 {
 			compatible = "beri,iommu";
 			reg = <0x7fb60000 0x100>;
+			va-region = <&va_space0>;
 			status = "okay";
 		};
 
 		iommu1: iommu@7fb60100 {
 			compatible = "beri,iommu";
 			reg = <0x7fb60100 0x100>;
+			va-region = <&va_space1>;
 			status = "okay";
 		};
 
