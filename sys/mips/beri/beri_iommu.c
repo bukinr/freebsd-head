@@ -170,6 +170,8 @@ beri_iommu_enter(device_t dev, struct xdma_iommu *xio, vm_offset_t va,
 	npte = opte & ~PTE_C_MASK;
 	npte |= PTE_C(VM_MEMATTR_UNCACHEABLE);
 	*pte = npte;
+
+	/* Invalidate the entry. */
 	if (pte_test(&opte, PTE_V) && opte != npte)
 		beri_iommu_invalidate(sc, va);
 
