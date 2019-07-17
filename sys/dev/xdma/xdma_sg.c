@@ -493,6 +493,7 @@ _xdma_load_data(xdma_channel_t *xchan, struct xdma_request *xr,
 	uint32_t nsegs;
 	vm_offset_t va, addr;
 	bus_addr_t pa;
+	vm_prot_t prot;
 
 	xdma = xchan->xdma;
 
@@ -510,8 +511,15 @@ _xdma_load_data(xdma_channel_t *xchan, struct xdma_request *xr,
 		} else if (xchan->caps & XCHAN_CAP_IOMMU) {
 			addr = mtod(m, bus_addr_t);
 			pa = vtophys(addr);
+
+			if (xr->direction == XDMA_MEM_TO_DEV)
+				prot = VM_PROT_READ;
+			else
+				prot = VM_PROT_WRITE;
+
 			xdma_iommu_add_entry(xchan, &va,
-			    m->m_pkthdr.len, pa);
+			    pa, m->m_pkthdr.len, prot);
+
 			/*
 			 * Save VA so we can unload data later
 			 * after this transfer complete.

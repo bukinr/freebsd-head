@@ -61,10 +61,26 @@ __FBSDID("$FreeBSD$");
 #include <dev/xdma/xdma.h>
 #include "xdma_if.h"
 
+void
+xdma_iommu_remove_entry(xdma_channel_t *xchan, vm_offset_t va)
+{
+	struct xdma_iommu *xio;
+
+	xio = &xchan->xio;
+
+	va &= ~(PAGE_SIZE - 1);
+	pmap_remove(&xio->p, va, va + PAGE_SIZE);
+
+	XDMA_IOMMU_REMOVE(xio->dev, xio, va);
+
+	vmem_free(xio->vmem, va, PAGE_SIZE);
+}
+
 static void
 xdma_iommu_enter(struct xdma_iommu *xio, vm_offset_t va,
-    vm_size_t size, vm_paddr_t pa)
+    vm_paddr_t pa, vm_size_t size, vm_prot_t prot)
 {
+	vm_page_t m;
 	pmap_t p;
 
 	p = &xio->p;
@@ -73,28 +89,19 @@ xdma_iommu_enter(struct xdma_iommu *xio, vm_offset_t va,
 	    ("%s: device mapping not page-sized", __func__));
 
 	for (; size > 0; size -= PAGE_SIZE) {
+		m = PHYS_TO_VM_PAGE(pa);
+		pmap_enter(p, va, m, prot, 0, 0);
+
 		XDMA_IOMMU_ENTER(xio->dev, xio, va, pa);
+
 		va += PAGE_SIZE;
 		pa += PAGE_SIZE;
 	}
 }
 
 void
-xdma_iommu_remove_entry(xdma_channel_t *xchan, vm_offset_t va)
-{
-	struct xdma_iommu *xio;
-
-	xio = &xchan->xio;
-
-	XDMA_IOMMU_REMOVE(xio->dev, xio, va);
-
-	va &= ~(PAGE_SIZE - 1);
-	vmem_free(xio->vmem, va, PAGE_SIZE);
-}
-
-void
 xdma_iommu_add_entry(xdma_channel_t *xchan, vm_offset_t *va,
-    vm_size_t size, vm_paddr_t pa)
+    vm_paddr_t pa, vm_size_t size, vm_prot_t prot)
 {
 	struct xdma_iommu *xio;
 	vm_offset_t addr;
@@ -103,7 +110,7 @@ xdma_iommu_add_entry(xdma_channel_t *xchan, vm_offset_t *va,
 	xio = &xchan->xio;
 
 	if (vmem_alloc(xio->vmem, size,
-	    M_BESTFIT | M_NOWAIT, &addr)) {
+	    M_FIRSTFIT | M_NOWAIT, &addr)) {
 		panic("Could not allocate virtual address.\n");
 	}
 
@@ -112,7 +119,7 @@ xdma_iommu_add_entry(xdma_channel_t *xchan, vm_offset_t *va,
 	if (va)
 		*va = addr;
 
-	xdma_iommu_enter(xio, addr, size, pa);
+	xdma_iommu_enter(xio, addr, pa, size, prot);
 }
 
 int

@@ -142,14 +142,9 @@ beri_iommu_enter(device_t dev, struct xdma_iommu *xio, vm_offset_t va,
 	vm_offset_t pde;
 	pt_entry_t opte, npte;
 	pmap_t p;
-	vm_memattr_t ma;
-	vm_page_t m;
 
 	sc = device_get_softc(dev);
 	p = &xio->p;
-
-	m = PHYS_TO_VM_PAGE(pa);
-	pmap_enter(p, va, m, VM_PROT_READ | VM_PROT_WRITE, 0, 0);
 
 	pte = pmap_pte(p, va);
 	if (pte == NULL)
@@ -170,9 +165,10 @@ beri_iommu_enter(device_t dev, struct xdma_iommu *xio, vm_offset_t va,
 	addr |= ((unsigned long long)MIPS_CCA_UNCACHED << 59);
 	pte = (pt_entry_t *)addr;
 
-	ma = VM_MEMATTR_UNCACHEABLE;
+	/* Make pte uncacheable. */
 	opte = *pte;
-	npte = TLBLO_PA_TO_PFN(pa) | PTE_C(ma) | PTE_D | PTE_V | PTE_G;
+	npte = opte & ~PTE_C_MASK;
+	npte |= PTE_C(VM_MEMATTR_UNCACHEABLE);
 	*pte = npte;
 	if (pte_test(&opte, PTE_V) && opte != npte)
 		beri_iommu_invalidate(sc, va);
