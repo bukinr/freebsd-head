@@ -327,6 +327,7 @@ xchan_seg_done(xdma_channel_t *xchan,
 	struct xdma_request *xr;
 	xdma_controller_t *xdma;
 	struct xchan_buf *b;
+	bus_addr_t addr;
 
 	xdma = xchan->xdma;
 
@@ -354,11 +355,11 @@ xchan_seg_done(xdma_channel_t *xchan,
 				    (void *)xr->buf.vaddr);
 		} else if (xchan->caps & XCHAN_CAP_IOMMU) {
 			if (xr->direction == XDMA_MEM_TO_DEV)
-				xdma_iommu_remove_entry(xchan, xr->src_addr);
+				addr = xr->src_addr;
 			else
-				xdma_iommu_remove_entry(xchan, xr->dst_addr);
+				addr = xr->dst_addr;
+			xdma_iommu_remove_entry(xchan, addr);
 		}
-
 		xr->status.error = st->error;
 		xr->status.transferred = st->transferred;
 

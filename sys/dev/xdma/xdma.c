@@ -77,23 +77,30 @@ xdma_channel_t *
 xdma_channel_alloc(xdma_controller_t *xdma, uint32_t caps)
 {
 	xdma_channel_t *xchan;
+	struct xdma_iommu *xio;
 	phandle_t node;
 	pcell_t prop;
-	struct xdma_iommu *xio;
+	size_t len;
 	int ret;
-
-	node = ofw_bus_get_node(xdma->dma_dev);
 
 	xchan = malloc(sizeof(xdma_channel_t), M_XDMA, M_WAITOK | M_ZERO);
 	xchan->xdma = xdma;
 
-	/* Check if this dma controller supports IOMMU. */
+	/* Check if this DMA controller supports IOMMU. */
+	node = ofw_bus_get_node(xdma->dma_dev);
 	if (OF_getproplen(node, "xdma,iommu") > 0) {
-		caps |= XCHAN_CAP_IOMMU;
-		OF_getencprop(node, "xdma,iommu", &prop, sizeof(prop));
+		len = OF_getencprop(node, "xdma,iommu", &prop, sizeof(prop));
+		if (len != sizeof(prop)) {
+			device_printf(xdma->dev,
+			    "%s: Can't get xdma,iommu\n", __func__);
+			free(xchan, M_XDMA);
+			return (NULL);
+		}
+
 		xio = &xchan->xio;
 		xio->dev = OF_device_from_xref(prop);
-		xdma_iommu_init(xio);
+
+		caps |= XCHAN_CAP_IOMMU;
 	}
 
 	xchan->caps = caps;
@@ -123,6 +130,9 @@ xdma_channel_alloc(xdma_controller_t *xdma, uint32_t caps)
 	TAILQ_INIT(&xchan->queue_in);
 	TAILQ_INIT(&xchan->queue_out);
 	TAILQ_INIT(&xchan->processing);
+
+	if (xchan->caps & XCHAN_CAP_IOMMU)
+		xdma_iommu_init(xio);
 
 	TAILQ_INSERT_TAIL(&xdma->channels, xchan, xchan_next);
 
