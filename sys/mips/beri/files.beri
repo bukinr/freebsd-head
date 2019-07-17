@@ -25,5 +25,5 @@ mips/beri/beri_machdep.c		standard
 mips/beri/beri_manager.c		standard
 mips/beri/beri_mp.c			optional smp
 mips/beri/beri_pic.c			optional fdt
-mips/beri/beri_iommu.c			standard
+mips/beri/beri_iommu.c			optional xdma
 mips/mips/tick.c			standard
