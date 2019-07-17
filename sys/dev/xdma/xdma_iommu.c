@@ -90,7 +90,7 @@ xdma_iommu_enter(struct xdma_iommu *xio, vm_offset_t va,
 
 	for (; size > 0; size -= PAGE_SIZE) {
 		m = PHYS_TO_VM_PAGE(pa);
-		pmap_enter(p, va, m, prot, 0, 0);
+		pmap_enter(p, va, m, prot, prot | PMAP_ENTER_WIRED, 0);
 
 		XDMA_IOMMU_ENTER(xio->dev, xio, va, pa);
 
