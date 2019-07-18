@@ -499,6 +499,9 @@ _xdma_load_data(xdma_channel_t *xchan, struct xdma_request *xr,
 
 	m = xr->m;
 
+	KASSERT(xchan->caps & XCHAN_CAP_NOSEG,
+	    ("Handling segmented data is not implemented here."));
+
 	nsegs = 1;
 
 	switch (xr->req_type) {
