@@ -67,8 +67,6 @@ __FBSDID("$FreeBSD$");
 #define	IOMMU_INVALIDATE	0x00
 #define	IOMMU_SET_BASE		0x08
 
-#define	pmap_pde_index(v)	(((v) >> PDRSHIFT) & (NPDEPG - 1))
-
 struct beri_iommu_softc {
 	struct resource		*res[1];
 	device_t		dev;
@@ -137,10 +135,8 @@ beri_iommu_enter(device_t dev, struct xdma_iommu *xio, vm_offset_t va,
     vm_paddr_t pa)
 {
 	struct beri_iommu_softc *sc;
-	pt_entry_t *pte;
-	vm_offset_t addr;
-	vm_offset_t pde;
 	pt_entry_t opte, npte;
+	pt_entry_t *pte;
 	pmap_t p;
 
 	sc = device_get_softc(dev);
@@ -150,26 +146,14 @@ beri_iommu_enter(device_t dev, struct xdma_iommu *xio, vm_offset_t va,
 	if (pte == NULL)
 		panic("pte is NULL\n");
 
-	/* Write back, invalidate pde. */
-	pde = (vm_offset_t)p->pm_segtab[pmap_pde_index(va)];
-	mips_dcache_wbinv_range(pde, sizeof(vm_offset_t));
-
-	/* Make pde pointer uncached. */
-	pde &= ~((unsigned long long)MIPS_CCA_CACHED << 59);
-	pde |= ((unsigned long long)MIPS_CCA_UNCACHED << 59);
-	p->pm_segtab[pmap_pde_index(va)] = (void *)pde;
-
-	/* Make pte pointer uncached. */
-	addr = (vm_offset_t)pte;
-	addr &= ~((unsigned long long)MIPS_CCA_CACHED << 59);
-	addr |= ((unsigned long long)MIPS_CCA_UNCACHED << 59);
-	pte = (pt_entry_t *)addr;
-
 	/* Make pte uncacheable. */
 	opte = *pte;
 	npte = opte & ~PTE_C_MASK;
 	npte |= PTE_C(VM_MEMATTR_UNCACHEABLE);
 	*pte = npte;
+
+	/* Write back, invalidate pte. */
+	mips_dcache_wbinv_range((vm_offset_t)pte, sizeof(vm_offset_t));
 
 	/* Invalidate the entry. */
 	if (pte_test(&opte, PTE_V) && opte != npte)
