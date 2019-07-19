@@ -114,7 +114,7 @@ xdma_channel_alloc(xdma_controller_t *xdma, uint32_t caps)
 #ifdef FDT
 	/* Check if this DMA controller supports IOMMU. */
 	if (xdma_get_iommu_fdt(xdma, xchan))
-		caps |= XCHAN_CAP_IOMMU;
+		caps |= XCHAN_CAP_IOMMU | XCHAN_CAP_NOSEG;
 #endif
 
 	xchan->caps = caps;
