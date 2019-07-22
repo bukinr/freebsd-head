@@ -80,7 +80,7 @@ xdma_get_iommu_fdt(xdma_controller_t *xdma, xdma_channel_t *xchan)
 	size_t len;
 
 	node = ofw_bus_get_node(xdma->dma_dev);
-	if (OF_getproplen(node, "xdma,iommu") < 0)
+	if (OF_getproplen(node, "xdma,iommu") <= 0)
 		return (0);
 
 	len = OF_getencprop(node, "xdma,iommu", &prop, sizeof(prop));
