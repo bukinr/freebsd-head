@@ -80,27 +80,26 @@ xdma_get_iommu_fdt(xdma_controller_t *xdma, xdma_channel_t *xchan)
 	size_t len;
 
 	node = ofw_bus_get_node(xdma->dma_dev);
-	if (OF_getproplen(node, "xdma,iommu") > 0) {
-		len = OF_getencprop(node, "xdma,iommu", &prop, sizeof(prop));
-		if (len != sizeof(prop)) {
-			device_printf(xdma->dev,
-			    "%s: Can't get iommu device node\n", __func__);
-			return (0);
-		}
+	if (OF_getproplen(node, "xdma,iommu") < 0)
+		return (0);
 
-		xio = &xchan->xio;
-		xio->dev = OF_device_from_xref(prop);
-		if (xio->dev == NULL) {
-			device_printf(xdma->dev,
-			    "%s: Can't get iommu device\n", __func__);
-			return (0);
-		}
-
-		/* Found */
-		return (1);
+	len = OF_getencprop(node, "xdma,iommu", &prop, sizeof(prop));
+	if (len != sizeof(prop)) {
+		device_printf(xdma->dev,
+		    "%s: Can't get iommu device node\n", __func__);
+		return (0);
 	}
 
-	return (0);
+	xio = &xchan->xio;
+	xio->dev = OF_device_from_xref(prop);
+	if (xio->dev == NULL) {
+		device_printf(xdma->dev,
+		    "%s: Can't get iommu device\n", __func__);
+		return (0);
+	}
+
+	/* Found */
+	return (1);
 }
 #endif
 
