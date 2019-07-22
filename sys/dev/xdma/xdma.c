@@ -90,6 +90,11 @@ xdma_get_iommu_fdt(xdma_controller_t *xdma, xdma_channel_t *xchan)
 
 		xio = &xchan->xio;
 		xio->dev = OF_device_from_xref(prop);
+		if (xio->dev == NULL) {
+			device_printf(xdma->dev,
+			    "%s: Can't get iommu device\n", __func__);
+			return (0);
+		}
 
 		/* Found */
 		return (1);
