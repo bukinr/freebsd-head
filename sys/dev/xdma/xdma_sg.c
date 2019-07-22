@@ -525,7 +525,7 @@ _xdma_load_data(xdma_channel_t *xchan, struct xdma_request *xr,
 
 			/*
 			 * Save VA so we can unload data later
-			 * after this transfer complete.
+			 * after completion of this transfer.
 			 */
 			if (xr->direction == XDMA_MEM_TO_DEV)
 				xr->src_addr = va;
