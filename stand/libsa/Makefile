@@ -99,8 +99,8 @@ CFLAGS+= -DBZ_NO_STDIO -DBZ_NO_COMPRESS
 SRCS+=bzlib.c crctable.c decompress.c huffman.c randtable.c
 
 # decompression functionality from zlib
-.PATH: ${SRCTOP}/contrib/zlib
-CFLAGS+=-DHAVE_MEMCPY -I${SRCTOP}/contrib/zlib
+.PATH: ${SRCTOP}/sys/contrib/zlib
+CFLAGS+=-DHAVE_MEMCPY -I${SRCTOP}/sys/contrib/zlib
 SRCS+=	adler32.c crc32.c
 SRCS+=	infback.c inffast.c inflate.c inftrees.c zutil.c
 
@@ -145,9 +145,6 @@ SRCS+=	ufs.c nfs.c cd9660.c tftp.c gzipfs.c bzipfs.c
 SRCS+=	dosfs.c ext2fs.c
 SRCS+=	splitfs.c
 SRCS+=	pkgfs.c
-.if ${MK_NAND} != "no"
-SRCS+=	nandfs.c
-.endif
 
 # kernel ufs support
 .PATH: ${SRCTOP}/sys/ufs/ffs
@@ -155,17 +152,22 @@ SRCS+=ffs_subr.c ffs_tables.c
 
 CFLAGS.bzipfs.c+= -I${SRCTOP}/contrib/bzip2
 
-# explicit_bzero
+# explicit_bzero and calculate_crc32c
 .PATH: ${SYSDIR}/libkern
-SRCS+=  explicit_bzero.c
+SRCS+=  explicit_bzero.c crc32_libkern.c
 
 # Maybe GELI
 .if ${MK_LOADER_GELI} == "yes"
 .include "${SASRC}/geli/Makefile.inc"
 .endif
 
+.if ${MK_LOADER_VERIEXEC} == "yes" && ${MK_BEARSSL} == "yes"
+.include "${SRCTOP}/lib/libbearssl/Makefile.libsa.inc"
+.include "${SRCTOP}/lib/libsecureboot/Makefile.libsa.inc"
+.endif
+
 # Maybe ZFS
-.if ${MK_ZFS} == "yes"
+.if ${MK_LOADER_ZFS} == "yes"
 .include "${SASRC}/zfs/Makefile.inc"
 .endif
 

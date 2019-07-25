@@ -530,6 +530,7 @@ uipc_attach(struct socket *so, int proto, struct thread *td)
 		UNP_LINK_WLOCK();
 
 	unp->unp_gencnt = ++unp_gencnt;
+	unp->unp_ino = ++unp_ino;
 	unp_count++;
 	switch (so->so_type) {
 	case SOCK_STREAM:
@@ -911,7 +912,7 @@ uipc_listen(struct socket *so, int backlog, struct thread *td)
 	SOCK_LOCK(so);
 	error = solisten_proto_check(so);
 	if (error == 0) {
-		cru2x(td->td_ucred, &unp->unp_peercred);
+		cru2xt(td, &unp->unp_peercred);
 		solisten_proto(so, backlog);
 	}
 	SOCK_UNLOCK(so);
@@ -1302,12 +1303,8 @@ uipc_sense(struct socket *so, struct stat *sb)
 	KASSERT(unp != NULL, ("uipc_sense: unp == NULL"));
 
 	sb->st_blksize = so->so_snd.sb_hiwat;
-	UNP_PCB_LOCK(unp);
 	sb->st_dev = NODEV;
-	if (unp->unp_ino == 0)
-		unp->unp_ino = (++unp_ino == 0) ? ++unp_ino : unp_ino;
 	sb->st_ino = unp->unp_ino;
-	UNP_PCB_UNLOCK(unp);
 	return (0);
 }
 
@@ -1659,7 +1656,7 @@ void
 unp_copy_peercred(struct thread *td, struct unpcb *client_unp,
     struct unpcb *server_unp, struct unpcb *listen_unp)
 {
-	cru2x(td->td_ucred, &client_unp->unp_peercred);
+	cru2xt(td, &client_unp->unp_peercred);
 	client_unp->unp_flags |= UNP_HAVEPC;
 
 	memcpy(&server_unp->unp_peercred, &listen_unp->unp_peercred,
@@ -1812,7 +1809,7 @@ unp_pcblist(SYSCTL_HANDLER_ARGS)
 	/*
 	 * OK, now we're committed to doing something.
 	 */
-	xug = malloc(sizeof(*xug), M_TEMP, M_WAITOK);
+	xug = malloc(sizeof(*xug), M_TEMP, M_WAITOK | M_ZERO);
 	UNP_LINK_RLOCK();
 	gencnt = unp_gencnt;
 	n = unp_count;
@@ -2123,30 +2120,53 @@ unp_init(void)
 	UNP_DEFERRED_LOCK_INIT();
 }
 
+static void
+unp_internalize_cleanup_rights(struct mbuf *control)
+{
+	struct cmsghdr *cp;
+	struct mbuf *m;
+	void *data;
+	socklen_t datalen;
+
+	for (m = control; m != NULL; m = m->m_next) {
+		cp = mtod(m, struct cmsghdr *);
+		if (cp->cmsg_level != SOL_SOCKET ||
+		    cp->cmsg_type != SCM_RIGHTS)
+			continue;
+		data = CMSG_DATA(cp);
+		datalen = (caddr_t)cp + cp->cmsg_len - (caddr_t)data;
+		unp_freerights(data, datalen / sizeof(struct filedesc *));
+	}
+}
+
 static int
 unp_internalize(struct mbuf **controlp, struct thread *td)
 {
-	struct mbuf *control = *controlp;
-	struct proc *p = td->td_proc;
-	struct filedesc *fdesc = p->p_fd;
+	struct mbuf *control, **initial_controlp;
+	struct proc *p;
+	struct filedesc *fdesc;
 	struct bintime *bt;
-	struct cmsghdr *cm = mtod(control, struct cmsghdr *);
+	struct cmsghdr *cm;
 	struct cmsgcred *cmcred;
 	struct filedescent *fde, **fdep, *fdev;
 	struct file *fp;
 	struct timeval *tv;
 	struct timespec *ts;
-	int i, *fdp;
 	void *data;
-	socklen_t clen = control->m_len, datalen;
-	int error, oldfds;
+	socklen_t clen, datalen;
+	int i, j, error, *fdp, oldfds;
 	u_int newlen;
 
 	UNP_LINK_UNLOCK_ASSERT();
 
+	p = td->td_proc;
+	fdesc = p->p_fd;
 	error = 0;
+	control = *controlp;
+	clen = control->m_len;
 	*controlp = NULL;
-	while (cm != NULL) {
+	initial_controlp = controlp;
+	for (cm = mtod(control, struct cmsghdr *); cm != NULL;) {
 		if (sizeof(*cm) > clen || cm->cmsg_level != SOL_SOCKET
 		    || cm->cmsg_len > clen || cm->cmsg_len < sizeof(*cm)) {
 			error = EINVAL;
@@ -2215,6 +2235,19 @@ unp_internalize(struct mbuf **controlp, struct thread *td)
 				FILEDESC_SUNLOCK(fdesc);
 				error = E2BIG;
 				goto out;
+			}
+			fdp = data;
+			for (i = 0; i < oldfds; i++, fdp++) {
+				if (!fhold(fdesc->fd_ofiles[*fdp].fde_file)) {
+					fdp = data;
+					for (j = 0; j < i; j++, fdp++) {
+						fdrop(fdesc->fd_ofiles[*fdp].
+						    fde_file, td);
+					}
+					FILEDESC_SUNLOCK(fdesc);
+					error = EBADF;
+					goto out;
+				}
 			}
 			fdp = data;
 			fdep = (struct filedescent **)
@@ -2297,6 +2330,8 @@ unp_internalize(struct mbuf **controlp, struct thread *td)
 	}
 
 out:
+	if (error != 0 && initial_controlp != NULL)
+		unp_internalize_cleanup_rights(*initial_controlp);
 	m_freem(control);
 	return (error);
 }
@@ -2418,7 +2453,6 @@ unp_internalize_fp(struct file *fp)
 		unp->unp_file = fp;
 		unp->unp_msgcount++;
 	}
-	fhold(fp);
 	unp_rights++;
 	UNP_LINK_WUNLOCK();
 }
@@ -2579,10 +2613,10 @@ unp_gc(__unused void *arg, int pending)
 			if ((unp->unp_gcflag & UNPGC_DEAD) != 0) {
 				f = unp->unp_file;
 				if (unp->unp_msgcount == 0 || f == NULL ||
-				    f->f_count != unp->unp_msgcount)
+				    f->f_count != unp->unp_msgcount ||
+				    !fhold(f))
 					continue;
 				unref[total++] = f;
-				fhold(f);
 				KASSERT(total <= unp_unreachable,
 				    ("unp_gc: incorrect unreachable count."));
 			}
@@ -2758,8 +2792,8 @@ db_print_xucred(int indent, struct xucred *xu)
 	int comma, i;
 
 	db_print_indent(indent);
-	db_printf("cr_version: %u   cr_uid: %u   cr_ngroups: %d\n",
-	    xu->cr_version, xu->cr_uid, xu->cr_ngroups);
+	db_printf("cr_version: %u   cr_uid: %u   cr_pid: %d   cr_ngroups: %d\n",
+	    xu->cr_version, xu->cr_uid, xu->cr_pid, xu->cr_ngroups);
 	db_print_indent(indent);
 	db_printf("cr_groups: ");
 	comma = 0;

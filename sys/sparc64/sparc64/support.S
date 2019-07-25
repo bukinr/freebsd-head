@@ -207,6 +207,30 @@ __FBSDID("$FreeBSD$");
 6:
 
 /*
+ * Extension of _MEMCPY dealing with overlap, but unaware of ASIs.
+ * Used for bcopy() and memmove().
+ */
+#define	_MEMMOVE(dst, src, len) \
+	/* Check for overlap, and copy backwards if so. */ \
+	sub	dst, src, %g1 ; \
+	cmp	%g1, len ; \
+	bgeu,a,pt %xcc, 2f ; \
+	 nop ; \
+	/* Copy backwards. */ \
+	add	src, len, src ; \
+	add	dst, len, dst ; \
+1:	deccc	1, len ; \
+	bl,pn	%xcc, 3f ; \
+	 dec	1, src ; \
+	ldub	[src], %g1 ; \
+	dec	1, dst ; \
+	ba	%xcc, 1b ; \
+	 stb	%g1, [dst] ; \
+2:	/* Do the fast version. */ \
+	_MEMCPY(dst, src, len, EMPTY, EMPTY, EMPTY, EMPTY) ; \
+3:
+
+/*
  * void ascopy(u_long asi, vm_offset_t src, vm_offset_t dst, size_t len)
  */
 ENTRY(ascopy)
@@ -265,48 +289,13 @@ ENTRY(bcmp)
 END(bcmp)
 
 /*
- * void *memmove(void *dst, const void *src, size_t len)
  * void bcopy(const void *src, void *dst, size_t len)
  */
-ENTRY(memmove)
-	/*
-	 * Swap src/dst for memmove/bcopy differences
-	 */
-	mov	%o0, %o6
-	mov	%o1, %o0
-	mov	%o6, %o1
-ALTENTRY(bcopy)
-	/*
-	 * Check for overlap, and copy backwards if so.
-	 */
-	sub	%o1, %o0, %g1
-	cmp	%g1, %o2
-	bgeu,a,pt %xcc, 3f
-	 nop
-
-	/*
-	 * Copy backwards.
-	 */
-	add	%o0, %o2, %o0
-	add	%o1, %o2, %o1
-1:	deccc	1, %o2
-	bl,a,pn	%xcc, 2f
-	 nop
-	dec	1, %o0
-	ldub	[%o0], %g1
-	dec	1, %o1
-	ba	%xcc, 1b
-	 stb	%g1, [%o1]
-2:	retl
-	 mov	%o6, %o0
-
-	/*
-	 * Do the fast version.
-	 */
-3:	_MEMCPY(%o1, %o0, %o2, EMPTY, EMPTY, EMPTY, EMPTY)
+ENTRY(bcopy)
+	_MEMMOVE(%o1, %o0, %o2)
 	retl
-	 mov	%o6, %o0
-END(memmove)
+	 nop
+END(bcopy)
 
 /*
  * void bzero(void *b, size_t len)
@@ -335,6 +324,16 @@ ENTRY(memcpy)
 	retl
 	 nop
 END(memcpy)
+
+/*
+ * void *memmove(void *dst, const void *src, size_t len)
+ */
+ENTRY(memmove)
+	mov	%o0, %o3
+	_MEMMOVE(%o3, %o1, %o2)
+	retl
+	 nop
+END(memmove)
 
 /*
  * void *memset(void *b, int c, size_t len)
@@ -404,28 +403,27 @@ fs_nofault_begin:
 	.set	susword, suword16
 	.set	suword, suword64
 
-	.globl	casuword32, casuword, fuptr, suptr
-	.set	casuword, casuword64
+	.globl	casuword32_int, casuword64_int, fuptr, suptr
 	.set	fuptr, fuword64
 	.set	suptr, suword64
 
 /*
  * int32_t casuword32(volatile int32_t *p, int32_t e, int32_t s)
  */
-ENTRY(casuword32)
+ENTRY(casuword32_int)
 	casa	[%o0] ASI_AIUP, %o1, %o2
 	retl
 	 mov	%o2, %o0
-END(casuword32)
+END(casuword32_int)
 
 /*
  * int64_t casuword64(volatile int64_t *p, int64_t e, int64_t s)
  */
-ENTRY(casuword64)
+ENTRY(casuword64_int)
 	casxa	[%o0] ASI_AIUP, %o1, %o2
 	retl
 	 mov	%o2, %o0
-END(casuword64)
+END(casuword64_int)
 
 /*
  * int fuword8(const void *base)

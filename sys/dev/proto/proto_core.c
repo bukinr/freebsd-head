@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2014, 2015 Marcel Moolenaar
+ * Copyright (c) 2014, 2015, 2019 Marcel Moolenaar
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -184,6 +184,7 @@ proto_attach(device_t dev)
 
 	sc = device_get_softc(dev);
 	sc->sc_dev = dev;
+	mtx_init(&sc->sc_mtx, "proto-softc", NULL, MTX_DEF);
 
 	for (res = 0; res < sc->sc_rescnt; res++) {
 		r = sc->sc_res + res;
@@ -196,7 +197,7 @@ proto_attach(device_t dev)
 		case SYS_RES_MEMORY:
 		case SYS_RES_IOPORT:
 			r->r_size = rman_get_size(r->r_d.res);
-			r->r_u.cdev = make_dev(&proto_devsw, res, 0, 0, 0666,
+			r->r_u.cdev = make_dev(&proto_devsw, res, 0, 0, 0600,
 			    "proto/%s/%02x.%s", device_get_desc(dev), r->r_rid,
 			    (r->r_type == SYS_RES_IOPORT) ? "io" : "mem");
 			r->r_u.cdev->si_drv1 = sc;
@@ -204,7 +205,7 @@ proto_attach(device_t dev)
 			break;
 		case PROTO_RES_PCICFG:
 			r->r_size = 4096;
-			r->r_u.cdev = make_dev(&proto_devsw, res, 0, 0, 0666,
+			r->r_u.cdev = make_dev(&proto_devsw, res, 0, 0, 0600,
 			    "proto/%s/pcicfg", device_get_desc(dev));
 			r->r_u.cdev->si_drv1 = sc;
 			r->r_u.cdev->si_drv2 = r;
@@ -212,7 +213,7 @@ proto_attach(device_t dev)
 		case PROTO_RES_BUSDMA:
 			r->r_d.busdma = proto_busdma_attach(sc);
 			r->r_size = 0;	/* no read(2) nor write(2) */
-			r->r_u.cdev = make_dev(&proto_devsw, res, 0, 0, 0666,
+			r->r_u.cdev = make_dev(&proto_devsw, res, 0, 0, 0600,
 			    "proto/%s/busdma", device_get_desc(dev));
 			r->r_u.cdev->si_drv1 = sc;
 			r->r_u.cdev->si_drv2 = r;
@@ -231,15 +232,16 @@ proto_detach(device_t dev)
 
 	sc = device_get_softc(dev);
 
-	/* Don't detach if we have open device files. */
-	for (res = 0; res < sc->sc_rescnt; res++) {
-		r = sc->sc_res + res;
-		if (r->r_opened)
-			return (EBUSY);
-	}
+	mtx_lock(&sc->sc_mtx);
+	if (sc->sc_opencnt == 0)
+		sc->sc_opencnt = -1;
+	mtx_unlock(&sc->sc_mtx);
+	if (sc->sc_opencnt > 0)
+		return (EBUSY);
 
 	for (res = 0; res < sc->sc_rescnt; res++) {
 		r = sc->sc_res + res;
+
 		switch (r->r_type) {
 		case SYS_RES_IRQ:
 			/* XXX TODO */
@@ -252,21 +254,25 @@ proto_detach(device_t dev)
 			break;
 		case SYS_RES_MEMORY:
 		case SYS_RES_IOPORT:
+			destroy_dev(r->r_u.cdev);
 			bus_release_resource(dev, r->r_type, r->r_rid,
 			    r->r_d.res);
-			destroy_dev(r->r_u.cdev);
 			break;
 		case PROTO_RES_PCICFG:
 			destroy_dev(r->r_u.cdev);
 			break;
 		case PROTO_RES_BUSDMA:
-			proto_busdma_detach(sc, r->r_d.busdma);
 			destroy_dev(r->r_u.cdev);
+			proto_busdma_detach(sc, r->r_d.busdma);
 			break;
 		}
 		r->r_type = PROTO_RES_UNUSED;
 	}
+	mtx_lock(&sc->sc_mtx);
 	sc->sc_rescnt = 0;
+	sc->sc_opencnt = 0;
+	mtx_unlock(&sc->sc_mtx);
+	mtx_destroy(&sc->sc_mtx);
 	return (0);
 }
 
@@ -278,11 +284,23 @@ static int
 proto_open(struct cdev *cdev, int oflags, int devtype, struct thread *td)
 {
 	struct proto_res *r;
+	struct proto_softc *sc;
+	int error;
 
-	r = cdev->si_drv2;
-	if (!atomic_cmpset_acq_ptr(&r->r_opened, 0UL, (uintptr_t)td->td_proc))
-		return (EBUSY);
-	return (0);
+	sc = cdev->si_drv1;
+	mtx_lock(&sc->sc_mtx);
+	if (sc->sc_opencnt >= 0) {
+		r = cdev->si_drv2;
+		if (!r->r_opened) {
+			r->r_opened = 1;
+			sc->sc_opencnt++;
+			error = 0;
+		} else
+			error = EBUSY;
+	} else
+		error = ENXIO;
+	mtx_unlock(&sc->sc_mtx);
+	return (error);
 }
 
 static int
@@ -290,14 +308,24 @@ proto_close(struct cdev *cdev, int fflag, int devtype, struct thread *td)
 {
 	struct proto_res *r;
 	struct proto_softc *sc;
+	int error;
 
 	sc = cdev->si_drv1;
-	r = cdev->si_drv2;
-	if (!atomic_cmpset_acq_ptr(&r->r_opened, (uintptr_t)td->td_proc, 0UL))
-		return (ENXIO);
-	if (r->r_type == PROTO_RES_BUSDMA)
-		proto_busdma_cleanup(sc, r->r_d.busdma);
-	return (0);
+	mtx_lock(&sc->sc_mtx);
+	if (sc->sc_opencnt > 0) {
+		r = cdev->si_drv2;
+		if (r->r_opened) {
+			if (r->r_type == PROTO_RES_BUSDMA)
+				proto_busdma_cleanup(sc, r->r_d.busdma);
+			r->r_opened = 0;
+			sc->sc_opencnt--;
+			error = 0;
+		} else
+			error = ENXIO;
+	} else
+		error = ENXIO;
+	mtx_unlock(&sc->sc_mtx);
+	return (error);
 }
 
 static int

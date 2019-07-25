@@ -33,6 +33,7 @@
 __FBSDID("$FreeBSD$");
 
 #include "opt_capsicum.h"
+#include "opt_printf.h"
 
 #include <sys/param.h>
 #include <sys/capsicum.h>
@@ -92,7 +93,7 @@ static const char	*dev_console_filename;
 			FLUSHO|NOKERNINFO|NOFLSH)
 #define TTYSUP_CFLAG	(CIGNORE|CSIZE|CSTOPB|CREAD|PARENB|PARODD|\
 			HUPCL|CLOCAL|CCTS_OFLOW|CRTS_IFLOW|CDTR_IFLOW|\
-			CDSR_OFLOW|CCAR_OFLOW)
+			CDSR_OFLOW|CCAR_OFLOW|CNO_RTSDTR)
 
 #define	TTY_CALLOUT(tp,d) (dev2unit(d) & TTYUNIT_CALLOUT)
 
@@ -105,6 +106,12 @@ SYSCTL_INT(_kern, OID_AUTO, tty_drainwait, CTLFLAG_RWTUN,
  */
 
 #define	TTYBUF_MAX	65536
+
+#ifdef PRINTF_BUFR_SIZE
+#define	TTY_PRBUF_SIZE	PRINTF_BUFR_SIZE
+#else
+#define	TTY_PRBUF_SIZE	256
+#endif
 
 /*
  * Allocate buffer space if necessary, and set low watermarks, based on speed.
@@ -231,9 +238,6 @@ ttydev_leave(struct tty *tp)
 
 	tp->t_flags |= TF_OPENCLOSE;
 
-	/* Stop asynchronous I/O. */
-	funsetown(&tp->t_sigio);
-
 	/* Remove console TTY. */
 	if (constty == tp)
 		constty_clear();
@@ -325,7 +329,8 @@ ttydev_open(struct cdev *dev, int oflags, int devtype __unused,
 		if (TTY_CALLOUT(tp, dev) || dev == dev_console)
 			tp->t_termios.c_cflag |= CLOCAL;
 
-		ttydevsw_modem(tp, SER_DTR|SER_RTS, 0);
+		if ((tp->t_termios.c_cflag & CNO_RTSDTR) == 0)
+			ttydevsw_modem(tp, SER_DTR|SER_RTS, 0);
 
 		error = ttydevsw_open(tp);
 		if (error != 0)
@@ -1051,7 +1056,9 @@ tty_alloc_mutex(struct ttydevsw *tsw, void *sc, struct mtx *mutex)
 	PATCH_FUNC(busy);
 #undef PATCH_FUNC
 
-	tp = malloc(sizeof(struct tty), M_TTY, M_WAITOK|M_ZERO);
+	tp = malloc(sizeof(struct tty) + TTY_PRBUF_SIZE, M_TTY,
+	    M_WAITOK | M_ZERO);
+	tp->t_prbufsz = TTY_PRBUF_SIZE;
 	tp->t_devsw = tsw;
 	tp->t_devswsoftc = sc;
 	tp->t_flags = tsw->tsw_flags;
@@ -1123,6 +1130,9 @@ tty_rel_free(struct tty *tp)
 		tty_unlock(tp);
 		return;
 	}
+
+	/* Stop asynchronous I/O. */
+	funsetown(&tp->t_sigio);
 
 	/* TTY can be deallocated. */
 	dev = tp->t_dev;

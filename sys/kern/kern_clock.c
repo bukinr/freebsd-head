@@ -49,6 +49,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/systm.h>
 #include <sys/callout.h>
 #include <sys/epoch.h>
+#include <sys/eventhandler.h>
 #include <sys/gtaskqueue.h>
 #include <sys/kdb.h>
 #include <sys/kernel.h>
@@ -421,36 +422,14 @@ initclocks(void *dummy)
 #endif
 }
 
-void
-hardclock(int cnt, int usermode)
+static __noinline void
+hardclock_itimer(struct thread *td, struct pstats *pstats, int cnt, int usermode)
 {
-	struct pstats *pstats;
-	struct thread *td = curthread;
-	struct proc *p = td->td_proc;
-	int *t = DPCPU_PTR(pcputicks);
-	int flags, global, newticks;
-	int i;
+	struct proc *p;
+	int flags;
 
-	/*
-	 * Update per-CPU and possibly global ticks values.
-	 */
-	*t += cnt;
-	do {
-		global = ticks;
-		newticks = *t - global;
-		if (newticks <= 0) {
-			if (newticks < -1)
-				*t = global - 1;
-			newticks = 0;
-			break;
-		}
-	} while (!atomic_cmpset_int(&ticks, global, *t));
-
-	/*
-	 * Run current process's virtual and profile time, as needed.
-	 */
-	pstats = p->p_stats;
 	flags = 0;
+	p = td->td_proc;
 	if (usermode &&
 	    timevalisset(&pstats->p_timer[ITIMER_VIRTUAL].it_value)) {
 		PROC_ITIMLOCK(p);
@@ -471,6 +450,40 @@ hardclock(int cnt, int usermode)
 		td->td_flags |= flags;
 		thread_unlock(td);
 	}
+}
+
+void
+hardclock(int cnt, int usermode)
+{
+	struct pstats *pstats;
+	struct thread *td = curthread;
+	struct proc *p = td->td_proc;
+	int *t = DPCPU_PTR(pcputicks);
+	int global, i, newticks;
+
+	/*
+	 * Update per-CPU and possibly global ticks values.
+	 */
+	*t += cnt;
+	global = ticks;
+	do {
+		newticks = *t - global;
+		if (newticks <= 0) {
+			if (newticks < -1)
+				*t = global - 1;
+			newticks = 0;
+			break;
+		}
+	} while (!atomic_fcmpset_int(&ticks, &global, *t));
+
+	/*
+	 * Run current process's virtual and profile time, as needed.
+	 */
+	pstats = p->p_stats;
+	if (__predict_false(
+	    timevalisset(&pstats->p_timer[ITIMER_VIRTUAL].it_value) ||
+	    timevalisset(&pstats->p_timer[ITIMER_PROF].it_value)))
+		hardclock_itimer(td, pstats, cnt, usermode);
 
 #ifdef	HWPMC_HOOKS
 	if (PMC_CPU_HAS_SAMPLES(PCPU_GET(cpuid)))
@@ -631,6 +644,7 @@ statclock(int cnt, int usermode)
 	struct proc *p;
 	long rss;
 	long *cp_time;
+	uint64_t runtime, new_switchtime;
 
 	td = curthread;
 	p = td->td_proc;
@@ -686,6 +700,17 @@ statclock(int cnt, int usermode)
 	    "prio:%d", td->td_priority, "stathz:%d", (stathz)?stathz:hz);
 	SDT_PROBE2(sched, , , tick, td, td->td_proc);
 	thread_lock_flags(td, MTX_QUIET);
+
+	/*
+	 * Compute the amount of time during which the current
+	 * thread was running, and add that to its total so far.
+	 */
+	new_switchtime = cpu_ticks();
+	runtime = new_switchtime - PCPU_GET(switchtime);
+	td->td_runtime += runtime;
+	td->td_incruntime += runtime;
+	PCPU_SET(switchtime, new_switchtime);
+
 	for ( ; cnt > 0; cnt--)
 		sched_clock(td);
 	thread_unlock(td);

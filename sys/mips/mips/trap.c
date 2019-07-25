@@ -51,6 +51,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/sysent.h>
 #include <sys/proc.h>
 #include <sys/kernel.h>
+#include <sys/ktr.h>
 #include <sys/signalvar.h>
 #include <sys/syscall.h>
 #include <sys/lock.h>
@@ -442,8 +443,6 @@ cpu_fetch_syscall_args(struct thread *td)
 	 * XXX
 	 * Shouldn't this go before switching on the code?
 	 */
-	if (se->sv_mask)
-		sa->code &= se->sv_mask;
 
 	if (sa->code >= se->sv_size)
 		sa->callp = &se->sv_table[0];
@@ -788,10 +787,8 @@ dofault:
 
 	case T_SYSCALL + T_USER:
 		{
-			int error;
-
 			td->td_sa.trapframe = trapframe;
-			error = syscallenter(td);
+			syscallenter(td);
 
 #if !defined(SMP) && (defined(DDB) || defined(DEBUG))
 			if (trp == trapdebug)
@@ -807,7 +804,7 @@ dofault:
 			 * instead of being done here under a special check
 			 * for SYS_ptrace().
 			 */
-			syscallret(td, error);
+			syscallret(td);
 			return (trapframe->pc);
 		}
 
@@ -1100,7 +1097,7 @@ err:
 #endif
 
 #ifdef KDB
-		if (debugger_on_panic) {
+		if (debugger_on_trap) {
 			kdb_why = KDB_WHY_TRAP;
 			kdb_trap(type, 0, trapframe);
 			kdb_why = KDB_WHY_UNSET;

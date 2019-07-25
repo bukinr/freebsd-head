@@ -45,7 +45,6 @@ local MSG_FAILOPENCFG = "Failed to open config: '%s'"
 local MSG_FAILREADCFG = "Failed to read config: '%s'"
 local MSG_FAILPARSECFG = "Failed to parse config: '%s'"
 local MSG_FAILEXBEF = "Failed to execute '%s' before loading '%s'"
-local MSG_FAILEXMOD = "Failed to execute '%s'"
 local MSG_FAILEXAF = "Failed to execute '%s' after loading '%s'"
 local MSG_MALFORMED = "Malformed line (%d):\n\t'%s'"
 local MSG_DEFAULTKERNFAIL = "No kernel set, failed to load from module_path"
@@ -55,7 +54,6 @@ local MSG_XENKERNLOADING = "Loading Xen kernel..."
 local MSG_KERNLOADING = "Loading kernel..."
 local MSG_MODLOADING = "Loading configured modules..."
 local MSG_MODBLACKLIST = "Not loading blacklisted module '%s'"
-local MSG_MODLOADFAIL = "Could not load one or more modules!"
 
 local MODULEEXPR = '([%w-_]+)'
 local QVALEXPR = "\"([%w%s%p]-)\""
@@ -267,12 +265,12 @@ local function isValidComment(line)
 end
 
 local function getBlacklist()
+	local blacklist = {}
 	local blacklist_str = loader.getenv('module_blacklist')
 	if blacklist_str == nil then
-		return nil
+		return blacklist
 	end
 
-	local blacklist = {}
 	for mod in blacklist_str:gmatch("[;, ]?([%w-_]+)[;, ]?") do
 		blacklist[mod] = true
 	end
@@ -292,6 +290,9 @@ local function loadModule(mod, silent)
 				end
 				goto continue
 			end
+			if not silent then
+				loader.printc(module_name .. "...")
+			end
 			local str = "load "
 			if v.type ~= nil then
 				str = str .. "-t " .. v.type .. " "
@@ -309,23 +310,29 @@ local function loadModule(mod, silent)
 			end
 
 			if cli_execute_unparsed(str) ~= 0 then
+				-- XXX Temporary shim: don't break the boot if
+				-- loader hadn't been recompiled with this
+				-- function exposed.
+				if loader.command_error then
+					print(loader.command_error())
+				end
 				if not silent then
-					print(MSG_FAILEXMOD:format(str))
+					print("failed!")
 				end
 				if v.error ~= nil then
 					cli_execute_unparsed(v.error)
 				end
 				status = false
-			end
-
-			if v.after ~= nil then
+			elseif v.after ~= nil then
 				pstatus = cli_execute_unparsed(v.after) == 0
 				if not pstatus and not silent then
 					print(MSG_FAILEXAF:format(v.after, k))
 				end
+				if not silent then
+					print("ok")
+				end
 				status = status and pstatus
 			end
-
 		end
 		::continue::
 	end
@@ -622,20 +629,18 @@ function config.loadelf()
 		print(MSG_XENKERNLOADING)
 		if cli_execute_unparsed('load ' .. xen_kernel) ~= 0 then
 			print(MSG_XENKERNFAIL:format(xen_kernel))
-			return
+			return false
 		end
 	end
 	print(MSG_KERNLOADING)
 	loaded = config.loadKernel(kernel)
 
 	if not loaded then
-		return
+		return false
 	end
 
 	print(MSG_MODLOADING)
-	if not loadModule(modules, not config.verbose) then
-		print(MSG_MODLOADFAIL)
-	end
+	return loadModule(modules, not config.verbose)
 end
 
 hook.registerType("config.loaded")

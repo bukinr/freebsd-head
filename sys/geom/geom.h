@@ -215,8 +215,8 @@ struct g_provider {
 	TAILQ_ENTRY(g_provider)	orphan;
 	off_t			mediasize;
 	u_int			sectorsize;
-	u_int			stripesize;
-	u_int			stripeoffset;
+	off_t			stripesize;
+	off_t			stripeoffset;
 	struct devstat		*stat;
 	u_int			nstart, nend;
 	u_int			flags;
@@ -415,7 +415,7 @@ g_free(void *ptr)
 	static moduledata_t name##_mod = {			\
 		#name, g_modevent, &class			\
 	};							\
-	DECLARE_MODULE(name, name##_mod, SI_SUB_DRIVERS, SI_ORDER_FIRST);
+	DECLARE_MODULE(name, name##_mod, SI_SUB_DRIVERS, SI_ORDER_SECOND);
 
 int g_is_geom_thread(struct thread *td);
 

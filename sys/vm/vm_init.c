@@ -68,6 +68,7 @@
 __FBSDID("$FreeBSD$");
 
 #include <sys/param.h>
+#include <sys/domainset.h>
 #include <sys/kernel.h>
 #include <sys/lock.h>
 #include <sys/proc.h>
@@ -117,11 +118,22 @@ vm_mem_init(void *dummy)
 {
 
 	/*
-	 * Initializes resident memory structures. From here on, all physical
+	 * Initialize static domainsets, used by various allocators.
+	 */
+	domainset_init();
+
+	/*
+	 * Initialize resident memory structures.  From here on, all physical
 	 * memory is accounted for, and we use only virtual addresses.
 	 */
 	vm_set_page_size();
 	virtual_avail = vm_page_startup(virtual_avail);
+
+	/*
+	 * Set an initial domain policy for thread0 so that allocations
+	 * can work.
+	 */
+	domainset_zero();
 
 #ifdef	UMA_MD_SMALL_ALLOC
 	/* Announce page availability to UMA. */
@@ -209,11 +221,9 @@ again:
 		panic("startup: table size inconsistency");
 
 	/*
-	 * Allocate the clean map to hold all of the paging and I/O virtual
-	 * memory.
+	 * Allocate the clean map to hold all of I/O virtual memory.
 	 */
-	size = (long)nbuf * BKVASIZE + (long)nswbuf * MAXPHYS +
-	    (long)bio_transient_maxcnt * MAXPHYS;
+	size = (long)nbuf * BKVASIZE + (long)bio_transient_maxcnt * MAXPHYS;
 	kmi->clean_sva = firstaddr = kva_alloc(size);
 	kmi->clean_eva = firstaddr + size;
 
@@ -228,13 +238,6 @@ again:
 	kmi->buffer_eva = kmi->buffer_sva + size;
 	vmem_init(buffer_arena, "buffer arena", kmi->buffer_sva, size,
 	    PAGE_SIZE, (mp_ncpus > 4) ? BKVASIZE * 8 : 0, 0);
-	firstaddr += size;
-
-	/*
-	 * Now swap kva.
-	 */
-	swapbkva = firstaddr;
-	size = (long)nswbuf * MAXPHYS;
 	firstaddr += size;
 
 	/*

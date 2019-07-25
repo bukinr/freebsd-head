@@ -62,6 +62,7 @@ __FBSDID("$FreeBSD$");
 #include "common/t4_msg.h"
 #include "common/t4_regs.h"
 #include "common/t4_regs_values.h"
+#include "t4_clip.h"
 #include "tom/t4_tom_l2t.h"
 #include "tom/t4_tom.h"
 
@@ -98,7 +99,8 @@ do_act_establish(struct sge_iq *iq, const struct rss_header *rss,
 		goto done;
 	}
 
-	make_established(toep, cpl->snd_isn, cpl->rcv_isn, cpl->tcp_opt);
+	make_established(toep, be32toh(cpl->snd_isn) - 1,
+	    be32toh(cpl->rcv_isn) - 1, cpl->tcp_opt);
 
 	if (toep->ulp_mode == ULP_MODE_TLS)
 		tls_establish(toep);
@@ -316,7 +318,6 @@ t4_connect(struct toedev *tod, struct socket *so, struct rtentry *rt,
     struct sockaddr *nam)
 {
 	struct adapter *sc = tod->tod_softc;
-	struct tom_data *td = tod_td(tod);
 	struct toepcb *toep = NULL;
 	struct wrqe *wr = NULL;
 	struct ifnet *rt_ifp = rt->rt_ifp;
@@ -384,8 +385,7 @@ t4_connect(struct toedev *tod, struct socket *so, struct rtentry *rt,
 	toep->vnet = so->so_vnet;
 	set_ulp_mode(toep, select_ulp_mode(so, sc, &settings));
 	SOCKBUF_LOCK(&so->so_rcv);
-	/* opt0 rcv_bufsiz initially, assumes its normal meaning later */
-	toep->rx_credits = min(select_rcv_wnd(so) >> 10, M_RCV_BUFSIZ);
+	toep->opt0_rcv_bufsize = min(select_rcv_wnd(so) >> 10, M_RCV_BUFSIZ);
 	SOCKBUF_UNLOCK(&so->so_rcv);
 
 	/*
@@ -409,7 +409,7 @@ t4_connect(struct toedev *tod, struct socket *so, struct rtentry *rt,
 		if ((inp->inp_vflag & INP_IPV6) == 0)
 			DONT_OFFLOAD_ACTIVE_OPEN(ENOTSUP);
 
-		toep->ce = hold_lip(td, &inp->in6p_laddr, NULL);
+		toep->ce = t4_hold_lip(sc, &inp->in6p_laddr, NULL);
 		if (toep->ce == NULL)
 			DONT_OFFLOAD_ACTIVE_OPEN(ENOENT);
 
@@ -439,7 +439,7 @@ t4_connect(struct toedev *tod, struct socket *so, struct rtentry *rt,
 		cpl->peer_ip_hi = *(uint64_t *)&inp->in6p_faddr.s6_addr[0];
 		cpl->peer_ip_lo = *(uint64_t *)&inp->in6p_faddr.s6_addr[8];
 		cpl->opt0 = calc_opt0(so, vi, toep->l2te, mtu_idx, rscale,
-		    toep->rx_credits, toep->ulp_mode, &settings);
+		    toep->opt0_rcv_bufsize, toep->ulp_mode, &settings);
 		cpl->opt2 = calc_opt2a(so, toep, &settings);
 	} else {
 		struct cpl_act_open_req *cpl = wrtod(wr);
@@ -468,7 +468,7 @@ t4_connect(struct toedev *tod, struct socket *so, struct rtentry *rt,
 		inp_4tuple_get(inp, &cpl->local_ip, &cpl->local_port,
 		    &cpl->peer_ip, &cpl->peer_port);
 		cpl->opt0 = calc_opt0(so, vi, toep->l2te, mtu_idx, rscale,
-		    toep->rx_credits, toep->ulp_mode, &settings);
+		    toep->opt0_rcv_bufsize, toep->ulp_mode, &settings);
 		cpl->opt2 = calc_opt2a(so, toep, &settings);
 	}
 
@@ -496,7 +496,7 @@ failed:
 		if (toep->l2te)
 			t4_l2t_release(toep->l2te);
 		if (toep->ce)
-			release_lip(td, toep->ce);
+			t4_release_lip(sc, toep->ce);
 		free_toepcb(toep);
 	}
 

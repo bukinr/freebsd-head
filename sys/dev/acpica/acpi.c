@@ -33,6 +33,7 @@ __FBSDID("$FreeBSD$");
 #include "opt_acpi.h"
 
 #include <sys/param.h>
+#include <sys/eventhandler.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
 #include <sys/fcntl.h>
@@ -140,7 +141,7 @@ static void	acpi_delete_resource(device_t bus, device_t child, int type,
 		    int rid);
 static uint32_t	acpi_isa_get_logicalid(device_t dev);
 static int	acpi_isa_get_compatid(device_t dev, uint32_t *cids, int count);
-static char	*acpi_device_id_probe(device_t bus, device_t dev, char **ids);
+static int	acpi_device_id_probe(device_t bus, device_t dev, char **ids, char **match);
 static ACPI_STATUS acpi_device_eval_obj(device_t bus, device_t dev,
 		    ACPI_STRING pathname, ACPI_OBJECT_LIST *parameters,
 		    ACPI_BUFFER *ret);
@@ -179,9 +180,7 @@ static int	acpi_child_location_str_method(device_t acdev, device_t child,
 					       char *buf, size_t buflen);
 static int	acpi_child_pnpinfo_str_method(device_t acdev, device_t child,
 					      char *buf, size_t buflen);
-#if defined(__i386__) || defined(__amd64__)
 static void	acpi_enable_pcie(void);
-#endif
 static void	acpi_hint_device_unit(device_t acdev, device_t child,
 		    const char *name, int *unitp);
 static void	acpi_reset_interfaces(device_t dev);
@@ -502,10 +501,8 @@ acpi_attach(device_t dev)
 	goto out;
     }
 
-#if defined(__i386__) || defined(__amd64__)
     /* Handle MCFG table if present. */
     acpi_enable_pcie();
-#endif
 
     /*
      * Note that some systems (specifically, those with namespace evaluation
@@ -1183,7 +1180,7 @@ acpi_sysres_alloc(device_t dev)
     if (device_get_children(dev, &children, &child_count) != 0)
 	return (ENXIO);
     for (i = 0; i < child_count; i++) {
-	if (ACPI_ID_PROBE(dev, children[i], sysres_ids) != NULL)
+	if (ACPI_ID_PROBE(dev, children[i], sysres_ids, NULL) <= 0)
 	    device_probe_and_attach(children[i]);
     }
     free(children, M_TEMP);
@@ -1242,7 +1239,7 @@ acpi_reserve_resources(device_t dev)
 	rl = &ad->ad_rl;
 
 	/* Don't reserve system resources. */
-	if (ACPI_ID_PROBE(dev, children[i], sysres_ids) != NULL)
+	if (ACPI_ID_PROBE(dev, children[i], sysres_ids, NULL) <= 0)
 	    continue;
 
 	STAILQ_FOREACH(rle, rl, link) {
@@ -1286,13 +1283,13 @@ acpi_set_resource(device_t dev, device_t child, int type, int rid,
     struct acpi_softc *sc = device_get_softc(dev);
     struct acpi_device *ad = device_get_ivars(child);
     struct resource_list *rl = &ad->ad_rl;
-#if defined(__i386__) || defined(__amd64__)
     ACPI_DEVICE_INFO *devinfo;
-#endif
     rman_res_t end;
-    
+    int allow;
+
     /* Ignore IRQ resources for PCI link devices. */
-    if (type == SYS_RES_IRQ && ACPI_ID_PROBE(dev, child, pcilink_ids) != NULL)
+    if (type == SYS_RES_IRQ &&
+	ACPI_ID_PROBE(dev, child, pcilink_ids, NULL) <= 0)
 	return (0);
 
     /*
@@ -1304,11 +1301,15 @@ acpi_set_resource(device_t dev, device_t child, int type, int rid,
      * x86 of a PCI bridge claiming the I/O ports used for PCI config
      * access.
      */
-#if defined(__i386__) || defined(__amd64__)
     if (type == SYS_RES_MEMORY || type == SYS_RES_IOPORT) {
 	if (ACPI_SUCCESS(AcpiGetObjectInfo(ad->ad_handle, &devinfo))) {
 	    if ((devinfo->Flags & ACPI_PCI_ROOT_BRIDGE) != 0) {
-		if (!(type == SYS_RES_IOPORT && start == CONF1_ADDR_PORT)) {
+#if defined(__i386__) || defined(__amd64__)
+		allow = (type == SYS_RES_IOPORT && start == CONF1_ADDR_PORT);
+#else
+		allow = 0;
+#endif
+		if (!allow) {
 		    AcpiOsFree(devinfo);
 		    return (0);
 		}
@@ -1316,6 +1317,12 @@ acpi_set_resource(device_t dev, device_t child, int type, int rid,
 	    AcpiOsFree(devinfo);
 	}
     }
+
+#ifdef INTRNG
+    /* map with default for now */
+    if (type == SYS_RES_IRQ)
+	start = (rman_res_t)acpi_map_intr(child, (u_int)start,
+			acpi_get_handle(child));
 #endif
 
     /* If the resource is already allocated, fail. */
@@ -1335,7 +1342,7 @@ acpi_set_resource(device_t dev, device_t child, int type, int rid,
 	return (0);
 
     /* Don't reserve system resources. */
-    if (ACPI_ID_PROBE(dev, child, sysres_ids) != NULL)
+    if (ACPI_ID_PROBE(dev, child, sysres_ids, NULL) <= 0)
 	return (0);
 
     /*
@@ -1344,6 +1351,14 @@ acpi_set_resource(device_t dev, device_t child, int type, int rid,
      * using legacy routing).
      */
     if (type == SYS_RES_IRQ)
+	return (0);
+
+    /*
+     * Don't reserve resources for CPU devices.  Some of these
+     * resources need to be allocated as shareable, but reservations
+     * are always non-shareable.
+     */
+    if (device_get_devclass(child) == devclass_find("cpu"))
 	return (0);
 
     /*
@@ -1640,26 +1655,34 @@ acpi_isa_get_compatid(device_t dev, uint32_t *cids, int count)
     return_VALUE (valid);
 }
 
-static char *
-acpi_device_id_probe(device_t bus, device_t dev, char **ids) 
+static int
+acpi_device_id_probe(device_t bus, device_t dev, char **ids, char **match) 
 {
     ACPI_HANDLE h;
     ACPI_OBJECT_TYPE t;
+    int rv;
     int i;
 
     h = acpi_get_handle(dev);
     if (ids == NULL || h == NULL)
-	return (NULL);
+	return (ENXIO);
     t = acpi_get_type(dev);
     if (t != ACPI_TYPE_DEVICE && t != ACPI_TYPE_PROCESSOR)
-	return (NULL);
+	return (ENXIO);
 
     /* Try to match one of the array of IDs with a HID or CID. */
     for (i = 0; ids[i] != NULL; i++) {
-	if (acpi_MatchHid(h, ids[i]))
-	    return (ids[i]);
+	rv = acpi_MatchHid(h, ids[i]);
+	if (rv == ACPI_MATCHHID_NOMATCH)
+	    continue;
+	
+	if (match != NULL) {
+	    *match = ids[i];
+	}
+	return ((rv == ACPI_MATCHHID_HID)?
+		    BUS_PROBE_DEFAULT : BUS_PROBE_LOW_PRIORITY);
     }
-    return (NULL);
+    return (ENXIO);
 }
 
 static ACPI_STATUS
@@ -1858,15 +1881,18 @@ acpi_isa_pnp_probe(device_t bus, device_t child, struct isa_pnp_id *ids)
     return_VALUE (result);
 }
 
-#if defined(__i386__) || defined(__amd64__)
 /*
  * Look for a MCFG table.  If it is present, use the settings for
  * domain (segment) 0 to setup PCI config space access via the memory
  * map.
+ *
+ * On non-x86 architectures (arm64 for now), this will be done from the
+ * PCI host bridge driver.
  */
 static void
 acpi_enable_pcie(void)
 {
+#if defined(__i386__) || defined(__amd64__)
 	ACPI_TABLE_HEADER *hdr;
 	ACPI_MCFG_ALLOCATION *alloc, *end;
 	ACPI_STATUS status;
@@ -1885,31 +1911,8 @@ acpi_enable_pcie(void)
 		}
 		alloc++;
 	}
-}
-#elif defined(__aarch64__)
-static void
-acpi_enable_pcie(device_t child, int segment)
-{
-	ACPI_TABLE_HEADER *hdr;
-	ACPI_MCFG_ALLOCATION *alloc, *end;
-	ACPI_STATUS status;
-
-	status = AcpiGetTable(ACPI_SIG_MCFG, 1, &hdr);
-	if (ACPI_FAILURE(status))
-		return;
-
-	end = (ACPI_MCFG_ALLOCATION *)((char *)hdr + hdr->Length);
-	alloc = (ACPI_MCFG_ALLOCATION *)((ACPI_TABLE_MCFG *)hdr + 1);
-	while (alloc < end) {
-		if (alloc->PciSegment == segment) {
-			bus_set_resource(child, SYS_RES_MEMORY, 0,
-			    alloc->Address, 0x10000000);
-			return;
-		}
-		alloc++;
-	}
-}
 #endif
+}
 
 /*
  * Scan all of the ACPI namespace and attach child devices.
@@ -2000,9 +2003,6 @@ acpi_probe_child(ACPI_HANDLE handle, UINT32 level, void *context, void **status)
 {
     ACPI_DEVICE_INFO *devinfo;
     struct acpi_device	*ad;
-#ifdef __aarch64__
-    int segment;
-#endif
     struct acpi_prw_data prw;
     ACPI_OBJECT_TYPE type;
     ACPI_HANDLE h;
@@ -2105,13 +2105,6 @@ acpi_probe_child(ACPI_HANDLE handle, UINT32 level, void *context, void **status)
 		    ad->ad_cls_class = strtoul(devinfo->ClassCode.String,
 			NULL, 16);
 		}
-#ifdef __aarch64__
-		if ((devinfo->Flags & ACPI_PCI_ROOT_BRIDGE) != 0) {
-		    if (ACPI_SUCCESS(acpi_GetInteger(handle, "_SEG", &segment))) {
-			acpi_enable_pcie(child, segment);
-		    }
-		}
-#endif
 		AcpiOsFree(devinfo);
 	    }
 	    break;
@@ -2219,20 +2212,23 @@ acpi_DeviceIsPresent(device_t dev)
 	h = acpi_get_handle(dev);
 	if (h == NULL)
 		return (FALSE);
-	status = acpi_GetInteger(h, "_STA", &s);
-
 	/*
-	 * Onboard serial ports on certain AMD motherboards have an invalid _STA
-	 * method that always returns 0.  Force them to always be treated as present.
-	 *
-	 * This may solely be a quirk of a preproduction BIOS.
+	 * Certain Treadripper boards always returns 0 for FreeBSD because it
+	 * only returns non-zero for the OS string "Windows 2015". Otherwise it
+	 * will return zero. Force them to always be treated as present.
+	 * Beata versions were worse: they always returned 0.
 	 */
 	if (acpi_MatchHid(h, "AMDI0020") || acpi_MatchHid(h, "AMDI0010"))
 		return (TRUE);
 
-	/* If no _STA method, must be present */
+	status = acpi_GetInteger(h, "_STA", &s);
+
+	/*
+	 * If no _STA method or if it failed, then assume that
+	 * the device is present.
+	 */
 	if (ACPI_FAILURE(status))
-		return (status == AE_NOT_FOUND ? TRUE : FALSE);
+		return (TRUE);
 
 	return (ACPI_DEVICE_PRESENT(s) ? TRUE : FALSE);
 }
@@ -2252,9 +2248,12 @@ acpi_BatteryIsPresent(device_t dev)
 		return (FALSE);
 	status = acpi_GetInteger(h, "_STA", &s);
 
-	/* If no _STA method, must be present */
+	/*
+	 * If no _STA method or if it failed, then assume that
+	 * the device is present.
+	 */
 	if (ACPI_FAILURE(status))
-		return (status == AE_NOT_FOUND ? TRUE : FALSE);
+		return (TRUE);
 
 	return (ACPI_BATTERY_PRESENT(s) ? TRUE : FALSE);
 }
@@ -2285,8 +2284,11 @@ acpi_has_hid(ACPI_HANDLE h)
 
 /*
  * Match a HID string against a handle
+ * returns ACPI_MATCHHID_HID if _HID match
+ *         ACPI_MATCHHID_CID if _CID match and not _HID match.
+ *         ACPI_MATCHHID_NOMATCH=0 if no match.
  */
-BOOLEAN
+int
 acpi_MatchHid(ACPI_HANDLE h, const char *hid) 
 {
     ACPI_DEVICE_INFO	*devinfo;
@@ -2295,16 +2297,16 @@ acpi_MatchHid(ACPI_HANDLE h, const char *hid)
 
     if (hid == NULL || h == NULL ||
 	ACPI_FAILURE(AcpiGetObjectInfo(h, &devinfo)))
-	return (FALSE);
+	return (ACPI_MATCHHID_NOMATCH);
 
-    ret = FALSE;
+    ret = ACPI_MATCHHID_NOMATCH;
     if ((devinfo->Valid & ACPI_VALID_HID) != 0 &&
 	strcmp(hid, devinfo->HardwareId.String) == 0)
-	    ret = TRUE;
+	    ret = ACPI_MATCHHID_HID;
     else if ((devinfo->Valid & ACPI_VALID_CID) != 0)
 	for (i = 0; i < devinfo->CompatibleIdList.Count; i++) {
 	    if (strcmp(hid, devinfo->CompatibleIdList.Ids[i].String) == 0) {
-		ret = TRUE;
+		ret = ACPI_MATCHHID_CID;
 		break;
 	    }
 	}

@@ -221,7 +221,8 @@
 #define	FFS_UNLINK		14	/* remove a name in the filesystem */
 #define	FFS_SET_INODE		15	/* update an on-disk inode */
 #define	FFS_SET_BUFOUTPUT	16	/* set buffered writing on descriptor */
-#define	FFS_MAXID		16	/* number of valid ffs ids */
+#define	FFS_SET_SIZE		17	/* set inode size */
+#define	FFS_MAXID		17	/* number of valid ffs ids */
 
 /*
  * Command structure passed in to the filesystem to adjust filesystem values.
@@ -364,7 +365,8 @@ struct fs {
 	int32_t	 fs_save_cgsize;	/* save real cg size to use fs_bsize */
 	ufs_time_t fs_mtime;		/* Last mount or fsck time. */
 	int32_t  fs_sujfree;		/* SUJ free list */
-	int32_t	 fs_sparecon32[22];	/* reserved for future constants */
+	int32_t	 fs_sparecon32[21];	/* reserved for future constants */
+	u_int32_t fs_ckhash;		/* if CK_SUPERBLOCK, its check-hash */
 	u_int32_t fs_metackhash;	/* metadata check-hash, see CK_ below */
 	int32_t  fs_flags;		/* see FS_ flags below */
 	int32_t	 fs_contigsumsize;	/* size of cluster summary array */ 

@@ -3,6 +3,7 @@
 
 KMOD=mlx5en
 SRCS= \
+mlx5_en_dim.c \
 mlx5_en_ethtool.c \
 mlx5_en_main.c \
 mlx5_en_tx.c \
@@ -19,6 +20,10 @@ CFLAGS+= -DHAVE_PER_CQ_EVENT_PACKET
 
 .if defined(HAVE_TCP_LRO_RX)
 CFLAGS+= -DHAVE_TCP_LRO_RX
+.endif
+
+.if defined(CONFIG_BUILD_FPGA)
+CFLAGS+= -DCONFIG_MLX5_FPGA
 .endif
 
 CFLAGS+= -I${SRCTOP}/sys/ofed/include

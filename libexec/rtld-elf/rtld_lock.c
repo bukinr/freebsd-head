@@ -52,6 +52,7 @@
 #include "debug.h"
 #include "rtld.h"
 #include "rtld_machdep.h"
+#include "rtld_libc.h"
 
 void _rtld_thread_init(struct RtldLockInfo *) __exported;
 void _rtld_atfork_pre(int *) __exported;
@@ -184,7 +185,7 @@ thread_mask_clear(int mask)
 }
 
 #define	RTLD_LOCK_CNT	3
-struct rtld_lock {
+static struct rtld_lock {
 	void	*handle;
 	int	 mask;
 } rtld_locks[RTLD_LOCK_CNT];

@@ -274,7 +274,7 @@ g_part_mbr_bootcode(struct g_part_table *basetable, struct g_part_parms *gpp)
 	table = (struct g_part_mbr_table *)basetable;
 	dsn = *(uint32_t *)(table->mbr + DOSDSNOFF);
 	bcopy(gpp->gpp_codeptr, table->mbr, DOSPARTOFF);
-	if (dsn != 0)
+	if (dsn != 0 && !gpp->gpp_skip_dsn)
 		*(uint32_t *)(table->mbr + DOSDSNOFF) = dsn;
 	return (0);
 }
@@ -330,7 +330,7 @@ g_part_mbr_dumpconf(struct g_part_table *basetable, struct g_part_entry *baseent
 		sbuf_printf(sb, "%s<efimedia>HD(%d,MBR,%#08x,%#jx,%#jx)", indent,
 		    entry->base.gpe_index, dsn, (intmax_t)entry->base.gpe_start,
 		    (intmax_t)(entry->base.gpe_end - entry->base.gpe_start + 1));
-		sbuf_printf(sb, "</efimedia>\n");
+		sbuf_cat(sb, "</efimedia>\n");
 	} else {
 		/* confxml: scheme information */
 	}

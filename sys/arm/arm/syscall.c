@@ -118,8 +118,6 @@ cpu_fetch_syscall_args(struct thread *td)
 		ap += 2;
 	}
 	p = td->td_proc;
-	if (p->p_sysent->sv_mask)
-		sa->code &= p->p_sysent->sv_mask;
 	if (sa->code >= p->p_sysent->sv_size)
 		sa->callp = &p->p_sysent->sv_table[0];
 	else
@@ -143,14 +141,10 @@ cpu_fetch_syscall_args(struct thread *td)
 static void
 syscall(struct thread *td, struct trapframe *frame)
 {
-	int error;
 
 	td->td_sa.nap = 4;
-
-	error = syscallenter(td);
-	KASSERT(error != 0 || td->td_ar == NULL,
-	    ("returning from syscall with td_ar set!"));
-	syscallret(td, error);
+	syscallenter(td);
+	syscallret(td);
 }
 
 void

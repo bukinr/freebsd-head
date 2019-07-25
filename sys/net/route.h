@@ -210,6 +210,7 @@ struct rtentry {
 #define	NHF_DEFAULT		0x0080	/* Default route */
 #define	NHF_BROADCAST		0x0100	/* RTF_BROADCAST */
 #define	NHF_GATEWAY		0x0200	/* RTF_GATEWAY */
+#define	NHF_HOST		0x0400	/* RTF_HOST */
 
 /* Nexthop request flags */
 #define	NHR_IFAIF		0x01	/* Return ifa_ifp interface */
@@ -251,6 +252,7 @@ struct rt_msghdr {
 	u_char	rtm_version;	/* future binary compatibility */
 	u_char	rtm_type;	/* message type */
 	u_short	rtm_index;	/* index for associated ifp */
+	u_short _rtm_spare1;
 	int	rtm_flags;	/* flags, incl. kern & message, e.g. DONE */
 	int	rtm_addrs;	/* bitmask identifying sockaddrs in msg */
 	pid_t	rtm_pid;	/* identify sender */

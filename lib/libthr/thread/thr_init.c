@@ -272,6 +272,7 @@ static pthread_func_t jmp_table[][2] = {
 	{DUAL_ENTRY(_pthread_mutex_consistent)},/* PJT_MUTEX_CONSISTENT */
 	{DUAL_ENTRY(_pthread_mutexattr_getrobust)},/* PJT_MUTEXATTR_GETROBUST */
 	{DUAL_ENTRY(_pthread_mutexattr_setrobust)},/* PJT_MUTEXATTR_SETROBUST */
+	{DUAL_ENTRY(_pthread_getthreadid_np)},	/* PJT_GETTHREADID_NP */
 };
 
 static int init_once = 0;
@@ -461,6 +462,7 @@ init_private(void)
 	 */
 	if (init_once == 0) {
 		__thr_pshared_init();
+		__thr_malloc_init();
 		/* Find the stack top */
 		mib[0] = CTL_KERN;
 		mib[1] = KERN_USRSTACK;
@@ -474,8 +476,9 @@ init_private(void)
 				PANIC("Cannot get stack rlimit");
 			_thr_stack_initial = rlim.rlim_cur;
 		}
-		len = sizeof(_thr_is_smp);
-		sysctlbyname("kern.smp.cpus", &_thr_is_smp, &len, NULL, 0);
+		_thr_is_smp = sysconf(_SC_NPROCESSORS_CONF);
+		if (_thr_is_smp == -1)
+			PANIC("Cannot get _SC_NPROCESSORS_CONF");
 		_thr_is_smp = (_thr_is_smp > 1);
 		_thr_page_size = getpagesize();
 		_thr_guard_default = _thr_page_size;

@@ -63,7 +63,7 @@
 
 /*#define SMBFS_RWGENERIC*/
 
-extern int smbfs_pbuf_freecnt;
+extern uma_zone_t smbfs_pbuf_zone;
 
 static int smbfs_fastlookup = 1;
 
@@ -106,8 +106,8 @@ smbfs_readvdir(struct vnode *vp, struct uio *uio, struct ucred *cred)
 		de.d_namlen = offset + 1;
 		de.d_name[0] = '.';
 		de.d_name[1] = '.';
-		de.d_name[offset + 1] = '\0';
 		de.d_type = DT_DIR;
+		dirent_terminate(&de);
 		error = uiomove(&de, DE_SIZE, uio);
 		if (error)
 			goto out;
@@ -156,7 +156,7 @@ smbfs_readvdir(struct vnode *vp, struct uio *uio, struct ucred *cred)
 		de.d_type = (ctx->f_attr.fa_attr & SMB_FA_DIR) ? DT_DIR : DT_REG;
 		de.d_namlen = ctx->f_nmlen;
 		bcopy(ctx->f_name, de.d_name, de.d_namlen);
-		de.d_name[de.d_namlen] = '\0';
+		dirent_terminate(&de);
 		if (smbfs_fastlookup) {
 			error = smbfs_nget(vp->v_mount, vp, ctx->f_name,
 			    ctx->f_nmlen, &ctx->f_attr, &newvp);
@@ -375,9 +375,6 @@ smbfs_doio(struct vnode *vp, struct buf *bp, struct ucred *cr, struct thread *td
 		 */
 		if (error == EINTR
 		    || (!error && (bp->b_flags & B_NEEDCOMMIT))) {
-			int s;
-
-			s = splbio();
 			bp->b_flags &= ~(B_INVAL|B_NOCACHE);
 			if ((bp->b_flags & B_ASYNC) == 0)
 			    bp->b_flags |= B_EINTR;
@@ -387,7 +384,6 @@ smbfs_doio(struct vnode *vp, struct buf *bp, struct ucred *cr, struct thread *td
 			}
 			if ((bp->b_flags & B_ASYNC) == 0)
 			    bp->b_flags |= B_EINTR;
-			splx(s);
 		} else {
 			if (error) {
 				bp->b_ioflags |= BIO_ERROR;
@@ -468,7 +464,7 @@ smbfs_getpages(ap)
 	scred = smbfs_malloc_scred();
 	smb_makescred(scred, td, cred);
 
-	bp = getpbuf(&smbfs_pbuf_freecnt);
+	bp = uma_zalloc(smbfs_pbuf_zone, M_WAITOK);
 
 	kva = (vm_offset_t) bp->b_data;
 	pmap_qenter(kva, pages, npages);
@@ -490,7 +486,7 @@ smbfs_getpages(ap)
 	smbfs_free_scred(scred);
 	pmap_qremove(kva, npages);
 
-	relpbuf(bp, &smbfs_pbuf_freecnt);
+	uma_zfree(smbfs_pbuf_zone, bp);
 
 	if (error && (uio.uio_resid == count)) {
 		printf("smbfs_getpages: error %d\n",error);
@@ -593,7 +589,7 @@ smbfs_putpages(ap)
 		rtvals[i] = VM_PAGER_ERROR;
 	}
 
-	bp = getpbuf(&smbfs_pbuf_freecnt);
+	bp = uma_zalloc(smbfs_pbuf_zone, M_WAITOK);
 
 	kva = (vm_offset_t) bp->b_data;
 	pmap_qenter(kva, pages, npages);
@@ -621,7 +617,7 @@ smbfs_putpages(ap)
 
 	pmap_qremove(kva, npages);
 
-	relpbuf(bp, &smbfs_pbuf_freecnt);
+	uma_zfree(smbfs_pbuf_zone, bp);
 
 	if (error == 0) {
 		vnode_pager_undirty_pages(pages, rtvals, count - uio.uio_resid,

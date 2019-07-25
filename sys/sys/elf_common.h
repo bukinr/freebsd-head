@@ -369,6 +369,15 @@ typedef struct {
 #define	EF_PPC_RELOCATABLE	0x00010000
 #define	EF_PPC_RELOCATABLE_LIB	0x00008000
 
+#define	EF_RISCV_RVC		0x00000001
+#define	EF_RISCV_FLOAT_ABI_MASK	0x00000006
+#define	EF_RISCV_FLOAT_ABI_SOFT	0x00000000
+#define	EF_RISCV_FLOAT_ABI_SINGLE 0x000002
+#define	EF_RISCV_FLOAT_ABI_DOUBLE 0x000004
+#define	EF_RISCV_FLOAT_ABI_QUAD	0x00000006
+#define	EF_RISCV_RVE		0x00000008
+#define	EF_RISCV_TSO		0x00000010
+
 #define	EF_SPARC_EXT_MASK	0x00ffff00
 #define	EF_SPARC_32PLUS		0x00000100
 #define	EF_SPARC_SUN_US1	0x00000200
@@ -534,6 +543,10 @@ typedef struct {
 #define	PT_ARM_ARCHEXT	0x70000000	/* ARM arch compat information. */
 #define	PT_ARM_EXIDX	0x70000001	/* ARM exception unwind tables. */
 #define	PT_HIPROC	0x7fffffff	/* Last processor-specific type. */
+
+#define	PT_OPENBSD_RANDOMIZE	0x65A3DBE6	/* OpenBSD random data segment */
+#define	PT_OPENBSD_WXNEEDED	0x65A3DBE7	/* OpenBSD EXEC/WRITE pages needed */
+#define	PT_OPENBSD_BOOTDATA	0x65A41BE6	/* OpenBSD section for boot args */
 
 /* Values for p_flags. */
 #define	PF_X		0x1		/* Executable. */
@@ -707,6 +720,7 @@ typedef struct {
 #define	DT_MIPS_PLTGOT			0x70000032
 #define	DT_MIPS_RLD_OBJ_UPDATE		0x70000033
 #define	DT_MIPS_RWPLT			0x70000034
+#define	DT_MIPS_RLD_MAP_REL		0x70000035
 
 #define	DT_PPC_GOT			0x70000000
 #define	DT_PPC_TLSOPT			0x70000001
@@ -759,6 +773,11 @@ typedef struct {
 #define	NT_FREEBSD_ABI_TAG	1
 #define	NT_FREEBSD_NOINIT_TAG	2
 #define	NT_FREEBSD_ARCH_TAG	3
+#define	NT_FREEBSD_FEATURE_CTL	4
+
+/* NT_FREEBSD_FEATURE_CTL desc[0] bits */
+#define	NT_FREEBSD_FCTL_ASLR_DISABLE	0x00000001
+#define	NT_FREEBSD_FCTL_PROTMAX_DISABLE	0x00000002
 
 /* Values for n_type.  Used in core files. */
 #define	NT_PRSTATUS	1	/* Process status. */
@@ -779,6 +798,21 @@ typedef struct {
 #define	NT_PPC_VSX	0x102	/* PowerPC VSX registers */
 #define	NT_X86_XSTATE	0x202	/* x86 XSAVE extended state. */
 #define	NT_ARM_VFP	0x400	/* ARM VFP registers */
+
+/* GNU note types. */
+#define	NT_GNU_ABI_TAG		1
+#define	NT_GNU_HWCAP		2
+#define	NT_GNU_BUILD_ID		3
+#define	NT_GNU_GOLD_VERSION	4
+#define	NT_GNU_PROPERTY_TYPE_0	5
+
+#define	GNU_PROPERTY_LOPROC			0xc0000000
+#define	GNU_PROPERTY_HIPROC			0xdfffffff
+
+#define	GNU_PROPERTY_X86_FEATURE_1_AND		0xc0000002
+
+#define	GNU_PROPERTY_X86_FEATURE_1_IBT		0x00000001
+#define	GNU_PROPERTY_X86_FEATURE_1_SHSTK	0x00000002
 
 /* Symbol Binding - ELFNN_ST_BIND - st_info */
 #define	STB_LOCAL	0	/* Local symbol */
@@ -879,6 +913,50 @@ typedef struct {
 #define	ELFCOMPRESS_HIOS	0x6fffffff
 #define	ELFCOMPRESS_LOPROC	0x70000000	/* Processor-specific */
 #define	ELFCOMPRESS_HIPROC	0x7fffffff
+
+/* Values for a_type. */
+#define	AT_NULL		0	/* Terminates the vector. */
+#define	AT_IGNORE	1	/* Ignored entry. */
+#define	AT_EXECFD	2	/* File descriptor of program to load. */
+#define	AT_PHDR		3	/* Program header of program already loaded. */
+#define	AT_PHENT	4	/* Size of each program header entry. */
+#define	AT_PHNUM	5	/* Number of program header entries. */
+#define	AT_PAGESZ	6	/* Page size in bytes. */
+#define	AT_BASE		7	/* Interpreter's base address. */
+#define	AT_FLAGS	8	/* Flags. */
+#define	AT_ENTRY	9	/* Where interpreter should transfer control. */
+#define	AT_NOTELF	10	/* Program is not ELF ?? */
+#define	AT_UID		11	/* Real uid. */
+#define	AT_EUID		12	/* Effective uid. */
+#ifndef __powerpc__
+#define	AT_GID		13	/* Real gid. */
+#define	AT_EGID		14	/* Effective gid. */
+#define	AT_EXECPATH	15	/* Path to the executable. */
+#define	AT_CANARY	16	/* Canary for SSP. */
+#define	AT_CANARYLEN	17	/* Length of the canary. */
+#define	AT_OSRELDATE	18	/* OSRELDATE. */
+#define	AT_NCPUS	19	/* Number of CPUs. */
+#define	AT_PAGESIZES	20	/* Pagesizes. */
+#define	AT_PAGESIZESLEN	21	/* Number of pagesizes. */
+#else /* defined(__powerpc__) */
+#define	AT_EXECPATH	13
+#define	AT_CANARY	14
+#define	AT_CANARYLEN	15
+#define	AT_OSRELDATE	16
+#define	AT_NCPUS	17
+#define	AT_PAGESIZES	18
+#define	AT_PAGESIZESLEN	19
+#define	AT_STACKPROT	21
+#endif /* defined(__powerpc__) */
+#define	AT_TIMEKEEP	22	/* Pointer to timehands. */
+#ifndef __powerpc__
+#define	AT_STACKPROT	23	/* Initial stack protection. */
+#endif
+#define	AT_EHDRFLAGS	24	/* e_flags field from elf hdr */
+#define	AT_HWCAP	25	/* CPU feature flags. */
+#define	AT_HWCAP2	26	/* CPU feature flags 2. */
+
+#define	AT_COUNT	27	/* Count of defined aux entry types. */
 
 /*
  * Relocation types.
@@ -1242,6 +1320,17 @@ typedef struct {
 #define	R_RISCV_ALIGN		43
 #define	R_RISCV_RVC_BRANCH	44
 #define	R_RISCV_RVC_JUMP	45
+#define	R_RISCV_RVC_LUI		46
+#define	R_RISCV_GPREL_I		47
+#define	R_RISCV_GPREL_S		48
+#define	R_RISCV_TPREL_I		49
+#define	R_RISCV_TPREL_S		50
+#define	R_RISCV_RELAX		51
+#define	R_RISCV_SUB6		52
+#define	R_RISCV_SET6		53
+#define	R_RISCV_SET8		54
+#define	R_RISCV_SET16		55
+#define	R_RISCV_SET32		56
 
 #define	R_SPARC_NONE		0
 #define	R_SPARC_8		1

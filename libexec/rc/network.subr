@@ -229,6 +229,10 @@ ifconfig_up()
 		${IFCONFIG_CMD} $1 up
 	fi
 
+	if ! noafif $1 && afexists inet6; then
+		ipv6_accept_rtadv_up $1 && _cfg=0
+	fi
+
 	if dhcpif $1; then
 		if [ $_cfg -ne 0 ] ; then
 			${IFCONFIG_CMD} $1 up
@@ -257,9 +261,7 @@ ifconfig_down()
 	elif hostapif $1; then
 		/etc/rc.d/hostapd stop $1
 		_cfg=0
-	fi
-
-	if dhcpif $1; then
+	elif dhcpif $1; then
 		/etc/rc.d/dhclient stop $1
 		_cfg=0
 	fi
@@ -688,7 +690,6 @@ ipv6_up()
 
 	ifalias ${_if} inet6 alias && _ret=0
 	ipv6_prefix_hostid_addr_common ${_if} alias && _ret=0
-	ipv6_accept_rtadv_up ${_if} && _ret=0
 
 	return $_ret
 }
@@ -1200,10 +1201,12 @@ ipv6_accept_rtadv_up()
 {
 	if ipv6_autoconfif $1; then
 		${IFCONFIG_CMD} $1 inet6 accept_rtadv up
-		if ! checkyesno rtsold_enable; then
-			rtsol ${rtsol_flags} $1
+		if [ -x /sbin/rtsol ]; then
+			/sbin/rtsol ${rtsol_flags} $1
 		fi
+		return 0
 	fi
+	return 1
 }
 
 # ipv6_accept_rtadv_down if
@@ -1325,7 +1328,7 @@ wlan_down()
 #
 clone_up()
 {
-	local _list ifn ifopt _iflist _n tmpargs
+	local _list ifn ifopt _iflist _inet6 _n tmpargs
 	_list=
 	_iflist=$*
 
@@ -1391,9 +1394,21 @@ clone_up()
 		esac
 		if [ $? -eq 0 ]; then
 			_list="$_list $ifn"
+			tmpargs=$(get_if_var $ifn gifconfig_IF)
+			_inet6=''
+			case "$tmpargs" in
+			'')
+			;;
+			inet6[[:space:]]*)
+				tmpargs=${tmpargs#inet6}
+				_inet6=inet6
+				# FALLTHROUGH
+			;&
+			*)
+				${IFCONFIG_CMD} $ifn $_inet6 tunnel $tmpargs
+			;;
+			esac
 		fi
-		tmpargs=$(get_if_var $ifn gifconfig_IF)
-		eval ifconfig_${ifn}=\"\$ifconfig_${ifn} tunnel \$tmpargs\"
 	done
 	if [ -n "${_list# }" ]; then
 		echo "Created clone interfaces: ${_list# }."
@@ -1469,38 +1484,11 @@ clone_down()
 #	Create and configure child interfaces.  Return 0 if child
 #	interfaces are created.
 #
-#	XXXGL: the wlan code in this functions is superseded by wlan_up(),
-#	and will go away soon.
-#
 childif_create()
 {
-	local cfg child child_vlans child_wlans create_args debug_flags ifn i
+	local cfg child child_vlans create_args debug_flags ifn i
 	cfg=1
 	ifn=$1
-
-	# Create wireless interfaces
-	child_wlans=`get_if_var $ifn wlans_IF`
-
-	for child in ${child_wlans}; do
-		create_args="wlandev $ifn `get_if_var $child create_args_IF`"
-		debug_flags="`get_if_var $child wlandebug_IF`"
-
-		if expr $child : 'wlan[0-9][0-9]*$' >/dev/null 2>&1; then
-			${IFCONFIG_CMD} $child create ${create_args} && cfg=0
-			if [ -n "${debug_flags}" ]; then
-				wlandebug -i $child ${debug_flags}
-			fi
-		else
-			i=`${IFCONFIG_CMD} wlan create ${create_args}`
-			if [ -n "${debug_flags}" ]; then
-				wlandebug -i $i ${debug_flags}
-			fi
-			${IFCONFIG_CMD} $i name $child && cfg=0
-		fi
-		if autoif $child; then
-			ifn_start $child
-		fi
-	done
 
 	# Create vlan interfaces
 	child_vlans=`get_if_var $ifn vlans_IF`
@@ -1536,16 +1524,8 @@ childif_create()
 #
 childif_destroy()
 {
-	local cfg child child_vlans child_wlans ifn
+	local cfg child child_vlans ifn
 	cfg=1
-
-	child_wlans=`get_if_var $ifn wlans_IF`
-	for child in ${child_wlans}; do
-		if ! ifexists $child; then
-			continue
-		fi
-		${IFCONFIG_CMD} -n $child destroy && cfg=0
-	done
 
 	child_vlans=`get_if_var $ifn vlans_IF`
 	for child in ${child_vlans}; do

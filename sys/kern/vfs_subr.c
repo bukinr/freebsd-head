@@ -50,6 +50,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/systm.h>
 #include <sys/bio.h>
 #include <sys/buf.h>
+#include <sys/capsicum.h>
 #include <sys/condvar.h>
 #include <sys/conf.h>
 #include <sys/counter.h>
@@ -63,6 +64,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/kdb.h>
 #include <sys/kernel.h>
 #include <sys/kthread.h>
+#include <sys/ktr.h>
 #include <sys/lockf.h>
 #include <sys/malloc.h>
 #include <sys/mount.h>
@@ -156,7 +158,7 @@ SYSCTL_ULONG(_vfs, OID_AUTO, mnt_free_list_batch, CTLFLAG_RW,
  */
 enum vtype iftovt_tab[16] = {
 	VNON, VFIFO, VCHR, VNON, VDIR, VNON, VBLK, VNON,
-	VREG, VNON, VLNK, VNON, VSOCK, VNON, VNON, VBAD,
+	VREG, VNON, VLNK, VNON, VSOCK, VNON, VNON, VNON
 };
 int vttoif_tab[10] = {
 	0, S_IFREG, S_IFDIR, S_IFBLK, S_IFCHR, S_IFLNK,
@@ -337,6 +339,93 @@ SYSCTL_ULONG(_kern, OID_AUTO, minvnodes, CTLFLAG_RW,
 static int vnlru_nowhere;
 SYSCTL_INT(_debug, OID_AUTO, vnlru_nowhere, CTLFLAG_RW,
     &vnlru_nowhere, 0, "Number of times the vnlru process ran without success");
+
+static int
+sysctl_try_reclaim_vnode(SYSCTL_HANDLER_ARGS)
+{
+	struct vnode *vp;
+	struct nameidata nd;
+	char *buf;
+	unsigned long ndflags;
+	int error;
+
+	if (req->newptr == NULL)
+		return (EINVAL);
+	if (req->newlen > PATH_MAX)
+		return (E2BIG);
+
+	buf = malloc(PATH_MAX + 1, M_TEMP, M_WAITOK);
+	error = SYSCTL_IN(req, buf, req->newlen);
+	if (error != 0)
+		goto out;
+
+	buf[req->newlen] = '\0';
+
+	ndflags = LOCKLEAF | NOFOLLOW | AUDITVNODE1 | NOCACHE | SAVENAME;
+	NDINIT(&nd, LOOKUP, ndflags, UIO_SYSSPACE, buf, curthread);
+	if ((error = namei(&nd)) != 0)
+		goto out;
+	vp = nd.ni_vp;
+
+	if ((vp->v_iflag & VI_DOOMED) != 0) {
+		/*
+		 * This vnode is being recycled.  Return != 0 to let the caller
+		 * know that the sysctl had no effect.  Return EAGAIN because a
+		 * subsequent call will likely succeed (since namei will create
+		 * a new vnode if necessary)
+		 */
+		error = EAGAIN;
+		goto putvnode;
+	}
+
+	counter_u64_add(recycles_count, 1);
+	vgone(vp);
+putvnode:
+	NDFREE(&nd, 0);
+out:
+	free(buf, M_TEMP);
+	return (error);
+}
+
+static int
+sysctl_ftry_reclaim_vnode(SYSCTL_HANDLER_ARGS)
+{
+	struct thread *td = curthread;
+	struct vnode *vp;
+	struct file *fp;
+	int error;
+	int fd;
+
+	if (req->newptr == NULL)
+		return (EBADF);
+
+        error = sysctl_handle_int(oidp, &fd, 0, req);
+        if (error != 0)
+                return (error);
+	error = getvnode(curthread, fd, &cap_fcntl_rights, &fp);
+	if (error != 0)
+		return (error);
+	vp = fp->f_vnode;
+
+	error = vn_lock(vp, LK_EXCLUSIVE);
+	if (error != 0)
+		goto drop;
+
+	counter_u64_add(recycles_count, 1);
+	vgone(vp);
+	VOP_UNLOCK(vp, 0);
+drop:
+	fdrop(fp, td);
+	return (error);
+}
+
+SYSCTL_PROC(_debug, OID_AUTO, try_reclaim_vnode,
+    CTLTYPE_STRING | CTLFLAG_MPSAFE | CTLFLAG_WR, NULL, 0,
+    sysctl_try_reclaim_vnode, "A", "Try to reclaim a vnode by its pathname");
+SYSCTL_PROC(_debug, OID_AUTO, ftry_reclaim_vnode,
+    CTLTYPE_INT | CTLFLAG_MPSAFE | CTLFLAG_WR, NULL, 0,
+    sysctl_ftry_reclaim_vnode, "I",
+    "Try to reclaim a vnode by its file descriptor");
 
 /* Shift count for (uintptr_t)vp to initialize vp->v_hash. */
 static int vnsz2log;
@@ -1756,8 +1845,16 @@ flushbuflist(struct bufv *bufv, int flags, struct bufobj *bo, int slpflag,
 
 	retval = 0;
 	TAILQ_FOREACH_SAFE(bp, &bufv->bv_hd, b_bobufs, nbp) {
-		if (((flags & V_NORMAL) && (bp->b_xflags & BX_ALTDATA)) ||
-		    ((flags & V_ALT) && (bp->b_xflags & BX_ALTDATA) == 0)) {
+		/*
+		 * If we are flushing both V_NORMAL and V_ALT buffers then
+		 * do not skip any buffers. If we are flushing only V_NORMAL
+		 * buffers then skip buffers marked as BX_ALTDATA. If we are
+		 * flushing only V_ALT buffers then skip buffers not marked
+		 * as BX_ALTDATA.
+		 */
+		if (((flags & (V_NORMAL | V_ALT)) != (V_NORMAL | V_ALT)) &&
+		   (((flags & V_NORMAL) && (bp->b_xflags & BX_ALTDATA) != 0) ||
+		    ((flags & V_ALT) && (bp->b_xflags & BX_ALTDATA) == 0))) {
 			continue;
 		}
 		if (nbp != NULL) {
@@ -1840,7 +1937,7 @@ again:
 		 * reused.  Dirty buffers will have the hint applied once
 		 * they've been written.
 		 */
-		if (bp->b_vp->v_object != NULL)
+		if ((bp->b_flags & B_VMIO) != 0)
 			bp->b_flags |= B_NOREUSE;
 		brelse(bp);
 		BO_RLOCK(bo);
@@ -1854,15 +1951,15 @@ again:
  * sync activity.
  */
 int
-vtruncbuf(struct vnode *vp, struct ucred *cred, off_t length, int blksize)
+vtruncbuf(struct vnode *vp, off_t length, int blksize)
 {
 	struct buf *bp, *nbp;
 	int anyfreed;
-	int trunclbn;
+	daddr_t trunclbn;
 	struct bufobj *bo;
 
-	CTR5(KTR_VFS, "%s: vp %p with cred %p and block %d:%ju", __func__,
-	    vp, cred, blksize, (uintmax_t)length);
+	CTR4(KTR_VFS, "%s: vp %p with block %d:%ju", __func__,
+	    vp, blksize, (uintmax_t)length);
 
 	/*
 	 * Round up to the *next* lbn.
@@ -3138,7 +3235,7 @@ loop:
 
 			if ((vp->v_type == VNON ||
 			    (error == 0 && vattr.va_nlink > 0)) &&
-			    (vp->v_writecount == 0 || vp->v_type != VREG)) {
+			    (vp->v_writecount <= 0 || vp->v_type != VREG)) {
 				VOP_UNLOCK(vp, 0);
 				vdropl(vp);
 				continue;
@@ -3483,8 +3580,6 @@ vn_printf(struct vnode *vp, const char *fmt, ...)
 		strlcat(buf, "|VV_ETERNALDEV", sizeof(buf));
 	if (vp->v_vflag & VV_CACHEDLABEL)
 		strlcat(buf, "|VV_CACHEDLABEL", sizeof(buf));
-	if (vp->v_vflag & VV_TEXT)
-		strlcat(buf, "|VV_TEXT", sizeof(buf));
 	if (vp->v_vflag & VV_COPYONWRITE)
 		strlcat(buf, "|VV_COPYONWRITE", sizeof(buf));
 	if (vp->v_vflag & VV_SYSTEM)
@@ -3500,7 +3595,7 @@ vn_printf(struct vnode *vp, const char *fmt, ...)
 	if (vp->v_vflag & VV_FORCEINSMQ)
 		strlcat(buf, "|VV_FORCEINSMQ", sizeof(buf));
 	flags = vp->v_vflag & ~(VV_ROOT | VV_ISTTY | VV_NOSYNC | VV_ETERNALDEV |
-	    VV_CACHEDLABEL | VV_TEXT | VV_COPYONWRITE | VV_SYSTEM | VV_PROCDEP |
+	    VV_CACHEDLABEL | VV_COPYONWRITE | VV_SYSTEM | VV_PROCDEP |
 	    VV_NOKNOTE | VV_DELETED | VV_MD | VV_FORCEINSMQ);
 	if (flags != 0) {
 		snprintf(buf2, sizeof(buf2), "|VV(0x%lx)", flags);
@@ -4469,7 +4564,7 @@ privcheck:
 		 * requests, instead of PRIV_VFS_EXEC.
 		 */
 		if ((accmode & VEXEC) && ((dac_granted & VEXEC) == 0) &&
-		    !priv_check_cred(cred, PRIV_VFS_LOOKUP, 0))
+		    !priv_check_cred(cred, PRIV_VFS_LOOKUP))
 			priv_granted |= VEXEC;
 	} else {
 		/*
@@ -4479,20 +4574,20 @@ privcheck:
 		 */
 		if ((accmode & VEXEC) && ((dac_granted & VEXEC) == 0) &&
 		    (file_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) != 0 &&
-		    !priv_check_cred(cred, PRIV_VFS_EXEC, 0))
+		    !priv_check_cred(cred, PRIV_VFS_EXEC))
 			priv_granted |= VEXEC;
 	}
 
 	if ((accmode & VREAD) && ((dac_granted & VREAD) == 0) &&
-	    !priv_check_cred(cred, PRIV_VFS_READ, 0))
+	    !priv_check_cred(cred, PRIV_VFS_READ))
 		priv_granted |= VREAD;
 
 	if ((accmode & VWRITE) && ((dac_granted & VWRITE) == 0) &&
-	    !priv_check_cred(cred, PRIV_VFS_WRITE, 0))
+	    !priv_check_cred(cred, PRIV_VFS_WRITE))
 		priv_granted |= (VWRITE | VAPPEND);
 
 	if ((accmode & VADMIN) && ((dac_granted & VADMIN) == 0) &&
-	    !priv_check_cred(cred, PRIV_VFS_ADMIN, 0))
+	    !priv_check_cred(cred, PRIV_VFS_ADMIN))
 		priv_granted |= VADMIN;
 
 	if ((accmode & (priv_granted | dac_granted)) == accmode) {
@@ -4527,7 +4622,7 @@ extattr_check_cred(struct vnode *vp, int attrnamespace, struct ucred *cred,
 	switch (attrnamespace) {
 	case EXTATTR_NAMESPACE_SYSTEM:
 		/* Potentially should be: return (EPERM); */
-		return (priv_check_cred(cred, PRIV_VFS_EXTATTR_SYSTEM, 0));
+		return (priv_check_cred(cred, PRIV_VFS_EXTATTR_SYSTEM));
 	case EXTATTR_NAMESPACE_USER:
 		return (VOP_ACCESS(vp, accmode, cred, td));
 	default:

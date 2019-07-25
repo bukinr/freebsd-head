@@ -67,7 +67,7 @@ static char lbuf[LBUF];
 
 #define Decimal(str, ans, tmp, maxval) if (decimal(str, &tmp, ans, maxval)) ans = tmp
 
-#define MAX_SEC_SIZE 2048	/* maximum section size that is supported */
+#define MAX_SEC_SIZE 65536	/* maximum sector size that is supported */
 #define MIN_SEC_SIZE 512	/* the sector size to start sensing at */
 static int secsize = 0;		/* the sensed sector size */
 
@@ -175,6 +175,7 @@ static const char *const part_types[256] = {
 	[0x63] = "System V/386 (such as ISC UNIX), GNU HURD or Mach",
 	[0x64] = "Novell Netware/286 2.xx",
 	[0x65] = "Novell Netware/386 3.xx",
+	[0x6C] = "DragonFlyBSD",
 	[0x70] = "DiskSecure Multi-Boot",
 	[0x75] = "PCIX",
 	[0x77] = "QNX4.x",

@@ -36,16 +36,10 @@
  * shm_open(2) and shm_unlink(2).  While most of the implementation is
  * here, vm_mmap.c contains mapping logic changes.
  *
- * TODO:
- *
- * (1) Need to export data to a userland tool via a sysctl.  Should ipcs(1)
- *     and ipcrm(1) be expanded or should new tools to manage both POSIX
- *     kernel semaphores and POSIX shared memory be written?
- *
- * (2) Add support for this file type to fstat(1).
- *
- * (3) Resource limits?  Does this need its own resource limits or are the
- *     existing limits in mmap(2) sufficient?
+ * posixshmcontrol(1) allows users to inspect the state of the memory
+ * objects.  Per-uid swap resource limit controls total amount of
+ * memory that user can consume for anonymous objects, including
+ * shared.
  */
 
 #include <sys/cdefs.h>
@@ -60,6 +54,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/fcntl.h>
 #include <sys/file.h>
 #include <sys/filedesc.h>
+#include <sys/filio.h>
 #include <sys/fnv_hash.h>
 #include <sys/kernel.h>
 #include <sys/uio.h>
@@ -75,6 +70,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/refcount.h>
 #include <sys/resourcevar.h>
 #include <sys/rwlock.h>
+#include <sys/sbuf.h>
 #include <sys/stat.h>
 #include <sys/syscallsubr.h>
 #include <sys/sysctl.h>
@@ -113,7 +109,7 @@ static LIST_HEAD(, shm_mapping) *shm_dictionary;
 static struct sx shm_dict_lock;
 static struct mtx shm_timestamp_lock;
 static u_long shm_hash;
-static struct unrhdr *shm_ino_unr;
+static struct unrhdr64 shm_ino_unr;
 static dev_t shm_dev_ino;
 
 #define	SHM_HASH(fnv)	(&shm_dictionary[(fnv) & shm_hash])
@@ -126,6 +122,7 @@ static int	shm_remove(char *path, Fnv32_t fnv, struct ucred *ucred);
 static fo_rdwr_t	shm_read;
 static fo_rdwr_t	shm_write;
 static fo_truncate_t	shm_truncate;
+static fo_ioctl_t	shm_ioctl;
 static fo_stat_t	shm_stat;
 static fo_close_t	shm_close;
 static fo_chmod_t	shm_chmod;
@@ -139,7 +136,7 @@ struct fileops shm_ops = {
 	.fo_read = shm_read,
 	.fo_write = shm_write,
 	.fo_truncate = shm_truncate,
-	.fo_ioctl = invfo_ioctl,
+	.fo_ioctl = shm_ioctl,
 	.fo_poll = invfo_poll,
 	.fo_kqfilter = invfo_kqfilter,
 	.fo_stat = shm_stat,
@@ -210,11 +207,7 @@ uiomove_object_page(vm_object_t obj, size_t len, struct uio *uio)
 		vm_page_xunbusy(m);
 	}
 	vm_page_lock(m);
-	vm_page_hold(m);
-	if (vm_page_active(m))
-		vm_page_reference(m);
-	else
-		vm_page_activate(m);
+	vm_page_wire(m);
 	vm_page_unlock(m);
 	VM_OBJECT_WUNLOCK(obj);
 	error = uiomove_fromphys(&m, offset, tlen, uio);
@@ -225,7 +218,7 @@ uiomove_object_page(vm_object_t obj, size_t len, struct uio *uio)
 		VM_OBJECT_WUNLOCK(obj);
 	}
 	vm_page_lock(m);
-	vm_page_unhold(m);
+	vm_page_unwire(m, PQ_ACTIVE);
 	vm_page_unlock(m);
 
 	return (error);
@@ -363,6 +356,24 @@ shm_truncate(struct file *fp, off_t length, struct ucred *active_cred,
 	return (shm_dotruncate(shmfd, length));
 }
 
+int
+shm_ioctl(struct file *fp, u_long com, void *data, struct ucred *active_cred,
+    struct thread *td)
+{
+
+	switch (com) {
+	case FIONBIO:
+	case FIOASYNC:
+		/*
+		 * Allow fcntl(fd, F_SETFL, O_NONBLOCK) to work,
+		 * just like it would on an unlinked regular file
+		 */
+		return (0);
+	default:
+		return (ENOTTY);
+	}
+}
+
 static int
 shm_stat(struct file *fp, struct stat *sb, struct ucred *active_cred,
     struct thread *td)
@@ -399,6 +410,7 @@ shm_stat(struct file *fp, struct stat *sb, struct ucred *active_cred,
 	mtx_unlock(&shm_timestamp_lock);
 	sb->st_dev = shm_dev_ino;
 	sb->st_ino = shmfd->shm_ino;
+	sb->st_nlink = shmfd->shm_object->ref_count;
 
 	return (0);
 }
@@ -531,7 +543,6 @@ struct shmfd *
 shm_alloc(struct ucred *ucred, mode_t mode)
 {
 	struct shmfd *shmfd;
-	int ino;
 
 	shmfd = malloc(sizeof(*shmfd), M_SHMFD, M_WAITOK | M_ZERO);
 	shmfd->shm_size = 0;
@@ -549,11 +560,7 @@ shm_alloc(struct ucred *ucred, mode_t mode)
 	vfs_timestamp(&shmfd->shm_birthtime);
 	shmfd->shm_atime = shmfd->shm_mtime = shmfd->shm_ctime =
 	    shmfd->shm_birthtime;
-	ino = alloc_unr(shm_ino_unr);
-	if (ino == -1)
-		shmfd->shm_ino = 0;
-	else
-		shmfd->shm_ino = ino;
+	shmfd->shm_ino = alloc_unr64(&shm_ino_unr);
 	refcount_init(&shmfd->shm_refs, 1);
 	mtx_init(&shmfd->shm_mtx, "shmrl", NULL, MTX_DEF);
 	rangelock_init(&shmfd->shm_rl);
@@ -584,8 +591,6 @@ shm_drop(struct shmfd *shmfd)
 		rangelock_destroy(&shmfd->shm_rl);
 		mtx_destroy(&shmfd->shm_mtx);
 		vm_object_deallocate(shmfd->shm_object);
-		if (shmfd->shm_ino != 0)
-			free_unr(shm_ino_unr, shmfd->shm_ino);
 		free(shmfd, M_SHMFD);
 	}
 }
@@ -624,8 +629,7 @@ shm_init(void *arg)
 	mtx_init(&shm_timestamp_lock, "shm timestamps", NULL, MTX_DEF);
 	sx_init(&shm_dict_lock, "shm dictionary");
 	shm_dictionary = hashinit(1024, M_SHMFD, &shm_hash);
-	shm_ino_unr = new_unrhdr(1, INT32_MAX, NULL);
-	KASSERT(shm_ino_unr != NULL, ("shm fake inodes not initialized"));
+	new_unrhdr64(&shm_ino_unr, 1);
 	shm_dev_ino = devfs_alloc_cdp_inode();
 	KASSERT(shm_dev_ino > 0, ("shm dev inode not initialized"));
 }
@@ -976,7 +980,7 @@ shm_chown(struct file *fp, uid_t uid, gid_t gid, struct ucred *active_cred,
                  gid = shmfd->shm_gid;
 	if (((uid != shmfd->shm_uid && uid != active_cred->cr_uid) ||
 	    (gid != shmfd->shm_gid && !groupmember(gid, active_cred))) &&
-	    (error = priv_check_cred(active_cred, PRIV_VFS_CHOWN, 0)))
+	    (error = priv_check_cred(active_cred, PRIV_VFS_CHOWN)))
 		goto out;
 	shmfd->shm_uid = uid;
 	shmfd->shm_gid = gid;
@@ -1088,34 +1092,89 @@ shm_unmap(struct file *fp, void *mem, size_t size)
 }
 
 static int
-shm_fill_kinfo(struct file *fp, struct kinfo_file *kif, struct filedesc *fdp)
+shm_fill_kinfo_locked(struct shmfd *shmfd, struct kinfo_file *kif, bool list)
 {
 	const char *path, *pr_path;
-	struct shmfd *shmfd;
 	size_t pr_pathlen;
+	bool visible;
 
+	sx_assert(&shm_dict_lock, SA_LOCKED);
 	kif->kf_type = KF_TYPE_SHM;
-	shmfd = fp->f_data;
-
-	mtx_lock(&shm_timestamp_lock);
-	kif->kf_un.kf_file.kf_file_mode = S_IFREG | shmfd->shm_mode;	/* XXX */
-	mtx_unlock(&shm_timestamp_lock);
+	kif->kf_un.kf_file.kf_file_mode = S_IFREG | shmfd->shm_mode;
 	kif->kf_un.kf_file.kf_file_size = shmfd->shm_size;
 	if (shmfd->shm_path != NULL) {
-		sx_slock(&shm_dict_lock);
 		if (shmfd->shm_path != NULL) {
 			path = shmfd->shm_path;
 			pr_path = curthread->td_ucred->cr_prison->pr_path;
 			if (strcmp(pr_path, "/") != 0) {
 				/* Return the jail-rooted pathname. */
 				pr_pathlen = strlen(pr_path);
-				if (strncmp(path, pr_path, pr_pathlen) == 0 &&
-				    path[pr_pathlen] == '/')
+				visible = strncmp(path, pr_path, pr_pathlen)
+				    == 0 && path[pr_pathlen] == '/';
+				if (list && !visible)
+					return (EPERM);
+				if (visible)
 					path += pr_pathlen;
 			}
 			strlcpy(kif->kf_path, path, sizeof(kif->kf_path));
 		}
-		sx_sunlock(&shm_dict_lock);
 	}
 	return (0);
 }
+
+static int
+shm_fill_kinfo(struct file *fp, struct kinfo_file *kif,
+    struct filedesc *fdp __unused)
+{
+	int res;
+
+	sx_slock(&shm_dict_lock);
+	res = shm_fill_kinfo_locked(fp->f_data, kif, false);
+	sx_sunlock(&shm_dict_lock);
+	return (res);
+}
+
+static int
+sysctl_posix_shm_list(SYSCTL_HANDLER_ARGS)
+{
+	struct shm_mapping *shmm;
+	struct sbuf sb;
+	struct kinfo_file kif;
+	u_long i;
+	ssize_t curlen;
+	int error, error2;
+
+	sbuf_new_for_sysctl(&sb, NULL, sizeof(struct kinfo_file) * 5, req);
+	sbuf_clear_flags(&sb, SBUF_INCLUDENUL);
+	curlen = 0;
+	error = 0;
+	sx_slock(&shm_dict_lock);
+	for (i = 0; i < shm_hash + 1; i++) {
+		LIST_FOREACH(shmm, &shm_dictionary[i], sm_link) {
+			error = shm_fill_kinfo_locked(shmm->sm_shmfd,
+			    &kif, true);
+			if (error == EPERM)
+				continue;
+			if (error != 0)
+				break;
+			pack_kinfo(&kif);
+			if (req->oldptr != NULL &&
+			    kif.kf_structsize + curlen > req->oldlen)
+				break;
+			error = sbuf_bcat(&sb, &kif, kif.kf_structsize) == 0 ?
+			    0 : ENOMEM;
+			if (error != 0)
+				break;
+			curlen += kif.kf_structsize;
+		}
+	}
+	sx_sunlock(&shm_dict_lock);
+	error2 = sbuf_finish(&sb);
+	sbuf_delete(&sb);
+	return (error != 0 ? error : error2);
+}
+
+SYSCTL_PROC(_kern_ipc, OID_AUTO, posix_shm_list,
+    CTLFLAG_RD | CTLFLAG_MPSAFE | CTLTYPE_OPAQUE,
+    NULL, 0, sysctl_posix_shm_list, "",
+    "POSIX SHM list");

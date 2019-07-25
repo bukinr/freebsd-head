@@ -86,6 +86,9 @@ __FBSDID("$FreeBSD$");
 #if defined(INET) || defined(INET6)
 #include <netinet/in.h>
 #include <netinet/in_pcb.h>
+#ifdef INET
+#include <netinet/in_var.h>
+#endif
 #include <netinet/ip_var.h>
 #include <netinet/tcp_var.h>
 #ifdef TCPHPTS
@@ -93,16 +96,13 @@ __FBSDID("$FreeBSD$");
 #endif
 #include <netinet/udp.h>
 #include <netinet/udp_var.h>
-#endif
-#ifdef INET
-#include <netinet/in_var.h>
-#endif
 #ifdef INET6
 #include <netinet/ip6.h>
 #include <netinet6/in6_pcb.h>
 #include <netinet6/in6_var.h>
 #include <netinet6/ip6_var.h>
 #endif /* INET6 */
+#endif
 
 #include <netipsec/ipsec_support.h>
 
@@ -266,7 +266,7 @@ in_pcblbgroup_resize(struct inpcblbgrouphead *hdr,
 
 	grp = in_pcblbgroup_alloc(hdr, old_grp->il_vflag,
 	    old_grp->il_lport, &old_grp->il_dependladdr, size);
-	if (!grp)
+	if (grp == NULL)
 		return (NULL);
 
 	KASSERT(old_grp->il_inpcnt < grp->il_inpsiz,
@@ -288,21 +288,20 @@ static void
 in_pcblbgroup_reorder(struct inpcblbgrouphead *hdr, struct inpcblbgroup **grpp,
     int i)
 {
-	struct inpcblbgroup *grp = *grpp;
+	struct inpcblbgroup *grp, *new_grp;
 
+	grp = *grpp;
 	for (; i + 1 < grp->il_inpcnt; ++i)
 		grp->il_inp[i] = grp->il_inp[i + 1];
 	grp->il_inpcnt--;
 
 	if (grp->il_inpsiz > INPCBLBGROUP_SIZMIN &&
-	    grp->il_inpcnt <= (grp->il_inpsiz / 4)) {
+	    grp->il_inpcnt <= grp->il_inpsiz / 4) {
 		/* Shrink this group. */
-		struct inpcblbgroup *new_grp =
-		        in_pcblbgroup_resize(hdr, grp, grp->il_inpsiz / 2);
-		if (new_grp)
+		new_grp = in_pcblbgroup_resize(hdr, grp, grp->il_inpsiz / 2);
+		if (new_grp != NULL)
 			*grpp = new_grp;
 	}
-	return;
 }
 
 /*
@@ -316,31 +315,17 @@ in_pcbinslbgrouphash(struct inpcb *inp)
 	struct inpcbinfo *pcbinfo;
 	struct inpcblbgrouphead *hdr;
 	struct inpcblbgroup *grp;
-	uint16_t hashmask, lport;
-	uint32_t group_index;
-	struct ucred *cred;
+	uint32_t idx;
 
 	pcbinfo = inp->inp_pcbinfo;
 
 	INP_WLOCK_ASSERT(inp);
 	INP_HASH_WLOCK_ASSERT(pcbinfo);
 
-	if (pcbinfo->ipi_lbgrouphashbase == NULL)
-		return (0);
-
-	hashmask = pcbinfo->ipi_lbgrouphashmask;
-	lport = inp->inp_lport;
-	group_index = INP_PCBLBGROUP_PORTHASH(lport, hashmask);
-	hdr = &pcbinfo->ipi_lbgrouphashbase[group_index];
-
 	/*
 	 * Don't allow jailed socket to join local group.
 	 */
-	if (inp->inp_socket != NULL)
-		cred = inp->inp_socket->so_cred;
-	else
-		cred = NULL;
-	if (cred != NULL && jailed(cred))
+	if (inp->inp_socket != NULL && jailed(inp->inp_socket->so_cred))
 		return (0);
 
 #ifdef INET6
@@ -354,24 +339,22 @@ in_pcbinslbgrouphash(struct inpcb *inp)
 	}
 #endif
 
-	hdr = &pcbinfo->ipi_lbgrouphashbase[
-	    INP_PCBLBGROUP_PORTHASH(inp->inp_lport,
-	        pcbinfo->ipi_lbgrouphashmask)];
+	idx = INP_PCBPORTHASH(inp->inp_lport, pcbinfo->ipi_lbgrouphashmask);
+	hdr = &pcbinfo->ipi_lbgrouphashbase[idx];
 	CK_LIST_FOREACH(grp, hdr, il_list) {
 		if (grp->il_vflag == inp->inp_vflag &&
 		    grp->il_lport == inp->inp_lport &&
 		    memcmp(&grp->il_dependladdr,
-		        &inp->inp_inc.inc_ie.ie_dependladdr,
-		        sizeof(grp->il_dependladdr)) == 0) {
+		    &inp->inp_inc.inc_ie.ie_dependladdr,
+		    sizeof(grp->il_dependladdr)) == 0)
 			break;
-		}
 	}
 	if (grp == NULL) {
 		/* Create new load balance group. */
 		grp = in_pcblbgroup_alloc(hdr, inp->inp_vflag,
 		    inp->inp_lport, &inp->inp_inc.inc_ie.ie_dependladdr,
 		    INPCBLBGROUP_SIZMIN);
-		if (!grp)
+		if (grp == NULL)
 			return (ENOBUFS);
 	} else if (grp->il_inpcnt == grp->il_inpsiz) {
 		if (grp->il_inpsiz >= INPCBLBGROUP_SIZMAX) {
@@ -383,13 +366,13 @@ in_pcbinslbgrouphash(struct inpcb *inp)
 
 		/* Expand this local group. */
 		grp = in_pcblbgroup_resize(hdr, grp, grp->il_inpsiz * 2);
-		if (!grp)
+		if (grp == NULL)
 			return (ENOBUFS);
 	}
 
 	KASSERT(grp->il_inpcnt < grp->il_inpsiz,
-			("invalid local group size %d and count %d",
-			 grp->il_inpsiz, grp->il_inpcnt));
+	    ("invalid local group size %d and count %d", grp->il_inpsiz,
+	    grp->il_inpcnt));
 
 	grp->il_inp[grp->il_inpcnt] = inp;
 	grp->il_inpcnt++;
@@ -412,13 +395,8 @@ in_pcbremlbgrouphash(struct inpcb *inp)
 	INP_WLOCK_ASSERT(inp);
 	INP_HASH_WLOCK_ASSERT(pcbinfo);
 
-	if (pcbinfo->ipi_lbgrouphashbase == NULL)
-		return;
-
 	hdr = &pcbinfo->ipi_lbgrouphashbase[
-	    INP_PCBLBGROUP_PORTHASH(inp->inp_lport,
-	        pcbinfo->ipi_lbgrouphashmask)];
-
+	    INP_PCBPORTHASH(inp->inp_lport, pcbinfo->ipi_lbgrouphashmask)];
 	CK_LIST_FOREACH(grp, hdr, il_list) {
 		for (i = 0; i < grp->il_inpcnt; ++i) {
 			if (grp->il_inp[i] != inp)
@@ -458,6 +436,8 @@ in_pcbinfo_init(struct inpcbinfo *pcbinfo, const char *name,
     char *inpcbzone_name, uma_init inpcbzone_init, u_int hashfields)
 {
 
+	porthash_nelements = imin(porthash_nelements, IPPORT_MAX + 1);
+
 	INP_INFO_LOCK_INIT(pcbinfo, name);
 	INP_HASH_LOCK_INIT(pcbinfo, "pcbinfohash");	/* XXXRW: argument? */
 	INP_LIST_LOCK_INIT(pcbinfo, "pcbinfolist");
@@ -471,7 +451,7 @@ in_pcbinfo_init(struct inpcbinfo *pcbinfo, const char *name,
 	    &pcbinfo->ipi_hashmask);
 	pcbinfo->ipi_porthashbase = hashinit(porthash_nelements, M_PCB,
 	    &pcbinfo->ipi_porthashmask);
-	pcbinfo->ipi_lbgrouphashbase = hashinit(hash_nelements, M_PCB,
+	pcbinfo->ipi_lbgrouphashbase = hashinit(porthash_nelements, M_PCB,
 	    &pcbinfo->ipi_lbgrouphashmask);
 #ifdef PCBGROUP
 	in_pcbgroup_init(pcbinfo, hashfields, hash_nelements);
@@ -530,6 +510,9 @@ in_pcballoc(struct socket *so, struct inpcbinfo *pcbinfo)
 	if (inp == NULL)
 		return (ENOBUFS);
 	bzero(&inp->inp_start_zero, inp_zero_size);
+#ifdef NUMA
+	inp->inp_numa_domain = M_NODOM;
+#endif
 	inp->inp_pcbinfo = pcbinfo;
 	inp->inp_socket = so;
 	inp->inp_cred = crhold(so->so_cred);
@@ -642,7 +625,7 @@ in_pcb_lport(struct inpcb *inp, struct in_addr *laddrp, u_short *lportp,
 		last  = V_ipport_hilastauto;
 		lastport = &pcbinfo->ipi_lasthi;
 	} else if (inp->inp_flags & INP_LOWPORT) {
-		error = priv_check_cred(cred, PRIV_NETINET_RESERVEDPORT, 0);
+		error = priv_check_cred(cred, PRIV_NETINET_RESERVEDPORT);
 		if (error)
 			return (error);
 		first = V_ipport_lowfirstauto;	/* 1023 */
@@ -886,12 +869,10 @@ in_pcbbind_setup(struct inpcb *inp, struct sockaddr *nam, in_addr_t *laddrp,
 			/* GROSS */
 			if (ntohs(lport) <= V_ipport_reservedhigh &&
 			    ntohs(lport) >= V_ipport_reservedlow &&
-			    priv_check_cred(cred, PRIV_NETINET_RESERVEDPORT,
-			    0))
+			    priv_check_cred(cred, PRIV_NETINET_RESERVEDPORT))
 				return (EACCES);
 			if (!IN_MULTICAST(ntohl(sin->sin_addr.s_addr)) &&
-			    priv_check_cred(inp->inp_cred,
-			    PRIV_NETINET_REUSEPORT, 0) != 0) {
+			    priv_check_cred(inp->inp_cred, PRIV_NETINET_REUSEPORT) != 0) {
 				t = in_pcblookup_local(pcbinfo, sin->sin_addr,
 				    lport, INPLOOKUP_WILDCARD, cred);
 	/*
@@ -1034,6 +1015,7 @@ in_pcbladdr(struct inpcb *inp, struct in_addr *faddr, struct in_addr *laddr,
 	struct sockaddr *sa;
 	struct sockaddr_in *sin;
 	struct route sro;
+	struct epoch_tracker et;
 	int error;
 
 	KASSERT(laddr != NULL, ("%s: laddr NULL", __func__));
@@ -1069,7 +1051,7 @@ in_pcbladdr(struct inpcb *inp, struct in_addr *faddr, struct in_addr *laddr,
 	 * network and try to find a corresponding interface to take
 	 * the source address from.
 	 */
-	NET_EPOCH_ENTER();
+	NET_EPOCH_ENTER(et);
 	if (sro.ro_rt == NULL || sro.ro_rt->rt_ifp == NULL) {
 		struct in_ifaddr *ia;
 		struct ifnet *ifp;
@@ -1233,7 +1215,7 @@ in_pcbladdr(struct inpcb *inp, struct in_addr *faddr, struct in_addr *laddr,
 	}
 
 done:
-	NET_EPOCH_EXIT();
+	NET_EPOCH_EXIT(et);
 	if (sro.ro_rt != NULL)
 		RTFREE(sro.ro_rt);
 	return (error);
@@ -1586,6 +1568,7 @@ in_pcbfree_deferred(epoch_context_t ctx)
 	inp = __containerof(ctx, struct inpcb, inp_epoch_ctx);
 
 	INP_WLOCK(inp);
+	CURVNET_SET(inp->inp_vnet);
 #ifdef INET
 	struct ip_moptions *imo = inp->inp_moptions;
 	inp->inp_moptions = NULL;
@@ -1618,6 +1601,7 @@ in_pcbfree_deferred(epoch_context_t ctx)
 #ifdef INET
 	inp_freemoptions(imo);
 #endif	
+	CURVNET_RESTORE();
 }
 
 /*
@@ -1795,8 +1779,9 @@ void
 in_pcbpurgeif0(struct inpcbinfo *pcbinfo, struct ifnet *ifp)
 {
 	struct inpcb *inp;
+	struct in_multi *inm;
+	struct in_mfilter *imf;
 	struct ip_moptions *imo;
-	int i, gap;
 
 	INP_INFO_WLOCK(pcbinfo);
 	CK_LIST_FOREACH(inp, pcbinfo->ipi_listhead, inp_list) {
@@ -1817,17 +1802,18 @@ in_pcbpurgeif0(struct inpcbinfo *pcbinfo, struct ifnet *ifp)
 			 *
 			 * XXX This can all be deferred to an epoch_call
 			 */
-			for (i = 0, gap = 0; i < imo->imo_num_memberships;
-			    i++) {
-				if (imo->imo_membership[i]->inm_ifp == ifp) {
-					IN_MULTI_LOCK_ASSERT();
-					in_leavegroup_locked(imo->imo_membership[i], NULL);
-					gap++;
-				} else if (gap != 0)
-					imo->imo_membership[i - gap] =
-					    imo->imo_membership[i];
+restart:
+			IP_MFILTER_FOREACH(imf, &imo->imo_head) {
+				if ((inm = imf->imf_inm) == NULL)
+					continue;
+				if (inm->inm_ifp != ifp)
+					continue;
+				ip_mfilter_remove(&imo->imo_head, imf);
+				IN_MULTI_LOCK_ASSERT();
+				in_leavegroup_locked(inm, NULL);
+				ip_mfilter_free(imf);
+				goto restart;
 			}
-			imo->imo_num_memberships -= gap;
 		}
 		INP_WUNLOCK(inp);
 	}
@@ -1969,8 +1955,8 @@ in_pcblookup_lbgroup(const struct inpcbinfo *pcbinfo,
 
 	INP_HASH_LOCK_ASSERT(pcbinfo);
 
-	hdr = &pcbinfo->ipi_lbgrouphashbase[INP_PCBLBGROUP_PORTHASH(lport,
-	    pcbinfo->ipi_lbgrouphashmask)];
+	hdr = &pcbinfo->ipi_lbgrouphashbase[
+	    INP_PCBPORTHASH(lport, pcbinfo->ipi_lbgrouphashmask)];
 
 	/*
 	 * Order of socket selection:
@@ -2289,13 +2275,11 @@ in_pcblookup_hash_locked(struct inpcbinfo *pcbinfo, struct in_addr faddr,
 	/*
 	 * Then look in lb group (for wildcard match).
 	 */
-	if (pcbinfo->ipi_lbgrouphashbase != NULL &&
-		(lookupflags & INPLOOKUP_WILDCARD)) {
+	if ((lookupflags & INPLOOKUP_WILDCARD) != 0) {
 		inp = in_pcblookup_lbgroup(pcbinfo, &laddr, lport, &faddr,
 		    fport, lookupflags);
-		if (inp != NULL) {
+		if (inp != NULL)
 			return (inp);
-		}
 	}
 
 	/*
@@ -2904,11 +2888,10 @@ void
 in_pcbtoxinpcb(const struct inpcb *inp, struct xinpcb *xi)
 {
 
+	bzero(xi, sizeof(*xi));
 	xi->xi_len = sizeof(struct xinpcb);
 	if (inp->inp_socket)
 		sotoxsocket(inp->inp_socket, &xi->xi_socket);
-	else
-		bzero(&xi->xi_socket, sizeof(struct xsocket));
 	bcopy(&inp->inp_inc, &xi->inp_inc, sizeof(struct in_conninfo));
 	xi->inp_gencnt = inp->inp_gencnt;
 	xi->inp_ppcb = (uintptr_t)inp->inp_ppcb;
@@ -3293,13 +3276,6 @@ in_pcbattach_txrtlmt(struct inpcb *inp, struct ifnet *ifp,
 		error = EOPNOTSUPP;
 	} else {
 		error = ifp->if_snd_tag_alloc(ifp, &params, &inp->inp_snd_tag);
-
-		/*
-		 * At success increment the refcount on
-		 * the send tag's network interface:
-		 */
-		if (error == 0)
-			if_ref(inp->inp_snd_tag->ifp);
 	}
 	return (error);
 }
@@ -3312,7 +3288,6 @@ void
 in_pcbdetach_txrtlmt(struct inpcb *inp)
 {
 	struct m_snd_tag *mst;
-	struct ifnet *ifp;
 
 	INP_WLOCK_ASSERT(inp);
 
@@ -3322,19 +3297,7 @@ in_pcbdetach_txrtlmt(struct inpcb *inp)
 	if (mst == NULL)
 		return;
 
-	ifp = mst->ifp;
-	if (ifp == NULL)
-		return;
-
-	/*
-	 * If the device was detached while we still had reference(s)
-	 * on the ifp, we assume if_snd_tag_free() was replaced with
-	 * stubs.
-	 */
-	ifp->if_snd_tag_free(mst);
-
-	/* release reference count on network interface */
-	if_rele(ifp);
+	m_snd_tag_rele(mst);
 }
 
 /*
@@ -3380,6 +3343,17 @@ in_pcboutput_txrtlmt(struct inpcb *inp, struct ifnet *ifp, struct mbuf *mb)
 	max_pacing_rate = socket->so_max_pacing_rate;
 
 	/*
+	 * If the existing send tag is for the wrong interface due to
+	 * a route change, first drop the existing tag.  Set the
+	 * CHANGED flag so that we will keep trying to allocate a new
+	 * tag if we fail to allocate one this time.
+	 */
+	if (inp->inp_snd_tag != NULL && inp->inp_snd_tag->ifp != ifp) {
+		in_pcbdetach_txrtlmt(inp);
+		inp->inp_flags2 |= INP_RATE_LIMIT_CHANGED;
+	}
+
+	/*
 	 * NOTE: When attaching to a network interface a reference is
 	 * made to ensure the network interface doesn't go away until
 	 * all ratelimit connections are gone. The network interface
@@ -3419,14 +3393,9 @@ in_pcboutput_txrtlmt(struct inpcb *inp, struct ifnet *ifp, struct mbuf *mb)
 void
 in_pcboutput_eagain(struct inpcb *inp)
 {
-	struct socket *socket;
 	bool did_upgrade;
 
 	if (inp == NULL)
-		return;
-
-	socket = inp->inp_socket;
-	if (socket == NULL)
 		return;
 
 	if (inp->inp_snd_tag == NULL)

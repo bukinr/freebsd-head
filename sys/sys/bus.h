@@ -130,6 +130,7 @@ struct devreq {
 #define	DEV_DELETE	_IOW('D', 10, struct devreq)
 #define	DEV_FREEZE	_IOW('D', 11, struct devreq)
 #define	DEV_THAW	_IOW('D', 12, struct devreq)
+#define	DEV_RESET	_IOW('D', 13, struct devreq)
 
 /* Flags for DEV_DETACH and DEV_DISABLE. */
 #define	DEVF_FORCE_DETACH	0x0000001
@@ -143,10 +144,15 @@ struct devreq {
 /* Flags for DEV_DELETE. */
 #define	DEVF_FORCE_DELETE	0x0000001
 
+/* Flags for DEV_RESET */
+#define	DEVF_RESET_DETACH	0x0000001	/* Detach drivers vs suspend
+						   device */
+
 #ifdef _KERNEL
 
-#include <sys/eventhandler.h>
+#include <sys/_eventhandler.h>
 #include <sys/kobj.h>
+#include <sys/systm.h>
 
 /**
  * devctl hooks.  Typically one should use the devctl_notify
@@ -414,6 +420,8 @@ void	root_bus_configure(void);
  * Useful functions for implementing buses.
  */
 
+struct _cpuset;
+
 int	bus_generic_activate_resource(device_t dev, device_t child, int type,
 				      int rid, struct resource *r);
 device_t
@@ -485,11 +493,17 @@ int	bus_generic_suspend(device_t dev);
 int	bus_generic_suspend_child(device_t dev, device_t child);
 int	bus_generic_teardown_intr(device_t dev, device_t child,
 				  struct resource *irq, void *cookie);
+int	bus_generic_suspend_intr(device_t dev, device_t child,
+				  struct resource *irq);
+int	bus_generic_resume_intr(device_t dev, device_t child,
+				  struct resource *irq);
 int	bus_generic_unmap_resource(device_t dev, device_t child, int type,
 				   struct resource *r,
 				   struct resource_map *map);
 int	bus_generic_write_ivar(device_t dev, device_t child, int which,
 			       uintptr_t value);
+int	bus_helper_reset_post(device_t dev, int flags);
+int	bus_helper_reset_prepare(device_t dev, int flags);
 int	bus_null_rescan(device_t dev);
 
 /*
@@ -535,6 +549,8 @@ int	bus_setup_intr(device_t dev, struct resource *r, int flags,
 		       driver_filter_t filter, driver_intr_t handler, 
 		       void *arg, void **cookiep);
 int	bus_teardown_intr(device_t dev, struct resource *r, void *cookie);
+int	bus_suspend_intr(device_t dev, struct resource *r);
+int	bus_resume_intr(device_t dev, struct resource *r);
 int	bus_bind_intr(device_t dev, struct resource *r, int cpu);
 int	bus_describe_intr(device_t dev, struct resource *irq, void *cookie,
 			  const char *fmt, ...) __printflike(4, 5);
@@ -612,6 +628,7 @@ void	device_set_desc(device_t dev, const char* desc);
 void	device_set_desc_copy(device_t dev, const char* desc);
 int	device_set_devclass(device_t dev, const char *classname);
 int	device_set_devclass_fixed(device_t dev, const char *classname);
+bool	device_is_devclass_fixed(device_t dev);
 int	device_set_driver(device_t dev, driver_t *driver);
 void	device_set_flags(device_t dev, u_int32_t flags);
 void	device_set_softc(device_t dev, void *softc);
@@ -794,16 +811,24 @@ DECLARE_MODULE(name##_##busname, name##_##busname##_mod,		\
 static __inline type varp ## _get_ ## var(device_t dev)			\
 {									\
 	uintptr_t v;							\
-	BUS_READ_IVAR(device_get_parent(dev), dev,			\
+	int e;								\
+	e = BUS_READ_IVAR(device_get_parent(dev), dev,			\
 	    ivarp ## _IVAR_ ## ivar, &v);				\
+	KASSERT(e == 0, ("%s failed for %s on bus %s, error = %d",	\
+	    __func__, device_get_nameunit(dev),				\
+	    device_get_nameunit(device_get_parent(dev)), e));		\
 	return ((type) v);						\
 }									\
 									\
 static __inline void varp ## _set_ ## var(device_t dev, type t)		\
 {									\
 	uintptr_t v = (uintptr_t) t;					\
-	BUS_WRITE_IVAR(device_get_parent(dev), dev,			\
+	int e;								\
+	e = BUS_WRITE_IVAR(device_get_parent(dev), dev,			\
 	    ivarp ## _IVAR_ ## ivar, v);				\
+	KASSERT(e == 0, ("%s failed for %s on bus %s, error = %d",	\
+	    __func__, device_get_nameunit(dev),				\
+	    device_get_nameunit(device_get_parent(dev)), e));		\
 }
 
 /**

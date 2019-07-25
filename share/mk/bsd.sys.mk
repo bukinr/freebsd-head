@@ -24,6 +24,11 @@ CFLAGS+=	-std=iso9899:1999
 .else # CSTD
 CFLAGS+=	-std=${CSTD}
 .endif # CSTD
+
+.if !empty(CXXSTD)
+CXXFLAGS+=	-std=${CXXSTD}
+.endif
+
 # -pedantic is problematic because it also imposes namespace restrictions
 #CFLAGS+=	-pedantic
 .if defined(WARNS)
@@ -79,6 +84,10 @@ CWARNFLAGS.clang+=	-Wno-unused-local-typedef
 .endif
 .if ${COMPILER_TYPE} == "clang" && ${COMPILER_VERSION} >= 40000
 CWARNFLAGS.clang+=	-Wno-address-of-packed-member
+.endif
+.if ${COMPILER_TYPE} == "clang" && ${COMPILER_VERSION} >= 70000 && \
+    ${MACHINE_CPUARCH} == "arm" && !${MACHINE_ARCH:Marmv[67]*}
+CWARNFLAGS.clang+=	-Wno-atomic-alignment
 .endif
 .endif # WARNS <= 3
 .if ${WARNS} <= 2
@@ -231,11 +240,27 @@ CFLAGS+=	 ${CFLAGS.${COMPILER_TYPE}}
 CXXFLAGS+=	 ${CXXFLAGS.${COMPILER_TYPE}}
 
 AFLAGS+=	${AFLAGS.${.IMPSRC:T}}
+AFLAGS+=	${AFLAGS.${.TARGET:T}}
 ACFLAGS+=	${ACFLAGS.${.IMPSRC:T}}
+ACFLAGS+=	${ACFLAGS.${.TARGET:T}}
 CFLAGS+=	${CFLAGS.${.IMPSRC:T}}
 CXXFLAGS+=	${CXXFLAGS.${.IMPSRC:T}}
 
 LDFLAGS+=	${LDFLAGS.${LINKER_TYPE}}
+
+# Only allow .TARGET when not using PROGS as it has the same syntax
+# per PROG which is ambiguous with this syntax. This is only needed
+# for PROG_VARS vars.
+.if !defined(_RECURSING_PROGS)
+.if ${MK_WARNS} != "no"
+CFLAGS+=	${CWARNFLAGS.${.TARGET:T}}
+.endif
+CFLAGS+=	${CFLAGS.${.TARGET:T}}
+CXXFLAGS+=	${CXXFLAGS.${.TARGET:T}}
+LDFLAGS+=	${LDFLAGS.${.TARGET:T}}
+LDADD+=		${LDADD.${.TARGET:T}}
+LIBADD+=	${LIBADD.${.TARGET:T}}
+.endif
 
 .if defined(SRCTOP)
 # Prevent rebuilding during install to support read-only objdirs.
@@ -259,7 +284,7 @@ PHONY_NOTMAIN = analyze afterdepend afterinstall all beforedepend beforeinstall 
 .NOTMAIN: ${PHONY_NOTMAIN:Nall}
 
 .if ${MK_STAGING} != "no"
-.if defined(_SKIP_BUILD) || (!make(all) && !make(clean*))
+.if defined(_SKIP_BUILD) || (!make(all) && !make(clean*) && !make(*clean))
 _SKIP_STAGING?= yes
 .endif
 .if ${_SKIP_STAGING:Uno} == "yes"

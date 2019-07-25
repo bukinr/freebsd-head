@@ -325,6 +325,11 @@ LIST_HEAD(tmpfs_node_list, tmpfs_node);
  */
 struct tmpfs_mount {
 	/*
+	 * Original value of the "size" parameter, for reference purposes,
+	 * mostly.
+	 */
+	off_t			tm_size_max;
+	/*
 	 * Maximum number of memory pages available for use by the file
 	 * system, set during mount time.  This variable must never be
 	 * used directly as it may be bigger than the current amount of
@@ -353,7 +358,7 @@ struct tmpfs_mount {
 	ino_t			tm_nodes_max;
 
 	/* unrhdr used to allocate inode numbers */
-	struct unrhdr *		tm_ino_unr;
+	struct unrhdr64		tm_ino_unr;
 
 	/* Number of nodes currently that are in use. */
 	ino_t			tm_nodes_inuse;
@@ -411,7 +416,7 @@ void	tmpfs_ref_node(struct tmpfs_node *node);
 void	tmpfs_ref_node_locked(struct tmpfs_node *node);
 int	tmpfs_alloc_node(struct mount *mp, struct tmpfs_mount *, enum vtype,
 	    uid_t uid, gid_t gid, mode_t mode, struct tmpfs_node *,
-	    char *, dev_t, struct tmpfs_node **);
+	    const char *, dev_t, struct tmpfs_node **);
 void	tmpfs_free_node(struct tmpfs_mount *, struct tmpfs_node *);
 bool	tmpfs_free_node_locked(struct tmpfs_mount *, struct tmpfs_node *, bool);
 void	tmpfs_free_tmp(struct tmpfs_mount *);
@@ -424,7 +429,7 @@ int	tmpfs_alloc_vp(struct mount *, struct tmpfs_node *, int,
 	    struct vnode **);
 void	tmpfs_free_vp(struct vnode *);
 int	tmpfs_alloc_file(struct vnode *, struct vnode **, struct vattr *,
-	    struct componentname *, char *);
+	    struct componentname *, const char *);
 void	tmpfs_check_mtime(struct vnode *);
 void	tmpfs_dir_attach(struct vnode *, struct tmpfs_dirent *);
 void	tmpfs_dir_detach(struct vnode *, struct tmpfs_dirent *);
@@ -432,8 +437,8 @@ void	tmpfs_dir_destroy(struct tmpfs_mount *, struct tmpfs_node *);
 struct tmpfs_dirent *	tmpfs_dir_lookup(struct tmpfs_node *node,
 			    struct tmpfs_node *f,
 			    struct componentname *cnp);
-int	tmpfs_dir_getdents(struct tmpfs_node *, struct uio *, int,
-	    u_long *, int *);
+int	tmpfs_dir_getdents(struct tmpfs_mount *, struct tmpfs_node *,
+	    struct uio *, int, u_long *, int *);
 int	tmpfs_dir_whiteout_add(struct vnode *, struct componentname *);
 void	tmpfs_dir_whiteout_remove(struct vnode *, struct componentname *);
 int	tmpfs_reg_resize(struct vnode *, off_t, boolean_t);
@@ -447,7 +452,8 @@ int	tmpfs_chtimes(struct vnode *, struct vattr *, struct ucred *cred,
 void	tmpfs_itimes(struct vnode *, const struct timespec *,
 	    const struct timespec *);
 
-void	tmpfs_set_status(struct tmpfs_node *node, int status);
+void	tmpfs_set_status(struct tmpfs_mount *tm, struct tmpfs_node *node,
+	    int status);
 void	tmpfs_update(struct vnode *);
 int	tmpfs_truncate(struct vnode *, off_t);
 struct tmpfs_dirent *tmpfs_dir_first(struct tmpfs_node *dnode,
@@ -482,7 +488,9 @@ struct tmpfs_dirent *tmpfs_dir_next(struct tmpfs_node *dnode,
  * Amount of memory pages to reserve for the system (e.g., to not use by
  * tmpfs).
  */
+#if !defined(TMPFS_PAGES_MINRESERVED)
 #define TMPFS_PAGES_MINRESERVED		(4 * 1024 * 1024 / PAGE_SIZE)
+#endif
 
 size_t tmpfs_mem_avail(void);
 

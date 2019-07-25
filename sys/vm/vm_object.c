@@ -274,6 +274,7 @@ _vm_object_allocate(objtype_t type, vm_pindex_t size, vm_object_t object)
 		panic("_vm_object_allocate: type %d is undefined", type);
 	}
 	object->size = size;
+	object->domain.dr_policy = NULL;
 	object->generation = 1;
 	object->ref_count = 1;
 	object->memattr = VM_MEMATTR_DEFAULT;
@@ -492,33 +493,11 @@ vm_object_vndeallocate(vm_object_t object)
 	if (!umtx_shm_vnobj_persistent && object->ref_count == 1)
 		umtx_shm_object_terminated(object);
 
-	/*
-	 * The test for text of vp vnode does not need a bypass to
-	 * reach right VV_TEXT there, since it is obtained from
-	 * object->handle.
-	 */
-	if (object->ref_count > 1 || (vp->v_vflag & VV_TEXT) == 0) {
-		object->ref_count--;
-		VM_OBJECT_WUNLOCK(object);
-		/* vrele may need the vnode lock. */
-		vrele(vp);
-	} else {
-		vhold(vp);
-		VM_OBJECT_WUNLOCK(object);
-		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
-		vdrop(vp);
-		VM_OBJECT_WLOCK(object);
-		object->ref_count--;
-		if (object->type == OBJT_DEAD) {
-			VM_OBJECT_WUNLOCK(object);
-			VOP_UNLOCK(vp, 0);
-		} else {
-			if (object->ref_count == 0)
-				VOP_UNSET_TEXT(vp);
-			VM_OBJECT_WUNLOCK(object);
-			vput(vp);
-		}
-	}
+	object->ref_count--;
+
+	/* vrele may need the vnode lock. */
+	VM_OBJECT_WUNLOCK(object);
+	vrele(vp);
 }
 
 /*
@@ -741,7 +720,7 @@ vm_object_terminate_pages(vm_object_t object)
 			 */
 			vm_page_change_lock(p, &mtx);
 		p->object = NULL;
-		if (p->wire_count != 0)
+		if (vm_page_wired(p))
 			continue;
 		VM_CNT_INC(v_pfree);
 		vm_page_free(p);
@@ -1233,7 +1212,7 @@ next_page:
 		if (tm->valid != VM_PAGE_BITS_ALL)
 			goto next_pindex;
 		vm_page_lock(tm);
-		if (vm_page_held(tm)) {
+		if (vm_page_wired(tm)) {
 			vm_page_unlock(tm);
 			goto next_pindex;
 		}
@@ -1616,10 +1595,8 @@ vm_object_collapse_scan(vm_object_t object, int op)
 			vm_page_lock(p);
 			KASSERT(!pmap_page_is_mapped(p),
 			    ("freeing mapped page %p", p));
-			if (p->wire_count == 0)
+			if (vm_page_remove(p))
 				vm_page_free(p);
-			else
-				vm_page_remove(p);
 			vm_page_unlock(p);
 			continue;
 		}
@@ -1660,10 +1637,8 @@ vm_object_collapse_scan(vm_object_t object, int op)
 			vm_page_lock(p);
 			KASSERT(!pmap_page_is_mapped(p),
 			    ("freeing mapped page %p", p));
-			if (p->wire_count == 0)
+			if (vm_page_remove(p))
 				vm_page_free(p);
-			else
-				vm_page_remove(p);
 			vm_page_unlock(p);
 			continue;
 		}
@@ -1747,8 +1722,8 @@ vm_object_collapse(vm_object_t object)
 		VM_OBJECT_WLOCK(backing_object);
 		if (backing_object->handle != NULL ||
 		    (backing_object->type != OBJT_DEFAULT &&
-		     backing_object->type != OBJT_SWAP) ||
-		    (backing_object->flags & OBJ_DEAD) ||
+		    backing_object->type != OBJT_SWAP) ||
+		    (backing_object->flags & (OBJ_DEAD | OBJ_NOSPLIT)) != 0 ||
 		    object->handle != NULL ||
 		    (object->type != OBJT_DEFAULT &&
 		     object->type != OBJT_SWAP) ||
@@ -1965,7 +1940,7 @@ again:
 			VM_OBJECT_WLOCK(object);
 			goto again;
 		}
-		if (p->wire_count != 0) {
+		if (vm_page_wired(p)) {
 			if ((options & OBJPR_NOTMAPPED) == 0 &&
 			    object->ref_count != 0)
 				pmap_remove_all(p);
@@ -2305,16 +2280,63 @@ next_page:
 	}
 }
 
+/*
+ * Return the vnode for the given object, or NULL if none exists.
+ * For tmpfs objects, the function may return NULL if there is
+ * no vnode allocated at the time of the call.
+ */
 struct vnode *
 vm_object_vnode(vm_object_t object)
 {
+	struct vnode *vp;
 
 	VM_OBJECT_ASSERT_LOCKED(object);
-	if (object->type == OBJT_VNODE)
-		return (object->handle);
-	if (object->type == OBJT_SWAP && (object->flags & OBJ_TMPFS) != 0)
-		return (object->un_pager.swp.swp_tmpfs);
-	return (NULL);
+	if (object->type == OBJT_VNODE) {
+		vp = object->handle;
+		KASSERT(vp != NULL, ("%s: OBJT_VNODE has no vnode", __func__));
+	} else if (object->type == OBJT_SWAP &&
+	    (object->flags & OBJ_TMPFS) != 0) {
+		vp = object->un_pager.swp.swp_tmpfs;
+		KASSERT(vp != NULL, ("%s: OBJT_TMPFS has no vnode", __func__));
+	} else {
+		vp = NULL;
+	}
+	return (vp);
+}
+
+/*
+ * Return the kvme type of the given object.
+ * If vpp is not NULL, set it to the object's vm_object_vnode() or NULL.
+ */
+int
+vm_object_kvme_type(vm_object_t object, struct vnode **vpp)
+{
+
+	VM_OBJECT_ASSERT_LOCKED(object);
+	if (vpp != NULL)
+		*vpp = vm_object_vnode(object);
+	switch (object->type) {
+	case OBJT_DEFAULT:
+		return (KVME_TYPE_DEFAULT);
+	case OBJT_VNODE:
+		return (KVME_TYPE_VNODE);
+	case OBJT_SWAP:
+		if ((object->flags & OBJ_TMPFS_NODE) != 0)
+			return (KVME_TYPE_VNODE);
+		return (KVME_TYPE_SWAP);
+	case OBJT_DEVICE:
+		return (KVME_TYPE_DEVICE);
+	case OBJT_PHYS:
+		return (KVME_TYPE_PHYS);
+	case OBJT_DEAD:
+		return (KVME_TYPE_DEAD);
+	case OBJT_SG:
+		return (KVME_TYPE_SG);
+	case OBJT_MGTDEVICE:
+		return (KVME_TYPE_MGTDEVICE);
+	default:
+		return (KVME_TYPE_UNKNOWN);
+	}
 }
 
 static int
@@ -2391,38 +2413,9 @@ sysctl_vm_object_list(SYSCTL_HANDLER_ARGS)
 		kvo->kvo_vn_fsid_freebsd11 = 0;
 		freepath = NULL;
 		fullpath = "";
-		vp = NULL;
-		switch (obj->type) {
-		case OBJT_DEFAULT:
-			kvo->kvo_type = KVME_TYPE_DEFAULT;
-			break;
-		case OBJT_VNODE:
-			kvo->kvo_type = KVME_TYPE_VNODE;
-			vp = obj->handle;
+		kvo->kvo_type = vm_object_kvme_type(obj, &vp);
+		if (vp != NULL)
 			vref(vp);
-			break;
-		case OBJT_SWAP:
-			kvo->kvo_type = KVME_TYPE_SWAP;
-			break;
-		case OBJT_DEVICE:
-			kvo->kvo_type = KVME_TYPE_DEVICE;
-			break;
-		case OBJT_PHYS:
-			kvo->kvo_type = KVME_TYPE_PHYS;
-			break;
-		case OBJT_DEAD:
-			kvo->kvo_type = KVME_TYPE_DEAD;
-			break;
-		case OBJT_SG:
-			kvo->kvo_type = KVME_TYPE_SG;
-			break;
-		case OBJT_MGTDEVICE:
-			kvo->kvo_type = KVME_TYPE_MGTDEVICE;
-			break;
-		default:
-			kvo->kvo_type = KVME_TYPE_UNKNOWN;
-			break;
-		}
 		VM_OBJECT_RUNLOCK(obj);
 		if (vp != NULL) {
 			vn_fullpath(curthread, vp, &fullpath, &freepath);

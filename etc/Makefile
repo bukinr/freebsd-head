@@ -4,6 +4,9 @@
 .include <src.opts.mk>
 
 FILESGROUPS=	FILES
+NLS_ALIASES=	POSIX C \
+		en_US.US_ASCII C
+PWD_MKDB_CMD?=	pwd_mkdb
 
 # No need as it is empty and just causes rebuilds since this file does so much.
 UPDATE_DEPENDFILE=	no
@@ -12,18 +15,7 @@ UPDATE_DEPENDFILE=	no
 SUBDIR+=sendmail
 .endif
 
-BIN1=	\
-	group \
-	login.access \
-	rc.bsdextended \
-	rc.firewall \
-	termcap.small
-
 # NB: keep these sorted by MK_* knobs
-
-.if ${MK_SENDMAIL} != "no"
-BIN1+=	rc.sendmail
-.endif
 
 .if ${MK_SENDMAIL} == "no"
 ETCMAIL=mailer.conf aliases
@@ -61,30 +53,14 @@ distribution:
 	@echo "set DESTDIR before running \"make ${.TARGET}\""
 	@false
 .endif
-	cd ${.CURDIR}; \
-	    ${INSTALL} -o ${BINOWN} -g ${BINGRP} -m 644 \
-		${BIN1} ${DESTDIR}/etc; \
-	    ${INSTALL} -o ${BINOWN} -g ${BINGRP} -m 600 \
-		master.passwd ${DESTDIR}/etc;
-
-.if ${MK_TCSH} == "no"
-	sed -i "" -e 's;/bin/csh;/bin/sh;' ${DESTDIR}/etc/master.passwd
-.endif
-	pwd_mkdb -i -p -d ${DESTDIR}/etc ${DESTDIR}/etc/master.passwd
-.if defined(NO_ROOT)
-	( \
-		echo "./etc/passwd type=file mode=0644 uname=root gname=wheel"; \
-		echo "./etc/pwd.db type=file mode=0644 uname=root gname=wheel"; \
-		echo "./etc/spwd.db type=file mode=0600 uname=root gname=wheel"; \
-	) | ${METALOG.add}
-.endif
 	${_+_}cd ${.CURDIR}/gss; ${MAKE} install
 	${_+_}cd ${.CURDIR}/mtree; ${MAKE} install
 	${_+_}cd ${SRCTOP}/share/termcap; ${MAKE} etc-termcap
 	${_+_}cd ${SRCTOP}/usr.sbin/rmt; ${MAKE} etc-rmt
 .if ${MK_UNBOUND} != "no"
 	if [ ! -e ${DESTDIR}/etc/unbound ]; then \
-		${INSTALL_SYMLINK} ../var/unbound ${DESTDIR}/etc/unbound; \
+		${INSTALL_SYMLINK} -T "package=unbound" \
+		../var/unbound ${DESTDIR}/etc/unbound; \
 	fi
 .endif
 .if ${MK_SENDMAIL} != "no"
@@ -93,26 +69,29 @@ distribution:
 .if ${MK_KERBEROS} != "no"
 	cd ${.CURDIR}/root; \
 	    ${INSTALL} -o ${BINOWN} -g ${BINGRP} -m 644 \
+		-T "package=runtime" \
 		dot.k5login ${DESTDIR}/root/.k5login;
 .endif
 
 .if ${MK_MAIL} != "no"
 	cd ${.CURDIR}/mail; ${INSTALL} -o ${BINOWN} -g ${BINGRP} -m 644 \
-	    ${ETCMAIL} ${DESTDIR}/etc/mail
+	    -T "package=runtime" ${ETCMAIL} ${DESTDIR}/etc/mail
 	if [ -d ${DESTDIR}/etc/mail -a -f ${DESTDIR}/etc/mail/aliases -a \
 	      ! -f ${DESTDIR}/etc/aliases ]; then \
-		${INSTALL_SYMLINK} mail/aliases ${DESTDIR}/etc/aliases; \
+		${INSTALL_SYMLINK} -T "package=runtime" \
+		mail/aliases ${DESTDIR}/etc/aliases; \
 	fi
 .endif
 .if ${MK_LOCATE} != "no"
-	${INSTALL} -o nobody -g ${BINGRP} -m 644 /dev/null \
-	    ${DESTDIR}/var/db/locate.database
+	${INSTALL} -o nobody -g ${BINGRP} -m 644 -T "package=runtime"\
+	    /dev/null ${DESTDIR}/var/db/locate.database
 .endif
 	cd ${.CURDIR}/..; ${INSTALL} -o ${BINOWN} -g ${BINGRP} -m 444 \
-		${FREEBSD} ${DESTDIR}/
+		-T "package=runtime" ${FREEBSD} ${DESTDIR}/
 .if ${MK_BOOT} != "no"
 .if exists(${SRCTOP}/sys/${MACHINE}/conf/GENERIC.hints)
 	${INSTALL} -o ${BINOWN} -g ${BINGRP} -m 444 \
+	    -T "package=runtime" \
 	    ${SRCTOP}/sys/${MACHINE}/conf/GENERIC.hints \
 	    ${DESTDIR}/boot/device.hints
 .endif
@@ -157,48 +136,35 @@ distrib-cleanup: .PHONY
 	done
 
 distrib-dirs: ${MTREES:N/*} distrib-cleanup .PHONY
-	@set ${MTREES}; \
-	while test $$# -ge 2; do \
-		m=${.CURDIR}/$$1; \
-		shift; \
-		d=${DESTDIR}$$1; \
-		shift; \
-		test -d $$d || mkdir -p $$d; \
-		${ECHO} ${MTREE_CMD} -deU ${MTREE_FSCHG} \
-		    ${MTREE_FOLLOWS_SYMLINKS} -f $$m -p $$d; \
-		${MTREE_FILTER} $$m | \
-		${MTREE_CMD} -deU ${MTREE_FSCHG} ${MTREE_FOLLOWS_SYMLINKS} \
-		    -p $$d; \
-	done; true
+.for _m _d in ${MTREES}
+	@m=${.CURDIR}/${_m}; \
+	d=${DESTDIR}${_d}; \
+	test -d $$d || mkdir -p $$d; \
+	${ECHO} ${MTREE_CMD} -deU ${MTREE_FSCHG} \
+	    ${MTREE_FOLLOWS_SYMLINKS} -f $$m -p $$d; \
+	${MTREE_FILTER} $$m | \
+	${MTREE_CMD} -deU ${MTREE_FSCHG} ${MTREE_FOLLOWS_SYMLINKS} \
+	    -p $$d
+.endfor
 .if defined(NO_ROOT)
-	@set ${MTREES}; \
-	while test $$# -ge 2; do \
-		m=${.CURDIR}/$$1; \
-		shift; \
-		d=$$1; \
-		test "$$d" == "/" && d=""; \
-		d=${DISTBASE}$$d; \
-		shift; \
-		test -d ${DESTDIR}/$$d || mkdir -p ${DESTDIR}/$$d; \
-		${ECHO} "${MTREE_CMD:N-W} -C -f $$m -K all | " \
-		    "sed s#^\.#.$$d# | ${METALOG.add}" ; \
-		${MTREE_FILTER} $$m | \
-		${MTREE_CMD:N-W} -C -K all | sed s#^\.#.$$d# | \
-		    ${METALOG.add} ; \
-	done; true
+.for _m _d in ${MTREES}
+	@m=${.CURDIR}/${_m}; \
+	d=${_d}; \
+	test "$$d" == "/" && d=""; \
+	d=${DISTBASE}$$d; \
+	test -d ${DESTDIR}/$$d || mkdir -p ${DESTDIR}/$$d; \
+	${ECHO} "${MTREE_CMD:N-W} -C -f $$m -K all | " \
+	    "sed s#^\.#.$$d# | ${METALOG.add}" ; \
+	${MTREE_FILTER} $$m | \
+	${MTREE_CMD:N-W} -C -K all | sed s#^\.#.$$d# | \
+	    ${METALOG.add}
+.endfor
 .endif
 .if ${MK_NLS} != "no"
-	set - `grep "^[a-zA-Z]" ${.CURDIR}/nls.alias`; \
-	while [ $$# -gt 0 ] ; do \
-		${INSTALL_SYMLINK} "$$2" "${DESTDIR}${SHAREDIR}/nls/$$1"; \
-		shift; shift; \
-	done
+.for alias nls in ${NLS_ALIASES}
+	${INSTALL_SYMLINK} "${nls}" "${DESTDIR}${SHAREDIR}/nls/${alias}"
+.endfor
 .endif
-
-etc-examples: ${META_DEPS}
-	cd ${.CURDIR}; ${INSTALL} ${TAG_ARGS} -o ${BINOWN} -g ${BINGRP} -m 444 \
-	    ${BIN1} ${BIN2} \
-	    ${DESTDIR}${SHAREDIR}/examples/etc
 
 .include <bsd.prog.mk>
 

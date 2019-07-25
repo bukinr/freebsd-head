@@ -103,6 +103,9 @@
 #define	EXC_SPFPD	0x2f30		/* SPE Floating-point Data */
 #define	EXC_SPFPR	0x2f40		/* SPE Floating-point Round */
 
+/* POWER8 */
+#define EXC_SOFT_PATCH	0x1500		/* POWER8 Soft Patch Exception */
+
 #define	EXC_LAST	0x2f00		/* Last possible exception vector */
 
 #define	EXC_AST		0x3000		/* Fake AST vector */
@@ -127,7 +130,7 @@
 /* Macros to extract register information */
 #define EXC_ALI_RST(dsisr) ((dsisr >> 5) & 0x1f)   /* source or target */
 #define EXC_ALI_RA(dsisr) (dsisr & 0x1f)
-#define	EXC_ALI_SPE_REG(instr)	((instr >> 21) & 0x1f)
+#define	EXC_ALI_INST_RST(instr)	((instr >> 21) & 0x1f)
 
 /*
  * SRR1 bits for program exception traps. These identify what caused
@@ -149,9 +152,10 @@
 
 #ifndef LOCORE
 struct	trapframe;
-struct	pcb;
+struct	thread;
+extern int	(*hmi_handler)(struct trapframe *);
 void    trap(struct trapframe *);
-int	ppc_instr_emulate(struct trapframe *, struct pcb *);
+int	ppc_instr_emulate(struct trapframe *, struct thread *);
 #endif
 
 #endif	/* _POWERPC_TRAP_H_ */

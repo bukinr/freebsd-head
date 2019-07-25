@@ -225,7 +225,8 @@ static devclass_t fsl_pcib_devclass;
 
 DEFINE_CLASS_1(pcib, fsl_pcib_driver, fsl_pcib_methods,
     sizeof(struct fsl_pcib_softc), ofw_pci_driver);
-DRIVER_MODULE(pcib, ofwbus, fsl_pcib_driver, fsl_pcib_devclass, 0, 0);
+EARLY_DRIVER_MODULE(pcib, ofwbus, fsl_pcib_driver, fsl_pcib_devclass, 0, 0,
+    BUS_PASS_BUS);
 
 static int
 fsl_pcib_err_intr(void *v)
@@ -562,7 +563,7 @@ fsl_pcib_init(struct fsl_pcib_softc *sc, int bus, int maxslot)
 	int new_pribus, new_secbus, new_subbus;
 	int slot, func, maxfunc;
 	uint16_t vendor, device;
-	uint8_t command, hdrtype, subclass;
+	uint8_t brctl, command, hdrtype, subclass;
 
 	secbus = bus;
 	for (slot = 0; slot <= maxslot; slot++) {
@@ -605,6 +606,17 @@ fsl_pcib_init(struct fsl_pcib_softc *sc, int bus, int maxslot)
 			/* Allow all DEVTYPE 1 devices */
 			if (hdrtype != PCIM_HDRTYPE_BRIDGE)
 				continue;
+
+			brctl = fsl_pcib_read_config(sc->sc_dev, bus, slot, func,
+			    PCIR_BRIDGECTL_1, 1);
+			brctl |= PCIB_BCR_SECBUS_RESET;
+			fsl_pcib_write_config(sc->sc_dev, bus, slot, func,
+			    PCIR_BRIDGECTL_1, brctl, 1);
+			DELAY(100000);
+			brctl &= ~PCIB_BCR_SECBUS_RESET;
+			fsl_pcib_write_config(sc->sc_dev, bus, slot, func,
+			    PCIR_BRIDGECTL_1, brctl, 1);
+			DELAY(100000);
 
 			secbus++;
 

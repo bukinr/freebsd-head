@@ -317,6 +317,12 @@ cpu_startup(dummy)
 	printf("avail memory = %ju (%ju MB)\n",
 	    ptoa((uintmax_t)vm_free_count()),
 	    ptoa((uintmax_t)vm_free_count()) / 1048576);
+#ifdef DEV_PCI
+	if (bootverbose && intel_graphics_stolen_base != 0)
+		printf("intel stolen mem: base %#jx size %ju MB\n",
+		    (uintmax_t)intel_graphics_stolen_base,
+		    (uintmax_t)intel_graphics_stolen_size / 1024 / 1024);
+#endif
 
 	/*
 	 * Set up buffers, so they can be used to read disk labels.
@@ -386,7 +392,6 @@ sendsig(sig_t catcher, ksiginfo_t *ksi, sigset_t *mask)
 	sf.sf_uc.uc_mcontext.mc_gsbase = pcb->pcb_gsbase;
 	bzero(sf.sf_uc.uc_mcontext.mc_spare,
 	    sizeof(sf.sf_uc.uc_mcontext.mc_spare));
-	bzero(sf.sf_uc.__spare__, sizeof(sf.sf_uc.__spare__));
 
 	/* Allocate space for the signal handler context. */
 	if ((td->td_pflags & TDP_ALTSTACK) != 0 && !oonstack &&
@@ -1575,6 +1580,7 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 
 	identify_cpu1();
 	identify_hypervisor();
+	identify_cpu_fixup_bsp();
 	identify_cpu2();
 	initializecpucache();
 
@@ -1609,6 +1615,13 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 	kstack0_sz = thread0.td_kstack_pages * PAGE_SIZE;
 	bzero((void *)thread0.td_kstack, kstack0_sz);
 	physfree += kstack0_sz;
+
+	/*
+	 * Initialize enough of thread0 for delayed invalidation to
+	 * work very early.  Rely on thread0.td_base_pri
+	 * zero-initialization, it is reset to PVM at proc0_init().
+	 */
+	pmap_thread_init_invl_gen(&thread0);
 
 	/*
 	 * make gdt memory segments
@@ -1726,6 +1739,7 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 	TUNABLE_INT_FETCH("hw.spec_store_bypass_disable", &hw_ssb_disable);
 	TUNABLE_INT_FETCH("machdep.syscall_ret_l1d_flush",
 	    &syscall_ret_l1d_flush_mode);
+	TUNABLE_INT_FETCH("hw.mds_disable", &hw_mds_disable);
 
 	finishidentcpu();	/* Final stage of CPU initialization */
 	initializecpu();	/* Initialize CPU registers */
@@ -1791,6 +1805,11 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 	init_param2(physmem);
 
 	/* now running on new page tables, configured,and u/iom is accessible */
+
+#ifdef DEV_PCI
+        /* This call might adjust phys_avail[]. */
+        pci_early_quirks();
+#endif
 
 	if (late_console)
 		cninit();
@@ -2034,6 +2053,7 @@ fill_regs(struct thread *td, struct reg *regs)
 int
 fill_frame_regs(struct trapframe *tp, struct reg *regs)
 {
+
 	regs->r_r15 = tp->tf_r15;
 	regs->r_r14 = tp->tf_r14;
 	regs->r_r13 = tp->tf_r13;
@@ -2065,6 +2085,8 @@ fill_frame_regs(struct trapframe *tp, struct reg *regs)
 		regs->r_fs = 0;
 		regs->r_gs = 0;
 	}
+	regs->r_err = 0;
+	regs->r_trapno = 0;
 	return (0);
 }
 
@@ -2616,15 +2638,14 @@ set_pcb_flags_raw(struct pcb *pcb, const u_int flags)
  * the PCB_FULL_IRET flag is set.  We disable interrupts to sync with
  * context switches.
  */
-void
-set_pcb_flags(struct pcb *pcb, const u_int flags)
+static void
+set_pcb_flags_fsgsbase(struct pcb *pcb, const u_int flags)
 {
 	register_t r;
 
 	if (curpcb == pcb &&
 	    (flags & PCB_FULL_IRET) != 0 &&
-	    (pcb->pcb_flags & PCB_FULL_IRET) == 0 &&
-	    (cpu_stdext_feature & CPUID_STDEXT_FSGSBASE) != 0) {
+	    (pcb->pcb_flags & PCB_FULL_IRET) == 0) {
 		r = intr_disable();
 		if ((pcb->pcb_flags & PCB_FULL_IRET) == 0) {
 			if (rfs() == _ufssel)
@@ -2637,6 +2658,13 @@ set_pcb_flags(struct pcb *pcb, const u_int flags)
 	} else {
 		set_pcb_flags_raw(pcb, flags);
 	}
+}
+
+DEFINE_IFUNC(, void, set_pcb_flags, (struct pcb *, const u_int))
+{
+
+	return ((cpu_stdext_feature & CPUID_STDEXT_FSGSBASE) != 0 ?
+	    set_pcb_flags_fsgsbase : set_pcb_flags_raw);
 }
 
 void
@@ -2679,36 +2707,41 @@ outb_(u_short port, u_char data)
 
 void	*memset_std(void *buf, int c, size_t len);
 void	*memset_erms(void *buf, int c, size_t len);
-DEFINE_IFUNC(, void *, memset, (void *, int, size_t), static)
+DEFINE_IFUNC(, void *, memset, (void *, int, size_t))
 {
 
 	return ((cpu_stdext_feature & CPUID_STDEXT_ERMS) != 0 ?
-		memset_erms : memset_std);
+	    memset_erms : memset_std);
 }
 
-void    *memmove_std(void * _Nonnull dst, const void * _Nonnull src, size_t len);
-void    *memmove_erms(void * _Nonnull dst, const void * _Nonnull src, size_t len);
-DEFINE_IFUNC(, void *, memmove, (void * _Nonnull, const void * _Nonnull, size_t), static)
+void    *memmove_std(void * _Nonnull dst, const void * _Nonnull src,
+	    size_t len);
+void    *memmove_erms(void * _Nonnull dst, const void * _Nonnull src,
+	    size_t len);
+DEFINE_IFUNC(, void *, memmove, (void * _Nonnull, const void * _Nonnull,
+    size_t))
 {
 
 	return ((cpu_stdext_feature & CPUID_STDEXT_ERMS) != 0 ?
-		memmove_erms : memmove_std);
+	    memmove_erms : memmove_std);
 }
 
-void    *memcpy_std(void * _Nonnull dst, const void * _Nonnull src, size_t len);
-void    *memcpy_erms(void * _Nonnull dst, const void * _Nonnull src, size_t len);
-DEFINE_IFUNC(, void *, memcpy, (void * _Nonnull, const void * _Nonnull, size_t), static)
+void    *memcpy_std(void * _Nonnull dst, const void * _Nonnull src,
+	    size_t len);
+void    *memcpy_erms(void * _Nonnull dst, const void * _Nonnull src,
+	    size_t len);
+DEFINE_IFUNC(, void *, memcpy, (void * _Nonnull, const void * _Nonnull,size_t))
 {
 
 	return ((cpu_stdext_feature & CPUID_STDEXT_ERMS) != 0 ?
-		memcpy_erms : memcpy_std);
+	    memcpy_erms : memcpy_std);
 }
 
 void	pagezero_std(void *addr);
 void	pagezero_erms(void *addr);
-DEFINE_IFUNC(, void , pagezero, (void *), static)
+DEFINE_IFUNC(, void , pagezero, (void *))
 {
 
 	return ((cpu_stdext_feature & CPUID_STDEXT_ERMS) != 0 ?
-		pagezero_erms : pagezero_std);
+	    pagezero_erms : pagezero_std);
 }

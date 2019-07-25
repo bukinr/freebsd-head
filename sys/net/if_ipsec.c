@@ -214,6 +214,12 @@ ipsec_clone_destroy(struct ifnet *ifp)
 	sx_xlock(&ipsec_ioctl_sx);
 	sc = ifp->if_softc;
 	ipsec_delete_tunnel(sc);
+	/*
+	 * Delete softc from idhash on interface destroy, since
+	 * ipsec_delete_tunnel() keeps reqid unchanged.
+	 */
+	if (sc->reqid != 0)
+		CK_LIST_REMOVE(sc, idhash);
 	bpfdetach(ifp);
 	if_detach(ifp);
 	ifp->if_softc = NULL;
@@ -267,6 +273,13 @@ vnet_ipsec_uninit(const void *unused __unused)
 
 	if_clone_detach(V_ipsec_cloner);
 	free(V_ipsec_idhtbl, M_IPSEC);
+	/*
+	 * Use V_ipsec_idhtbl pointer as indicator that VNET is going to be
+	 * destroyed, it is used by ipsec_srcaddr() callback.
+	 */
+	V_ipsec_idhtbl = NULL;
+	IPSEC_WAIT();
+
 #ifdef INET
 	if (IS_DEFAULT_VNET(curvnet))
 		ip_encap_unregister_srcaddr(ipsec4_srctab);
@@ -779,6 +792,10 @@ ipsec_srcaddr(void *arg __unused, const struct sockaddr *sa,
 	struct ipsec_softc *sc;
 	struct secasindex *saidx;
 
+	/* Check that VNET is ready */
+	if (V_ipsec_idhtbl == NULL)
+		return;
+
 	MPASS(in_epoch(net_epoch_preempt));
 	CK_LIST_FOREACH(sc, ipsec_srchash(sa), srchash) {
 		if (sc->family == 0)
@@ -951,7 +968,7 @@ static int
 ipsec_set_addresses(struct ifnet *ifp, struct sockaddr *src,
     struct sockaddr *dst)
 {
-	struct ipsec_softc *sc, *tsc;
+	struct ipsec_softc *sc;
 	struct secasindex *saidx;
 
 	sx_assert(&ipsec_ioctl_sx, SA_XLOCKED);
@@ -965,18 +982,6 @@ ipsec_set_addresses(struct ifnet *ifp, struct sockaddr *src,
 		    key_sockaddrcmp(&saidx->dst.sa, dst, 0) == 0)
 			return (0); /* Nothing has been changed. */
 
-	}
-	/* Check that given addresses aren't already configured */
-	CK_LIST_FOREACH(tsc, ipsec_srchash(src), srchash) {
-		if (tsc == sc)
-			continue;
-		MPASS(tsc->family == src->sa_family);
-		saidx = ipsec_getsaidx(tsc, IPSEC_DIR_OUTBOUND, tsc->family);
-		if (key_sockaddrcmp(&saidx->src.sa, src, 0) == 0 &&
-		    key_sockaddrcmp(&saidx->dst.sa, dst, 0) == 0) {
-			/* We already have tunnel with such addresses */
-			return (EADDRNOTAVAIL);
-		}
 	}
 	/* If reqid is not set, generate new one. */
 	if (ipsec_init_reqid(sc) != 0)
@@ -1025,13 +1030,11 @@ ipsec_delete_tunnel(struct ipsec_softc *sc)
 	sc->ifp->if_drv_flags &= ~IFF_DRV_RUNNING;
 	if (sc->family != 0) {
 		CK_LIST_REMOVE(sc, srchash);
-		IPSEC_WAIT();
-
+		sc->family = 0;
 		/*
 		 * Make sure that ipsec_if_input() will not do access
 		 * to softc's policies.
 		 */
-		sc->family = 0;
 		IPSEC_WAIT();
 
 		key_unregister_ifnet(sc->sp, IPSEC_SPCOUNT);

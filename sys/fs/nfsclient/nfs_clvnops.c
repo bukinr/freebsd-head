@@ -142,12 +142,12 @@ static vop_advlock_t	nfs_advlock;
 static vop_advlockasync_t nfs_advlockasync;
 static vop_getacl_t nfs_getacl;
 static vop_setacl_t nfs_setacl;
-static vop_set_text_t nfs_set_text;
 
 /*
  * Global vfs data structures for nfs
  */
-struct vop_vector newnfs_vnodeops = {
+
+static struct vop_vector newnfs_vnodeops_nosig = {
 	.vop_default =		&default_vnodeops,
 	.vop_access =		nfs_access,
 	.vop_advlock =		nfs_advlock,
@@ -179,10 +179,21 @@ struct vop_vector newnfs_vnodeops = {
 	.vop_write =		ncl_write,
 	.vop_getacl =		nfs_getacl,
 	.vop_setacl =		nfs_setacl,
-	.vop_set_text =		nfs_set_text,
 };
 
-struct vop_vector newnfs_fifoops = {
+static int
+nfs_vnodeops_bypass(struct vop_generic_args *a)
+{
+
+	return (vop_sigdefer(&newnfs_vnodeops_nosig, a));
+}
+
+struct vop_vector newnfs_vnodeops = {
+	.vop_default =		&default_vnodeops,
+	.vop_bypass =		nfs_vnodeops_bypass,
+};
+
+static struct vop_vector newnfs_fifoops_nosig = {
 	.vop_default =		&fifo_specops,
 	.vop_access =		nfsspec_access,
 	.vop_close =		nfsfifo_close,
@@ -195,6 +206,18 @@ struct vop_vector newnfs_fifoops = {
 	.vop_reclaim =		ncl_reclaim,
 	.vop_setattr =		nfs_setattr,
 	.vop_write =		nfsfifo_write,
+};
+
+static int
+nfs_fifoops_bypass(struct vop_generic_args *a)
+{
+
+	return (vop_sigdefer(&newnfs_fifoops_nosig, a));
+}
+
+struct vop_vector newnfs_fifoops = {
+	.vop_default =		&default_vnodeops,
+	.vop_bypass =		nfs_fifoops_bypass,
 };
 
 static int nfs_mknodrpc(struct vnode *dvp, struct vnode **vpp,
@@ -498,6 +521,7 @@ nfs_open(struct vop_open_args *ap)
 	int error;
 	int fmode = ap->a_mode;
 	struct ucred *cred;
+	vm_object_t obj;
 
 	if (vp->v_type != VREG && vp->v_type != VDIR && vp->v_type != VLNK)
 		return (EOPNOTSUPP);
@@ -611,6 +635,32 @@ nfs_open(struct vop_open_args *ap)
 	if (cred != NULL)
 		crfree(cred);
 	vnode_create_vobject(vp, vattr.va_size, ap->a_td);
+
+	/*
+	 * If the text file has been mmap'd, flush any dirty pages to the
+	 * buffer cache and then...
+	 * Make sure all writes are pushed to the NFS server.  If this is not
+	 * done, the modify time of the file can change while the text
+	 * file is being executed.  This will cause the process that is
+	 * executing the text file to be terminated.
+	 */
+	if (vp->v_writecount <= -1) {
+		if ((obj = vp->v_object) != NULL &&
+		    (obj->flags & OBJ_MIGHTBEDIRTY) != 0) {
+			VM_OBJECT_WLOCK(obj);
+			vm_object_page_clean(obj, 0, 0, OBJPC_SYNC);
+			VM_OBJECT_WUNLOCK(obj);
+		}
+
+		/* Now, flush the buffer cache. */
+		ncl_flush(vp, MNT_WAIT, curthread, 0, 0);
+
+		/* And, finally, make sure that n_mtime is up to date. */
+		np = VTONFS(vp);
+		mtx_lock(&np->n_mtx);
+		np->n_mtime = np->n_vattr.na_mtime;
+		mtx_unlock(&np->n_mtx);
+	}
 	return (0);
 }
 
@@ -929,8 +979,7 @@ nfs_setattr(struct vop_setattr_args *ap)
 			mtx_lock(&np->n_mtx);
 			tsize = np->n_size;
 			mtx_unlock(&np->n_mtx);
-			error = ncl_meta_setsize(vp, ap->a_cred, td,
-			    vap->va_size);
+			error = ncl_meta_setsize(vp, td, vap->va_size);
 			mtx_lock(&np->n_mtx);
  			if (np->n_flag & NMODIFIED) {
 			    tsize = np->n_size;
@@ -1132,7 +1181,6 @@ nfs_lookup(struct vop_lookup_args *ap)
 		cache_purge_negative(dvp);
 	}
 
-	error = 0;
 	newvp = NULLVP;
 	NFSINCRGLOBAL(nfsstatsv1.lookupcache_misses);
 	error = nfsrpc_lookup(dvp, cnp->cn_nameptr, cnp->cn_namelen,
@@ -2891,10 +2939,7 @@ loop:
 		}
 		BO_UNLOCK(bo);
 		bremfree(bp);
-		if (passone || !commit)
-		    bp->b_flags |= B_ASYNC;
-		else
-		    bp->b_flags |= B_ASYNC;
+		bp->b_flags |= B_ASYNC;
 		bwrite(bp);
 		if (newnfs_sigintr(nmp, td)) {
 			error = EINTR;
@@ -3005,20 +3050,25 @@ nfs_advlock(struct vop_advlock_args *ap)
 	struct proc *p = (struct proc *)ap->a_id;
 	struct thread *td = curthread;	/* XXX */
 	struct vattr va;
-	int ret, error = EOPNOTSUPP;
+	int ret, error;
 	u_quad_t size;
 	
+	error = NFSVOPLOCK(vp, LK_SHARED);
+	if (error != 0)
+		return (EBADF);
 	if (NFS_ISV4(vp) && (ap->a_flags & (F_POSIX | F_FLOCK)) != 0) {
-		if (vp->v_type != VREG)
-			return (EINVAL);
+		if (vp->v_type != VREG) {
+			error = EINVAL;
+			goto out;
+		}
 		if ((ap->a_flags & F_POSIX) != 0)
 			cred = p->p_ucred;
 		else
 			cred = td->td_ucred;
-		NFSVOPLOCK(vp, LK_EXCLUSIVE | LK_RETRY);
+		NFSVOPLOCK(vp, LK_UPGRADE | LK_RETRY);
 		if (vp->v_iflag & VI_DOOMED) {
-			NFSVOPUNLOCK(vp, 0);
-			return (EBADF);
+			error = EBADF;
+			goto out;
 		}
 
 		/*
@@ -3047,21 +3097,21 @@ nfs_advlock(struct vop_advlock_args *ap)
 					return (EINTR);
 				NFSVOPLOCK(vp, LK_EXCLUSIVE | LK_RETRY);
 				if (vp->v_iflag & VI_DOOMED) {
-					NFSVOPUNLOCK(vp, 0);
-					return (EBADF);
+					error = EBADF;
+					goto out;
 				}
 			}
 		} while (ret == NFSERR_DENIED && (ap->a_flags & F_WAIT) &&
 		     ap->a_op == F_SETLK);
 		if (ret == NFSERR_DENIED) {
-			NFSVOPUNLOCK(vp, 0);
-			return (EAGAIN);
+			error = EAGAIN;
+			goto out;
 		} else if (ret == EINVAL || ret == EBADF || ret == EINTR) {
-			NFSVOPUNLOCK(vp, 0);
-			return (ret);
+			error = ret;
+			goto out;
 		} else if (ret != 0) {
-			NFSVOPUNLOCK(vp, 0);
-			return (EACCES);
+			error = EACCES;
+			goto out;
 		}
 
 		/*
@@ -3091,12 +3141,7 @@ nfs_advlock(struct vop_advlock_args *ap)
 			np->n_flag |= NHASBEENLOCKED;
 			mtx_unlock(&np->n_mtx);
 		}
-		NFSVOPUNLOCK(vp, 0);
-		return (0);
 	} else if (!NFS_ISV4(vp)) {
-		error = NFSVOPLOCK(vp, LK_SHARED);
-		if (error)
-			return (error);
 		if ((VFSTONFS(vp->v_mount)->nm_flag & NFSMNT_NOLOCKD) != 0) {
 			size = VTONFS(vp)->n_size;
 			NFSVOPUNLOCK(vp, 0);
@@ -3119,7 +3164,11 @@ nfs_advlock(struct vop_advlock_args *ap)
 				NFSVOPUNLOCK(vp, 0);
 			}
 		}
-	}
+		return (error);
+	} else
+		error = EOPNOTSUPP;
+out:
+	NFSVOPUNLOCK(vp, 0);
 	return (error);
 }
 
@@ -3384,39 +3433,6 @@ nfs_setacl(struct vop_setacl_args *ap)
 	return (error);
 }
 
-static int
-nfs_set_text(struct vop_set_text_args *ap)
-{
-	struct vnode *vp = ap->a_vp;
-	struct nfsnode *np;
-
-	/*
-	 * If the text file has been mmap'd, flush any dirty pages to the
-	 * buffer cache and then...
-	 * Make sure all writes are pushed to the NFS server.  If this is not
-	 * done, the modify time of the file can change while the text
-	 * file is being executed.  This will cause the process that is
-	 * executing the text file to be terminated.
-	 */
-	if (vp->v_object != NULL) {
-		VM_OBJECT_WLOCK(vp->v_object);
-		vm_object_page_clean(vp->v_object, 0, 0, OBJPC_SYNC);
-		VM_OBJECT_WUNLOCK(vp->v_object);
-	}
-
-	/* Now, flush the buffer cache. */
-	ncl_flush(vp, MNT_WAIT, curthread, 0, 0);
-
-	/* And, finally, make sure that n_mtime is up to date. */
-	np = VTONFS(vp);
-	mtx_lock(&np->n_mtx);
-	np->n_mtime = np->n_vattr.na_mtime;
-	mtx_unlock(&np->n_mtx);
-
-	vp->v_vflag |= VV_TEXT;
-	return (0);
-}
-
 /*
  * Return POSIX pathconf information applicable to nfs filesystems.
  */
@@ -3482,9 +3498,6 @@ nfs_pathconf(struct vop_pathconf_args *ap)
 	case _PC_NO_TRUNC:
 		*ap->a_retval = pc.pc_notrunc;
 		break;
-	case _PC_ACL_EXTENDED:
-		*ap->a_retval = 0;
-		break;
 	case _PC_ACL_NFS4:
 		if (NFS_ISV4(vp) && nfsrv_useacl != 0 && attrflag != 0 &&
 		    NFSISSET_ATTRBIT(&nfsva.na_suppattr, NFSATTRBIT_ACL))
@@ -3497,9 +3510,6 @@ nfs_pathconf(struct vop_pathconf_args *ap)
 			*ap->a_retval = ACL_MAX_ENTRIES;
 		else
 			*ap->a_retval = 3;
-		break;
-	case _PC_MAC_PRESENT:
-		*ap->a_retval = 0;
 		break;
 	case _PC_PRIO_IO:
 		*ap->a_retval = 0;

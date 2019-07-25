@@ -137,7 +137,7 @@ nvme_ctrlr_construct_io_qpairs(struct nvme_controller *ctrlr)
 	 *  the MQES field in the capabilities register.
 	 */
 	cap_lo = nvme_mmio_read_4(ctrlr, cap_lo);
-	mqes = (cap_lo >> NVME_CAP_LO_REG_MQES_SHIFT) & NVME_CAP_LO_REG_MQES_MASK;
+	mqes = NVME_CAP_LO_MQES(cap_lo);
 	num_entries = min(num_entries, mqes + 1);
 
 	num_trackers = NVME_IO_TRACKERS;
@@ -237,7 +237,7 @@ nvme_ctrlr_fail_req_task(void *arg, int pending)
 		STAILQ_REMOVE_HEAD(&ctrlr->fail_req, stailq);
 		mtx_unlock(&ctrlr->lock);
 		nvme_qpair_manual_complete_request(req->qpair, req,
-		    NVME_SCT_GENERIC, NVME_SC_ABORTED_BY_REQUEST, TRUE);
+		    NVME_SCT_GENERIC, NVME_SC_ABORTED_BY_REQUEST);
 		mtx_lock(&ctrlr->lock);
 	}
 	mtx_unlock(&ctrlr->lock);
@@ -515,28 +515,33 @@ nvme_ctrlr_create_qpairs(struct nvme_controller *ctrlr)
 }
 
 static int
-nvme_ctrlr_destroy_qpair(struct nvme_controller *ctrlr, struct nvme_qpair *qpair)
+nvme_ctrlr_destroy_qpairs(struct nvme_controller *ctrlr)
 {
 	struct nvme_completion_poll_status	status;
+	struct nvme_qpair			*qpair;
 
-	status.done = 0;
-	nvme_ctrlr_cmd_delete_io_sq(ctrlr, qpair,
-	    nvme_completion_poll_cb, &status);
-	while (!atomic_load_acq_int(&status.done))
-		pause("nvme", 1);
-	if (nvme_completion_is_error(&status.cpl)) {
-		nvme_printf(ctrlr, "nvme_destroy_io_sq failed!\n");
-		return (ENXIO);
-	}
+	for (int i = 0; i < ctrlr->num_io_queues; i++) {
+		qpair = &ctrlr->ioq[i];
 
-	status.done = 0;
-	nvme_ctrlr_cmd_delete_io_cq(ctrlr, qpair,
-	    nvme_completion_poll_cb, &status);
-	while (!atomic_load_acq_int(&status.done))
-		pause("nvme", 1);
-	if (nvme_completion_is_error(&status.cpl)) {
-		nvme_printf(ctrlr, "nvme_destroy_io_cq failed!\n");
-		return (ENXIO);
+		status.done = 0;
+		nvme_ctrlr_cmd_delete_io_sq(ctrlr, qpair,
+		    nvme_completion_poll_cb, &status);
+		while (!atomic_load_acq_int(&status.done))
+			pause("nvme", 1);
+		if (nvme_completion_is_error(&status.cpl)) {
+			nvme_printf(ctrlr, "nvme_destroy_io_sq failed!\n");
+			return (ENXIO);
+		}
+
+		status.done = 0;
+		nvme_ctrlr_cmd_delete_io_cq(ctrlr, qpair,
+		    nvme_completion_poll_cb, &status);
+		while (!atomic_load_acq_int(&status.done))
+			pause("nvme", 1);
+		if (nvme_completion_is_error(&status.cpl)) {
+			nvme_printf(ctrlr, "nvme_destroy_io_cq failed!\n");
+			return (ENXIO);
+		}
 	}
 
 	return (0);
@@ -1052,15 +1057,11 @@ nvme_ctrlr_passthrough_cmd(struct nvme_controller *ctrlr,
 			 *  this passthrough command.
 			 */
 			PHOLD(curproc);
-			buf = getpbuf(NULL);
+			buf = uma_zalloc(pbuf_zone, M_WAITOK);
 			buf->b_data = pt->buf;
 			buf->b_bufsize = pt->len;
 			buf->b_iocmd = pt->is_read ? BIO_READ : BIO_WRITE;
-#ifdef NVME_UNMAPPED_BIO_SUPPORT
 			if (vmapbuf(buf, 1) < 0) {
-#else
-			if (vmapbuf(buf) < 0) {
-#endif
 				ret = EFAULT;
 				goto err;
 			}
@@ -1075,6 +1076,8 @@ nvme_ctrlr_passthrough_cmd(struct nvme_controller *ctrlr,
 	/* Assume userspace already converted to little-endian */
 	req->cmd.opc = pt->cmd.opc;
 	req->cmd.fuse = pt->cmd.fuse;
+	req->cmd.rsvd2 = pt->cmd.rsvd2;
+	req->cmd.rsvd3 = pt->cmd.rsvd3;
 	req->cmd.cdw10 = pt->cmd.cdw10;
 	req->cmd.cdw11 = pt->cmd.cdw11;
 	req->cmd.cdw12 = pt->cmd.cdw12;
@@ -1099,7 +1102,7 @@ nvme_ctrlr_passthrough_cmd(struct nvme_controller *ctrlr,
 
 err:
 	if (buf != NULL) {
-		relpbuf(buf, NULL);
+		uma_zfree(pbuf_zone, buf);
 		PRELE(curproc);
 	}
 
@@ -1243,16 +1246,16 @@ nvme_ctrlr_construct(struct nvme_controller *ctrlr, device_t dev)
 	 *  other than zero, but this driver is not set up to handle that.
 	 */
 	cap_hi = nvme_mmio_read_4(ctrlr, cap_hi);
-	dstrd = (cap_hi >> NVME_CAP_HI_REG_DSTRD_SHIFT) & NVME_CAP_HI_REG_DSTRD_MASK;
+	dstrd = NVME_CAP_HI_DSTRD(cap_hi);
 	if (dstrd != 0)
 		return (ENXIO);
 
-	mpsmin = (cap_hi >> NVME_CAP_HI_REG_MPSMIN_SHIFT) & NVME_CAP_HI_REG_MPSMIN_MASK;
+	mpsmin = NVME_CAP_HI_MPSMIN(cap_hi);
 	ctrlr->min_page_size = 1 << (12 + mpsmin);
 
 	/* Get ready timeout value from controller, in units of 500ms. */
 	cap_lo = nvme_mmio_read_4(ctrlr, cap_lo);
-	to = (cap_lo >> NVME_CAP_LO_REG_TO_SHIFT) & NVME_CAP_LO_REG_TO_MASK;
+	to = NVME_CAP_LO_TO(cap_lo) + 1;
 	ctrlr->ready_timeout_in_ms = to * 500;
 
 	timeout_period = NVME_DEFAULT_TIMEOUT_PERIOD;
@@ -1316,8 +1319,8 @@ nvme_ctrlr_destruct(struct nvme_controller *ctrlr, device_t dev)
 	if (ctrlr->cdev)
 		destroy_dev(ctrlr->cdev);
 
+	nvme_ctrlr_destroy_qpairs(ctrlr);
 	for (i = 0; i < ctrlr->num_io_queues; i++) {
-		nvme_ctrlr_destroy_qpair(ctrlr, &ctrlr->ioq[i]);
 		nvme_io_qpair_destroy(&ctrlr->ioq[i]);
 	}
 	free(ctrlr->ioq, M_NVME);

@@ -1052,14 +1052,7 @@ check_accept_rtadv(int idx)
 		    __func__, idx);
 		return (0);
 	}
-#if (__FreeBSD_version < 900000)
-	/*
-	 * RA_RECV: !ip6.forwarding && ip6.accept_rtadv
-	 * RA_SEND: ip6.forwarding
-	 */
-	return ((getinet6sysctl(IPV6CTL_FORWARDING) == 0) &&
-	    (getinet6sysctl(IPV6CTL_ACCEPT_RTADV) == 1));
-#else
+
 	/*
 	 * RA_RECV: ND6_IFF_ACCEPT_RTADV
 	 * RA_SEND: ip6.forwarding
@@ -1070,7 +1063,6 @@ check_accept_rtadv(int idx)
 	}
 
 	return (ifi->ifi_nd_flags & ND6_IFF_ACCEPT_RTADV);
-#endif
 }
 
 static void
@@ -1160,6 +1152,19 @@ ra_input(int len, struct nd_router_advert *nra,
 			sizeof(ntopbuf)), on_off[rai->rai_otherflg]);
 		inconsistent++;
 	}
+#ifdef DRAFT_IETF_6MAN_IPV6ONLY_FLAG
+	/* S "IPv6-Only" (Six, Silence-IPv4) flag */
+	if ((nra->nd_ra_flags_reserved & ND_RA_FLAG_IPV6_ONLY) !=
+	    rai->rai_ipv6onlyflg) {
+		syslog(LOG_NOTICE,
+		    "S flag inconsistent on %s:"
+		    " %s from %s, %s from us",
+		    ifi->ifi_ifname, on_off[!rai->rai_ipv6onlyflg],
+		    inet_ntop(AF_INET6, &from->sin6_addr, ntopbuf,
+			sizeof(ntopbuf)), on_off[rai->rai_ipv6onlyflg]);
+		inconsistent++;
+	}
+#endif
 	/* Reachable Time */
 	reachabletime = ntohl(nra->nd_ra_reachable);
 	if (reachabletime && rai->rai_reachabletime &&

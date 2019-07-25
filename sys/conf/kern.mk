@@ -39,10 +39,6 @@ CWARNEXTRA+=	-Wno-address-of-packed-member
 .endif
 
 CLANG_NO_IAS= -no-integrated-as
-.if ${COMPILER_VERSION} < 30500
-# XXX: clang < 3.5 integrated-as doesn't grok .codeNN directives
-CLANG_NO_IAS34= -no-integrated-as
-.endif
 .endif
 
 .if ${COMPILER_TYPE} == "gcc"
@@ -60,12 +56,13 @@ CWARNEXTRA?=	-Wno-error=address				\
 		-Wno-error=maybe-uninitialized			\
 		-Wno-error=overflow				\
 		-Wno-error=sequence-point			\
-		-Wno-error=unused-but-set-variable
+		-Wno-unused-but-set-variable
 .if ${COMPILER_VERSION} >= 60100
 CWARNEXTRA+=	-Wno-error=misleading-indentation		\
 		-Wno-error=nonnull-compare			\
 		-Wno-error=shift-overflow			\
-		-Wno-error=tautological-compare
+		-Wno-error=tautological-compare			\
+		-Wno-format-zero-length
 .endif
 .if ${COMPILER_VERSION} >= 70200
 CWARNEXTRA+=	-Wno-error=memset-elt-size
@@ -79,6 +76,7 @@ CWARNEXTRA?=	-Wno-uninitialized
 # GCC 4.2 doesn't have -Wno-error=cast-qual, so just disable the warning for
 # the few files that are already known to generate cast-qual warnings.
 NO_WCAST_QUAL= -Wno-cast-qual
+NO_WNONNULL=	-Wno-nonnull
 .endif
 .endif
 

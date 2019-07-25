@@ -33,6 +33,7 @@
 #ifndef __T4_TOM_H__
 #define __T4_TOM_H__
 #include <sys/vmem.h>
+#include "common/t4_hw.h"
 #include "tom/t4_tls.h"
 
 #define LISTEN_HASH_SIZE 32
@@ -68,12 +69,8 @@ enum {
 	TPF_ABORT_SHUTDOWN = (1 << 6),	/* connection abort is in progress */
 	TPF_CPL_PENDING    = (1 << 7),	/* haven't received the last CPL */
 	TPF_SYNQE	   = (1 << 8),	/* synq_entry, not really a toepcb */
-	TPF_SYNQE_NEEDFREE = (1 << 9),	/* synq_entry was malloc'd separately */
-	TPF_SYNQE_TCPDDP   = (1 << 10),	/* ulp_mode TCPDDP in toepcb */
-	TPF_SYNQE_EXPANDED = (1 << 11),	/* toepcb ready, tid context updated */
-	TPF_SYNQE_HAS_L2TE = (1 << 12),	/* we've replied to PASS_ACCEPT_REQ */
-	TPF_SYNQE_TLS      = (1 << 13), /* ulp_mode TLS in toepcb */
-	TPF_FORCE_CREDITS  = (1 << 14), /* always send credits */
+	TPF_SYNQE_EXPANDED = (1 << 9),	/* toepcb ready, tid context updated */
+	TPF_FORCE_CREDITS  = (1 << 10), /* always send credits */
 };
 
 enum {
@@ -127,13 +124,7 @@ struct pageset {
 
 TAILQ_HEAD(pagesetq, pageset);
 
-#define	PS_WIRED		0x0001	/* Pages wired rather than held. */
-#define	PS_PPODS_WRITTEN	0x0002	/* Page pods written to the card. */
-
-#define	EXT_FLAG_AIOTX		EXT_FLAG_VENDOR1
-
-#define	IS_AIOTX_MBUF(m)						\
-	((m)->m_flags & M_EXT && (m)->m_ext.ext_flags & EXT_FLAG_AIOTX)
+#define	PS_PPODS_WRITTEN	0x0001	/* Page pods written to the card. */
 
 struct ddp_buffer {
 	struct pageset *ps;
@@ -154,12 +145,6 @@ struct ddp_pcb {
 	struct task requeue_task;
 	struct kaiocb *queueing;
 	struct mtx lock;
-};
-
-struct aiotx_buffer {
-	struct pageset ps;
-	struct kaiocb *job;
-	int refcount;
 };
 
 struct toepcb {
@@ -184,9 +169,10 @@ struct toepcb {
 	u_int tx_nocompl;	/* tx WR credits since last compl request */
 	u_int plen_nocompl;	/* payload since last compl request */
 
-	/* rx credit handling */
-	u_int sb_cc;		/* last noted value of so_rcv->sb_cc */
-	int rx_credits;		/* rx credits (in bytes) to be returned to hw */
+	uint16_t opt0_rcv_bufsize;	/* XXX: save full opt0/opt2 for later? */
+	uint16_t mtu_idx;
+	uint16_t emss;
+	uint16_t tcp_opt;
 
 	u_int ulp_mode;	/* ULP mode */
 	void *ulpcb;
@@ -199,7 +185,7 @@ struct toepcb {
 
 	TAILQ_HEAD(, kaiocb) aiotx_jobq;
 	struct task aiotx_task;
-	bool aiotx_task_active;
+	struct socket *aiotx_so;
 
 	/* Tx software descriptor */
 	uint8_t txsd_total;
@@ -220,26 +206,26 @@ struct flowc_tx_params {
 	unsigned int mss;
 };
 
-#define	DDP_RETRY_WAIT	5	/* seconds to wait before re-enabling DDP */
-#define	DDP_LOW_SCORE	1
-#define	DDP_HIGH_SCORE	3
-
 /*
- * Compressed state for embryonic connections for a listener.  Barely fits in
- * 64B, try not to grow it further.
+ * Compressed state for embryonic connections for a listener.
  */
 struct synq_entry {
-	TAILQ_ENTRY(synq_entry) link;	/* listen_ctx's synq link */
-	int flags;			/* same as toepcb's tp_flags */
-	int tid;
 	struct listen_ctx *lctx;	/* backpointer to listen ctx */
 	struct mbuf *syn;
-	uint32_t iss;
-	uint32_t ts;
-	volatile uintptr_t wr;
+	int flags;			/* same as toepcb's tp_flags */
+	volatile int ok_to_respond;
 	volatile u_int refcnt;
+	int tid;
+	uint32_t iss;
+	uint32_t irs;
+	uint32_t ts;
+	uint16_t txqid;
+	uint16_t rxqid;
 	uint16_t l2e_idx;
+	uint16_t ulp_mode;
 	uint16_t rcv_bufsize;
+	__be16 tcp_opt; /* from cpl_pass_establish */
+	struct toepcb *toep;
 };
 
 /* listen_ctx flags */
@@ -256,16 +242,33 @@ struct listen_ctx {
 	struct sge_wrq *ctrlq;
 	struct sge_ofld_rxq *ofld_rxq;
 	struct clip_entry *ce;
-	TAILQ_HEAD(, synq_entry) synq;
 };
 
-struct clip_entry {
-	TAILQ_ENTRY(clip_entry) link;
-	struct in6_addr lip;	/* local IPv6 address */
-	u_int refcount;
+/* tcb_histent flags */
+#define TE_RPL_PENDING	1
+#define TE_ACTIVE	2
+
+/* bits in one 8b tcb_histent sample. */
+#define TS_RTO			(1 << 0)
+#define TS_DUPACKS		(1 << 1)
+#define TS_FASTREXMT		(1 << 2)
+#define TS_SND_BACKLOGGED	(1 << 3)
+#define TS_CWND_LIMITED		(1 << 4)
+#define TS_ECN_ECE		(1 << 5)
+#define TS_ECN_CWR		(1 << 6)
+#define TS_RESERVED		(1 << 7)	/* Unused. */
+
+struct tcb_histent {
+	struct mtx te_lock;
+	struct callout te_callout;
+	uint64_t te_tcb[TCB_SIZE / sizeof(uint64_t)];
+	struct adapter *te_adapter;
+	u_int te_flags;
+	u_int te_tid;
+	uint8_t te_pidx;
+	uint8_t te_sample[100];
 };
 
-TAILQ_HEAD(clip_head, clip_entry);
 struct tom_data {
 	struct toedev tod;
 
@@ -280,11 +283,9 @@ struct tom_data {
 
 	struct ppod_region pr;
 
-	vmem_t *key_map;
-
-	struct mtx clip_table_lock;
-	struct clip_head clip_table;
-	int clip_gen;
+	struct rwlock tcb_history_lock __aligned(CACHE_LINE_SIZE);
+	struct tcb_histent **tcb_history;
+	int dupack_threshold;
 
 	/* WRs that will not be sent to the chip because L2 resolution failed */
 	struct mtx unsent_wr_lock;
@@ -344,9 +345,7 @@ int select_ulp_mode(struct socket *, struct adapter *,
     struct offload_settings *);
 void set_ulp_mode(struct toepcb *, int);
 int negative_advice(int);
-struct clip_entry *hold_lip(struct tom_data *, struct in6_addr *,
-    struct clip_entry *);
-void release_lip(struct tom_data *, struct clip_entry *);
+int add_tid_to_history(struct adapter *, u_int);
 
 /* t4_connect.c */
 void t4_init_connect_cpl_handlers(void);
@@ -368,6 +367,7 @@ int do_abort_req_synqe(struct sge_iq *, const struct rss_header *,
 int do_abort_rpl_synqe(struct sge_iq *, const struct rss_header *,
     struct mbuf *);
 void t4_offload_socket(struct toedev *, void *, struct socket *);
+void synack_failure_cleanup(struct adapter *, int);
 
 /* t4_cpl_io.c */
 void aiotx_init_toep(struct toepcb *);
@@ -426,8 +426,6 @@ void t4_push_tls_records(struct adapter *, struct toepcb *, int);
 void t4_tls_mod_load(void);
 void t4_tls_mod_unload(void);
 void tls_establish(struct toepcb *);
-void tls_free_kmap(struct tom_data *);
-int tls_init_kmap(struct adapter *, struct tom_data *);
 void tls_init_toep(struct toepcb *);
 int tls_rx_key(struct toepcb *);
 void tls_stop_handshake_timer(struct toepcb *);

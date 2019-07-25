@@ -915,6 +915,7 @@ dme_attach(device_t dev)
 		ether_ifdetach(ifp);
 		goto fail;
 	}
+
 fail:
 	if (error != 0)
 		dme_detach(dev);

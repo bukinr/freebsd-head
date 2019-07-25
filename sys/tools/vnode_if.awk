@@ -139,9 +139,12 @@ if (!cfile && !hfile && !pfile && !qfile)
 if (!srcfile)
 	usage();
 
+# Avoid a literal generated file tag here.
+generated = "@" "generated";
+
 common_head = \
     "/*\n" \
-    " * This file is produced automatically.\n" \
+    " * This file is " generated " automatically.\n" \
     " * Do not modify anything in here by hand.\n" \
     " *\n" \
     " * Created from $FreeBSD$\n" \
@@ -181,6 +184,7 @@ if (cfile) {
 	    "struct vnodeop_desc vop_default_desc = {\n" \
 	    "	\"default\",\n" \
 	    "	0,\n" \
+	    "   0,\n" \
 	    "	(vop_bypass_t *)vop_panic,\n" \
 	    "	NULL,\n" \
 	    "	VDESC_NO_OFFSET,\n" \
@@ -366,12 +370,10 @@ while ((getline < srcfile) > 0) {
 			add_debug_code(name, args[i], "Entry", "\t");
 		printc("\tKTR_START" ctrstr);
 		add_pre(name);
-		printc("\tVFS_PROLOGUE(a->a_" args[0]"->v_mount);")
 		printc("\tif (vop->"name" != NULL)")
 		printc("\t\trc = vop->"name"(a);")
 		printc("\telse")
 		printc("\t\trc = vop->vop_bypass(&a->a_gen);")
-		printc("\tVFS_EPILOGUE(a->a_" args[0]"->v_mount);")
 		printc("\tSDT_PROBE3(vfs, vop, " name ", return, a->a_" args[0] ", a, rc);\n");
 		printc("\tif (rc == 0) {");
 		for (i = 0; i < numargs; ++i)
@@ -402,6 +404,8 @@ while ((getline < srcfile) > 0) {
 			releflags = "0";
 		printc("\t" releflags vppwillrele ",");
 
+		# index in struct vop_vector
+		printc("\t__offsetof(struct vop_vector, " name "),");
 		# function to call
 		printc("\t(vop_bypass_t *)" uname "_AP,");
 		# vp offsets

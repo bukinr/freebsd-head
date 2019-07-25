@@ -51,6 +51,7 @@
 #define	cpu_getstack(td)	((td)->td_frame->tf_sp)
 #define	cpu_setstack(td, sp)	((td)->td_frame->tf_sp = (sp))
 #define	cpu_spinwait()		__asm __volatile("yield" ::: "memory")
+#define	cpu_lock_delay()	DELAY(1)
 
 /* Extract CPU affinity levels 0-3 */
 #define	CPU_AFF0(mpidr)	(u_int)(((mpidr) >> 0) & 0xff)
@@ -159,7 +160,6 @@ void	cpu_reset(void) __dead2;
 void	fork_trampoline(void);
 void	identify_cpu(void);
 void	install_cpu_errata(void);
-void	print_cpu_features(u_int);
 void	swi_vm(void *v);
 
 #define	CPU_AFFINITY(cpu)	__cpu_affinity[(cpu)]

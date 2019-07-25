@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2018 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1999-2019 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -39,8 +39,8 @@ extern "C" {
  * (Prior to 0.9.5a beta1, a different scheme was used: MMNNFFRBB for
  *  major minor fix final patch/beta)
  */
-# define OPENSSL_VERSION_NUMBER  0x1010100fL
-# define OPENSSL_VERSION_TEXT    "OpenSSL 1.1.1-freebsd  11 Sep 2018"
+# define OPENSSL_VERSION_NUMBER  0x1010103fL
+# define OPENSSL_VERSION_TEXT    "OpenSSL 1.1.1c-freebsd  28 May 2019"
 
 /*-
  * The macros below are to be used for shared library (.so, .dll, ...)
@@ -92,7 +92,7 @@ extern "C" {
  * should only keep the versions that are binary compatible with the current.
  */
 # define SHLIB_VERSION_HISTORY ""
-# define SHLIB_VERSION_NUMBER "9"
+# define SHLIB_VERSION_NUMBER "111"
 
 
 #ifdef  __cplusplus

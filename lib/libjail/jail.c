@@ -30,7 +30,6 @@
 __FBSDID("$FreeBSD$");
 
 #include <sys/param.h>
-#include <sys/types.h>
 #include <sys/jail.h>
 #include <sys/linker.h>
 #include <sys/socket.h>
@@ -1050,10 +1049,12 @@ kldload_param(const char *name)
 		kl = kldload(name);
 	else if (strncmp(name, "allow.mount.", 12) == 0) {
 		/* Load the matching filesystem */
-		kl = kldload(name + 12);
+		const char *modname = name + 12;
+
+		kl = kldload(modname);
 		if (kl < 0 && errno == ENOENT &&
-		    strncmp(name + 12, "no", 2) == 0)
-			kl = kldload(name + 14);
+		    strncmp(modname, "no", 2) == 0)
+			kl = kldload(modname + 2);
 	} else {
 		errno = ENOENT;
 		return (-1);
