@@ -200,6 +200,7 @@ static u_int	moea64_vsid_bitmap[NVSIDS / VSID_NBPW];
 
 static boolean_t moea64_initialized = FALSE;
 
+#ifdef MOEA64_STATS
 /*
  * Statistics.
  */
@@ -218,6 +219,7 @@ SYSCTL_INT(_machdep, OID_AUTO, moea64_pvo_enter_calls, CTLFLAG_RD,
     &moea64_pvo_enter_calls, 0, "");
 SYSCTL_INT(_machdep, OID_AUTO, moea64_pvo_remove_calls, CTLFLAG_RD,
     &moea64_pvo_remove_calls, 0, "");
+#endif
 
 vm_offset_t	moea64_scratchpage_va[2];
 struct pvo_entry *moea64_scratchpage_pvo[2];
@@ -1434,7 +1436,7 @@ moea64_enter(mmu_t mmu, pmap_t pmap, vm_offset_t va, vm_page_t m,
 
 				/* If not in page table, reinsert it */
 				if (MOEA64_PTE_SYNCH(mmu, oldpvo) < 0) {
-					moea64_pte_overflow--;
+					STAT_MOEA64(moea64_pte_overflow--);
 					MOEA64_PTE_INSERT(mmu, oldpvo);
 				}
 
@@ -1449,13 +1451,13 @@ moea64_enter(mmu_t mmu, pmap_t pmap, vm_offset_t va, vm_page_t m,
 			KASSERT(oldpvo->pvo_pmap == pmap, ("pmap of old "
 			    "mapping does not match new mapping"));
 			moea64_pvo_remove_from_pmap(mmu, oldpvo);
-			error = moea64_pvo_enter(mmu, pvo, pvo_head, NULL);
+			moea64_pvo_enter(mmu, pvo, pvo_head, NULL);
 		}
 		PV_PAGE_UNLOCK(m);
 		PMAP_UNLOCK(pmap);
 
 		/* Free any dead pages */
-		if (oldpvo != NULL) {
+		if (error == EEXIST) {
 			moea64_pvo_remove_from_page(mmu, oldpvo);
 			free_pvo_entry(oldpvo);
 		}
@@ -2521,10 +2523,8 @@ moea64_pvo_enter(mmu_t mmu, struct pvo_entry *pvo, struct pvo_head *pvo_head,
 	struct pvo_entry *old_pvo;
 
 	PMAP_LOCK_ASSERT(pvo->pvo_pmap, MA_OWNED);
-	KASSERT(moea64_pvo_find_va(pvo->pvo_pmap, PVO_VADDR(pvo)) == NULL,
-	    ("Existing mapping for VA %#jx", (uintmax_t)PVO_VADDR(pvo)));
 
-	moea64_pvo_enter_calls++;
+	STAT_MOEA64(moea64_pvo_enter_calls++);
 
 	/*
 	 * Add to pmap list
@@ -2559,7 +2559,7 @@ moea64_pvo_enter(mmu_t mmu, struct pvo_entry *pvo, struct pvo_head *pvo_head,
 		panic("moea64_pvo_enter: overflow");
 	}
 
-	moea64_pvo_entries++;
+	STAT_MOEA64(moea64_pvo_entries++);
 
 	if (pvo->pvo_pmap == kernel_pmap)
 		isync();
@@ -2658,8 +2658,8 @@ moea64_pvo_remove_from_page_locked(mmu_t mmu, struct pvo_entry *pvo,
 		}
 	}
 
-	moea64_pvo_entries--;
-	moea64_pvo_remove_calls++;
+	STAT_MOEA64(moea64_pvo_entries--);
+	STAT_MOEA64(moea64_pvo_remove_calls++);
 }
 
 static void
