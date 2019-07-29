@@ -49,7 +49,7 @@ __FBSDID("$FreeBSD$");
 #include "if_dwc_if.h"
 
 static int
-socfpga_if_dwc_probe(device_t dev)
+if_dwc_socfpga_probe(device_t dev)
 {
 
 	if (!ofw_bus_status_okay(dev))
@@ -64,21 +64,21 @@ socfpga_if_dwc_probe(device_t dev)
 }
 
 static int
-socfpga_if_dwc_init(device_t dev)
+if_dwc_socfpga_init(device_t dev)
 {
 
 	return (0);
 }
 
 static int
-socfpga_if_dwc_mac_type(device_t dev)
+if_dwc_socfpga_mac_type(device_t dev)
 {
 
 	return (DWC_GMAC);
 }
 
 static int
-socfpga_if_dwc_mii_clk(device_t dev)
+if_dwc_socfpga_mii_clk(device_t dev)
 {
 	phandle_t root;
 
@@ -92,11 +92,11 @@ socfpga_if_dwc_mii_clk(device_t dev)
 }
 
 static device_method_t dwc_socfpga_methods[] = {
-	DEVMETHOD(device_probe,		socfpga_if_dwc_probe),
+	DEVMETHOD(device_probe,		if_dwc_socfpga_probe),
 
-	DEVMETHOD(if_dwc_init,		socfpga_if_dwc_init),
-	DEVMETHOD(if_dwc_mac_type,	socfpga_if_dwc_mac_type),
-	DEVMETHOD(if_dwc_mii_clk,	socfpga_if_dwc_mii_clk),
+	DEVMETHOD(if_dwc_init,		if_dwc_socfpga_init),
+	DEVMETHOD(if_dwc_mac_type,	if_dwc_socfpga_mac_type),
+	DEVMETHOD(if_dwc_mii_clk,	if_dwc_socfpga_mii_clk),
 
 	DEVMETHOD_END
 };
