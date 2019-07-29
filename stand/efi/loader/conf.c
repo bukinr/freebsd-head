@@ -40,7 +40,6 @@ struct devsw *devsw[] = {
 	&efipart_cddev,
 	&efipart_hddev,
 	&efihttp_dev, /* ordering with efinet_dev matters */
-	&efinet_dev,
 	&vdisk_dev,
 #ifdef EFI_ZFS_BOOT
 	&zfs_dev,
@@ -64,7 +63,6 @@ struct fs_ops *file_system[] = {
 };
 
 struct netif_driver *netif_drivers[] = {
-	&efinetif,
 	NULL
 };
 

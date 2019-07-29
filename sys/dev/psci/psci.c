@@ -137,6 +137,8 @@ psci_init(void *dummy)
 {
 	psci_callfn_t new_callfn;
 
+	printf("%s\n", __func__);
+
 	if (psci_find_callfn(&new_callfn) != PSCI_RETVAL_SUCCESS) {
 		printf("No PSCI/SMCCC call function found\n");
 		return;
@@ -220,8 +222,16 @@ psci_fdt_attach(device_t dev)
 	const struct ofw_compat_data *ocd;
 	struct psci_init_def *psci_init_def;
 
+	printf("%s\n", __func__);
+
 	ocd = ofw_bus_search_compatible(dev, compat_data);
+
+	printf("%s\n", __func__);
+
 	psci_init_def = (struct psci_init_def *)ocd->ocd_data;
+
+	printf("%s: psci_init_def %p\n", __func__, psci_init_def);
+	printf("%s: psci_init_def %p\n", __func__, psci_init_def);
 
 	return (psci_attach(dev, psci_init_def->psci_init,
 	    psci_init_def->default_version));
@@ -334,12 +344,21 @@ psci_attach(device_t dev, psci_initfn_t psci_init, int default_version)
 {
 	struct psci_softc *sc = device_get_softc(dev);
 
+	printf("%s\n", __func__);
+
 	if (psci_softc != NULL)
 		return (ENXIO);
 
+	printf("%s\n", __func__);
+
 	KASSERT(psci_init != NULL, ("PSCI init function cannot be NULL"));
+
+	printf("%s: psci_init %p\n", __func__, psci_init);
+
 	if (psci_init(dev, default_version))
 		return (ENXIO);
+
+	printf("%s\n", __func__);
 
 	psci_softc = sc;
 
@@ -374,6 +393,8 @@ psci_fdt_callfn(psci_callfn_t *callfn)
 {
 	phandle_t node;
 
+	printf("%s\n", __func__);
+
 	node = ofw_bus_find_compatible(OF_peer(0), "arm,psci-0.2");
 	if (node == 0) {
 		node = ofw_bus_find_compatible(OF_peer(0), "arm,psci-1.0");
@@ -406,6 +427,8 @@ psci_find_callfn(psci_callfn_t *callfn)
 {
 	int error;
 
+	printf("%s\n", __func__);
+
 	*callfn = NULL;
 #ifdef FDT
 	if (USE_FDT) {
@@ -421,6 +444,8 @@ psci_find_callfn(psci_callfn_t *callfn)
 			return (error);
 	}
 #endif
+
+	printf("%s\n", __func__);
 
 	if (*callfn == NULL)
 		return (PSCI_MISSING);

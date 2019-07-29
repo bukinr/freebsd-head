@@ -119,7 +119,7 @@ void
 cpu_reset(void)
 {
 
-	psci_reset();
+	//psci_reset();
 
 	printf("cpu_reset failed");
 	while(1)
