@@ -83,8 +83,6 @@ socfpga_if_dwc_mii_clk(device_t dev)
 	phandle_t root;
 
 	root = OF_finddevice("/");
-	if (root == -1)
-		panic("Could not find root node.");
 
 	if (ofw_bus_node_is_compatible(root, "altr,socfpga-stratix10"))
 		return (GMAC_MII_CLK_35_60M_DIV26);
