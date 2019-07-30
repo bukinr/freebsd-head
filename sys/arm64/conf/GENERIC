@@ -117,8 +117,6 @@ options 	SOC_ROCKCHIP_RK3328
 options 	SOC_ROCKCHIP_RK3399
 options 	SOC_XILINX_ZYNQ
 
-# device		soc_altera
-
 # Timer drivers
 device		a10_timer
 
@@ -193,6 +191,7 @@ device		aw_mmc			# Allwinner SD/MMC controller
 device		mmc			# mmc/sd bus
 device		mmcsd			# mmc/sd flash cards
 device		dwmmc
+device		dwmmc_altera
 device		rk_emmcphy
 
 # Serial (COM) ports
