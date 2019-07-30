@@ -162,7 +162,6 @@ device		neta		# Marvell Armada 370/38x/XP/3700 NIC
 device  	smc		# SMSC LAN91C111
 device		vnic		# Cavium ThunderX NIC
 device		al_eth		# Annapurna Alpine Ethernet NIC
-# device		dwc		# Synopsys DesignWare Ethernet MAC
 device		dwc_rk		# Rockchip Designware
 device		dwc_socfpga	# Altera SOCFPGA Ethernet MAC
 
