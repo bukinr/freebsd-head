@@ -13,6 +13,7 @@ SRCS=	delay.c \
 	efichar.c \
 	efienv.c \
 	efihttp.c \
+	efinet.c \
 	efipart.c \
 	efizfs.c \
 	env.c \
