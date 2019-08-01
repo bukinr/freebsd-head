@@ -119,7 +119,7 @@ arm64/arm64/bzero.S		standard
 arm64/arm64/clock.c		standard
 arm64/arm64/copyinout.S		standard
 arm64/arm64/copystr.c		standard
-#arm64/arm64/cpu_errata.c	standard
+arm64/arm64/cpu_errata.c	standard
 arm64/arm64/cpufunc_asm.S	standard
 arm64/arm64/db_disasm.c		optional	ddb
 arm64/arm64/db_interface.c	optional	ddb
@@ -231,9 +231,9 @@ dev/ofw/ofwpci.c		optional 	fdt pci
 dev/pci/pci_host_generic.c	optional	pci
 dev/pci/pci_host_generic_acpi.c	optional	pci acpi
 dev/pci/pci_host_generic_fdt.c	optional	pci fdt
-#dev/psci/psci.c			standard
-#dev/psci/psci_arm64.S		standard
-#dev/psci/smccc.c		standard
+dev/psci/psci.c			standard
+dev/psci/psci_arm64.S		standard
+dev/psci/smccc.c		standard
 dev/sdhci/sdhci_xenon.c		optional	sdhci_xenon sdhci fdt
 dev/uart/uart_cpu_arm64.c	optional	uart
 dev/uart/uart_dev_mu.c		optional	uart uart_mu
