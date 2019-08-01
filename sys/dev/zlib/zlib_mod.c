@@ -1,8 +1,7 @@
 /*-
- * SPDX-License-Identifier: BSD-3-Clause
+ * SPDX-License-Identifier: BSD-2-Clause
  *
- * Copyright (c) 1995 John Birrell <jb@cimlogic.com.au>.
- * All rights reserved.
+ * Copyright (c) 2019 The FreeBSD Foundation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -12,11 +11,8 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the author nor the names of any co-contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY JOHN BIRRELL AND CONTRIBUTORS ``AS IS'' AND
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
  * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
@@ -27,25 +23,31 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
+ *
+ * $FreeBSD$
  */
 
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
+#include <sys/param.h>
+#include <sys/time.h>
+#include <sys/kernel.h>
+#include <sys/module.h>
 
-#include "namespace.h"
-#include <pthread.h>
-#include "un-namespace.h"
-
-#include "thr_private.h"
-
-__weak_reference(_Tthr_self, pthread_self);
-__weak_reference(_Tthr_self, _pthread_self);
-
-pthread_t
-_Tthr_self(void)
+static int
+zlib_modevent(module_t mod, int type, void *unused)
 {
-	_thr_check_init();
-
-	/* Return the running thread pointer: */
-	return (_get_curthread());
+	switch (type) {
+	case MOD_LOAD:
+		return 0;
+	case MOD_UNLOAD:
+		return 0;
+	}
+	return EINVAL;
 }
+
+static moduledata_t zlib_mod = {
+	"zlib",
+	zlib_modevent,
+	0
+};
+DECLARE_MODULE(zlib, zlib_mod, SI_SUB_DRIVERS, SI_ORDER_FIRST);
+MODULE_VERSION(zlib, 1);
