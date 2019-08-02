@@ -945,7 +945,7 @@ use_real_interface:
 		 * We use an atomic here for accounting so we don't have to
 		 * use locks when freeing.
 		 */
-		atomic_add_long(&rs->rs_flows_using, 1);
+		atomic_add_64(&rs->rs_flows_using, 1);
 	}
 	epoch_exit_preempt(net_epoch_preempt, &et);
 	return (rte);
@@ -1186,7 +1186,7 @@ tcp_rel_pacing_rate(const struct tcp_hwrate_limit_table *crte, struct tcpcb *tp)
 	 * in order to release our refcount.
 	 */
 	rs = __DECONST(struct tcp_rate_set *, crs);
-	pre = atomic_fetchadd_long(&rs->rs_flows_using, -1);
+	pre = atomic_fetchadd_64(&rs->rs_flows_using, -1);
 	if (pre == 1) {
 		mtx_lock(&rs_mtx);
 		/*
