@@ -49,6 +49,14 @@
 #define	SMCCC_32BIT_CALL	0
 #define	SMCCC_64BIT_CALL	1
 
+#define	SMCCC_ARM_ARCH_CALLS		0
+#define	SMCCC_CPU_SERVICE_CALLS		1
+#define	SMCCC_SIP_SERVICE_CALLS		2
+#define	SMCCC_OEM_SERVICE_CALLS		3
+#define	SMCCC_STD_SECURE_SERVICE_CALLS	4
+#define	SMCCC_STD_HYP_SERVICE_CALLS	5
+#define	SMCCC_VENDOR_HYP_SERVICE_CALLS	6
+
 /*
  * Arm Architecture Calls.
  * These are documented in the document ARM DEN 0070A.
