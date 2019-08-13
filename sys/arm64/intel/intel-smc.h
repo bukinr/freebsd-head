@@ -80,4 +80,7 @@
 #define	INTEL_SIP_SMC_RSU_UPDATE			\
     INTEL_SIP_SMC_FAST_CALL(INTEL_SIP_SMC_FUNCID_RSU_UPDATE)
 
+uint64_t arm_smccc_smc(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t *res);
+uint64_t arm_smccc_hvc(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t *res);
+
 #endif /* _ARM64_INTEL_INTEL_SMC_H_ */

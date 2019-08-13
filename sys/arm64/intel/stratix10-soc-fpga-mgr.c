@@ -53,6 +53,8 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
 
+#include <arm64/intel/stratix10-svc.h>
+
 #include <machine/bus.h>
 #include <machine/cpu.h>
 #include <machine/intr.h>
@@ -69,6 +71,12 @@ fpga_open(struct cdev *dev, int flags __unused,
 	struct fpgamgr_s10_softc *sc;
 
 	sc = dev->si_drv1;
+
+	printf("%s\n", __func__);
+
+	s10_svc_send();
+
+	printf("%s done\n", __func__);
 
 	return (0);
 }

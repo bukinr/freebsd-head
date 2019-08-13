@@ -54,6 +54,9 @@ __FBSDID("$FreeBSD$");
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
 
+#include <arm64/intel/intel-smc.h>
+#include <arm64/intel/stratix10-svc.h>
+
 #include <machine/bus.h>
 #include <machine/cpu.h>
 #include <machine/intr.h>
@@ -61,6 +64,29 @@ __FBSDID("$FreeBSD$");
 struct s10_svc_softc {
 	device_t		dev;
 };
+
+int
+s10_svc_send(void)
+{
+	int ret;
+	register_t a0, a1, a2;
+
+	printf("%s\n", __func__);
+
+	a0 = INTEL_SIP_SMC_FPGA_CONFIG_START;
+	a1 = 1; //flag partial ?
+
+	a0 = INTEL_SIP_SMC_RSU_STATUS;
+	a0 = INTEL_SIP_SMC_FPGA_CONFIG_GET_MEM;
+	a1 = 0;
+	a2 = 0;
+
+	ret = arm_smccc_smc(a0, a1, a2, 0, 0, 0, 0, 0, NULL);
+
+	printf("ret %d\n", ret);
+
+	return (0);
+}
 
 static int
 s10_svc_probe(device_t dev)
