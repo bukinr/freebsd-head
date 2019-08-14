@@ -48,6 +48,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/timetc.h>
 #include <sys/conf.h>
 #include <sys/uio.h>
+#include <sys/vmem.h>
 
 #include <dev/fdt/simplebus.h>
 #include <dev/ofw/openfirm.h>
@@ -63,6 +64,7 @@ __FBSDID("$FreeBSD$");
 
 struct s10_svc_softc {
 	device_t		dev;
+	vmem_t			*vmem;
 };
 
 int
@@ -91,6 +93,37 @@ s10_svc_send(void)
 }
 
 static int
+s10_get_memory(struct s10_svc_softc *sc)
+{
+	struct arm_smccc_res res;
+	vmem_addr_t addr;
+	vmem_size_t size;
+	vmem_t *vmem;
+
+	arm_smccc_smc(INTEL_SIP_SMC_FPGA_CONFIG_GET_MEM,
+	    0, 0, 0, 0, 0, 0, 0, &res);
+
+	if (res.a0 != 0)
+		return (ENXIO);
+
+	vmem = vmem_create("stratix10 vmem", 0, 0, PAGE_SIZE,
+	    PAGE_SIZE, M_BESTFIT | M_WAITOK);
+	if (vmem == NULL)
+		return (ENXIO);
+
+	addr = res.a1;
+	size = res.a2;
+
+	printf("%s: shared memory addr %lx size %lx\n", __func__,
+	    addr, size);
+	vmem_add(vmem, addr, size, 0);
+
+	sc->vmem = vmem;
+
+	return (0);
+}
+
+static int
 s10_svc_probe(device_t dev)
 {
 
@@ -112,6 +145,9 @@ s10_svc_attach(device_t dev)
 
 	sc = device_get_softc(dev);
 	sc->dev = dev;
+
+	if (s10_get_memory(sc) != 0)
+		return (ENXIO);
 
 	return (0);
 }
