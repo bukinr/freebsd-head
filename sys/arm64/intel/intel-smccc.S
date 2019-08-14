@@ -48,5 +48,8 @@ END(arm_smccc_hvc)
  */
 ENTRY(arm_smccc_smc)
 	smc	#0
+	ldr	x4, [sp]
+	stp	x0, x1, [x4, #16 * 0]
+	stp	x2, x3, [x4, #16 * 1]
 	ret
 END(arm_smccc_smc)

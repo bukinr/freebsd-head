@@ -68,8 +68,9 @@ struct s10_svc_softc {
 int
 s10_svc_send(void)
 {
-	int ret;
+	uint64_t ret;
 	register_t a0, a1, a2;
+	struct arm_smccc_res res;
 
 	printf("%s\n", __func__);
 
@@ -81,9 +82,10 @@ s10_svc_send(void)
 	a1 = 0;
 	a2 = 0;
 
-	ret = arm_smccc_smc(a0, a1, a2, 0, 0, 0, 0, 0, NULL);
+	ret = arm_smccc_smc(a0, a1, a2, 0, 0, 0, 0, 0, &res);
 
-	printf("ret %d\n", ret);
+	printf("res.a0 %lx, a1 %lx, a2 %lx, a3 %lx\n",
+	    res.a0, res.a1, res.a2, res.a3);
 
 	return (0);
 }
