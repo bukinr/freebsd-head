@@ -65,6 +65,7 @@
  * SUCH DAMAGE.
  */
 
+#if 0
 #ifndef lint
 static const char copyright[] =
 "@(#) Copyright (c) 1989, 1993\n\
@@ -72,10 +73,9 @@ static const char copyright[] =
 #endif /* not lint */
 
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#)ping.c	8.1 (Berkeley) 6/5/93";
-#endif
 #endif /* not lint */
+#endif
 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
@@ -307,7 +307,7 @@ main(int argc, char *argv[])
 	int ip6optlen = 0;
 	struct cmsghdr *scmsgp = NULL;
 	/* For control (ancillary) data received from recvmsg() */
-	struct cmsghdr cm[CONTROLLEN];
+	u_char cm[CONTROLLEN];
 #if defined(SO_SNDBUF) && defined(SO_RCVBUF)
 	u_long lsockbufsize;
 	int sockbufsize = 0;
@@ -332,6 +332,9 @@ main(int argc, char *argv[])
 	/* just to be sure */
 	memset(&smsghdr, 0, sizeof(smsghdr));
 	memset(&smsgiov, 0, sizeof(smsgiov));
+
+	intvl.tv_sec = interval / 1000;
+	intvl.tv_nsec = interval % 1000 * 1000000;
 
 	alarmtimeout = preload = 0;
 	datap = &outpack[ICMP6ECHOLEN + ICMP6ECHOTMLEN];
@@ -1121,9 +1124,6 @@ main(int argc, char *argv[])
 	if (options & F_FLOOD) {
 		intvl.tv_sec = 0;
 		intvl.tv_nsec = 10000000;
-	} else if ((options & F_INTERVAL) == 0) {
-		intvl.tv_sec = interval / 1000;
-		intvl.tv_nsec = interval % 1000 * 1000000;
 	}
 
 	almost_done = 0;
@@ -2082,7 +2082,7 @@ pr_nodeaddr(struct icmp6_nodeinfo *ni, int nilen)
 	if (nilen % (sizeof(u_int32_t) + sizeof(struct in6_addr)) == 0)
 		withttl = 1;
 	while (nilen > 0) {
-		u_int32_t ttl;
+		u_int32_t ttl = 0;
 
 		if (withttl) {
 			/* XXX: alignment? */
