@@ -50,6 +50,9 @@ __FBSDID("$FreeBSD$");
 #include <sys/uio.h>
 #include <sys/vmem.h>
 
+#include <vm/vm.h>
+#include <vm/pmap.h>
+
 #include <dev/fdt/simplebus.h>
 #include <dev/ofw/openfirm.h>
 #include <dev/ofw/ofw_bus.h>
@@ -67,29 +70,61 @@ struct s10_svc_softc {
 	vmem_t			*vmem;
 };
 
+static struct s10_svc_softc *s10_svc_sc;
+
 int
-s10_svc_send(void)
+s10_svc_send(struct s10_svc_msg *msg)
 {
-	uint64_t ret;
+	int ret;
 	register_t a0, a1, a2;
 	struct arm_smccc_res res;
 
-	printf("%s\n", __func__);
+	printf("%s: cmd %d\n", __func__, msg->command);
 
-	a0 = INTEL_SIP_SMC_FPGA_CONFIG_START;
-	a1 = 1; //flag partial ?
-
-	a0 = INTEL_SIP_SMC_RSU_STATUS;
-	a0 = INTEL_SIP_SMC_FPGA_CONFIG_GET_MEM;
+	a0 = 0;
 	a1 = 0;
 	a2 = 0;
+
+	switch (msg->command) {
+	case COMMAND_RECONFIG:
+		a0 = INTEL_SIP_SMC_FPGA_CONFIG_START;
+		a1 = 0; //flag partial ?
+		break;
+	case COMMAND_RECONFIG_DATA_SUBMIT:
+		a0 = INTEL_SIP_SMC_FPGA_CONFIG_WRITE;
+		a1 = (uint64_t)msg->payload;
+		a2 = (uint64_t)msg->payload_length;
+		break;
+	default:
+		return (-1);
+	}
 
 	ret = arm_smccc_smc(a0, a1, a2, 0, 0, 0, 0, 0, &res);
 
 	printf("res.a0 %lx, a1 %lx, a2 %lx, a3 %lx\n",
 	    res.a0, res.a1, res.a2, res.a3);
 
-	return (0);
+	return (ret);
+}
+
+void *
+s10_svc_allocate_memory(size_t size)
+{
+	struct s10_svc_softc *sc;
+	vmem_addr_t addr;
+
+	sc = s10_svc_sc;
+
+	if (vmem_alloc(sc->vmem, size,
+	    M_FIRSTFIT | M_NOWAIT, &addr)) {
+		printf("cant allocate memory\n");
+		return (NULL);
+	}
+
+	void *va;
+	va = pmap_mapdev(addr, size);
+
+	return (void *)va;
 }
 
 static int
@@ -145,6 +180,8 @@ s10_svc_attach(device_t dev)
 
 	sc = device_get_softc(dev);
 	sc->dev = dev;
+
+	s10_svc_sc = sc;
 
 	if (s10_get_memory(sc) != 0)
 		return (ENXIO);

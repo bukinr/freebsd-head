@@ -62,21 +62,31 @@ __FBSDID("$FreeBSD$");
 struct fpgamgr_s10_softc {
 	struct cdev		*mgr_cdev;
 	device_t		dev;
+	void			*mem;
 };
+
+#define	SVC_BUF_SIZE	(512 * 1024)
 
 static int
 fpga_open(struct cdev *dev, int flags __unused,
     int fmt __unused, struct thread *td __unused)
 {
 	struct fpgamgr_s10_softc *sc;
+	struct s10_svc_msg msg;
+	int ret;
 
 	sc = dev->si_drv1;
 
 	printf("%s\n", __func__);
 
-	s10_svc_send();
+	sc->mem = s10_svc_allocate_memory(SVC_BUF_SIZE);
+	printf("%s: mem %p\n", __func__, sc->mem);
 
-	printf("%s done\n", __func__);
+	msg.command = COMMAND_RECONFIG;
+
+	ret = s10_svc_send(&msg);
+
+	printf("%s done, ret %d\n", __func__, ret);
 
 	return (0);
 }
@@ -89,6 +99,8 @@ fpga_close(struct cdev *dev, int flags __unused,
 
 	sc = dev->si_drv1;
 
+	printf("%s\n", __func__);
+
 	return (0);
 }
 
@@ -96,12 +108,39 @@ static int
 fpga_write(struct cdev *dev, struct uio *uio, int ioflag)
 {
 	struct fpgamgr_s10_softc *sc;
+	struct s10_svc_msg msg;
 	uint32_t buffer;
+	uint64_t addr;
+	int ret;
+	int count;
+	int i;
 
 	sc = dev->si_drv1;
 
-	while (uio->uio_resid >= 4) {
-		uiomove(&buffer, 4, uio);
+	printf("%s: uio->uio_resid %ld\n", __func__, uio->uio_resid);
+
+	i = 0;
+	count = 0;
+
+	while (uio->uio_resid > 0 && count < SVC_BUF_SIZE) {
+		addr = (uint64_t)sc->mem + count;
+		uiomove((void *)addr, 4, uio);
+		count += 4;
+
+		if (count == SVC_BUF_SIZE || uio->uio_resid == 0) {
+			printf("%s: writing %d chunk\n", __func__, i++);
+			msg.command = COMMAND_RECONFIG_DATA_SUBMIT;
+			msg.payload = sc->mem;
+			msg.payload_length = count;
+			ret = s10_svc_send(&msg);
+			printf("%s: ret %d\n", __func__, ret);
+			count = 0;
+		}
+	}
+
+	while (uio->uio_resid >= SVC_BUF_SIZE) {
+		uiomove(sc->mem, SVC_BUF_SIZE, uio);
+
 #if 0
 		bus_space_write_4(sc->bst_data, sc->bsh_data,
 		    0x0, buffer);

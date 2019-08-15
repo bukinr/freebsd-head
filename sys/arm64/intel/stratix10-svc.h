@@ -35,6 +35,16 @@
 #ifndef _ARM64_INTEL_STRATIX10_SVC_H_
 #define	_ARM64_INTEL_STRATIX10_SVC_H_
 
-int s10_svc_send(void);
+struct s10_svc_msg {
+	int command;
+#define	COMMAND_RECONFIG		(1 << 0)
+#define	COMMAND_RECONFIG_DATA_SUBMIT	(1 << 1)
+#define	COMMAND_RECONFIG_DATA_CLAIM	(1 << 2)
+	void *payload;
+	int payload_length;
+};
+
+int s10_svc_send(struct s10_svc_msg *msg);
+void * s10_svc_allocate_memory(size_t size);
 
 #endif	/* !_ARM64_INTEL_STRATIX10_SVC_H_ */
