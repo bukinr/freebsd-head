@@ -94,6 +94,7 @@ s10_svc_send(struct s10_svc_msg *msg)
 		a0 = INTEL_SIP_SMC_FPGA_CONFIG_WRITE;
 		a1 = (uint64_t)msg->payload;
 		a2 = (uint64_t)msg->payload_length;
+		break;
 	case COMMAND_RECONFIG_DATA_CLAIM:
 		a0 = INTEL_SIP_SMC_FPGA_CONFIG_COMPLETED_WRITE;
 		a1 = 0;
