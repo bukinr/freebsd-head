@@ -26,3 +26,5 @@ echo 'bootefi 0x2000000 0x8000000'
 echo 'load disk0s1:kernel'
 echo 'fdt ls'
 echo 'boot'
+
+echo 'dd if=/root/DE10_Pro-hps.core.rbf of=/dev/fpga0 bs=4m'
