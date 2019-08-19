@@ -330,7 +330,7 @@ options 	FDT
 device		acpi
 
 # DTBs
-makeoptions	MODULES_EXTRA="dtb/allwinner dtb/rockchip dtb/rpi"
+makeoptions	MODULES_EXTRA="dtb/allwinner dtb/mv dtb/rockchip dtb/rpi"
 
-#options		FDT_DTB_STATIC
+#options 	FDT_DTB_STATIC
 #makeoptions	FDT_DTS_FILE=socfpga_stratix10_de10_pro.dts
