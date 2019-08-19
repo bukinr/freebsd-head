@@ -68,6 +68,10 @@ struct fpgamgr_s10_softc {
 	struct s10_svc_mem	mem[SVC_NBUFS];
 	int			curbuf;
 	int			count;
+
+	vm_size_t		bufsize;
+	int			fill;
+	void			*buf;
 };
 
 static int
@@ -95,13 +99,16 @@ fpga_open(struct cdev *dev, int flags __unused,
 	}
 
 	msg.command = COMMAND_RECONFIG;
-
 	ret = s10_svc_send(&msg);
 
 	printf("%s done, ret %d\n", __func__, ret);
 
 	sc->curbuf = 0;
 	sc->count = 0;
+
+	sc->fill = 0;
+	sc->bufsize = 2 * 1024 * 1024;
+	sc->buf = malloc(sc->bufsize, M_DEVBUF, M_WAITOK);
 
 	return (0);
 }
@@ -110,35 +117,58 @@ static int
 fpga_write(struct cdev *dev, struct uio *uio, int ioflag)
 {
 	struct fpgamgr_s10_softc *sc;
-	struct s10_svc_msg msg;
 	uint64_t addr;
-	int ret;
-	int i;
+	int amnt;
 
 	sc = dev->si_drv1;
 
 	//printf("%s: uio->uio_resid %ld\n", __func__, uio->uio_resid);
 
-	i = 0;
-
 	while (uio->uio_resid > 0) {
-		addr = (uint64_t)sc->mem[sc->curbuf].vaddr + sc->count;
-		uiomove((void *)addr, 4, uio);
-		sc->count += 4;
-
-		if (sc->count == SVC_BUF_SIZE || uio->uio_resid == 0) {
-			msg.command = COMMAND_RECONFIG_DATA_SUBMIT;
-			msg.payload = (void *)sc->mem[sc->curbuf].paddr;
-			msg.payload_length = sc->count;
-
-			printf("%s: writing %d chunk (%d bytes), addr %p\n",
-			    __func__, i++, sc->count, msg.payload);
-			ret = s10_svc_send(&msg);
-			printf("%s: ret %d\n", __func__, ret);
-
-			sc->count = 0;
-			sc->curbuf += 1;
+		addr = (vm_offset_t)sc->buf + sc->fill;
+		if (sc->fill >= sc->bufsize) {
+			printf("write failed\n");
+			return (-1);
 		}
+		amnt = MIN(uio->uio_resid, (sc->bufsize - sc->fill));
+		uiomove((void *)addr, amnt, uio);
+		sc->fill += amnt;
+	}
+
+	return (0);
+}
+
+static int
+fpga_program(struct fpgamgr_s10_softc *sc)
+{
+	struct s10_svc_msg msg;
+	int copied;
+	int i;
+	int len;
+	int amnt;
+	void *src;
+	int ret;
+
+	i = 0;
+	copied = 0;
+	len = sc->fill;
+
+	while (copied < sc->fill) {
+		amnt = MIN((sc->fill - copied), SVC_BUF_SIZE);
+		src = (void *)((vm_offset_t)sc->buf + copied);
+		memcpy((void *)sc->mem[sc->curbuf].vaddr, src, amnt);
+		copied += amnt;
+
+		msg.command = COMMAND_RECONFIG_DATA_SUBMIT;
+		msg.payload = (void *)sc->mem[sc->curbuf].paddr;
+		msg.payload_length = amnt;
+
+		printf("%s: writing %d chunk (%d bytes), addr %p\n",
+		    __func__, i++, amnt, msg.payload);
+		ret = s10_svc_send(&msg);
+		printf("%s: ret %d\n", __func__, ret);
+
+		sc->curbuf += 1;
 	}
 
 	printf("finishing write\n");
@@ -160,11 +190,14 @@ fpga_close(struct cdev *dev, int flags __unused,
 
 	printf("%s\n", __func__);
 
-	for (i = 0; i < SVC_NBUFS; i++) {
+	fpga_program(sc);
+
+	for (i = 0; i < SVC_NBUFS; i++)
 		s10_svc_allocate_memory(&sc->mem[i]);
-	}
 
 	sc->count = 0;
+
+	free(sc->buf, M_DEVBUF);
 
 	return (0);
 }
