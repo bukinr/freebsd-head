@@ -27,4 +27,6 @@ echo 'load disk0s1:kernel'
 echo 'fdt ls'
 echo 'boot'
 
-echo 'dd if=/root/DE10_Pro-hps.core.rbf of=/dev/fpga0 bs=4m'
+# echo 'dd if=/root/DE10_Pro-hps.core.rbf of=/dev/fpga0 bs=4m'
+
+echo 'cp /root/DE10_Pro-hps.core.rbf /var && dd if=/var/DE10_Pro-hps.core.rbf of=/dev/fpga0 bs=4m'

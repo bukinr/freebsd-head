@@ -49,11 +49,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/conf.h>
 #include <sys/uio.h>
 
-#include <vm/vm.h>
-#include <vm/vm_extern.h>
-#include <vm/vm_kern.h>
-#include <vm/pmap.h>
-
 #include <dev/ofw/openfirm.h>
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
@@ -66,11 +61,6 @@ __FBSDID("$FreeBSD$");
 
 #define	SVC_NBUFS	4
 #define	SVC_BUF_SIZE	(512 * 1024)
-
-struct s10_svc_mem {
-	void		*buf;
-	int		lock;
-};
 
 struct fpgamgr_s10_softc {
 	struct cdev		*mgr_cdev;
@@ -87,6 +77,7 @@ fpga_open(struct cdev *dev, int flags __unused,
 	struct fpgamgr_s10_softc *sc;
 	struct s10_svc_msg msg;
 	int ret;
+	int err;
 	int i;
 
 	sc = dev->si_drv1;
@@ -94,8 +85,13 @@ fpga_open(struct cdev *dev, int flags __unused,
 	printf("%s\n", __func__);
 
 	for (i = 0; i < SVC_NBUFS; i++) {
-		sc->mem[i].buf = s10_svc_allocate_memory(SVC_BUF_SIZE);
-		printf("%s: mem %d buf %p\n", __func__, i, sc->mem[i].buf);
+		sc->mem[i].size = SVC_BUF_SIZE;
+		err = s10_svc_allocate_memory(&sc->mem[i]);
+		if (err != 0)
+			return (ENXIO);
+
+		printf("%s: mem %d vaddr %lx\n",
+		    __func__, i, sc->mem[i].vaddr);
 	}
 
 	msg.command = COMMAND_RECONFIG;
@@ -127,13 +123,13 @@ fpga_write(struct cdev *dev, struct uio *uio, int ioflag)
 	i = 0;
 
 	while (uio->uio_resid > 0) {
-		addr = (uint64_t)sc->mem[sc->curbuf].buf + sc->count;
+		addr = (uint64_t)sc->mem[sc->curbuf].vaddr + sc->count;
 		uiomove((void *)addr, 4, uio);
 		sc->count += 4;
 
 		if (sc->count == SVC_BUF_SIZE || uio->uio_resid == 0) {
 			msg.command = COMMAND_RECONFIG_DATA_SUBMIT;
-			msg.payload = (void *)vtophys(sc->mem[sc->curbuf].buf);
+			msg.payload = (void *)sc->mem[sc->curbuf].paddr;
 			msg.payload_length = sc->count;
 
 			printf("%s: writing %d chunk (%d bytes), addr %p\n",

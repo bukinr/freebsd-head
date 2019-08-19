@@ -112,24 +112,22 @@ s10_svc_send(struct s10_svc_msg *msg)
 	return (ret);
 }
 
-void *
-s10_svc_allocate_memory(size_t size)
+int
+s10_svc_allocate_memory(struct s10_svc_mem *mem)
 {
 	struct s10_svc_softc *sc;
-	vmem_addr_t addr;
 
 	sc = s10_svc_sc;
 
-	if (vmem_alloc(sc->vmem, size,
-	    M_FIRSTFIT | M_NOWAIT, &addr)) {
+	if (vmem_alloc(sc->vmem, mem->size,
+	    M_FIRSTFIT | M_NOWAIT, &mem->paddr)) {
 		printf("cant allocate memory\n");
-		return (NULL);
+		return (-1);
 	}
 
-	void *va;
-	va = pmap_mapdev(addr, size);
+	mem->vaddr = (vm_offset_t)pmap_mapdev(mem->paddr, mem->size);
 
-	return (void *)va;
+	return (0);
 }
 
 static int

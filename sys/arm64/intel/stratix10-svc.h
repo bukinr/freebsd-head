@@ -44,7 +44,13 @@ struct s10_svc_msg {
 	int payload_length;
 };
 
+struct s10_svc_mem {
+	vm_offset_t paddr;
+	vm_offset_t vaddr;
+	vm_size_t size;
+};
+
 int s10_svc_send(struct s10_svc_msg *msg);
-void * s10_svc_allocate_memory(size_t size);
+int s10_svc_allocate_memory(struct s10_svc_mem *mem);
 
 #endif	/* !_ARM64_INTEL_STRATIX10_SVC_H_ */
