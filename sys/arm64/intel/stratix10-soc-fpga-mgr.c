@@ -111,7 +111,6 @@ fpga_write(struct cdev *dev, struct uio *uio, int ioflag)
 {
 	struct fpgamgr_s10_softc *sc;
 	struct s10_svc_msg msg;
-	uint32_t buffer;
 	uint64_t addr;
 	int ret;
 	int i;
@@ -148,46 +147,6 @@ fpga_write(struct cdev *dev, struct uio *uio, int ioflag)
 	printf("%s: ret %d\n", __func__, ret);
 
 	return (0);
-
-	while (uio->uio_resid >= SVC_BUF_SIZE) {
-		uiomove(sc->mem, SVC_BUF_SIZE, uio);
-
-#if 0
-		bus_space_write_4(sc->bst_data, sc->bsh_data,
-		    0x0, buffer);
-#endif
-	}
-
-	switch (uio->uio_resid) {
-	case 3:
-		uiomove(&buffer, 3, uio);
-		buffer &= 0xffffff;
-#if 0
-		bus_space_write_4(sc->bst_data, sc->bsh_data,
-		    0x0, buffer);
-#endif
-		break;
-	case 2:
-		uiomove(&buffer, 2, uio);
-		buffer &= 0xffff;
-#if 0
-		bus_space_write_4(sc->bst_data, sc->bsh_data,
-		    0x0, buffer);
-#endif
-		break;
-	case 1:
-		uiomove(&buffer, 1, uio);
-		buffer &= 0xff;
-#if 0
-		bus_space_write_4(sc->bst_data, sc->bsh_data,
-		    0x0, buffer);
-#endif
-		break;
-	default:
-		break;
-	};
-
-	return (0);
 }
 
 static int
@@ -195,10 +154,17 @@ fpga_close(struct cdev *dev, int flags __unused,
     int fmt __unused, struct thread *td __unused)
 {
 	struct fpgamgr_s10_softc *sc;
+	int i;
 
 	sc = dev->si_drv1;
 
 	printf("%s\n", __func__);
+
+	for (i = 0; i < SVC_NBUFS; i++) {
+		s10_svc_allocate_memory(&sc->mem[i]);
+	}
+
+	sc->count = 0;
 
 	return (0);
 }

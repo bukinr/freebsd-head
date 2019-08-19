@@ -130,6 +130,16 @@ s10_svc_allocate_memory(struct s10_svc_mem *mem)
 	return (0);
 }
 
+void
+s10_svc_free_memory(struct s10_svc_mem *mem)
+{
+	struct s10_svc_softc *sc;
+
+	sc = s10_svc_sc;
+
+	vmem_free(sc->vmem, mem->paddr, mem->size);
+}
+
 static int
 s10_get_memory(struct s10_svc_softc *sc)
 {
