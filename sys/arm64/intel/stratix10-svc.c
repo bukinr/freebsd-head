@@ -72,12 +72,34 @@ struct s10_svc_softc {
 
 static struct s10_svc_softc *s10_svc_sc;
 
+static int
+s10_data_claim(void)
+{
+	struct arm_smccc_res res;
+	register_t a0, a1, a2;
+	int ret;
+
+	printf("%s\n", __func__);
+
+	while (1) {
+		a0 = INTEL_SIP_SMC_FPGA_CONFIG_COMPLETED_WRITE;
+		a1 = 0;
+		a2 = 0;
+
+		ret = arm_smccc_smc(a0, a1, a2, 0, 0, 0, 0, 0, &res);
+		if (ret == 0)
+			break;
+	}
+
+	return (0);
+}
+
 int
 s10_svc_send(struct s10_svc_msg *msg)
 {
-	int ret;
-	register_t a0, a1, a2;
 	struct arm_smccc_res res;
+	register_t a0, a1, a2;
+	int ret;
 
 	printf("%s: cmd %d\n", __func__, msg->command);
 
@@ -96,10 +118,8 @@ s10_svc_send(struct s10_svc_msg *msg)
 		a2 = (uint64_t)msg->payload_length;
 		break;
 	case COMMAND_RECONFIG_DATA_CLAIM:
-		a0 = INTEL_SIP_SMC_FPGA_CONFIG_COMPLETED_WRITE;
-		a1 = 0;
-		a2 = 0;
-		break;
+		ret = s10_data_claim();
+		return (ret);
 	default:
 		return (-1);
 	}

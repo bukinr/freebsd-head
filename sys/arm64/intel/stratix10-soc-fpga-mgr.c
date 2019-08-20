@@ -141,20 +141,22 @@ fpga_close(struct cdev *dev, int flags __unused,
 
 	sc = dev->si_drv1;
 
+	/* Submit bitstream */
 	msg.command = COMMAND_RECONFIG_DATA_SUBMIT;
 	msg.payload = (void *)sc->mem.paddr;
 	msg.payload_length = sc->mem.fill;
-
 	ret = s10_svc_send(&msg);
 	if (ret != 0)
 		device_printf(sc->dev, "Failed to submit data\n");
 
+	/* Claim memory buffer back */
 	msg.command = COMMAND_RECONFIG_DATA_CLAIM;
 	ret = s10_svc_send(&msg);
-	printf("%s: COMMAND_RECONFIG_DATA_CLAIM returned %d\n",
-	    __func__, ret);
+	if (ret == 0)
+		s10_svc_free_memory(&sc->mem);
+	else
+		device_printf(sc->dev, "Failed to claim memory back\n");
 
-	s10_svc_free_memory(&sc->mem);
 
 	sc->busy = 0;
 
