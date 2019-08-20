@@ -48,6 +48,7 @@ struct s10_svc_mem {
 	vm_offset_t paddr;
 	vm_offset_t vaddr;
 	vm_size_t size;
+	vm_size_t fill;
 };
 
 int s10_svc_send(struct s10_svc_msg *msg);

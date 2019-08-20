@@ -65,8 +65,8 @@ struct fpgamgr_s10_softc {
 	struct cdev		*mgr_cdev;
 	device_t		dev;
 	struct s10_svc_mem	mem;
-
-	int			fill;
+	struct mtx		mtx;
+	int			busy;
 };
 
 static int
@@ -82,10 +82,22 @@ fpga_open(struct cdev *dev, int flags __unused,
 
 	printf("%s\n", __func__);
 
+	mtx_lock(&sc->mtx);
+
+	if (sc->busy) {
+		mtx_unlock(&sc->mtx);
+		return (EBUSY);
+	}
+
+	sc->busy = 1;
+
 	sc->mem.size = SVC_BUF_SIZE;
+	sc->mem.fill = 0;
 	err = s10_svc_allocate_memory(&sc->mem);
-	if (err != 0)
+	if (err != 0) {
+		mtx_unlock(&sc->mtx);
 		return (ENXIO);
+	}
 
 	printf("%s: mem vaddr %lx\n",
 	    __func__, sc->mem.vaddr);
@@ -95,7 +107,7 @@ fpga_open(struct cdev *dev, int flags __unused,
 
 	printf("%s done, ret %d\n", __func__, ret);
 
-	sc->fill = 0;
+	mtx_unlock(&sc->mtx);
 
 	return (0);
 }
@@ -112,14 +124,14 @@ fpga_write(struct cdev *dev, struct uio *uio, int ioflag)
 	//printf("%s: uio->uio_resid %ld\n", __func__, uio->uio_resid);
 
 	while (uio->uio_resid > 0) {
-		addr = sc->mem.vaddr + sc->fill;
-		if (sc->fill >= SVC_BUF_SIZE) {
+		addr = sc->mem.vaddr + sc->mem.fill;
+		if (sc->mem.fill >= SVC_BUF_SIZE) {
 			printf("write failed\n");
 			return (-1);
 		}
-		amnt = MIN(uio->uio_resid, (SVC_BUF_SIZE - sc->fill));
+		amnt = MIN(uio->uio_resid, (SVC_BUF_SIZE - sc->mem.fill));
 		uiomove((void *)addr, amnt, uio);
-		sc->fill += amnt;
+		sc->mem.fill += amnt;
 	}
 
 	return (0);
@@ -139,10 +151,10 @@ fpga_close(struct cdev *dev, int flags __unused,
 
 	msg.command = COMMAND_RECONFIG_DATA_SUBMIT;
 	msg.payload = (void *)sc->mem.paddr;
-	msg.payload_length = sc->fill;
+	msg.payload_length = sc->mem.fill;
 
-	printf("%s: writing chunk (%d bytes), addr %p\n",
-	    __func__, sc->fill, msg.payload);
+	printf("%s: writing chunk (%ld bytes), addr %p\n",
+	    __func__, sc->mem.fill, msg.payload);
 
 	ret = s10_svc_send(&msg);
 
@@ -154,6 +166,8 @@ fpga_close(struct cdev *dev, int flags __unused,
 	printf("%s: ret %d\n", __func__, ret);
 
 	s10_svc_free_memory(&sc->mem);
+
+	sc->busy = 0;
 
 	return (0);
 }
@@ -197,6 +211,8 @@ fpgamgr_s10_attach(device_t dev)
 
 	sc = device_get_softc(dev);
 	sc->dev = dev;
+
+	mtx_init(&sc->mtx, "s10 fpga", NULL, MTX_DEF);
 
 	sc->mgr_cdev = make_dev(&fpga_cdevsw, 0, UID_ROOT, GID_WHEEL,
 	    0600, "fpga%d", device_get_unit(sc->dev));
