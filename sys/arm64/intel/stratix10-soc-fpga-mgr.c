@@ -80,16 +80,12 @@ fpga_open(struct cdev *dev, int flags __unused,
 
 	sc = dev->si_drv1;
 
-	printf("%s\n", __func__);
-
 	mtx_lock(&sc->mtx);
 
 	if (sc->busy) {
 		mtx_unlock(&sc->mtx);
 		return (EBUSY);
 	}
-
-	sc->busy = 1;
 
 	sc->mem.size = SVC_BUF_SIZE;
 	sc->mem.fill = 0;
@@ -99,13 +95,11 @@ fpga_open(struct cdev *dev, int flags __unused,
 		return (ENXIO);
 	}
 
-	printf("%s: mem vaddr %lx\n",
-	    __func__, sc->mem.vaddr);
+	sc->busy = 1;
 
 	msg.command = COMMAND_RECONFIG;
 	ret = s10_svc_send(&msg);
-
-	printf("%s done, ret %d\n", __func__, ret);
+	printf("%s: COMMAND_RECONFIG returned %d\n", __func__, ret);
 
 	mtx_unlock(&sc->mtx);
 
@@ -121,14 +115,10 @@ fpga_write(struct cdev *dev, struct uio *uio, int ioflag)
 
 	sc = dev->si_drv1;
 
-	//printf("%s: uio->uio_resid %ld\n", __func__, uio->uio_resid);
-
 	while (uio->uio_resid > 0) {
 		addr = sc->mem.vaddr + sc->mem.fill;
-		if (sc->mem.fill >= SVC_BUF_SIZE) {
-			printf("write failed\n");
-			return (-1);
-		}
+		if (sc->mem.fill >= SVC_BUF_SIZE)
+			return (ENOMEM);
 		amnt = MIN(uio->uio_resid, (SVC_BUF_SIZE - sc->mem.fill));
 		uiomove((void *)addr, amnt, uio);
 		sc->mem.fill += amnt;
@@ -147,23 +137,19 @@ fpga_close(struct cdev *dev, int flags __unused,
 
 	sc = dev->si_drv1;
 
-	printf("%s\n", __func__);
-
 	msg.command = COMMAND_RECONFIG_DATA_SUBMIT;
 	msg.payload = (void *)sc->mem.paddr;
 	msg.payload_length = sc->mem.fill;
 
-	printf("%s: writing chunk (%ld bytes), addr %p\n",
-	    __func__, sc->mem.fill, msg.payload);
-
 	ret = s10_svc_send(&msg);
 
-	printf("%s: ret %d\n", __func__, ret);
+	printf("%s: COMMAND_RECONFIG_DATA_SUBMIT returned %d\n",
+	    __func__, ret);
 
-	printf("finishing write\n");
 	msg.command = COMMAND_RECONFIG_DATA_CLAIM;
 	ret = s10_svc_send(&msg);
-	printf("%s: ret %d\n", __func__, ret);
+	printf("%s: COMMAND_RECONFIG_DATA_CLAIM returned %d\n",
+	    __func__, ret);
 
 	s10_svc_free_memory(&sc->mem);
 
