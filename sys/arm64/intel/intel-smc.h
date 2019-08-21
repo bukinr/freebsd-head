@@ -36,6 +36,16 @@
 #include <dev/psci/smccc.h>
 
 /*
+ * Intel SiP return values.
+ */
+#define	INTEL_SIP_SMC_STATUS_OK				0
+#define	INTEL_SIP_SMC_FPGA_CONFIG_STATUS_BUSY		1
+#define	INTEL_SIP_SMC_FPGA_CONFIG_STATUS_REJECTED	2
+#define	INTEL_SIP_SMC_FPGA_CONFIG_STATUS_ERROR		4
+#define	INTEL_SIP_SMC_REG_ERROR				5
+#define	INTEL_SIP_SMC_RSU_ERROR				7
+
+/*
  * Intel SiP calls.
  */
 #define	INTEL_SIP_SMC_STD_CALL(func)				\

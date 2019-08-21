@@ -77,7 +77,7 @@ s10_data_claim(void)
 	register_t a0, a1, a2;
 	int ret;
 
-	printf("%s\n", __func__);
+	ret = 0;
 
 	while (1) {
 		a0 = INTEL_SIP_SMC_FPGA_CONFIG_COMPLETED_WRITE;
@@ -85,11 +85,13 @@ s10_data_claim(void)
 		a2 = 0;
 
 		ret = arm_smccc_smc(a0, a1, a2, 0, 0, 0, 0, 0, &res);
-		if (ret == 0)
-			break;
+		if (ret == INTEL_SIP_SMC_FPGA_CONFIG_STATUS_BUSY)
+			continue;
+
+		break;
 	}
 
-	return (0);
+	return (ret);
 }
 
 int

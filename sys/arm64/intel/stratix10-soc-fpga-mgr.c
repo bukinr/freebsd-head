@@ -147,6 +147,7 @@ fpga_close(struct cdev *dev, int flags __unused,
 	ret = s10_svc_send(&msg);
 	if (ret != 0) {
 		device_printf(sc->dev, "Failed to submit data\n");
+		s10_svc_free_memory(sc->s10_svc_dev, &sc->mem);
 		sc->busy = 0;
 		return (0);
 	}
@@ -154,6 +155,7 @@ fpga_close(struct cdev *dev, int flags __unused,
 	/* Claim memory buffer back */
 	msg.command = COMMAND_RECONFIG_DATA_CLAIM;
 	s10_svc_send(&msg);
+
 	s10_svc_free_memory(sc->s10_svc_dev, &sc->mem);
 	sc->busy = 0;
 
