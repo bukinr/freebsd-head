@@ -88,7 +88,8 @@ fpga_open(struct cdev *dev, int flags __unused,
 		return (EBUSY);
 	}
 
-	err = s10_svc_allocate_memory(sc->s10_svc_dev, &sc->mem, SVC_BUF_SIZE);
+	err = s10_svc_allocate_memory(sc->s10_svc_dev,
+	    &sc->mem, SVC_BUF_SIZE);
 	if (err != 0) {
 		mtx_unlock(&sc->mtx);
 		return (ENXIO);
@@ -96,7 +97,6 @@ fpga_open(struct cdev *dev, int flags __unused,
 
 	msg.command = COMMAND_RECONFIG;
 	ret = s10_svc_send(&msg);
-
 	if (ret != 0) {
 		mtx_unlock(&sc->mtx);
 		return (ENXIO);

@@ -175,8 +175,7 @@ s10_get_memory(struct s10_svc_softc *sc)
 
 	arm_smccc_smc(INTEL_SIP_SMC_FPGA_CONFIG_GET_MEM,
 	    0, 0, 0, 0, 0, 0, 0, &res);
-
-	if (res.a0 != 0)
+	if (res.a0 != INTEL_SIP_SMC_STATUS_OK)
 		return (ENXIO);
 
 	vmem = vmem_create("stratix10 vmem", 0, 0, PAGE_SIZE,
@@ -189,6 +188,7 @@ s10_get_memory(struct s10_svc_softc *sc)
 
 	printf("%s: shared memory addr %lx size %lx\n", __func__,
 	    addr, size);
+
 	vmem_add(vmem, addr, size, 0);
 
 	sc->vmem = vmem;
