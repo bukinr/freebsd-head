@@ -70,8 +70,6 @@ struct s10_svc_softc {
 	vmem_t			*vmem;
 };
 
-static struct s10_svc_softc *s10_svc_sc;
-
 static int
 s10_data_claim(void)
 {
@@ -133,29 +131,34 @@ s10_svc_send(struct s10_svc_msg *msg)
 }
 
 int
-s10_svc_allocate_memory(struct s10_svc_mem *mem)
+s10_svc_allocate_memory(device_t dev, struct s10_svc_mem *mem, int size)
 {
 	struct s10_svc_softc *sc;
 
-	sc = s10_svc_sc;
+	sc = device_get_softc(dev);
 
-	if (vmem_alloc(sc->vmem, mem->size,
+	if (size <= 0)
+		return (EINVAL);
+
+	if (vmem_alloc(sc->vmem, size,
 	    M_FIRSTFIT | M_NOWAIT, &mem->paddr)) {
-		printf("cant allocate memory\n");
-		return (-1);
+		printf("%s: Can't allocate memory\n", __func__);
+		return (ENOMEM);
 	}
 
+	mem->size = size;
+	mem->fill = 0;
 	mem->vaddr = (vm_offset_t)pmap_mapdev(mem->paddr, mem->size);
 
 	return (0);
 }
 
 void
-s10_svc_free_memory(struct s10_svc_mem *mem)
+s10_svc_free_memory(device_t dev, struct s10_svc_mem *mem)
 {
 	struct s10_svc_softc *sc;
 
-	sc = s10_svc_sc;
+	sc = device_get_softc(dev);
 
 	vmem_free(sc->vmem, mem->paddr, mem->size);
 }
@@ -214,7 +217,8 @@ s10_svc_attach(device_t dev)
 	sc = device_get_softc(dev);
 	sc->dev = dev;
 
-	s10_svc_sc = sc;
+	if (device_get_unit(dev) != 0)
+		return (ENXIO);
 
 	if (s10_get_memory(sc) != 0)
 		return (ENXIO);
@@ -236,5 +240,5 @@ static driver_t s10_svc_driver = {
 
 static devclass_t s10_svc_devclass;
 
-DRIVER_MODULE(s10_svc, firmware, s10_svc_driver,
-    s10_svc_devclass, 0, 0);
+EARLY_DRIVER_MODULE(s10_svc, firmware, s10_svc_driver,
+    s10_svc_devclass, 0, 0, BUS_PASS_BUS + BUS_PASS_ORDER_MIDDLE);

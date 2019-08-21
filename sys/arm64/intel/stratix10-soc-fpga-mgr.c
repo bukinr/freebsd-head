@@ -64,6 +64,7 @@ __FBSDID("$FreeBSD$");
 struct fpgamgr_s10_softc {
 	struct cdev		*mgr_cdev;
 	device_t		dev;
+	device_t		s10_svc_dev;
 	struct s10_svc_mem	mem;
 	struct mtx		mtx;
 	int			busy;
@@ -87,9 +88,7 @@ fpga_open(struct cdev *dev, int flags __unused,
 		return (EBUSY);
 	}
 
-	sc->mem.size = SVC_BUF_SIZE;
-	sc->mem.fill = 0;
-	err = s10_svc_allocate_memory(&sc->mem);
+	err = s10_svc_allocate_memory(sc->s10_svc_dev, &sc->mem, SVC_BUF_SIZE);
 	if (err != 0) {
 		mtx_unlock(&sc->mtx);
 		return (ENXIO);
@@ -146,18 +145,16 @@ fpga_close(struct cdev *dev, int flags __unused,
 	msg.payload = (void *)sc->mem.paddr;
 	msg.payload_length = sc->mem.fill;
 	ret = s10_svc_send(&msg);
-	if (ret != 0)
+	if (ret != 0) {
 		device_printf(sc->dev, "Failed to submit data\n");
+		sc->busy = 0;
+		return (0);
+	}
 
 	/* Claim memory buffer back */
 	msg.command = COMMAND_RECONFIG_DATA_CLAIM;
-	ret = s10_svc_send(&msg);
-	if (ret == 0)
-		s10_svc_free_memory(&sc->mem);
-	else
-		device_printf(sc->dev, "Failed to claim memory back\n");
-
-
+	s10_svc_send(&msg);
+	s10_svc_free_memory(sc->s10_svc_dev, &sc->mem);
 	sc->busy = 0;
 
 	return (0);
@@ -199,19 +196,27 @@ static int
 fpgamgr_s10_attach(device_t dev)
 {
 	struct fpgamgr_s10_softc *sc;
+	devclass_t dc;
 
 	sc = device_get_softc(dev);
 	sc->dev = dev;
 
-	mtx_init(&sc->mtx, "s10 fpga", NULL, MTX_DEF);
+	dc = devclass_find("s10_svc");
+	if (dc == NULL)
+		return (ENXIO);
+
+	sc->s10_svc_dev = devclass_get_device(dc, 0);
+	if (sc->s10_svc_dev == NULL)
+		return (ENXIO);
 
 	sc->mgr_cdev = make_dev(&fpga_cdevsw, 0, UID_ROOT, GID_WHEEL,
 	    0600, "fpga%d", device_get_unit(sc->dev));
-
 	if (sc->mgr_cdev == NULL) {
 		device_printf(dev, "Failed to create character device.\n");
 		return (ENXIO);
 	}
+
+	mtx_init(&sc->mtx, "s10 fpga", NULL, MTX_DEF);
 
 	sc->mgr_cdev->si_drv1 = sc;
 

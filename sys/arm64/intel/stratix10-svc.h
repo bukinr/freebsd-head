@@ -47,12 +47,12 @@ struct s10_svc_msg {
 struct s10_svc_mem {
 	vm_offset_t paddr;
 	vm_offset_t vaddr;
-	vm_size_t size;
-	vm_size_t fill;
+	int size;
+	int fill;
 };
 
 int s10_svc_send(struct s10_svc_msg *msg);
-int s10_svc_allocate_memory(struct s10_svc_mem *mem);
-void s10_svc_free_memory(struct s10_svc_mem *mem);
+int s10_svc_allocate_memory(device_t dev, struct s10_svc_mem *mem, int size);
+void s10_svc_free_memory(device_t dev, struct s10_svc_mem *mem);
 
 #endif	/* !_ARM64_INTEL_STRATIX10_SVC_H_ */
