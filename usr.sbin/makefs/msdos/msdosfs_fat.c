@@ -58,14 +58,13 @@
 #include <string.h>
 #include <strings.h>
 
-#include <fs/msdosfs/bpb.h>
-#include "msdos/denode.h"
-#include "msdos/msdosfsmount.h"
-#include <fs/msdosfs/fat.h>
-
 #include "ffs/buf.h"
 
+#include <fs/msdosfs/bpb.h>
 #include "msdos/direntry.h"
+#include <fs/msdosfs/denode.h>
+#include <fs/msdosfs/fat.h>
+#include "msdos/msdosfsmount.h"
 
 #include "makefs.h"
 #include "msdos.h"
@@ -871,9 +870,11 @@ freeclusterchain(struct msdosfsmount *pmp, u_long cluster)
 int
 fillinusemap(struct msdosfsmount *pmp)
 {
-	struct buf *bp = NULL;
+	struct buf *bp;
 	u_long bn, bo, bsize, byteoffset, cn, readcn;
 	int error;
+
+	bp = NULL;
 
 	/*
 	 * Mark all clusters in use, we mark the free ones in the FAT scan
@@ -888,19 +889,17 @@ fillinusemap(struct msdosfsmount *pmp)
 	 * zero.  These represent free clusters.
 	 */
 	pmp->pm_freeclustercount = 0;
-	for (cn = CLUST_FIRST; cn <= pmp->pm_maxcluster; cn++) {
+	for (cn = 0; cn <= pmp->pm_maxcluster; cn++) {
 		byteoffset = FATOFS(pmp, cn);
 		bo = byteoffset % pmp->pm_fatblocksize;
-		if (bo == 0 || bp == NULL) {
+		if (bo == 0) {
 			/* Read new FAT block */
 			if (bp != NULL)
 				brelse(bp);
 			fatblock(pmp, byteoffset, &bn, &bsize, NULL);
 			error = bread(pmp->pm_devvp, bn, bsize, NOCRED, &bp);
-			if (error != 0) {
-				brelse(bp);
+			if (error != 0)
 				return (error);
-			}
 		}
 		if (FAT32(pmp))
 			readcn = getulong(bp->b_data + bo);
@@ -910,7 +909,19 @@ fillinusemap(struct msdosfsmount *pmp)
 			readcn >>= 4;
 		readcn &= pmp->pm_fatmask;
 
-		if (readcn == CLUST_FREE)
+		/*
+		 * Check if the FAT ID matches the BPB's media descriptor and
+		 * all other bits are set to 1.
+		 */
+		if (cn == 0 && readcn != ((pmp->pm_fatmask & 0xffffff00) |
+		    pmp->pm_bpb.bpbMedia)) {
+#ifdef MSDOSFS_DEBUG
+			printf("mountmsdosfs(): Media descriptor in BPB"
+			    "does not match FAT ID\n");
+#endif
+			brelse(bp);
+			return (EINVAL);
+		} else if (readcn == CLUST_FREE)
 			usemap_free(pmp, cn);
 	}
 	if (bp != NULL)
