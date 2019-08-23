@@ -244,9 +244,25 @@ fpgamgr_s10_attach(device_t dev)
 	return (0);
 }
 
+static int
+fpgamgr_s10_detach(device_t dev)
+{
+	struct fpgamgr_s10_softc *sc;
+
+	sc = device_get_softc(dev);
+
+	destroy_dev(sc->mgr_cdev);
+	destroy_dev(sc->mgr_cdev_partial);
+
+	mtx_destroy(&sc->mtx);
+
+	return (0);
+}
+
 static device_method_t fpgamgr_s10_methods[] = {
 	DEVMETHOD(device_probe,		fpgamgr_s10_probe),
 	DEVMETHOD(device_attach,	fpgamgr_s10_attach),
+	DEVMETHOD(device_detach,	fpgamgr_s10_detach),
 	{ 0, 0 }
 };
 
