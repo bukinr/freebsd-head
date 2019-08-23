@@ -40,6 +40,8 @@ struct s10_svc_msg {
 #define	COMMAND_RECONFIG		(1 << 0)
 #define	COMMAND_RECONFIG_DATA_SUBMIT	(1 << 1)
 #define	COMMAND_RECONFIG_DATA_CLAIM	(1 << 2)
+	int flags;
+#define	COMMAND_RECONFIG_FLAG_PARTIAL	(1 << 0)
 	void *payload;
 	int payload_length;
 };

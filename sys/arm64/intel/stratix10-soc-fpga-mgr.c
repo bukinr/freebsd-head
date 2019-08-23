@@ -63,6 +63,7 @@ __FBSDID("$FreeBSD$");
 
 struct fpgamgr_s10_softc {
 	struct cdev		*mgr_cdev;
+	struct cdev		*mgr_cdev_partial;
 	device_t		dev;
 	device_t		s10_svc_dev;
 	struct s10_svc_mem	mem;
@@ -81,6 +82,11 @@ fpga_open(struct cdev *dev, int flags __unused,
 
 	sc = dev->si_drv1;
 
+	if (dev == sc->mgr_cdev)
+		printf("cdev std\n");
+	else if (dev == sc->mgr_cdev_partial)
+		printf("cdev partial\n");
+
 	mtx_lock(&sc->mtx);
 
 	if (sc->busy) {
@@ -95,7 +101,10 @@ fpga_open(struct cdev *dev, int flags __unused,
 		return (ENXIO);
 	}
 
+	bzero(&msg, sizeof(struct s10_svc_msg));
 	msg.command = COMMAND_RECONFIG;
+	if (dev == sc->mgr_cdev_partial)
+		msg.flags |= COMMAND_RECONFIG_FLAG_PARTIAL;
 	ret = s10_svc_send(&msg);
 	if (ret != 0) {
 		mtx_unlock(&sc->mtx);
@@ -141,6 +150,7 @@ fpga_close(struct cdev *dev, int flags __unused,
 	sc = dev->si_drv1;
 
 	/* Submit bitstream */
+	bzero(&msg, sizeof(struct s10_svc_msg));
 	msg.command = COMMAND_RECONFIG_DATA_SUBMIT;
 	msg.payload = (void *)sc->mem.paddr;
 	msg.payload_length = sc->mem.fill;
@@ -153,6 +163,7 @@ fpga_close(struct cdev *dev, int flags __unused,
 	}
 
 	/* Claim memory buffer back */
+	bzero(&msg, sizeof(struct s10_svc_msg));
 	msg.command = COMMAND_RECONFIG_DATA_CLAIM;
 	s10_svc_send(&msg);
 
@@ -218,9 +229,17 @@ fpgamgr_s10_attach(device_t dev)
 		return (ENXIO);
 	}
 
+	sc->mgr_cdev_partial = make_dev(&fpga_cdevsw, 0, UID_ROOT, GID_WHEEL,
+	    0600, "fpga_partial%d", device_get_unit(sc->dev));
+	if (sc->mgr_cdev_partial == NULL) {
+		device_printf(dev, "Failed to create character device.\n");
+		return (ENXIO);
+	}
+
 	mtx_init(&sc->mtx, "s10 fpga", NULL, MTX_DEF);
 
 	sc->mgr_cdev->si_drv1 = sc;
+	sc->mgr_cdev_partial->si_drv1 = sc;
 
 	return (0);
 }

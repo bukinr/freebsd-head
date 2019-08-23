@@ -101,7 +101,7 @@ s10_svc_send(struct s10_svc_msg *msg)
 	register_t a0, a1, a2;
 	int ret;
 
-	printf("%s: cmd %d\n", __func__, msg->command);
+	printf("%s: cmd %d flags %x\n", __func__, msg->command, msg->flags);
 
 	a0 = 0;
 	a1 = 0;
@@ -110,7 +110,7 @@ s10_svc_send(struct s10_svc_msg *msg)
 	switch (msg->command) {
 	case COMMAND_RECONFIG:
 		a0 = INTEL_SIP_SMC_FPGA_CONFIG_START;
-		a1 = 0; //flag partial ?
+		a1 = msg->flags;
 		break;
 	case COMMAND_RECONFIG_DATA_SUBMIT:
 		a0 = INTEL_SIP_SMC_FPGA_CONFIG_WRITE;
