@@ -68,10 +68,11 @@ __FBSDID("$FreeBSD$");
 struct s10_svc_softc {
 	device_t		dev;
 	vmem_t			*vmem;
+	intel_smc_callfn_t	callfn;
 };
 
 static int
-s10_data_claim(void)
+s10_data_claim(struct s10_svc_softc *sc)
 {
 	struct arm_smccc_res res;
 	register_t a0, a1, a2;
@@ -84,7 +85,7 @@ s10_data_claim(void)
 		a1 = 0;
 		a2 = 0;
 
-		ret = arm_smccc_smc(a0, a1, a2, 0, 0, 0, 0, 0, &res);
+		ret = sc->callfn(a0, a1, a2, 0, 0, 0, 0, 0, &res);
 		if (ret == INTEL_SIP_SMC_FPGA_CONFIG_STATUS_BUSY)
 			continue;
 
@@ -95,11 +96,14 @@ s10_data_claim(void)
 }
 
 int
-s10_svc_send(struct s10_svc_msg *msg)
+s10_svc_send(device_t dev, struct s10_svc_msg *msg)
 {
+	struct s10_svc_softc *sc;
 	struct arm_smccc_res res;
 	register_t a0, a1, a2;
 	int ret;
+
+	sc = device_get_softc(dev);
 
 	printf("%s: cmd %d flags %x\n", __func__, msg->command, msg->flags);
 
@@ -118,13 +122,13 @@ s10_svc_send(struct s10_svc_msg *msg)
 		a2 = (uint64_t)msg->payload_length;
 		break;
 	case COMMAND_RECONFIG_DATA_CLAIM:
-		ret = s10_data_claim();
+		ret = s10_data_claim(sc);
 		return (ret);
 	default:
 		return (-1);
 	}
 
-	ret = arm_smccc_smc(a0, a1, a2, 0, 0, 0, 0, 0, &res);
+	ret = sc->callfn(a0, a1, a2, 0, 0, 0, 0, 0, &res);
 
 	printf("res.a0 %lx, a1 %lx, a2 %lx, a3 %lx\n",
 	    res.a0, res.a1, res.a2, res.a3);
@@ -173,7 +177,7 @@ s10_get_memory(struct s10_svc_softc *sc)
 	vmem_size_t size;
 	vmem_t *vmem;
 
-	arm_smccc_smc(INTEL_SIP_SMC_FPGA_CONFIG_GET_MEM,
+	sc->callfn(INTEL_SIP_SMC_FPGA_CONFIG_GET_MEM,
 	    0, 0, 0, 0, 0, 0, 0, &res);
 	if (res.a0 != INTEL_SIP_SMC_STATUS_OK)
 		return (ENXIO);
@@ -196,6 +200,25 @@ s10_get_memory(struct s10_svc_softc *sc)
 	return (0);
 }
 
+static intel_smc_callfn_t
+s10_svc_get_callfn(struct s10_svc_softc *sc, phandle_t node)
+{
+	char method[16];
+
+	if ((OF_getprop(node, "method", method, sizeof(method))) > 0) {
+		if (strcmp(method, "hvc") == 0)
+			return (arm_smccc_hvc);
+		else if (strcmp(method, "smc") == 0)
+			return (arm_smccc_smc);
+		else
+			device_printf(sc->dev,
+			    "Invalid method \"%s\"\n", method);
+	} else
+		device_printf(sc->dev, "SMC method not provided\n");
+
+	return (NULL);
+}
+
 static int
 s10_svc_probe(device_t dev)
 {
@@ -215,11 +238,18 @@ static int
 s10_svc_attach(device_t dev)
 {
 	struct s10_svc_softc *sc;
+	phandle_t node;
+
+	node = ofw_bus_get_node(dev);
 
 	sc = device_get_softc(dev);
 	sc->dev = dev;
 
 	if (device_get_unit(dev) != 0)
+		return (ENXIO);
+
+	sc->callfn = s10_svc_get_callfn(sc, node);
+	if (sc->callfn == NULL)
 		return (ENXIO);
 
 	if (s10_get_memory(sc) != 0)

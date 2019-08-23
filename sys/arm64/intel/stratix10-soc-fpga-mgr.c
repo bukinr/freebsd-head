@@ -105,7 +105,7 @@ fpga_open(struct cdev *dev, int flags __unused,
 	msg.command = COMMAND_RECONFIG;
 	if (dev == sc->mgr_cdev_partial)
 		msg.flags |= COMMAND_RECONFIG_FLAG_PARTIAL;
-	ret = s10_svc_send(&msg);
+	ret = s10_svc_send(sc->s10_svc_dev, &msg);
 	if (ret != 0) {
 		mtx_unlock(&sc->mtx);
 		return (ENXIO);
@@ -154,7 +154,7 @@ fpga_close(struct cdev *dev, int flags __unused,
 	msg.command = COMMAND_RECONFIG_DATA_SUBMIT;
 	msg.payload = (void *)sc->mem.paddr;
 	msg.payload_length = sc->mem.fill;
-	ret = s10_svc_send(&msg);
+	ret = s10_svc_send(sc->s10_svc_dev, &msg);
 	if (ret != 0) {
 		device_printf(sc->dev, "Failed to submit data\n");
 		s10_svc_free_memory(sc->s10_svc_dev, &sc->mem);
@@ -165,7 +165,7 @@ fpga_close(struct cdev *dev, int flags __unused,
 	/* Claim memory buffer back */
 	bzero(&msg, sizeof(struct s10_svc_msg));
 	msg.command = COMMAND_RECONFIG_DATA_CLAIM;
-	s10_svc_send(&msg);
+	s10_svc_send(sc->s10_svc_dev, &msg);
 
 	s10_svc_free_memory(sc->s10_svc_dev, &sc->mem);
 	sc->busy = 0;

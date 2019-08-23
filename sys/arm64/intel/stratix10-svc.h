@@ -53,7 +53,7 @@ struct s10_svc_mem {
 	int fill;
 };
 
-int s10_svc_send(struct s10_svc_msg *msg);
+int s10_svc_send(device_t dev, struct s10_svc_msg *msg);
 int s10_svc_allocate_memory(device_t dev, struct s10_svc_mem *mem, int size);
 void s10_svc_free_memory(device_t dev, struct s10_svc_mem *mem);
 
