@@ -90,19 +90,4 @@
 #define	INTEL_SIP_SMC_RSU_UPDATE			\
     INTEL_SIP_SMC_FAST_CALL(INTEL_SIP_SMC_FUNCID_RSU_UPDATE)
 
-struct arm_smccc_res {
-	uint64_t a0;
-	uint64_t a1;
-	uint64_t a2;
-	uint64_t a3;
-};
-
-uint64_t arm_smccc_smc(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
-    uint64_t, uint64_t, uint64_t, struct arm_smccc_res *res);
-uint64_t arm_smccc_hvc(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
-    uint64_t, uint64_t, uint64_t, struct arm_smccc_res *res);
-typedef uint64_t (*intel_smc_callfn_t)(uint64_t, uint64_t, uint64_t,
-    uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
-    struct arm_smccc_res *res);
-
 #endif /* _ARM64_INTEL_INTEL_SMC_H_ */
