@@ -33,7 +33,7 @@
 #ifndef	_ARM64_INTEL_INTEL_SMC_H_
 #define	_ARM64_INTEL_INTEL_SMC_H_
 
-#include <dev/psci/smccc.h>
+#include <machine/arm-smccc.h>
 
 /*
  * Intel SiP return values.
