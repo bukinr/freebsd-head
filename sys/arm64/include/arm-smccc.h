@@ -68,8 +68,5 @@ uint64_t arm_smccc_smc(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
     uint64_t, uint64_t, uint64_t, struct arm_smccc_res *res);
 uint64_t arm_smccc_hvc(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
     uint64_t, uint64_t, uint64_t, struct arm_smccc_res *res);
-typedef uint64_t (*intel_smc_callfn_t)(uint64_t, uint64_t, uint64_t,
-    uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
-    struct arm_smccc_res *res);
 
 #endif /* !_MACHINE_SMCCC_H_ */
