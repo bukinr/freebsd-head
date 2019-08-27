@@ -1698,7 +1698,7 @@ insmntque1(struct vnode *vp, struct mount *mp,
 	 */
 	MNT_ILOCK(mp);
 	VI_LOCK(vp);
-	if (((mp->mnt_kern_flag & MNTK_NOINSMNTQ) != 0 &&
+	if (((mp->mnt_kern_flag & MNTK_UNMOUNT) != 0 &&
 	    ((mp->mnt_kern_flag & MNTK_UNMOUNTF) != 0 ||
 	    mp->mnt_nvnodelistsize == 0)) &&
 	    (vp->v_vflag & VV_FORCEINSMQ) == 0) {
@@ -3018,6 +3018,19 @@ _vhold(struct vnode *vp, bool locked)
 		VI_UNLOCK(vp);
 }
 
+void
+vholdnz(struct vnode *vp)
+{
+
+	CTR2(KTR_VFS, "%s: vp %p", __func__, vp);
+#ifdef INVARIANTS
+	int old = atomic_fetchadd_int(&vp->v_holdcnt, 1);
+	VNASSERT(old > 0, vp, ("%s: wrong hold count", __func__));
+#else
+	atomic_add_int(&vp->v_holdcnt, 1);
+#endif
+}
+
 /*
  * Drop the hold count of the vnode.  If this is the last reference to
  * the vnode we place it on the free list unless it has been vgone'd
@@ -3818,7 +3831,6 @@ DB_SHOW_COMMAND(mount, db_show_mount)
 	MNT_KERN_FLAG(MNTK_UNMOUNTF);
 	MNT_KERN_FLAG(MNTK_ASYNC);
 	MNT_KERN_FLAG(MNTK_SOFTDEP);
-	MNT_KERN_FLAG(MNTK_NOINSMNTQ);
 	MNT_KERN_FLAG(MNTK_DRAINING);
 	MNT_KERN_FLAG(MNTK_REFEXPIRE);
 	MNT_KERN_FLAG(MNTK_EXTENDED_SHARED);

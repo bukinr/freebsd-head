@@ -657,6 +657,7 @@ void	vgone(struct vnode *vp);
 #define	vhold(vp)	_vhold((vp), 0)
 #define	vholdl(vp)	_vhold((vp), 1)
 void	_vhold(struct vnode *, bool);
+void	vholdnz(struct vnode *);
 void	vinactive(struct vnode *, struct thread *);
 int	vinvalbuf(struct vnode *vp, int save, int slpflag, int slptimeo);
 int	vtruncbuf(struct vnode *vp, off_t length, int blksize);
@@ -810,14 +811,14 @@ int	vop_sigdefer(struct vop_vector *vop, struct vop_generic_args *a);
 void	vop_strategy_pre(void *a);
 void	vop_lock_pre(void *a);
 void	vop_lock_post(void *a, int rc);
-void	vop_unlock_post(void *a, int rc);
 void	vop_unlock_pre(void *a);
+void	vop_unlock_post(void *a, int rc);
 #else
 #define	vop_strategy_pre(x)	do { } while (0)
 #define	vop_lock_pre(x)		do { } while (0)
 #define	vop_lock_post(x, y)	do { } while (0)
-#define	vop_unlock_post(x, y)	do { } while (0)
 #define	vop_unlock_pre(x)	do { } while (0)
+#define	vop_unlock_post(x, y)	do { } while (0)
 #endif
 
 void	vop_rename_fail(struct vop_rename_args *ap);
