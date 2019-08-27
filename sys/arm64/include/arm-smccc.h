@@ -34,13 +34,6 @@
 #ifndef	_MACHINE_SMCCC_H_
 #define	_MACHINE_SMCCC_H_
 
-struct arm_smccc_res {
-	uint64_t a0;
-	uint64_t a1;
-	uint64_t a2;
-	uint64_t a3;
-};
-
 #define	SMCCC_VERSION_MAJOR(ver)	(((ver) >> 16) & 0x7fff)
 #define	SMCCC_VERSION_MINOR(ver)	((ver) & 0xffff)
 
@@ -63,6 +56,13 @@ struct arm_smccc_res {
 #define	SMCCC_STD_SECURE_SERVICE_CALLS	4
 #define	SMCCC_STD_HYP_SERVICE_CALLS	5
 #define	SMCCC_VENDOR_HYP_SERVICE_CALLS	6
+
+struct arm_smccc_res {
+	uint64_t a0;
+	uint64_t a1;
+	uint64_t a2;
+	uint64_t a3;
+};
 
 uint64_t arm_smccc_smc(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
     uint64_t, uint64_t, uint64_t, struct arm_smccc_res *res);
