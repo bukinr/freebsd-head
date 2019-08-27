@@ -82,11 +82,6 @@ fpga_open(struct cdev *dev, int flags __unused,
 
 	sc = dev->si_drv1;
 
-	if (dev == sc->mgr_cdev)
-		printf("cdev std\n");
-	else if (dev == sc->mgr_cdev_partial)
-		printf("cdev partial\n");
-
 	mtx_lock(&sc->mtx);
 
 	if (sc->busy) {

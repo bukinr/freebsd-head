@@ -31,7 +31,7 @@
  */
 
 /*
- * Intel Stratix 10 SVC
+ * Intel Stratix 10 Service Layer
  */
 
 #include <sys/cdefs.h>
@@ -105,8 +105,6 @@ s10_svc_send(device_t dev, struct s10_svc_msg *msg)
 
 	sc = device_get_softc(dev);
 
-	printf("%s: cmd %d flags %x\n", __func__, msg->command, msg->flags);
-
 	a0 = 0;
 	a1 = 0;
 	a2 = 0;
@@ -129,9 +127,6 @@ s10_svc_send(device_t dev, struct s10_svc_msg *msg)
 	}
 
 	ret = sc->callfn(a0, a1, a2, 0, 0, 0, 0, 0, &res);
-
-	printf("res.a0 %lx, a1 %lx, a2 %lx, a3 %lx\n",
-	    res.a0, res.a1, res.a2, res.a3);
 
 	return (ret);
 }
