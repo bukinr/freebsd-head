@@ -144,7 +144,7 @@ s10_svc_allocate_memory(device_t dev, struct s10_svc_mem *mem, int size)
 
 	if (vmem_alloc(sc->vmem, size,
 	    M_FIRSTFIT | M_NOWAIT, &mem->paddr)) {
-		printf("%s: Can't allocate memory\n", __func__);
+		device_printf(dev, "Can't allocate memory\n");
 		return (ENOMEM);
 	}
 
@@ -186,7 +186,7 @@ s10_get_memory(struct s10_svc_softc *sc)
 	addr = res.a1;
 	size = res.a2;
 
-	printf("%s: shared memory addr %lx size %lx\n", __func__,
+	device_printf(sc->dev, "Shared memory address 0x%lx size 0x%lx\n",
 	    addr, size);
 
 	vmem_add(vmem, addr, size, 0);
