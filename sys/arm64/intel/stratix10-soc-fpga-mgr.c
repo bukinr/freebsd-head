@@ -48,6 +48,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/timetc.h>
 #include <sys/conf.h>
 #include <sys/uio.h>
+#include <sys/sx.h>
 
 #include <dev/ofw/openfirm.h>
 #include <dev/ofw/ofw_bus.h>
@@ -67,8 +68,8 @@ struct fpgamgr_s10_softc {
 	device_t		dev;
 	device_t		s10_svc_dev;
 	struct s10_svc_mem	mem;
-	struct mtx		mtx;
-	int			busy;
+	struct sx		sx;
+	int			opened;
 };
 
 static int
@@ -82,17 +83,16 @@ fpga_open(struct cdev *dev, int flags __unused,
 
 	sc = dev->si_drv1;
 
-	mtx_lock(&sc->mtx);
-
-	if (sc->busy) {
-		mtx_unlock(&sc->mtx);
+	sx_xlock(&sc->sx);
+	if (sc->opened) {
+		sx_xunlock(&sc->sx);
 		return (EBUSY);
 	}
 
 	err = s10_svc_allocate_memory(sc->s10_svc_dev,
 	    &sc->mem, SVC_BUF_SIZE);
 	if (err != 0) {
-		mtx_unlock(&sc->mtx);
+		sx_xunlock(&sc->sx);
 		return (ENXIO);
 	}
 
@@ -102,13 +102,12 @@ fpga_open(struct cdev *dev, int flags __unused,
 		msg.flags |= COMMAND_RECONFIG_FLAG_PARTIAL;
 	ret = s10_svc_send(sc->s10_svc_dev, &msg);
 	if (ret != 0) {
-		mtx_unlock(&sc->mtx);
+		sx_xunlock(&sc->sx);
 		return (ENXIO);
 	}
 
-	sc->busy = 1;
-
-	mtx_unlock(&sc->mtx);
+	sc->opened = 1;
+	sx_xunlock(&sc->sx);
 
 	return (0);
 }
@@ -122,6 +121,13 @@ fpga_write(struct cdev *dev, struct uio *uio, int ioflag)
 
 	sc = dev->si_drv1;
 
+	sx_xlock(&sc->sx);
+	if (sc->opened == 0) {
+		/* Device closed. */
+		sx_xunlock(&sc->sx);
+		return (ENXIO);
+	}
+
 	while (uio->uio_resid > 0) {
 		addr = sc->mem.vaddr + sc->mem.fill;
 		if (sc->mem.fill >= SVC_BUF_SIZE)
@@ -130,6 +136,8 @@ fpga_write(struct cdev *dev, struct uio *uio, int ioflag)
 		uiomove((void *)addr, amnt, uio);
 		sc->mem.fill += amnt;
 	}
+
+	sx_xunlock(&sc->sx);
 
 	return (0);
 }
@@ -144,6 +152,13 @@ fpga_close(struct cdev *dev, int flags __unused,
 
 	sc = dev->si_drv1;
 
+	sx_xlock(&sc->sx);
+	if (sc->opened == 0) {
+		/* Device closed. */
+		sx_xunlock(&sc->sx);
+		return (ENXIO);
+	}
+
 	/* Submit bitstream */
 	bzero(&msg, sizeof(struct s10_svc_msg));
 	msg.command = COMMAND_RECONFIG_DATA_SUBMIT;
@@ -153,7 +168,8 @@ fpga_close(struct cdev *dev, int flags __unused,
 	if (ret != 0) {
 		device_printf(sc->dev, "Failed to submit data\n");
 		s10_svc_free_memory(sc->s10_svc_dev, &sc->mem);
-		sc->busy = 0;
+		sc->opened = 0;
+		sx_xunlock(&sc->sx);
 		return (0);
 	}
 
@@ -163,7 +179,8 @@ fpga_close(struct cdev *dev, int flags __unused,
 	s10_svc_send(sc->s10_svc_dev, &msg);
 
 	s10_svc_free_memory(sc->s10_svc_dev, &sc->mem);
-	sc->busy = 0;
+	sc->opened = 0;
+	sx_xunlock(&sc->sx);
 
 	return (0);
 }
@@ -231,7 +248,7 @@ fpgamgr_s10_attach(device_t dev)
 		return (ENXIO);
 	}
 
-	mtx_init(&sc->mtx, "s10 fpga", NULL, MTX_DEF);
+	sx_init(&sc->sx, "s10 fpga");
 
 	sc->mgr_cdev->si_drv1 = sc;
 	sc->mgr_cdev_partial->si_drv1 = sc;
@@ -249,7 +266,7 @@ fpgamgr_s10_detach(device_t dev)
 	destroy_dev(sc->mgr_cdev);
 	destroy_dev(sc->mgr_cdev_partial);
 
-	mtx_destroy(&sc->mtx);
+	sx_destroy(&sc->sx);
 
 	return (0);
 }
