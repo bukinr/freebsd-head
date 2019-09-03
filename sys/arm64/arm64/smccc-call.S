@@ -35,24 +35,26 @@ __FBSDID("$FreeBSD$");
 
 /*
  * uint64_t arm_smccc_hvc(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
- *                        uint64_t, uint64_t, uint64_t, uint64_t *res)
+ *     uint64_t, uint64_t, uint64_t, struct arm_smccc_res *res)
  */
 ENTRY(arm_smccc_hvc)
 	hvc	#0
 	ldr	x4, [sp]
+	cbz	x4, 1f
 	stp	x0, x1, [x4, #16 * 0]
 	stp	x2, x3, [x4, #16 * 1]
-	ret
+1:	ret
 END(arm_smccc_hvc)
 
 /*
  * uint64_t arm_smccc_smc(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
- *                        uint64_t, uint64_t, uint64_t, uint64_t *res)
+ *     uint64_t, uint64_t, uint64_t, struct arm_smccc_res *res)
  */
 ENTRY(arm_smccc_smc)
 	smc	#0
 	ldr	x4, [sp]
+	cbz	x4, 1f
 	stp	x0, x1, [x4, #16 * 0]
 	stp	x2, x3, [x4, #16 * 1]
-	ret
+1:	ret
 END(arm_smccc_smc)
