@@ -52,8 +52,6 @@ struct dwgpiobus_softc {
 	struct simplebus_softc	simplebus_sc;
 	device_t		dev;
 	struct resource		*res[1];
-	bus_space_tag_t		bst;
-	bus_space_handle_t	bsh;
 };
 
 static struct resource_spec dwgpio_spec[] = {
@@ -85,18 +83,14 @@ dwgpiobus_attach(device_t dev)
 	sc = device_get_softc(dev);
 	sc->dev = dev;
 
+	node = ofw_bus_get_node(dev);
+	if (node == -1)
+		return (ENXIO);
+
 	if (bus_alloc_resources(dev, dwgpio_spec, sc->res)) {
 		device_printf(dev, "Could not allocate resources.\n");
 		return (ENXIO);
 	}
-
-	/* Memory interface */
-	sc->bst = rman_get_bustag(sc->res[0]);
-	sc->bsh = rman_get_bushandle(sc->res[0]);
-
-	node = ofw_bus_get_node(dev);
-	if (node == -1)
-		return (ENXIO);
 
 	simplebus_init(dev, node);
 
