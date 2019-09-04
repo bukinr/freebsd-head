@@ -32,14 +32,6 @@
 
 #include <machine/bus.h>
 
-#if 0
-#ifdef FDT
-#include <dev/fdt/fdt_common.h>
-#include <dev/ofw/ofw_bus.h>
-#include <dev/ofw/ofw_bus_subr.h>
-#endif
-#endif
-
 INTERFACE dwgpio;
 
 #
