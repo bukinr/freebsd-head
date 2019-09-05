@@ -149,8 +149,6 @@ dwgpio_attach(device_t dev)
 	if ((OF_getencprop(sc->node, "reg", &sc->port, sizeof(sc->port))) <= 0)
 		return (ENXIO);
 
-	printf("port %d\n", sc->port);
-
 	version =  READ4(sc, GPIO_VER_ID_CODE);
 	if (boothowto & RB_VERBOSE)
 		device_printf(sc->dev, "Version = 0x%08x\n", version);
