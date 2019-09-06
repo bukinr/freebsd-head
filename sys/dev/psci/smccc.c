@@ -39,8 +39,8 @@ __FBSDID("$FreeBSD$");
 #include <sys/systm.h>
 #include <sys/kernel.h>
 
-#include <dev/psci/smccc.h>
 #include <dev/psci/psci.h>
+#include <dev/psci/smccc.h>
 
 #define	SMCCC_VERSION_1_0	0x10000
 
