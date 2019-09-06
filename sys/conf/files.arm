@@ -45,6 +45,7 @@ arm/arm/identcpu-v6.c		optional	armv7 | armv6
 arm/arm/in_cksum.c		optional	inet | inet6
 arm/arm/in_cksum_arm.S		optional	inet | inet6
 arm/arm/intr.c			optional	!intrng
+arm/arm/smccc-call.S		standard
 kern/subr_intr.c		optional	intrng
 arm/arm/locore.S		standard	no-obj
 arm/arm/hypervisor-stub.S	optional	armv7 | armv6
@@ -114,7 +115,6 @@ dev/ofw/ofwpci.c		optional	fdt pci
 dev/pci/pci_host_generic.c	optional	pci_host_generic pci
 dev/pci/pci_host_generic_fdt.c	optional	pci_host_generic pci fdt
 dev/psci/psci.c			optional	psci
-dev/psci/psci_arm.S		optional	psci
 dev/syscons/scgfbrndr.c		optional	sc
 dev/uart/uart_cpu_fdt.c		optional	uart fdt
 
