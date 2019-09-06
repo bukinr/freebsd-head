@@ -34,7 +34,35 @@
 #ifndef	_PSCI_SMCCC_H_
 #define	_PSCI_SMCCC_H_
 
-#include <machine/arm-smccc.h>
+#define	SMCCC_VERSION_MAJOR(ver)	(((ver) >> 16) & 0x7fff)
+#define	SMCCC_VERSION_MINOR(ver)	((ver) & 0xffff)
+
+#define	SMCCC_FUNC_ID(type, call_conv, range, func)	\
+	(((type) << 31) |				\
+	 ((call_conv) << 30) |				\
+	 (((range) & 0x3f) << 24) |				\
+	 ((func) & 0xffff))
+
+#define	SMCCC_YIELDING_CALL	0
+#define	SMCCC_FAST_CALL		1
+
+#define	SMCCC_32BIT_CALL	0
+#define	SMCCC_64BIT_CALL	1
+
+#define	SMCCC_ARM_ARCH_CALLS		0
+#define	SMCCC_CPU_SERVICE_CALLS		1
+#define	SMCCC_SIP_SERVICE_CALLS		2
+#define	SMCCC_OEM_SERVICE_CALLS		3
+#define	SMCCC_STD_SECURE_SERVICE_CALLS	4
+#define	SMCCC_STD_HYP_SERVICE_CALLS	5
+#define	SMCCC_VENDOR_HYP_SERVICE_CALLS	6
+
+struct arm_smccc_res {
+	register_t a0;
+	register_t a1;
+	register_t a2;
+	register_t a3;
+};
 
 /*
  * Arm Architecture Calls.
@@ -57,5 +85,10 @@
 int32_t smccc_arch_features(uint32_t);
 int smccc_arch_workaround_1(void);
 int smccc_arch_workaround_2(int);
+
+int arm_smccc_smc(register_t, register_t, register_t, register_t, register_t,
+    register_t, register_t, register_t, struct arm_smccc_res *res);
+int arm_smccc_hvc(register_t, register_t, register_t, register_t, register_t,
+    register_t, register_t, register_t, struct arm_smccc_res *res);
 
 #endif /* _PSCI_SMCCC_H_ */

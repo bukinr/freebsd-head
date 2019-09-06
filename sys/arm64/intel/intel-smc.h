@@ -33,7 +33,7 @@
 #ifndef	_ARM64_INTEL_INTEL_SMC_H_
 #define	_ARM64_INTEL_INTEL_SMC_H_
 
-#include <machine/arm-smccc.h>
+#include <dev/psci/smccc.h>
 
 /*
  * Intel SiP return values.
@@ -90,8 +90,8 @@
 #define	INTEL_SIP_SMC_RSU_UPDATE			\
     INTEL_SIP_SMC_FAST_CALL(INTEL_SIP_SMC_FUNCID_RSU_UPDATE)
 
-typedef uint64_t (*intel_smc_callfn_t)(uint64_t, uint64_t, uint64_t,
-    uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+typedef int (*intel_smc_callfn_t)(register_t, register_t, register_t,
+    register_t, register_t, register_t, register_t, register_t,
     struct arm_smccc_res *res);
 
 #endif /* _ARM64_INTEL_INTEL_SMC_H_ */

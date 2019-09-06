@@ -61,7 +61,6 @@ __FBSDID("$FreeBSD$");
 #include <arm64/intel/intel-smc.h>
 #include <arm64/intel/stratix10-svc.h>
 
-#include <machine/arm-smccc.h>
 #include <machine/bus.h>
 #include <machine/cpu.h>
 #include <machine/intr.h>
