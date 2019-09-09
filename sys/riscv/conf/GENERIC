@@ -108,10 +108,10 @@ device		xdma		# DMA interface
 device		axidma		# Xilinx AXI DMA Controller
 
 # Uncomment for memory disk
-options 	MD_ROOT
-options 	MD_ROOT_SIZE=32768	# 32MB ram disk
-makeoptions	MFS_IMAGE=/home/br/dev/freebsd-head/riscv.img
-options 	ROOTDEVNAME=\"ufs:/dev/md0\"
+# options 	MD_ROOT
+# options 	MD_ROOT_SIZE=32768	# 32MB ram disk
+# makeoptions	MFS_IMAGE=/path/to/img
+# options 	ROOTDEVNAME=\"ufs:/dev/md0\"
 
 # Uncomment for virtio block device
 # options 	ROOTDEVNAME=\"ufs:/dev/vtbd0\"
