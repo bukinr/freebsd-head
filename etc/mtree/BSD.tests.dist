@@ -440,6 +440,10 @@
             files
             ..
         ..
+        ping
+        ..
+        ping6
+        ..
     ..
     secure
         lib
@@ -731,6 +735,8 @@
         file
         ..
         fs
+            fusefs
+            ..
             tmpfs
             ..
         ..
@@ -793,6 +799,8 @@
     netmap
     ..
         netpfil
+            common
+            ..
             pf
                 ioctl
                 ..
@@ -1010,6 +1018,8 @@
         ..
         opensm
         ..
+        patch
+        ..
         pr
         ..
         printf
@@ -1071,6 +1081,8 @@
         fstyp
         ..
         makefs
+        ..
+        mixer
         ..
         newsyslog
         ..

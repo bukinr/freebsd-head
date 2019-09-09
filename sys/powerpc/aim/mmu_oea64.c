@@ -74,6 +74,7 @@ __FBSDID("$FreeBSD$");
 #include <vm/vm_param.h>
 #include <vm/vm_kern.h>
 #include <vm/vm_page.h>
+#include <vm/vm_phys.h>
 #include <vm/vm_map.h>
 #include <vm/vm_object.h>
 #include <vm/vm_extern.h>
@@ -380,17 +381,15 @@ alloc_pvo_entry(int bootstrap)
 	if (!moea64_initialized || bootstrap) {
 		if (moea64_bpvo_pool_index >= moea64_bpvo_pool_size) {
 			panic("moea64_enter: bpvo pool exhausted, %d, %d, %zd",
-			      moea64_bpvo_pool_index, moea64_bpvo_pool_size, 
+			      moea64_bpvo_pool_index, moea64_bpvo_pool_size,
 			      moea64_bpvo_pool_size * sizeof(struct pvo_entry));
 		}
 		pvo = &moea64_bpvo_pool[
 		    atomic_fetchadd_int(&moea64_bpvo_pool_index, 1)];
 		bzero(pvo, sizeof(*pvo));
 		pvo->pvo_vaddr = PVO_BOOTSTRAP;
-	} else {
-		pvo = uma_zalloc(moea64_pvo_zone, M_NOWAIT);
-		bzero(pvo, sizeof(*pvo));
-	}
+	} else
+		pvo = uma_zalloc(moea64_pvo_zone, M_NOWAIT | M_ZERO);
 
 	return (pvo);
 }
@@ -780,7 +779,7 @@ moea64_early_bootstrap(mmu_t mmup, vm_offset_t kernelstart, vm_offset_t kernelen
 	mem_regions(&pregions, &pregions_sz, &regions, &regions_sz);
 	CTR0(KTR_PMAP, "moea64_bootstrap: physical memory");
 
-	if (nitems(phys_avail) < regions_sz)
+	if (PHYS_AVAIL_ENTRIES < regions_sz)
 		panic("moea64_bootstrap: phys_avail too small");
 
 	phys_avail_count = 0;
@@ -1400,6 +1399,8 @@ moea64_enter(mmu_t mmu, pmap_t pmap, vm_offset_t va, vm_page_t m,
 		VM_OBJECT_ASSERT_LOCKED(m->object);
 
 	pvo = alloc_pvo_entry(0);
+	if (pvo == NULL)
+		return (KERN_RESOURCE_SHORTAGE);
 	pvo->pvo_pmap = NULL; /* to be filled in later */
 	pvo->pvo_pte.prot = prot;
 
@@ -1415,61 +1416,53 @@ moea64_enter(mmu_t mmu, pmap_t pmap, vm_offset_t va, vm_page_t m,
 		pvo_head = &m->md.mdpg_pvoh;
 		pvo->pvo_vaddr |= PVO_MANAGED;
 	}
-	
-	for (;;) {
-		PV_PAGE_LOCK(m);
-		PMAP_LOCK(pmap);
-		if (pvo->pvo_pmap == NULL)
-			init_pvo_entry(pvo, pmap, va);
-		if (prot & VM_PROT_WRITE)
-			if (pmap_bootstrapped &&
-			    (m->oflags & VPO_UNMANAGED) == 0)
-				vm_page_aflag_set(m, PGA_WRITEABLE);
 
-		error = moea64_pvo_enter(mmu, pvo, pvo_head, &oldpvo);
-		if (error == EEXIST) {
-			if (oldpvo->pvo_vaddr == pvo->pvo_vaddr &&
-			    oldpvo->pvo_pte.pa == pvo->pvo_pte.pa &&
-			    oldpvo->pvo_pte.prot == prot) {
-				/* Identical mapping already exists */
-				error = 0;
+	PV_PAGE_LOCK(m);
+	PMAP_LOCK(pmap);
+	if (pvo->pvo_pmap == NULL)
+		init_pvo_entry(pvo, pmap, va);
+	if (prot & VM_PROT_WRITE)
+		if (pmap_bootstrapped &&
+		    (m->oflags & VPO_UNMANAGED) == 0)
+			vm_page_aflag_set(m, PGA_WRITEABLE);
 
-				/* If not in page table, reinsert it */
-				if (MOEA64_PTE_SYNCH(mmu, oldpvo) < 0) {
-					STAT_MOEA64(moea64_pte_overflow--);
-					MOEA64_PTE_INSERT(mmu, oldpvo);
-				}
+	error = moea64_pvo_enter(mmu, pvo, pvo_head, &oldpvo);
+	if (error == EEXIST) {
+		if (oldpvo->pvo_vaddr == pvo->pvo_vaddr &&
+		    oldpvo->pvo_pte.pa == pvo->pvo_pte.pa &&
+		    oldpvo->pvo_pte.prot == prot) {
+			/* Identical mapping already exists */
+			error = 0;
 
-				/* Then just clean up and go home */
-				PV_PAGE_UNLOCK(m);
-				PMAP_UNLOCK(pmap);
-				free_pvo_entry(pvo);
-				break;
+			/* If not in page table, reinsert it */
+			if (MOEA64_PTE_SYNCH(mmu, oldpvo) < 0) {
+				STAT_MOEA64(moea64_pte_overflow--);
+				MOEA64_PTE_INSERT(mmu, oldpvo);
 			}
 
+			/* Then just clean up and go home */
+			PV_PAGE_UNLOCK(m);
+			PMAP_UNLOCK(pmap);
+			free_pvo_entry(pvo);
+			goto out;
+		} else {
 			/* Otherwise, need to kill it first */
 			KASSERT(oldpvo->pvo_pmap == pmap, ("pmap of old "
 			    "mapping does not match new mapping"));
 			moea64_pvo_remove_from_pmap(mmu, oldpvo);
 			moea64_pvo_enter(mmu, pvo, pvo_head, NULL);
 		}
-		PV_PAGE_UNLOCK(m);
-		PMAP_UNLOCK(pmap);
+	}
+	PV_PAGE_UNLOCK(m);
+	PMAP_UNLOCK(pmap);
 
-		/* Free any dead pages */
-		if (error == EEXIST) {
-			moea64_pvo_remove_from_page(mmu, oldpvo);
-			free_pvo_entry(oldpvo);
-		}
-
-		if (error != ENOMEM)
-			break;
-		if ((flags & PMAP_ENTER_NOSLEEP) != 0)
-			return (KERN_RESOURCE_SHORTAGE);
-		VM_OBJECT_ASSERT_UNLOCKED(m->object);
-		vm_wait(NULL);
+	/* Free any dead pages */
+	if (error == EEXIST) {
+		moea64_pvo_remove_from_page(mmu, oldpvo);
+		free_pvo_entry(oldpvo);
 	}
 
+out:
 	/*
 	 * Flush the page from the instruction cache if this page is
 	 * mapped executable and cacheable.
@@ -1864,7 +1857,11 @@ moea64_kenter_attr(mmu_t mmu, vm_offset_t va, vm_paddr_t pa, vm_memattr_t ma)
 	int		error;	
 	struct pvo_entry *pvo, *oldpvo;
 
-	pvo = alloc_pvo_entry(0);
+	do {
+		pvo = alloc_pvo_entry(0);
+		if (pvo == NULL)
+			vm_wait(NULL);
+	} while (pvo == NULL);
 	pvo->pvo_pte.prot = VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE;
 	pvo->pvo_pte.pa = (pa & ~ADDR_POFF) | moea64_calc_wimg(pa, ma);
 	pvo->pvo_vaddr |= PVO_WIRED;
@@ -2366,9 +2363,9 @@ void
 moea64_remove_pages(mmu_t mmu, pmap_t pm)
 {
 	struct pvo_entry *pvo, *tpvo;
-	struct pvo_tree tofree;
+	struct pvo_dlist tofree;
 
-	RB_INIT(&tofree);
+	SLIST_INIT(&tofree);
 
 	PMAP_LOCK(pm);
 	RB_FOREACH_SAFE(pvo, pvo_tree, &pm->pmap_pvo, tpvo) {
@@ -2381,13 +2378,14 @@ moea64_remove_pages(mmu_t mmu, pmap_t pm)
 		 * pass
 		 */
 		moea64_pvo_remove_from_pmap(mmu, pvo);
-		RB_INSERT(pvo_tree, &tofree, pvo);
+		SLIST_INSERT_HEAD(&tofree, pvo, pvo_dlink);
 	}
 	PMAP_UNLOCK(pm);
 
-	RB_FOREACH_SAFE(pvo, pvo_tree, &tofree, tpvo) {
+	while (!SLIST_EMPTY(&tofree)) {
+		pvo = SLIST_FIRST(&tofree);
+		SLIST_REMOVE_HEAD(&tofree, pvo_dlink);
 		moea64_pvo_remove_from_page(mmu, pvo);
-		RB_REMOVE(pvo_tree, &tofree, pvo);
 		free_pvo_entry(pvo);
 	}
 }
@@ -2399,7 +2397,7 @@ void
 moea64_remove(mmu_t mmu, pmap_t pm, vm_offset_t sva, vm_offset_t eva)
 {
 	struct  pvo_entry *pvo, *tpvo, key;
-	struct pvo_tree tofree;
+	struct pvo_dlist tofree;
 
 	/*
 	 * Perform an unsynchronized read.  This is, however, safe.
@@ -2409,7 +2407,7 @@ moea64_remove(mmu_t mmu, pmap_t pm, vm_offset_t sva, vm_offset_t eva)
 
 	key.pvo_vaddr = sva;
 
-	RB_INIT(&tofree);
+	SLIST_INIT(&tofree);
 
 	PMAP_LOCK(pm);
 	for (pvo = RB_NFIND(pvo_tree, &pm->pmap_pvo, &key);
@@ -2422,13 +2420,14 @@ moea64_remove(mmu_t mmu, pmap_t pm, vm_offset_t sva, vm_offset_t eva)
 		 * pass
 		 */
 		moea64_pvo_remove_from_pmap(mmu, pvo);
-		RB_INSERT(pvo_tree, &tofree, pvo);
+		SLIST_INSERT_HEAD(&tofree, pvo, pvo_dlink);
 	}
 	PMAP_UNLOCK(pm);
 
-	RB_FOREACH_SAFE(pvo, pvo_tree, &tofree, tpvo) {
+	while (!SLIST_EMPTY(&tofree)) {
+		pvo = SLIST_FIRST(&tofree);
+		SLIST_REMOVE_HEAD(&tofree, pvo_dlink);
 		moea64_pvo_remove_from_page(mmu, pvo);
-		RB_REMOVE(pvo_tree, &tofree, pvo);
 		free_pvo_entry(pvo);
 	}
 }

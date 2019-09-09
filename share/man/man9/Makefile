@@ -289,6 +289,7 @@ MAN=	accept_filter.9 \
 	securelevel_gt.9 \
 	selrecord.9 \
 	sema.9 \
+	seqc.9 \
 	sf_buf.9 \
 	sglist.9 \
 	shm_map.9 \
@@ -1003,6 +1004,7 @@ MLINKS+=g_bio.9 g_alloc_bio.9 \
 	g_bio.9 g_clone_bio.9 \
 	g_bio.9 g_destroy_bio.9 \
 	g_bio.9 g_duplicate_bio.9 \
+	g_bio.9 g_format_bio.9 \
 	g_bio.9 g_new_bio.9 \
 	g_bio.9 g_print_bio.9 \
 	g_bio.9 g_reset_bio.9
@@ -1788,6 +1790,7 @@ MLINKS+=sbuf.9 sbuf_bcat.9 \
 	sbuf.9 sbuf_new.9 \
 	sbuf.9 sbuf_new_auto.9 \
 	sbuf.9 sbuf_new_for_sysctl.9 \
+	sbuf.9 sbuf_nl_terminate.9 \
 	sbuf.9 sbuf_printf.9 \
 	sbuf.9 sbuf_printf_drain.9 \
 	sbuf.9 sbuf_putbuf.9 \
@@ -1825,6 +1828,10 @@ MLINKS+=sema.9 sema_destroy.9 \
 	sema.9 sema_trywait.9 \
 	sema.9 sema_value.9 \
 	sema.9 sema_wait.9
+MLINKS+=seqc.9 seqc_consistent.9 \
+	seqc.9 seqc_read.9 \
+	seqc.9 seqc_write_begin.9 \
+	seqc.9 seqc_write_end.9
 MLINKS+=sf_buf.9 sf_buf_alloc.9 \
 	sf_buf.9 sf_buf_free.9 \
 	sf_buf.9 sf_buf_kva.9 \
@@ -2272,18 +2279,32 @@ MLINKS+=vrele.9 vput.9 \
 	vrele.9 vunref.9
 MLINKS+=vslock.9 vsunlock.9
 MLINKS+=zone.9 uma.9 \
+	zone.9 uma_prealloc.9 \
+	zone.9 uma_reclaim.9 \
 	zone.9 uma_zalloc.9 \
 	zone.9 uma_zalloc_arg.9 \
 	zone.9 uma_zalloc_domain.9 \
+	zone.9 uma_zalloc_pcpu.9 \
+	zone.9 uma_zalloc_pcpu_arg.9 \
+	zone.9 uma_zcache_create.9 \
 	zone.9 uma_zcreate.9 \
 	zone.9 uma_zdestroy.9 \
 	zone.9 uma_zfree.9 \
 	zone.9 uma_zfree_arg.9 \
 	zone.9 uma_zfree_domain.9 \
+	zone.9 uma_zfree_pcpu.9 \
+	zone.9 uma_zfree_pcpu_arg.9 \
 	zone.9 uma_zone_get_cur.9 \
 	zone.9 uma_zone_get_max.9 \
+	zone.9 uma_zone_reclaim.9 \
+	zone.9 uma_zone_reserve.9 \
+	zone.9 uma_zone_reserve_kva.9 \
+	zone.9 uma_zone_set_allocf.9 \
+	zone.9 uma_zone_set_freef.9 \
 	zone.9 uma_zone_set_max.9 \
+	zone.9 uma_zone_set_maxaction.9 \
+	zone.9 uma_zone_set_maxcache.9 \
 	zone.9 uma_zone_set_warning.9 \
-	zone.9 uma_zone_set_maxaction.9
+	zone.9 uma_zsecond_create.9
 
 .include <bsd.prog.mk>
