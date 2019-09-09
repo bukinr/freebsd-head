@@ -3,9 +3,10 @@ if [ "$1" = "fast" ]; then
     A=FAST
 fi
 
-export MAKEOBJDIRPREFIX=/home/br/obj/
+export MAKEOBJDIRPREFIX=/xhome/obj/
 
 KERNEL=BERI_DE4_USBROOT
+KERNEL_PATH=/xhome/obj/usr/home/br/dev/freebsd-head/mips.mips64/sys/${KERNEL}
 
 if [ "$2" = "dma" ]; then
 	KERNEL=BERI_DE4_USBROOT_DMA
@@ -19,11 +20,10 @@ ssh -K rb743@woc-base-05.cl.cam.ac.uk uname || exit 1
 
 hostname=`uname -n`
 if [ $hostname == 'pie' ]; then
-    rm -f /home/br/obj/usr/home/br/dev/freebsd-head/mips.mips64/sys/${KERNEL}/kernel.bz2 && \
-    sh ./sys/tools/embed_mfs.sh /home/br/obj/usr/home/br/dev/freebsd-head/mips.mips64/sys/BERI_DE4_USBROOT/kernel mips.img && \
-
-    bzip2 -k /home/br/obj/usr/home/br/dev/freebsd-head/mips.mips64/sys/${KERNEL}/kernel && \
-    scp -o GSSAPIAuthentication=yes /home/br/obj/usr/home/br/dev/freebsd-head/mips.mips64/sys/${KERNEL}/kernel.bz2 \
+    rm -f ${KERNEL_PATH}/kernel.bz2 && \
+    sh ./sys/tools/embed_mfs.sh ${KERNEL_PATH}/kernel mips.img && \
+    bzip2 -k ${KERNEL_PATH}/kernel && \
+    scp -o GSSAPIAuthentication=yes ${KERNEL_PATH}/kernel.bz2 \
 	rb743@woc-base-05.cl.cam.ac.uk:~/
 fi
 
