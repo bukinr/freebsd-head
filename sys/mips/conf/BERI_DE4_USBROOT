@@ -44,3 +44,7 @@ options 	ROOTDEVNAME=\"ufs:/dev/md0\"
 #options 	KTR_MASK=(KTR_SMP)
 #options 	KTR_COMPILE=(KTR_SMP)
 #options 	KTR_VERBOSE
+
+options		HWPMC_HOOKS
+device		hwpmc
+device		hwpmc_beri
