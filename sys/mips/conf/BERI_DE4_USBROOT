@@ -29,8 +29,8 @@ device		ext_resources
 #options 	SMP
 #options 	MIPS64_NEW_PMAP
 
-options 	FDT_DTB_STATIC
-makeoptions	FDT_DTS_FILE=beripad-de4-msgdma.dts
+#options 	FDT_DTB_STATIC
+#makeoptions	FDT_DTS_FILE=beripad-de4-msgdma.dts
 
 options 	MD_ROOT
 #options 	MD_ROOT_SIZE=32768
