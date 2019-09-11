@@ -44,7 +44,7 @@ __FBSDID("$FreeBSD$");
 
 #include <dev/hwpmc/hwpmc_beri.h>
 
-#define	BERI_PMC_CAPS	(PMC_CAP_INTERRUPT | PMC_CAP_USER |     \
+#define	BERI_PMC_CAPS	(PMC_CAP_USER |     \
 			 PMC_CAP_SYSTEM | PMC_CAP_EDGE |	\
 			 PMC_CAP_THRESHOLD | PMC_CAP_READ |	\
 			 PMC_CAP_WRITE | PMC_CAP_INVERT |	\
@@ -265,7 +265,7 @@ mips_read_pmc(int cpu, int ri, pmc_value_t *v)
 	KASSERT(ri >= 0 && ri < mips_npmcs,
 	    ("[mips,%d] illegal row index %d", __LINE__, ri));
 
-	pm  = mips_pcpu[cpu]->pc_mipspmcs[ri].phw_pmc;
+	pm = mips_pcpu[cpu]->pc_mipspmcs[ri].phw_pmc;
 	tmp = 0;//mips_pmcn_read(ri);
 	PMCDBG2(MDP,REA,2,"mips-read id=%d -> %jd", ri, tmp);
 
@@ -295,7 +295,7 @@ mips_write_pmc(int cpu, int ri, pmc_value_t v)
 	KASSERT(ri >= 0 && ri < mips_npmcs,
 	    ("[mips,%d] illegal row-index %d", __LINE__, ri));
 
-	pm  = mips_pcpu[cpu]->pc_mipspmcs[ri].phw_pmc;
+	pm = mips_pcpu[cpu]->pc_mipspmcs[ri].phw_pmc;
 
 	if (PMC_IS_SAMPLING_MODE(PMC_TO_MODE(pm)))
 		v = (1UL << (mips_pmc_spec.ps_counter_width - 1)) - v;
@@ -342,8 +342,8 @@ mips_start_pmc(int cpu, int ri)
 	printf("%s\n", __func__);
 	return (0);
 
-	phw    = &mips_pcpu[cpu]->pc_mipspmcs[ri];
-	pm     = phw->phw_pmc;
+	phw = &mips_pcpu[cpu]->pc_mipspmcs[ri];
+	pm = phw->phw_pmc;
 	config = pm->pm_md.pm_mips_evsel;
 
 	/* Enable the PMC. */
@@ -369,8 +369,8 @@ mips_stop_pmc(int cpu, int ri)
 
 	printf("%s\n", __func__);
 
-	phw    = &mips_pcpu[cpu]->pc_mipspmcs[ri];
-	pm     = phw->phw_pmc;
+	phw = &mips_pcpu[cpu]->pc_mipspmcs[ri];
+	pm = phw->phw_pmc;
 
 	/*
 	 * Disable the PMCs.
@@ -499,10 +499,10 @@ mips_describe(int cpu, int ri, struct pmc_info *pi, struct pmc **ppmc)
 	pi->pm_class = mips_pmc_spec.ps_cpuclass;
 	if (phw->phw_state & PMC_PHW_FLAG_IS_ENABLED) {
 		pi->pm_enabled = TRUE;
-		*ppmc          = phw->phw_pmc;
+		*ppmc = phw->phw_pmc;
 	} else {
 		pi->pm_enabled = FALSE;
-		*ppmc	       = NULL;
+		*ppmc = NULL;
 	}
 
 	return (0);
@@ -557,9 +557,9 @@ mips_pcpu_init(struct pmc_mdep *md, int cpu)
 	KASSERT(pc != NULL, ("[mips,%d] NULL per-cpu pointer", __LINE__));
 
 	for (i = 0, phw = pac->pc_mipspmcs; i < mips_npmcs; i++, phw++) {
-		phw->phw_state    = PMC_PHW_FLAG_IS_ENABLED |
+		phw->phw_state = PMC_PHW_FLAG_IS_ENABLED |
 		    PMC_PHW_CPU_TO_STATE(cpu) | PMC_PHW_INDEX_TO_STATE(i);
-		phw->phw_pmc      = NULL;
+		phw->phw_pmc = NULL;
 		pc->pc_hwpmcs[i + first_ri] = phw;
 	}
 
@@ -613,10 +613,10 @@ pmc_mips_initialize()
 	pmc_mdep->pmd_cputype = mips_pmc_spec.ps_cputype;
 
 	pcd = &pmc_mdep->pmd_classdep[PMC_MDEP_CLASS_INDEX_MIPS];
-	pcd->pcd_caps  = mips_pmc_spec.ps_capabilities;
+	pcd->pcd_caps = mips_pmc_spec.ps_capabilities;
 	pcd->pcd_class = mips_pmc_spec.ps_cpuclass;
-	pcd->pcd_num   = mips_npmcs;
-	pcd->pcd_ri    = pmc_mdep->pmd_npmc;
+	pcd->pcd_num = mips_npmcs;
+	pcd->pcd_ri = pmc_mdep->pmd_npmc;
 	pcd->pcd_width = mips_pmc_spec.ps_counter_width;
 
 	pcd->pcd_allocate_pmc   = mips_allocate_pmc;
@@ -635,7 +635,7 @@ pmc_mips_initialize()
 	pmc_mdep->pmd_switch_in  = mips_pmc_switch_in;
 	pmc_mdep->pmd_switch_out = mips_pmc_switch_out;
 	
-	pmc_mdep->pmd_npmc   += mips_npmcs;
+	pmc_mdep->pmd_npmc += mips_npmcs;
 
 	return (pmc_mdep);
 }
