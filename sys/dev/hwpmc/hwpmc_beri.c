@@ -42,6 +42,8 @@ __FBSDID("$FreeBSD$");
 #include <machine/mips_opcode.h>
 #include <machine/vmparam.h>
 
+#include <dev/hwpmc/hwpmc_beri.h>
+
 #define	BERI_PMC_CAPS	(PMC_CAP_INTERRUPT | PMC_CAP_USER |     \
 			 PMC_CAP_SYSTEM | PMC_CAP_EDGE |	\
 			 PMC_CAP_THRESHOLD | PMC_CAP_READ |	\
@@ -50,67 +52,122 @@ __FBSDID("$FreeBSD$");
 
 struct beri_event_code_map {
 	uint32_t	pe_ev;       /* enum value */
-	uint8_t		pe_reg;
-	uint8_t		pe_sel;
+	uint64_t	(*get_func)(void);
 };
 
 const struct beri_event_code_map beri_event_codes[] = {
-	{ PMC_EV_BERI_CYCLE, 2, 0 },
-	{ PMC_EV_BERI_INST, 4, 0 },
-	{ PMC_EV_BERI_INST_USER, 4, 1 },
-	{ PMC_EV_BERI_INST_KERNEL, 4, 2 },
-	{ PMC_EV_BERI_IMPRECISE_SETBOUNDS, 4, 3 },
-	{ PMC_EV_BERI_UNREPRESENTABLE_CAPS, 4, 4 },
-	{ PMC_EV_BERI_ITLB_MISS, 5, 0 },
-	{ PMC_EV_BERI_DTLB_MISS, 6, 0 },
-	{ PMC_EV_BERI_ICACHE_WRITE_HIT, 8, 0 },
-	{ PMC_EV_BERI_ICACHE_WRITE_MISS, 8, 1 },
-	{ PMC_EV_BERI_ICACHE_READ_HIT, 8, 2 },
-	{ PMC_EV_BERI_ICACHE_READ_MISS, 8, 3 },
-	{ PMC_EV_BERI_ICACHE_EVICT, 8, 6 },
-	{ PMC_EV_BERI_DCACHE_WRITE_HIT, 9, 0 },
-	{ PMC_EV_BERI_DCACHE_WRITE_MISS, 9, 1 },
-	{ PMC_EV_BERI_DCACHE_READ_HIT, 9, 2 },
-	{ PMC_EV_BERI_DCACHE_READ_MISS, 9, 3 },
-	{ PMC_EV_BERI_DCACHE_EVICT, 9, 6 },
-	{ PMC_EV_BERI_DCACHE_SET_TAG_WRITE, 9, 8 },
-	{ PMC_EV_BERI_DCACHE_SET_TAG_READ, 9, 9 },
-	{ PMC_EV_BERI_L2CACHE_WRITE_HIT, 10, 0 },
-	{ PMC_EV_BERI_L2CACHE_WRITE_MISS, 10, 1 },
-	{ PMC_EV_BERI_L2CACHE_READ_HIT, 10, 2 },
-	{ PMC_EV_BERI_L2CACHE_READ_MISS, 10, 3 },
-	{ PMC_EV_BERI_L2CACHE_EVICT, 10, 6 },
-	{ PMC_EV_BERI_L2CACHE_SET_TAG_WRITE, 10, 8 },
-	{ PMC_EV_BERI_L2CACHE_SET_TAG_READ, 10, 9 },
-	{ PMC_EV_BERI_MEM_BYTE_READ, 11, 0 },
-	{ PMC_EV_BERI_MEM_BYTE_WRITE, 11, 1 },
-	{ PMC_EV_BERI_MEM_HWORD_READ, 11, 2 },
-	{ PMC_EV_BERI_MEM_HWORD_WRITE, 11, 3 },
-	{ PMC_EV_BERI_MEM_WORD_READ, 11, 4 },
-	{ PMC_EV_BERI_MEM_WORD_WRITE, 11, 5 },
-	{ PMC_EV_BERI_MEM_DWORD_READ, 11, 6 },
-	{ PMC_EV_BERI_MEM_DWORD_WRITE, 11, 7 },
-	{ PMC_EV_BERI_MEM_CAP_READ, 11, 8 },
-	{ PMC_EV_BERI_MEM_CAP_WRITE, 11, 9 },
-	{ PMC_EV_BERI_MEM_CAP_READ_TAG_SET, 11, 10 },
-	{ PMC_EV_BERI_MEM_CAP_WRITE_TAG_SET, 11, 11 },
-	{ PMC_EV_BERI_TAGCACHE_WRITE_HIT, 12, 0 },
-	{ PMC_EV_BERI_TAGCACHE_WRITE_MISS, 12, 1 },
-	{ PMC_EV_BERI_TAGCACHE_READ_HIT, 12, 2 },
-	{ PMC_EV_BERI_TAGCACHE_READ_MISS, 12, 3 },
-	{ PMC_EV_BERI_TAGCACHE_EVICT, 12, 6 },
-	{ PMC_EV_BERI_L2CACHEMASTER_READ_REQ, 13, 0 },
-	{ PMC_EV_BERI_L2CACHEMASTER_WRITE_REQ, 13, 1 },
-	{ PMC_EV_BERI_L2CACHEMASTER_WRITE_REQ_FLIT, 13, 2 },
-	{ PMC_EV_BERI_L2CACHEMASTER_READ_RSP, 13, 3 },
-	{ PMC_EV_BERI_L2CACHEMASTER_READ_RSP_FLIT, 13, 4 },
-	{ PMC_EV_BERI_L2CACHEMASTER_WRITE_RSP, 13, 5 },
-	{ PMC_EV_BERI_TAGCACHEMASTER_READ_REQ, 14, 0 },
-	{ PMC_EV_BERI_TAGCACHEMASTER_WRITE_REQ, 14, 1 },
-	{ PMC_EV_BERI_TAGCACHEMASTER_WRITE_REQ_FLIT, 14, 2 },
-	{ PMC_EV_BERI_TAGCACHEMASTER_READ_RSP, 14, 3 },
-	{ PMC_EV_BERI_TAGCACHEMASTER_READ_RSP_FLIT, 14, 4 },
-	{ PMC_EV_BERI_TAGCACHEMASTER_WRITE_RSP, 14, 5 },
+	{ PMC_EV_BERI_CYCLE,
+		statcounters_get_cycle_count },
+	{ PMC_EV_BERI_INST,
+		statcounters_get_inst_count },
+	{ PMC_EV_BERI_INST_USER,
+		statcounters_get_inst_user_count },
+	{ PMC_EV_BERI_INST_KERNEL,
+		statcounters_get_inst_kernel_count },
+	{ PMC_EV_BERI_IMPRECISE_SETBOUNDS,
+		statcounters_get_imprecise_setbounds_count },
+	{ PMC_EV_BERI_UNREPRESENTABLE_CAPS,
+		statcounters_get_unrepresentable_caps_count },
+	{ PMC_EV_BERI_ITLB_MISS,
+		statcounters_get_itlb_miss_count },
+	{ PMC_EV_BERI_DTLB_MISS,
+		statcounters_get_dtlb_miss_count },
+	{ PMC_EV_BERI_ICACHE_WRITE_HIT,
+		statcounters_get_icache_write_hit_count },
+	{ PMC_EV_BERI_ICACHE_WRITE_MISS,
+		statcounters_get_icache_write_miss_count },
+	{ PMC_EV_BERI_ICACHE_READ_HIT,
+		statcounters_get_icache_read_hit_count },
+	{ PMC_EV_BERI_ICACHE_READ_MISS,
+		statcounters_get_icache_read_miss_count },
+	{ PMC_EV_BERI_ICACHE_EVICT,
+		statcounters_get_icache_evict_count },
+	{ PMC_EV_BERI_DCACHE_WRITE_HIT,
+		statcounters_get_dcache_write_hit_count },
+	{ PMC_EV_BERI_DCACHE_WRITE_MISS,
+		statcounters_get_dcache_write_miss_count },
+	{ PMC_EV_BERI_DCACHE_READ_HIT,
+		statcounters_get_dcache_read_hit_count },
+	{ PMC_EV_BERI_DCACHE_READ_MISS,
+		statcounters_get_dcache_read_miss_count },
+	{ PMC_EV_BERI_DCACHE_EVICT,
+		statcounters_get_dcache_evict_count },
+	{ PMC_EV_BERI_DCACHE_SET_TAG_WRITE,
+		statcounters_get_dcache_set_tag_write_count },
+	{ PMC_EV_BERI_DCACHE_SET_TAG_READ,
+		statcounters_get_dcache_set_tag_read_count },
+	{ PMC_EV_BERI_L2CACHE_WRITE_HIT,
+		statcounters_get_l2cache_write_hit_count },
+	{ PMC_EV_BERI_L2CACHE_WRITE_MISS,
+		statcounters_get_l2cache_write_miss_count },
+	{ PMC_EV_BERI_L2CACHE_READ_HIT,
+		statcounters_get_l2cache_read_hit_count },
+	{ PMC_EV_BERI_L2CACHE_READ_MISS,
+		statcounters_get_l2cache_read_miss_count },
+	{ PMC_EV_BERI_L2CACHE_EVICT,
+		statcounters_get_l2cache_evict_count },
+	{ PMC_EV_BERI_L2CACHE_SET_TAG_WRITE,
+		statcounters_get_l2cache_set_tag_write_count },
+	{ PMC_EV_BERI_L2CACHE_SET_TAG_READ,
+		statcounters_get_l2cache_set_tag_read_count },
+	{ PMC_EV_BERI_MEM_BYTE_READ,
+		statcounters_get_mem_byte_read_count },
+	{ PMC_EV_BERI_MEM_BYTE_WRITE,
+		statcounters_get_mem_byte_write_count },
+	{ PMC_EV_BERI_MEM_HWORD_READ,
+		statcounters_get_mem_hword_read_count },
+	{ PMC_EV_BERI_MEM_HWORD_WRITE,
+		statcounters_get_mem_hword_write_count },
+	{ PMC_EV_BERI_MEM_WORD_READ,
+		statcounters_get_mem_word_read_count },
+	{ PMC_EV_BERI_MEM_WORD_WRITE,
+		statcounters_get_mem_word_write_count },
+	{ PMC_EV_BERI_MEM_DWORD_READ,
+		statcounters_get_mem_dword_read_count },
+	{ PMC_EV_BERI_MEM_DWORD_WRITE,
+		statcounters_get_mem_dword_write_count },
+	{ PMC_EV_BERI_MEM_CAP_READ,
+		statcounters_get_mem_cap_read_count },
+	{ PMC_EV_BERI_MEM_CAP_WRITE,
+		statcounters_get_mem_cap_write_count },
+	{ PMC_EV_BERI_MEM_CAP_READ_TAG_SET,
+		statcounters_get_mem_cap_read_tag_set_count },
+	{ PMC_EV_BERI_MEM_CAP_WRITE_TAG_SET,
+		statcounters_get_mem_cap_write_tag_set_count },
+	{ PMC_EV_BERI_TAGCACHE_WRITE_HIT,
+		statcounters_get_tagcache_write_hit_count },
+	{ PMC_EV_BERI_TAGCACHE_WRITE_MISS,
+		statcounters_get_tagcache_write_miss_count },
+	{ PMC_EV_BERI_TAGCACHE_READ_HIT,
+		statcounters_get_tagcache_read_hit_count },
+	{ PMC_EV_BERI_TAGCACHE_READ_MISS,
+		statcounters_get_tagcache_read_miss_count },
+	{ PMC_EV_BERI_TAGCACHE_EVICT,
+		statcounters_get_tagcache_evict_count },
+	{ PMC_EV_BERI_L2CACHEMASTER_READ_REQ,
+		statcounters_get_l2cachemaster_read_req_count },
+	{ PMC_EV_BERI_L2CACHEMASTER_WRITE_REQ,
+		statcounters_get_l2cachemaster_write_req_count },
+	{ PMC_EV_BERI_L2CACHEMASTER_WRITE_REQ_FLIT,
+		statcounters_get_l2cachemaster_write_req_flit_count },
+	{ PMC_EV_BERI_L2CACHEMASTER_READ_RSP,
+		statcounters_get_l2cachemaster_read_rsp_count },
+	{ PMC_EV_BERI_L2CACHEMASTER_READ_RSP_FLIT,
+		statcounters_get_l2cachemaster_read_rsp_flit_count },
+	{ PMC_EV_BERI_L2CACHEMASTER_WRITE_RSP,
+		statcounters_get_l2cachemaster_write_rsp_count },
+	{ PMC_EV_BERI_TAGCACHEMASTER_READ_REQ,
+		statcounters_get_tagcachemaster_read_req_count },
+	{ PMC_EV_BERI_TAGCACHEMASTER_WRITE_REQ,
+		statcounters_get_tagcachemaster_write_req_count },
+	{ PMC_EV_BERI_TAGCACHEMASTER_WRITE_REQ_FLIT,
+		statcounters_get_tagcachemaster_write_req_flit_count },
+	{ PMC_EV_BERI_TAGCACHEMASTER_READ_RSP,
+		statcounters_get_tagcachemaster_read_rsp_count },
+	{ PMC_EV_BERI_TAGCACHEMASTER_READ_RSP_FLIT,
+		statcounters_get_tagcachemaster_read_rsp_flit_count },
+	{ PMC_EV_BERI_TAGCACHEMASTER_WRITE_RSP,
+		statcounters_get_tagcachemaster_write_rsp_count },
 };
 
 const int beri_event_codes_size = nitems(beri_event_codes);
@@ -174,6 +231,7 @@ mips_allocate_pmc(int cpu, int ri, struct pmc *pm,
 		if (beri_event_codes[i].pe_ev == pe) {
 			//event = beri_event_codes[i].pe_code;
 			//counter =  beri_event_codes[i].pe_counter;
+			config = i;
 			break;
 		}
 	}
@@ -184,7 +242,7 @@ mips_allocate_pmc(int cpu, int ri, struct pmc *pm,
 	if ((counter != MIPS_CTR_ALL) && (counter != ri))
 		return (EINVAL);
 
-	config = 0;//mips_get_perfctl(cpu, ri, event, caps);
+	//config = mips_get_perfctl(cpu, ri, event, caps);
 
 	pm->pm_md.pm_mips_evsel = config;
 
@@ -193,21 +251,12 @@ mips_allocate_pmc(int cpu, int ri, struct pmc *pm,
 	return 0;
 }
 
-#if 0
-static inline uint64_t
-statcounters_get_##name##_count(void)   \
-{                                           \
-    uint64_t ret;                           \
-    __asm __volatile(".word (0x1f << 26) | (0x0 << 21) | (12 << 16) | ("#X" << 11) | ( "#Y"  << 6) | 0x3b\n\tmove %0,$12" : "=r" (ret) :: "$12"); \
-    return ret;                             \
-}
-#endif
-
 static int
 mips_read_pmc(int cpu, int ri, pmc_value_t *v)
 {
 	struct pmc *pm;
 	pmc_value_t tmp;
+	uint32_t config;
 
 	printf("%s\n", __func__);
 
@@ -220,7 +269,9 @@ mips_read_pmc(int cpu, int ri, pmc_value_t *v)
 	tmp = 0;//mips_pmcn_read(ri);
 	PMCDBG2(MDP,REA,2,"mips-read id=%d -> %jd", ri, tmp);
 
-	*v = 3;
+	config = pm->pm_md.pm_mips_evsel;
+
+	*v = beri_event_codes[config].get_func();
 
 	return (0);
 
@@ -289,6 +340,7 @@ mips_start_pmc(int cpu, int ri)
         struct pmc_hw *phw;
 
 	printf("%s\n", __func__);
+	return (0);
 
 	phw    = &mips_pcpu[cpu]->pc_mipspmcs[ri];
 	pm     = phw->phw_pmc;
