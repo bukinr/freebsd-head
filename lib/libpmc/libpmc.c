@@ -145,6 +145,7 @@ PMC_CLASSDEP_TABLE(armv7, ARMV7);
 PMC_CLASSDEP_TABLE(armv8, ARMV8);
 PMC_CLASSDEP_TABLE(mips24k, MIPS24K);
 PMC_CLASSDEP_TABLE(mips74k, MIPS74K);
+PMC_CLASSDEP_TABLE(beri, BERI);
 PMC_CLASSDEP_TABLE(octeon, OCTEON);
 PMC_CLASSDEP_TABLE(ppc7450, PPC7450);
 PMC_CLASSDEP_TABLE(ppc970, PPC970);
@@ -194,6 +195,7 @@ PMC_MDEP_TABLE(cortex_a57, ARMV8, PMC_CLASS_SOFT, PMC_CLASS_ARMV8);
 PMC_MDEP_TABLE(mips24k, MIPS24K, PMC_CLASS_SOFT, PMC_CLASS_MIPS24K);
 PMC_MDEP_TABLE(mips74k, MIPS74K, PMC_CLASS_SOFT, PMC_CLASS_MIPS74K);
 PMC_MDEP_TABLE(octeon, OCTEON, PMC_CLASS_SOFT, PMC_CLASS_OCTEON);
+PMC_MDEP_TABLE(beri, BERI, PMC_CLASS_SOFT, PMC_CLASS_BERI);
 PMC_MDEP_TABLE(ppc7450, PPC7450, PMC_CLASS_SOFT, PMC_CLASS_PPC7450, PMC_CLASS_TSC);
 PMC_MDEP_TABLE(ppc970, PPC970, PMC_CLASS_SOFT, PMC_CLASS_PPC970, PMC_CLASS_TSC);
 PMC_MDEP_TABLE(e500, E500, PMC_CLASS_SOFT, PMC_CLASS_E500, PMC_CLASS_TSC);
@@ -238,6 +240,7 @@ PMC_CLASS_TABLE_DESC(cortex_a57, ARMV8, cortex_a57, arm64);
 PMC_CLASS_TABLE_DESC(mips24k, MIPS24K, mips24k, mips);
 PMC_CLASS_TABLE_DESC(mips74k, MIPS74K, mips74k, mips);
 PMC_CLASS_TABLE_DESC(octeon, OCTEON, octeon, mips);
+PMC_CLASS_TABLE_DESC(beri, BERI, beri, mips);
 #endif /* __mips__ */
 #if defined(__powerpc__)
 PMC_CLASS_TABLE_DESC(ppc7450, PPC7450, ppc7450, powerpc);
@@ -843,6 +846,11 @@ static struct pmc_event_alias mips74k_aliases[] = {
 	EV_ALIAS(NULL, NULL)
 };
 
+static struct pmc_event_alias beri_aliases[] = {
+	EV_ALIAS("instructions",	"INST"),
+	EV_ALIAS(NULL, NULL)
+};
+
 static struct pmc_event_alias octeon_aliases[] = {
 	EV_ALIAS("instructions",	"RET"),
 	EV_ALIAS("branches",		"BR"),
@@ -1279,6 +1287,10 @@ pmc_event_names_of_class(enum pmc_class cl, const char ***eventnames,
 		ev = octeon_event_table;
 		count = PMC_EVENT_TABLE_SIZE(octeon);
 		break;
+	case PMC_CLASS_BERI:
+		ev = beri_event_table;
+		count = PMC_EVENT_TABLE_SIZE(beri);
+		break;
 	case PMC_CLASS_PPC7450:
 		ev = ppc7450_event_table;
 		count = PMC_EVENT_TABLE_SIZE(ppc7450);
@@ -1520,6 +1532,10 @@ pmc_init(void)
 		PMC_MDEP_INIT(octeon);
 		pmc_class_table[n] = &octeon_class_table_descr;
 		break;
+	case PMC_CPU_MIPS_BERI:
+		PMC_MDEP_INIT(beri);
+		pmc_class_table[n] = &beri_class_table_descr;
+		break;
 #endif /* __mips__ */
 #if defined(__powerpc__)
 	case PMC_CPU_PPC_7450:
@@ -1651,6 +1667,9 @@ _pmc_name_of_event(enum pmc_event pe, enum pmc_cputype cpu)
 	} else if (pe >= PMC_EV_MIPS74K_FIRST && pe <= PMC_EV_MIPS74K_LAST) {
 		ev = mips74k_event_table;
 		evfence = mips74k_event_table + PMC_EVENT_TABLE_SIZE(mips74k);
+	} else if (pe >= PMC_EV_BERI_FIRST && pe <= PMC_EV_BERI_LAST) {
+		ev = beri_event_table;
+		evfence = beri_event_table + PMC_EVENT_TABLE_SIZE(beri);
 	} else if (pe >= PMC_EV_OCTEON_FIRST && pe <= PMC_EV_OCTEON_LAST) {
 		ev = octeon_event_table;
 		evfence = octeon_event_table + PMC_EVENT_TABLE_SIZE(octeon);

@@ -247,6 +247,7 @@ usr/sbin/diskinfo
 usr/sbin/iostat
 usr/sbin/ip6addrctl
 usr/sbin/pmcstat
+usr/sbin/pmccontrol
 usr/sbin/mtest
 usr/sbin/mtree
 usr/sbin/ndp

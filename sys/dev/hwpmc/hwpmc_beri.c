@@ -1,6 +1,7 @@
 /*-
- * Copyright (c) 2010 George V. Neville-Neil <gnn@freebsd.org>
- * Copyright (c) 2015 Adrian Chadd <adrian@freebsd.org>
+ * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
+ *
+ * Copyright (c) 2010, George V. Neville-Neil <gnn@freebsd.org>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,232 +30,906 @@
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
+#include "opt_hwpmc_hooks.h"
+
 #include <sys/param.h>
-#include <sys/systm.h>
 #include <sys/pmc.h>
 #include <sys/pmckern.h>
+#include <sys/systm.h>
 
-#include <machine/cpu.h>
-#include <machine/cpufunc.h>
 #include <machine/pmc_mdep.h>
+#include <machine/md_var.h>
+#include <machine/mips_opcode.h>
+#include <machine/vmparam.h>
 
-#define	MIPS74K_PMC_CAPS	(PMC_CAP_INTERRUPT | PMC_CAP_USER |     \
-				 PMC_CAP_SYSTEM | PMC_CAP_EDGE |	\
-				 PMC_CAP_THRESHOLD | PMC_CAP_READ |	\
-				 PMC_CAP_WRITE | PMC_CAP_INVERT |	\
-				 PMC_CAP_QUALIFIER)
+#define	BERI_PMC_CAPS	(PMC_CAP_INTERRUPT | PMC_CAP_USER |     \
+			 PMC_CAP_SYSTEM | PMC_CAP_EDGE |	\
+			 PMC_CAP_THRESHOLD | PMC_CAP_READ |	\
+			 PMC_CAP_WRITE | PMC_CAP_INVERT |	\
+			 PMC_CAP_QUALIFIER)
 
-/* 0x1 - Exception_enable */
-#define MIPS74K_PMC_INTERRUPT_ENABLE      0x10 /* Enable interrupts */
-#define MIPS74K_PMC_USER_ENABLE           0x08 /* Count in USER mode */
-#define MIPS74K_PMC_SUPER_ENABLE          0x04 /* Count in SUPERVISOR mode */
-#define MIPS74K_PMC_KERNEL_ENABLE         0x02 /* Count in KERNEL mode */
-#define MIPS74K_PMC_ENABLE (MIPS74K_PMC_USER_ENABLE |	   \
-			    MIPS74K_PMC_SUPER_ENABLE |	   \
-			    MIPS74K_PMC_KERNEL_ENABLE)
-
-#define MIPS74K_PMC_SELECT 5 /* Which bit position the event starts at. */
-
-const struct mips_event_code_map mips_event_codes[] = {
-	{ PMC_EV_MIPS74K_CYCLES, MIPS_CTR_ALL, 0 },
-	{ PMC_EV_MIPS74K_INSTR_EXECUTED, MIPS_CTR_ALL, 1 },
-	{ PMC_EV_MIPS74K_PREDICTED_JR_31, MIPS_CTR_0, 2 },
-	{ PMC_EV_MIPS74K_JR_31_MISPREDICTIONS, MIPS_CTR_1, 2 },
-	{ PMC_EV_MIPS74K_REDIRECT_STALLS, MIPS_CTR_0, 3 },
-	{ PMC_EV_MIPS74K_JR_31_NO_PREDICTIONS, MIPS_CTR_1, 3 },
-	{ PMC_EV_MIPS74K_ITLB_ACCESSES, MIPS_CTR_0, 4 },
-	{ PMC_EV_MIPS74K_ITLB_MISSES, MIPS_CTR_1, 4 },
-	{ PMC_EV_MIPS74K_JTLB_INSN_MISSES, MIPS_CTR_1, 5 },
-	{ PMC_EV_MIPS74K_ICACHE_ACCESSES, MIPS_CTR_0, 6 },
-	{ PMC_EV_MIPS74K_ICACHE_MISSES, MIPS_CTR_1, 6 },
-	{ PMC_EV_MIPS74K_ICACHE_MISS_STALLS, MIPS_CTR_0, 7 },
-	{ PMC_EV_MIPS74K_UNCACHED_IFETCH_STALLS, MIPS_CTR_0, 8 },
-	{ PMC_EV_MIPS74K_PDTRACE_BACK_STALLS, MIPS_CTR_1, 8 },
-	{ PMC_EV_MIPS74K_IFU_REPLAYS, MIPS_CTR_0, 9 },
-	{ PMC_EV_MIPS74K_KILLED_FETCH_SLOTS, MIPS_CTR_1, 9 },
-	{ PMC_EV_MIPS74K_IFU_IDU_MISS_PRED_UPSTREAM_CYCLES, MIPS_CTR_0, 11 },
-	{ PMC_EV_MIPS74K_IFU_IDU_NO_FETCH_CYCLES, MIPS_CTR_1, 11 },
-	{ PMC_EV_MIPS74K_IFU_IDU_CLOGED_DOWNSTREAM_CYCLES, MIPS_CTR_0, 12 },
-	{ PMC_EV_MIPS74K_DDQ0_FULL_DR_STALLS, MIPS_CTR_0, 13 },
-	{ PMC_EV_MIPS74K_DDQ1_FULL_DR_STALLS, MIPS_CTR_1, 13 },
-	{ PMC_EV_MIPS74K_ALCB_FULL_DR_STALLS, MIPS_CTR_0, 14 },
-	{ PMC_EV_MIPS74K_AGCB_FULL_DR_STALLS, MIPS_CTR_1, 14 },
-	{ PMC_EV_MIPS74K_CLDQ_FULL_DR_STALLS, MIPS_CTR_0, 15 },
-	{ PMC_EV_MIPS74K_IODQ_FULL_DR_STALLS, MIPS_CTR_1, 15 },
-	{ PMC_EV_MIPS74K_ALU_EMPTY_CYCLES, MIPS_CTR_0, 16 },
-	{ PMC_EV_MIPS74K_AGEN_EMPTY_CYCLES, MIPS_CTR_1, 16 },
-	{ PMC_EV_MIPS74K_ALU_OPERANDS_NOT_READY_CYCLES, MIPS_CTR_0, 17 },
-	{ PMC_EV_MIPS74K_AGEN_OPERANDS_NOT_READY_CYCLES, MIPS_CTR_1, 17 },
-	{ PMC_EV_MIPS74K_ALU_NO_ISSUES_CYCLES, MIPS_CTR_0, 18 },
-	{ PMC_EV_MIPS74K_AGEN_NO_ISSUES_CYCLES, MIPS_CTR_1, 18 },
-	{ PMC_EV_MIPS74K_ALU_BUBBLE_CYCLES, MIPS_CTR_0, 19 },
-	{ PMC_EV_MIPS74K_AGEN_BUBBLE_CYCLES, MIPS_CTR_1, 19 },
-	{ PMC_EV_MIPS74K_SINGLE_ISSUE_CYCLES, MIPS_CTR_0, 20 },
-	{ PMC_EV_MIPS74K_DUAL_ISSUE_CYCLES, MIPS_CTR_1, 20 },
-	{ PMC_EV_MIPS74K_OOO_ALU_ISSUE_CYCLES, MIPS_CTR_0, 21 },
-	{ PMC_EV_MIPS74K_OOO_AGEN_ISSUE_CYCLES, MIPS_CTR_1, 21 },
-	{ PMC_EV_MIPS74K_JALR_JALR_HB_INSNS, MIPS_CTR_0, 22 },
-	{ PMC_EV_MIPS74K_DCACHE_LINE_REFILL_REQUESTS, MIPS_CTR_1, 22 },
-	{ PMC_EV_MIPS74K_DCACHE_LOAD_ACCESSES, MIPS_CTR_0, 23 },
-	{ PMC_EV_MIPS74K_DCACHE_ACCESSES, MIPS_CTR_1, 23 },
-	{ PMC_EV_MIPS74K_DCACHE_WRITEBACKS, MIPS_CTR_0, 24 },
-	{ PMC_EV_MIPS74K_DCACHE_MISSES, MIPS_CTR_1, 24 },
-	{ PMC_EV_MIPS74K_JTLB_DATA_ACCESSES, MIPS_CTR_0, 25 },
-	{ PMC_EV_MIPS74K_JTLB_DATA_MISSES, MIPS_CTR_1, 25 },
-	{ PMC_EV_MIPS74K_LOAD_STORE_REPLAYS, MIPS_CTR_0, 26 },
-	{ PMC_EV_MIPS74K_VA_TRANSALTION_CORNER_CASES, MIPS_CTR_1, 26 },
-	{ PMC_EV_MIPS74K_LOAD_STORE_BLOCKED_CYCLES, MIPS_CTR_0, 27 },
-	{ PMC_EV_MIPS74K_LOAD_STORE_NO_FILL_REQUESTS, MIPS_CTR_1, 27 },
-	{ PMC_EV_MIPS74K_L2_CACHE_WRITEBACKS, MIPS_CTR_0, 28 },
-	{ PMC_EV_MIPS74K_L2_CACHE_ACCESSES, MIPS_CTR_1, 28 },
-	{ PMC_EV_MIPS74K_L2_CACHE_MISSES, MIPS_CTR_0, 29 },
-	{ PMC_EV_MIPS74K_L2_CACHE_MISS_CYCLES, MIPS_CTR_1, 29 },
-	{ PMC_EV_MIPS74K_FSB_FULL_STALLS, MIPS_CTR_0, 30 },
-	{ PMC_EV_MIPS74K_FSB_OVER_50_FULL, MIPS_CTR_1, 30 },
-	{ PMC_EV_MIPS74K_LDQ_FULL_STALLS, MIPS_CTR_0, 31 },
-	{ PMC_EV_MIPS74K_LDQ_OVER_50_FULL, MIPS_CTR_1, 31 },
-	{ PMC_EV_MIPS74K_WBB_FULL_STALLS, MIPS_CTR_0, 32 },
-	{ PMC_EV_MIPS74K_WBB_OVER_50_FULL, MIPS_CTR_1, 32 },
-	{ PMC_EV_MIPS74K_LOAD_MISS_CONSUMER_REPLAYS, MIPS_CTR_0, 35 },
-	{ PMC_EV_MIPS74K_CP1_CP2_LOAD_INSNS, MIPS_CTR_1, 35 },
-	{ PMC_EV_MIPS74K_JR_NON_31_INSNS, MIPS_CTR_0, 36 },
-	{ PMC_EV_MIPS74K_MISPREDICTED_JR_31_INSNS, MIPS_CTR_1, 36 },
-	{ PMC_EV_MIPS74K_BRANCH_INSNS, MIPS_CTR_0, 37 },
-	{ PMC_EV_MIPS74K_CP1_CP2_COND_BRANCH_INSNS, MIPS_CTR_1, 37 },
-	{ PMC_EV_MIPS74K_BRANCH_LIKELY_INSNS, MIPS_CTR_0, 38 },
-	{ PMC_EV_MIPS74K_MISPREDICTED_BRANCH_LIKELY_INSNS, MIPS_CTR_1, 38 },
-	{ PMC_EV_MIPS74K_COND_BRANCH_INSNS, MIPS_CTR_0, 39 },
-	{ PMC_EV_MIPS74K_MISPREDICTED_BRANCH_INSNS, MIPS_CTR_1, 39 },
-	{ PMC_EV_MIPS74K_INTEGER_INSNS, MIPS_CTR_0, 40 },
-	{ PMC_EV_MIPS74K_FPU_INSNS, MIPS_CTR_1, 40 },
-	{ PMC_EV_MIPS74K_LOAD_INSNS, MIPS_CTR_0, 41 },
-	{ PMC_EV_MIPS74K_STORE_INSNS, MIPS_CTR_1, 41 },
-	{ PMC_EV_MIPS74K_J_JAL_INSNS, MIPS_CTR_0, 42 },
-	{ PMC_EV_MIPS74K_MIPS16_INSNS, MIPS_CTR_1, 42 },
-	{ PMC_EV_MIPS74K_NOP_INSNS, MIPS_CTR_0, 43 },
-	{ PMC_EV_MIPS74K_NT_MUL_DIV_INSNS, MIPS_CTR_1, 43 },
-	{ PMC_EV_MIPS74K_DSP_INSNS, MIPS_CTR_0, 44 },
-	{ PMC_EV_MIPS74K_ALU_DSP_SATURATION_INSNS, MIPS_CTR_1, 44 },
-	{ PMC_EV_MIPS74K_DSP_BRANCH_INSNS, MIPS_CTR_0, 45 },
-	{ PMC_EV_MIPS74K_MDU_DSP_SATURATION_INSNS, MIPS_CTR_1, 45 },
-	{ PMC_EV_MIPS74K_UNCACHED_LOAD_INSNS, MIPS_CTR_0, 46 },
-	{ PMC_EV_MIPS74K_UNCACHED_STORE_INSNS, MIPS_CTR_1, 46 },
-	{ PMC_EV_MIPS74K_EJTAG_INSN_TRIGGERS, MIPS_CTR_0, 49 },
-	{ PMC_EV_MIPS74K_CP1_BRANCH_MISPREDICTIONS, MIPS_CTR_0, 50 },
-	{ PMC_EV_MIPS74K_SC_INSNS, MIPS_CTR_0, 51 },
-	{ PMC_EV_MIPS74K_FAILED_SC_INSNS, MIPS_CTR_1, 51 },
-	{ PMC_EV_MIPS74K_PREFETCH_INSNS, MIPS_CTR_0, 52 },
-	{ PMC_EV_MIPS74K_CACHE_HIT_PREFETCH_INSNS, MIPS_CTR_1, 52 },
-	{ PMC_EV_MIPS74K_NO_INSN_CYCLES, MIPS_CTR_0, 53 },
-	{ PMC_EV_MIPS74K_LOAD_MISS_INSNS, MIPS_CTR_1, 53 },
-	{ PMC_EV_MIPS74K_ONE_INSN_CYCLES, MIPS_CTR_0, 54 },
-	{ PMC_EV_MIPS74K_TWO_INSNS_CYCLES, MIPS_CTR_1, 54 },
-	{ PMC_EV_MIPS74K_GFIFO_BLOCKED_CYCLES, MIPS_CTR_0, 55 },
-	{ PMC_EV_MIPS74K_CP1_CP2_STORE_INSNS, MIPS_CTR_1, 55 },
-	{ PMC_EV_MIPS74K_MISPREDICTION_STALLS, MIPS_CTR_0, 56 },
-	{ PMC_EV_MIPS74K_MISPREDICTED_BRANCH_INSNS_CYCLES, MIPS_CTR_0, 57 },
-	{ PMC_EV_MIPS74K_EXCEPTIONS_TAKEN, MIPS_CTR_0, 58 },
-	{ PMC_EV_MIPS74K_GRADUATION_REPLAYS, MIPS_CTR_1, 58 },
-	{ PMC_EV_MIPS74K_COREEXTEND_EVENTS, MIPS_CTR_0, 59 },
-	{ PMC_EV_MIPS74K_ISPRAM_EVENTS, MIPS_CTR_0, 62 },
-	{ PMC_EV_MIPS74K_DSPRAM_EVENTS, MIPS_CTR_1, 62 },
-	{ PMC_EV_MIPS74K_L2_CACHE_SINGLE_BIT_ERRORS, MIPS_CTR_0, 63 },
-	{ PMC_EV_MIPS74K_SYSTEM_EVENT_0, MIPS_CTR_0, 64 },
-	{ PMC_EV_MIPS74K_SYSTEM_EVENT_1, MIPS_CTR_1, 64 },
-	{ PMC_EV_MIPS74K_SYSTEM_EVENT_2, MIPS_CTR_0, 65 },
-	{ PMC_EV_MIPS74K_SYSTEM_EVENT_3, MIPS_CTR_1, 65 },
-	{ PMC_EV_MIPS74K_SYSTEM_EVENT_4, MIPS_CTR_0, 66 },
-	{ PMC_EV_MIPS74K_SYSTEM_EVENT_5, MIPS_CTR_1, 66 },
-	{ PMC_EV_MIPS74K_SYSTEM_EVENT_6, MIPS_CTR_0, 67 },
-	{ PMC_EV_MIPS74K_SYSTEM_EVENT_7, MIPS_CTR_1, 67 },
-	{ PMC_EV_MIPS74K_OCP_ALL_REQUESTS, MIPS_CTR_0, 68 },
-	{ PMC_EV_MIPS74K_OCP_ALL_CACHEABLE_REQUESTS, MIPS_CTR_1, 68 },
-	{ PMC_EV_MIPS74K_OCP_READ_REQUESTS, MIPS_CTR_0, 69 },
-	{ PMC_EV_MIPS74K_OCP_READ_CACHEABLE_REQUESTS, MIPS_CTR_1, 69 },
-	{ PMC_EV_MIPS74K_OCP_WRITE_REQUESTS, MIPS_CTR_0, 70 },
-	{ PMC_EV_MIPS74K_OCP_WRITE_CACHEABLE_REQUESTS, MIPS_CTR_1, 70 },
-	{ PMC_EV_MIPS74K_FSB_LESS_25_FULL, MIPS_CTR_0, 74 },
-	{ PMC_EV_MIPS74K_FSB_25_50_FULL, MIPS_CTR_1, 74 },
-	{ PMC_EV_MIPS74K_LDQ_LESS_25_FULL, MIPS_CTR_0, 75 },
-	{ PMC_EV_MIPS74K_LDQ_25_50_FULL, MIPS_CTR_1, 75 },
-	{ PMC_EV_MIPS74K_WBB_LESS_25_FULL, MIPS_CTR_0, 76 },
-	{ PMC_EV_MIPS74K_WBB_25_50_FULL, MIPS_CTR_1, 76 },
+struct beri_event_code_map {
+	uint32_t	pe_ev;       /* enum value */
+	uint8_t		pe_reg;
+	uint8_t		pe_sel;
 };
 
-const int mips_event_codes_size = nitems(mips_event_codes);
+const struct beri_event_code_map beri_event_codes[] = {
+	{ PMC_EV_BERI_CYCLE, 2, 0 },
+	{ PMC_EV_BERI_INST, 4, 0 },
+	{ PMC_EV_BERI_INST_USER, 4, 1 },
+	{ PMC_EV_BERI_INST_KERNEL, 4, 2 },
+	{ PMC_EV_BERI_IMPRECISE_SETBOUNDS, 4, 3 },
+	{ PMC_EV_BERI_UNREPRESENTABLE_CAPS, 4, 4 },
+	{ PMC_EV_BERI_ITLB_MISS, 5, 0 },
+	{ PMC_EV_BERI_DTLB_MISS, 6, 0 },
+	{ PMC_EV_BERI_ICACHE_WRITE_HIT, 8, 0 },
+	{ PMC_EV_BERI_ICACHE_WRITE_MISS, 8, 1 },
+	{ PMC_EV_BERI_ICACHE_READ_HIT, 8, 2 },
+	{ PMC_EV_BERI_ICACHE_READ_MISS, 8, 3 },
+	{ PMC_EV_BERI_ICACHE_EVICT, 8, 6 },
+	{ PMC_EV_BERI_DCACHE_WRITE_HIT, 9, 0 },
+	{ PMC_EV_BERI_DCACHE_WRITE_MISS, 9, 1 },
+	{ PMC_EV_BERI_DCACHE_READ_HIT, 9, 2 },
+	{ PMC_EV_BERI_DCACHE_READ_MISS, 9, 3 },
+	{ PMC_EV_BERI_DCACHE_EVICT, 9, 6 },
+	{ PMC_EV_BERI_DCACHE_SET_TAG_WRITE, 9, 8 },
+	{ PMC_EV_BERI_DCACHE_SET_TAG_READ, 9, 9 },
+	{ PMC_EV_BERI_L2CACHE_WRITE_HIT, 10, 0 },
+	{ PMC_EV_BERI_L2CACHE_WRITE_MISS, 10, 1 },
+	{ PMC_EV_BERI_L2CACHE_READ_HIT, 10, 2 },
+	{ PMC_EV_BERI_L2CACHE_READ_MISS, 10, 3 },
+	{ PMC_EV_BERI_L2CACHE_EVICT, 10, 6 },
+	{ PMC_EV_BERI_L2CACHE_SET_TAG_WRITE, 10, 8 },
+	{ PMC_EV_BERI_L2CACHE_SET_TAG_READ, 10, 9 },
+	{ PMC_EV_BERI_MEM_BYTE_READ, 11, 0 },
+	{ PMC_EV_BERI_MEM_BYTE_WRITE, 11, 1 },
+	{ PMC_EV_BERI_MEM_HWORD_READ, 11, 2 },
+	{ PMC_EV_BERI_MEM_HWORD_WRITE, 11, 3 },
+	{ PMC_EV_BERI_MEM_WORD_READ, 11, 4 },
+	{ PMC_EV_BERI_MEM_WORD_WRITE, 11, 5 },
+	{ PMC_EV_BERI_MEM_DWORD_READ, 11, 6 },
+	{ PMC_EV_BERI_MEM_DWORD_WRITE, 11, 7 },
+	{ PMC_EV_BERI_MEM_CAP_READ, 11, 8 },
+	{ PMC_EV_BERI_MEM_CAP_WRITE, 11, 9 },
+	{ PMC_EV_BERI_MEM_CAP_READ_TAG_SET, 11, 10 },
+	{ PMC_EV_BERI_MEM_CAP_WRITE_TAG_SET, 11, 11 },
+	{ PMC_EV_BERI_TAGCACHE_WRITE_HIT, 12, 0 },
+	{ PMC_EV_BERI_TAGCACHE_WRITE_MISS, 12, 1 },
+	{ PMC_EV_BERI_TAGCACHE_READ_HIT, 12, 2 },
+	{ PMC_EV_BERI_TAGCACHE_READ_MISS, 12, 3 },
+	{ PMC_EV_BERI_TAGCACHE_EVICT, 12, 6 },
+	{ PMC_EV_BERI_L2CACHEMASTER_READ_REQ, 13, 0 },
+	{ PMC_EV_BERI_L2CACHEMASTER_WRITE_REQ, 13, 1 },
+	{ PMC_EV_BERI_L2CACHEMASTER_WRITE_REQ_FLIT, 13, 2 },
+	{ PMC_EV_BERI_L2CACHEMASTER_READ_RSP, 13, 3 },
+	{ PMC_EV_BERI_L2CACHEMASTER_READ_RSP_FLIT, 13, 4 },
+	{ PMC_EV_BERI_L2CACHEMASTER_WRITE_RSP, 13, 5 },
+	{ PMC_EV_BERI_TAGCACHEMASTER_READ_REQ, 14, 0 },
+	{ PMC_EV_BERI_TAGCACHEMASTER_WRITE_REQ, 14, 1 },
+	{ PMC_EV_BERI_TAGCACHEMASTER_WRITE_REQ_FLIT, 14, 2 },
+	{ PMC_EV_BERI_TAGCACHEMASTER_READ_RSP, 14, 3 },
+	{ PMC_EV_BERI_TAGCACHEMASTER_READ_RSP_FLIT, 14, 4 },
+	{ PMC_EV_BERI_TAGCACHEMASTER_WRITE_RSP, 14, 5 },
+};
+
+const int beri_event_codes_size = nitems(beri_event_codes);
 
 struct mips_pmc_spec mips_pmc_spec = {
-	.ps_cpuclass = PMC_CLASS_MIPS74K,
-	.ps_cputype = PMC_CPU_MIPS_74K,
-	.ps_capabilities = MIPS74K_PMC_CAPS,
+	.ps_cpuclass = PMC_CLASS_BERI,
+	.ps_cputype = PMC_CPU_MIPS_BERI,
+	.ps_capabilities = BERI_PMC_CAPS,
 	.ps_counter_width = 32
 };
 
+int mips_npmcs;
+
 /*
- * Performance Count Register N
+ * Per-processor information.
  */
-uint64_t
-mips_pmcn_read(unsigned int pmc)
+struct mips_cpu {
+	struct pmc_hw	*pc_mipspmcs;
+};
+
+static struct mips_cpu **mips_pcpu;
+
+#if defined(__mips_n64)
+#	define	MIPS_IS_VALID_KERNELADDR(reg)	((((reg) & 3) == 0) && \
+					((vm_offset_t)(reg) >= MIPS_XKPHYS_START))
+#else
+#	define	MIPS_IS_VALID_KERNELADDR(reg)	((((reg) & 3) == 0) && \
+					((vm_offset_t)(reg) >= MIPS_KSEG0_START))
+#endif
+
+/*
+ * We need some reasonable default to prevent backtrace code
+ * from wandering too far
+ */
+#define	MAX_FUNCTION_SIZE 0x10000
+#define	MAX_PROLOGUE_SIZE 0x100
+
+static int
+mips_allocate_pmc(int cpu, int ri, struct pmc *pm,
+  const struct pmc_op_pmcallocate *a)
 {
-	uint32_t reg = 0;
+	enum pmc_event pe;
+	uint32_t caps, config, counter;
+	uint32_t event;
+	int i;
 
-	KASSERT(pmc < mips_npmcs, ("[mips74k,%d] illegal PMC number %d",
-				   __LINE__, pmc));
+	printf("%s\n", __func__);
 
-	/* The counter value is the next value after the control register. */
-	switch (pmc) {
-	case 0:
-		reg = mips_rd_perfcnt1();
-		break;
-	case 1:
-		reg = mips_rd_perfcnt3();
-		break;
-	default:
-		return 0;
+	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
+	    ("[mips,%d] illegal CPU value %d", __LINE__, cpu));
+	KASSERT(ri >= 0 && ri < mips_npmcs,
+	    ("[mips,%d] illegal row index %d", __LINE__, ri));
+
+	caps = a->pm_caps;
+	if (a->pm_class != mips_pmc_spec.ps_cpuclass)
+		return (EINVAL);
+	pe = a->pm_ev;
+	counter = MIPS_CTR_ALL;
+	event = 0;
+	for (i = 0; i < beri_event_codes_size; i++) {
+		if (beri_event_codes[i].pe_ev == pe) {
+			//event = beri_event_codes[i].pe_code;
+			//counter =  beri_event_codes[i].pe_counter;
+			break;
+		}
 	}
-	return (reg);
+
+	if (i == beri_event_codes_size)
+		return (EINVAL);
+
+	if ((counter != MIPS_CTR_ALL) && (counter != ri))
+		return (EINVAL);
+
+	config = 0;//mips_get_perfctl(cpu, ri, event, caps);
+
+	pm->pm_md.pm_mips_evsel = config;
+
+	PMCDBG2(MDP,ALL,2,"mips-allocate ri=%d -> config=0x%x", ri, config);
+
+	return 0;
 }
 
-uint64_t
-mips_pmcn_write(unsigned int pmc, uint64_t reg)
+#if 0
+static inline uint64_t
+statcounters_get_##name##_count(void)   \
+{                                           \
+    uint64_t ret;                           \
+    __asm __volatile(".word (0x1f << 26) | (0x0 << 21) | (12 << 16) | ("#X" << 11) | ( "#Y"  << 6) | 0x3b\n\tmove %0,$12" : "=r" (ret) :: "$12"); \
+    return ret;                             \
+}
+#endif
+
+static int
+mips_read_pmc(int cpu, int ri, pmc_value_t *v)
 {
+	struct pmc *pm;
+	pmc_value_t tmp;
 
-	KASSERT(pmc < mips_npmcs, ("[mips74k,%d] illegal PMC number %d",
-				   __LINE__, pmc));
+	printf("%s\n", __func__);
 
-	switch (pmc) {
-	case 0:
-		mips_wr_perfcnt1(reg);
-		break;
-	case 1:
-		mips_wr_perfcnt3(reg);
-		break;
-	default:
-		return 0;
-	}
-	return (reg);
+	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
+	    ("[mips,%d] illegal CPU value %d", __LINE__, cpu));
+	KASSERT(ri >= 0 && ri < mips_npmcs,
+	    ("[mips,%d] illegal row index %d", __LINE__, ri));
+
+	pm  = mips_pcpu[cpu]->pc_mipspmcs[ri].phw_pmc;
+	tmp = 0;//mips_pmcn_read(ri);
+	PMCDBG2(MDP,REA,2,"mips-read id=%d -> %jd", ri, tmp);
+
+	*v = 3;
+
+	return (0);
+
+	if (PMC_IS_SAMPLING_MODE(PMC_TO_MODE(pm)))
+		*v = tmp - (1UL << (mips_pmc_spec.ps_counter_width - 1));
+	else
+		*v = tmp;
+
+	return 0;
 }
 
-uint32_t
-mips_get_perfctl(int cpu, int ri, uint32_t event, uint32_t caps)
+static int
+mips_write_pmc(int cpu, int ri, pmc_value_t v)
+{
+	struct pmc *pm;
+
+	printf("%s\n", __func__);
+
+	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
+	    ("[mips,%d] illegal CPU value %d", __LINE__, cpu));
+	KASSERT(ri >= 0 && ri < mips_npmcs,
+	    ("[mips,%d] illegal row-index %d", __LINE__, ri));
+
+	pm  = mips_pcpu[cpu]->pc_mipspmcs[ri].phw_pmc;
+
+	if (PMC_IS_SAMPLING_MODE(PMC_TO_MODE(pm)))
+		v = (1UL << (mips_pmc_spec.ps_counter_width - 1)) - v;
+	
+	PMCDBG3(MDP,WRI,1,"mips-write cpu=%d ri=%d v=%jx", cpu, ri, v);
+
+	//mips_pmcn_write(ri, v);
+
+	return 0;
+}
+
+static int
+mips_config_pmc(int cpu, int ri, struct pmc *pm)
+{
+	struct pmc_hw *phw;
+
+	PMCDBG3(MDP,CFG,1, "cpu=%d ri=%d pm=%p", cpu, ri, pm);
+
+	printf("%s\n", __func__);
+
+	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
+	    ("[mips,%d] illegal CPU value %d", __LINE__, cpu));
+	KASSERT(ri >= 0 && ri < mips_npmcs,
+	    ("[mips,%d] illegal row-index %d", __LINE__, ri));
+
+	phw = &mips_pcpu[cpu]->pc_mipspmcs[ri];
+
+	KASSERT(pm == NULL || phw->phw_pmc == NULL,
+	    ("[mips,%d] pm=%p phw->pm=%p hwpmc not unconfigured",
+	    __LINE__, pm, phw->phw_pmc));
+
+	phw->phw_pmc = pm;
+
+	return 0;
+}
+
+static int
+mips_start_pmc(int cpu, int ri)
 {
 	uint32_t config;
+        struct pmc *pm;
+        struct pmc_hw *phw;
 
-	config = event;
+	printf("%s\n", __func__);
 
-	config <<= MIPS74K_PMC_SELECT;
+	phw    = &mips_pcpu[cpu]->pc_mipspmcs[ri];
+	pm     = phw->phw_pmc;
+	config = pm->pm_md.pm_mips_evsel;
 
-	if (caps & PMC_CAP_SYSTEM)
-		config |= (MIPS74K_PMC_SUPER_ENABLE |
-			   MIPS74K_PMC_KERNEL_ENABLE);
-	if (caps & PMC_CAP_USER)
-		config |= MIPS74K_PMC_USER_ENABLE;
-	if ((caps & (PMC_CAP_USER | PMC_CAP_SYSTEM)) == 0)
-		config |= MIPS74K_PMC_ENABLE;
-	if (caps & PMC_CAP_INTERRUPT)
-		config |= MIPS74K_PMC_INTERRUPT_ENABLE;
+	/* Enable the PMC. */
+	switch (ri) {
+	case 0:
+		mips_wr_perfcnt0(config);
+		break;
+	case 1:
+		mips_wr_perfcnt2(config);
+		break;
+	default:
+		break;
+	}
 
-	PMCDBG2(MDP,ALL,2,"mips74k-get_perfctl ri=%d -> config=0x%x", ri, config);
+	return 0;
+}
 
-	return (config);
+static int
+mips_stop_pmc(int cpu, int ri)
+{
+        struct pmc *pm;
+        struct pmc_hw *phw;
+
+	printf("%s\n", __func__);
+
+	phw    = &mips_pcpu[cpu]->pc_mipspmcs[ri];
+	pm     = phw->phw_pmc;
+
+	/*
+	 * Disable the PMCs.
+	 *
+	 * Clearing the entire register turns the counter off as well
+	 * as removes the previously sampled event.
+	 */
+	switch (ri) {
+	case 0:
+		mips_wr_perfcnt0(0);
+		break;
+	case 1:
+		mips_wr_perfcnt2(0);
+		break;
+	default:
+		break;
+	}
+	return 0;
+}
+
+static int
+mips_release_pmc(int cpu, int ri, struct pmc *pmc)
+{
+	struct pmc_hw *phw;
+
+	printf("%s\n", __func__);
+
+	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
+	    ("[mips,%d] illegal CPU value %d", __LINE__, cpu));
+	KASSERT(ri >= 0 && ri < mips_npmcs,
+	    ("[mips,%d] illegal row-index %d", __LINE__, ri));
+
+	phw = &mips_pcpu[cpu]->pc_mipspmcs[ri];
+	KASSERT(phw->phw_pmc == NULL,
+	    ("[mips,%d] PHW pmc %p non-NULL", __LINE__, phw->phw_pmc));
+
+	return 0;
+}
+
+static int
+mips_pmc_intr(struct trapframe *tf)
+{
+	int error;
+	int retval, ri, cpu;
+	struct pmc *pm;
+	struct mips_cpu *pc;
+	uint32_t r0, r2;
+	pmc_value_t r;
+
+	printf("%s\n", __func__);
+
+	cpu = curcpu;
+	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
+	    ("[mips,%d] CPU %d out of range", __LINE__, cpu));
+
+	retval = 0;
+	pc = mips_pcpu[cpu];
+
+	/* Stop PMCs without clearing the counter */
+	r0 = mips_rd_perfcnt0();
+	mips_wr_perfcnt0(r0 & ~(0x1f));
+	r2 = mips_rd_perfcnt2();
+	mips_wr_perfcnt2(r2 & ~(0x1f));
+
+	for (ri = 0; ri < mips_npmcs; ri++) {
+		pm = mips_pcpu[cpu]->pc_mipspmcs[ri].phw_pmc;
+		if (pm == NULL)
+			continue;
+		if (! PMC_IS_SAMPLING_MODE(PMC_TO_MODE(pm)))
+			continue;
+
+		r = 0;//mips_pmcn_read(ri);
+
+		/* If bit 31 is set, the counter has overflowed */
+		if ((r & (1UL << (mips_pmc_spec.ps_counter_width - 1))) == 0)
+			continue;
+
+		retval = 1;
+		if (pm->pm_state != PMC_STATE_RUNNING)
+			continue;
+		error = pmc_process_interrupt(PMC_HR, pm, tf);
+		if (error) {
+			/* Clear/disable the relevant counter */
+			if (ri == 0)
+				r0 = 0;
+			else if (ri == 1)
+				r2 = 0;
+			mips_stop_pmc(cpu, ri);
+		}
+
+		/* Reload sampling count */
+		mips_write_pmc(cpu, ri, pm->pm_sc.pm_reloadcount);
+	}
+
+	/*
+	 * Re-enable the PMC counters where they left off.
+	 *
+	 * Any counter which overflowed will have its sample count
+	 * reloaded in the loop above.
+	 */
+	mips_wr_perfcnt0(r0);
+	mips_wr_perfcnt2(r2);
+
+	return retval;
+}
+
+static int
+mips_describe(int cpu, int ri, struct pmc_info *pi, struct pmc **ppmc)
+{
+	int error;
+	struct pmc_hw *phw;
+	char mips_name[PMC_NAME_MAX];
+
+	printf("%s\n", __func__);
+
+	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
+	    ("[mips,%d], illegal CPU %d", __LINE__, cpu));
+	KASSERT(ri >= 0 && ri < mips_npmcs,
+	    ("[mips,%d] row-index %d out of range", __LINE__, ri));
+
+	phw = &mips_pcpu[cpu]->pc_mipspmcs[ri];
+	snprintf(mips_name, sizeof(mips_name), "MIPS-%d", ri);
+	if ((error = copystr(mips_name, pi->pm_name, PMC_NAME_MAX,
+	    NULL)) != 0)
+		return error;
+	pi->pm_class = mips_pmc_spec.ps_cpuclass;
+	if (phw->phw_state & PMC_PHW_FLAG_IS_ENABLED) {
+		pi->pm_enabled = TRUE;
+		*ppmc          = phw->phw_pmc;
+	} else {
+		pi->pm_enabled = FALSE;
+		*ppmc	       = NULL;
+	}
+
+	return (0);
+}
+
+static int
+mips_get_config(int cpu, int ri, struct pmc **ppm)
+{
+
+	printf("%s\n", __func__);
+
+	*ppm = mips_pcpu[cpu]->pc_mipspmcs[ri].phw_pmc;
+
+	return 0;
+}
+
+/*
+ * XXX don't know what we should do here.
+ */
+static int
+mips_pmc_switch_in(struct pmc_cpu *pc, struct pmc_process *pp)
+{
+	return 0;
+}
+
+static int
+mips_pmc_switch_out(struct pmc_cpu *pc, struct pmc_process *pp)
+{
+	return 0;
+}
+
+static int
+mips_pcpu_init(struct pmc_mdep *md, int cpu)
+{
+	int first_ri, i;
+	struct pmc_cpu *pc;
+	struct mips_cpu *pac;
+	struct pmc_hw  *phw;
+
+	printf("%s: %d\n", __func__, cpu);
+
+	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
+	    ("[mips,%d] wrong cpu number %d", __LINE__, cpu));
+	PMCDBG1(MDP,INI,1,"mips-init cpu=%d", cpu);
+
+	mips_pcpu[cpu] = pac = malloc(sizeof(struct mips_cpu), M_PMC,
+	    M_WAITOK|M_ZERO);
+	pac->pc_mipspmcs = malloc(sizeof(struct pmc_hw) * mips_npmcs,
+	    M_PMC, M_WAITOK|M_ZERO);
+	pc = pmc_pcpu[cpu];
+	first_ri = md->pmd_classdep[PMC_MDEP_CLASS_INDEX_MIPS].pcd_ri;
+	KASSERT(pc != NULL, ("[mips,%d] NULL per-cpu pointer", __LINE__));
+
+	for (i = 0, phw = pac->pc_mipspmcs; i < mips_npmcs; i++, phw++) {
+		phw->phw_state    = PMC_PHW_FLAG_IS_ENABLED |
+		    PMC_PHW_CPU_TO_STATE(cpu) | PMC_PHW_INDEX_TO_STATE(i);
+		phw->phw_pmc      = NULL;
+		pc->pc_hwpmcs[i + first_ri] = phw;
+	}
+
+	/*
+	 * Clear the counter control register which has the effect
+	 * of disabling counting.
+	 */
+	//for (i = 0; i < mips_npmcs; i++)
+	//	mips_pmcn_write(i, 0);
+
+	return 0;
+}
+
+static int
+mips_pcpu_fini(struct pmc_mdep *md, int cpu)
+{
+
+	printf("%s\n", __func__);
+
+	return 0;
+}
+
+struct pmc_mdep *
+pmc_mips_initialize()
+{
+	struct pmc_mdep *pmc_mdep;
+	struct pmc_classdep *pcd;
+	
+	printf("%s\n", __func__);
+
+	snprintf(pmc_cpuid, sizeof(pmc_cpuid), "beri");
+
+	/*
+	 * TODO: Use More bit of PerfCntlX register to detect actual 
+	 * number of counters
+	 */
+	mips_npmcs = 2;
+	
+	PMCDBG1(MDP,INI,1,"mips-init npmcs=%d", mips_npmcs);
+
+	/*
+	 * Allocate space for pointers to PMC HW descriptors and for
+	 * the MDEP structure used by MI code.
+	 */
+	mips_pcpu = malloc(sizeof(struct mips_cpu *) * pmc_cpu_max(), M_PMC,
+			   M_WAITOK|M_ZERO);
+
+	/* Just one class */
+	pmc_mdep = pmc_mdep_alloc(1);
+
+	pmc_mdep->pmd_cputype = mips_pmc_spec.ps_cputype;
+
+	pcd = &pmc_mdep->pmd_classdep[PMC_MDEP_CLASS_INDEX_MIPS];
+	pcd->pcd_caps  = mips_pmc_spec.ps_capabilities;
+	pcd->pcd_class = mips_pmc_spec.ps_cpuclass;
+	pcd->pcd_num   = mips_npmcs;
+	pcd->pcd_ri    = pmc_mdep->pmd_npmc;
+	pcd->pcd_width = mips_pmc_spec.ps_counter_width;
+
+	pcd->pcd_allocate_pmc   = mips_allocate_pmc;
+	pcd->pcd_config_pmc     = mips_config_pmc;
+	pcd->pcd_pcpu_fini      = mips_pcpu_fini;
+	pcd->pcd_pcpu_init      = mips_pcpu_init;
+	pcd->pcd_describe       = mips_describe;
+	pcd->pcd_get_config	= mips_get_config;
+	pcd->pcd_read_pmc       = mips_read_pmc;
+	pcd->pcd_release_pmc    = mips_release_pmc;
+	pcd->pcd_start_pmc      = mips_start_pmc;
+	pcd->pcd_stop_pmc       = mips_stop_pmc;
+ 	pcd->pcd_write_pmc      = mips_write_pmc;
+
+	pmc_mdep->pmd_intr       = mips_pmc_intr;
+	pmc_mdep->pmd_switch_in  = mips_pmc_switch_in;
+	pmc_mdep->pmd_switch_out = mips_pmc_switch_out;
+	
+	pmc_mdep->pmd_npmc   += mips_npmcs;
+
+	return (pmc_mdep);
+}
+
+void
+pmc_mips_finalize(struct pmc_mdep *md)
+{
+
+	printf("%s\n", __func__);
+
+	(void) md;
+}
+
+#ifdef	HWPMC_MIPS_BACKTRACE
+
+static int
+pmc_next_frame(register_t *pc, register_t *sp)
+{
+	InstFmt i;
+	uintptr_t va;
+	uint32_t instr, mask;
+	int more, stksize;
+	register_t ra = 0;
+
+	/* Jump here after a nonstandard (interrupt handler) frame */
+	stksize = 0;
+
+	/* check for bad SP: could foul up next frame */
+	if (!MIPS_IS_VALID_KERNELADDR(*sp)) {
+		goto error;
+	}
+
+	/* check for bad PC */
+	if (!MIPS_IS_VALID_KERNELADDR(*pc)) {
+		goto error;
+	}
+
+	/*
+	 * Find the beginning of the current subroutine by scanning
+	 * backwards from the current PC for the end of the previous
+	 * subroutine.
+	 */
+	va = *pc - sizeof(int);
+	while (1) {
+		instr = *((uint32_t *)va);
+
+		/* [d]addiu sp,sp,-X */
+		if (((instr & 0xffff8000) == 0x27bd8000)
+		    || ((instr & 0xffff8000) == 0x67bd8000))
+			break;
+
+		/* jr	ra */
+		if (instr == 0x03e00008) {
+			/* skip over branch-delay slot instruction */
+			va += 2 * sizeof(int);
+			break;
+		}
+
+		va -= sizeof(int);
+	}
+
+	/* skip over nulls which might separate .o files */
+	while ((instr = *((uint32_t *)va)) == 0)
+		va += sizeof(int);
+
+	/* scan forwards to find stack size and any saved registers */
+	stksize = 0;
+	more = 3;
+	mask = 0;
+	for (; more; va += sizeof(int),
+	    more = (more == 3) ? 3 : more - 1) {
+		/* stop if hit our current position */
+		if (va >= *pc)
+			break;
+		instr = *((uint32_t *)va);
+		i.word = instr;
+		switch (i.JType.op) {
+		case OP_SPECIAL:
+			switch (i.RType.func) {
+			case OP_JR:
+			case OP_JALR:
+				more = 2;	/* stop after next instruction */
+				break;
+
+			case OP_SYSCALL:
+			case OP_BREAK:
+				more = 1;	/* stop now */
+			}
+			break;
+
+		case OP_BCOND:
+		case OP_J:
+		case OP_JAL:
+		case OP_BEQ:
+		case OP_BNE:
+		case OP_BLEZ:
+		case OP_BGTZ:
+			more = 2;	/* stop after next instruction */
+			break;
+
+		case OP_COP0:
+		case OP_COP1:
+		case OP_COP2:
+		case OP_COP3:
+			switch (i.RType.rs) {
+			case OP_BCx:
+			case OP_BCy:
+				more = 2;	/* stop after next instruction */
+			}
+			break;
+
+		case OP_SW:
+		case OP_SD:
+			/* 
+			 * SP is being saved using S8(FP). Most likely it indicates
+			 * that SP is modified in the function and we can't get
+			 * its value safely without emulating code backward
+			 * So just bail out on functions like this
+			 */
+			if ((i.IType.rs == 30) && (i.IType.rt = 29))
+				return (-1);
+
+			/* look for saved registers on the stack */
+			if (i.IType.rs != 29)
+				break;
+			/* only restore the first one */
+			if (mask & (1 << i.IType.rt))
+				break;
+			mask |= (1 << i.IType.rt);
+			if (i.IType.rt == 31)
+				ra = *((register_t *)(*sp + (short)i.IType.imm));
+			break;
+
+		case OP_ADDI:
+		case OP_ADDIU:
+		case OP_DADDI:
+		case OP_DADDIU:
+			/* look for stack pointer adjustment */
+			if (i.IType.rs != 29 || i.IType.rt != 29)
+				break;
+			stksize = -((short)i.IType.imm);
+		}
+	}
+
+	if (!MIPS_IS_VALID_KERNELADDR(ra))
+		return (-1);
+
+	*pc = ra;
+	*sp += stksize;
+
+	return (0);
+
+error:
+	return (-1);
+}
+
+static int
+pmc_next_uframe(register_t *pc, register_t *sp, register_t *ra)
+{
+	int offset, registers_on_stack;
+	uint32_t opcode, mask;
+	register_t function_start;
+	int stksize;
+	InstFmt i;
+
+	registers_on_stack = 0;
+	mask = 0;
+	function_start = 0;
+	offset = 0;
+	stksize = 0;
+
+	while (offset < MAX_FUNCTION_SIZE) {
+		opcode = fuword32((void *)(*pc - offset));
+
+		/* [d]addiu sp, sp, -X*/
+		if (((opcode & 0xffff8000) == 0x27bd8000)
+		    || ((opcode & 0xffff8000) == 0x67bd8000)) {
+			function_start = *pc - offset;
+			registers_on_stack = 1;
+			break;
+		}
+
+		/* lui gp, X */
+		if ((opcode & 0xffff8000) == 0x3c1c0000) {
+			/*
+			 * Function might start with this instruction
+			 * Keep an eye on "jr ra" and sp correction
+			 * with positive value further on
+			 */
+			function_start = *pc - offset;
+		}
+
+		if (function_start) {
+			/*
+			 * Stop looking further. Possible end of
+			 * function instruction: it means there is no
+			 * stack modifications, sp is unchanged
+			 */
+
+			/* [d]addiu sp,sp,X */
+			if (((opcode & 0xffff8000) == 0x27bd0000)
+			    || ((opcode & 0xffff8000) == 0x67bd0000))
+				break;
+
+			if (opcode == 0x03e00008)
+				break;
+		}
+
+		offset += sizeof(int);
+	}
+
+	if (!function_start)
+		return (-1);
+
+	if (registers_on_stack) {
+		offset = 0;
+		while ((offset < MAX_PROLOGUE_SIZE)
+		    && ((function_start + offset) < *pc)) {
+			i.word = fuword32((void *)(function_start + offset));
+			switch (i.JType.op) {
+			case OP_SW:
+				/* look for saved registers on the stack */
+				if (i.IType.rs != 29)
+					break;
+				/* only restore the first one */
+				if (mask & (1 << i.IType.rt))
+					break;
+				mask |= (1 << i.IType.rt);
+				if (i.IType.rt == 31)
+					*ra = fuword32((void *)(*sp + (short)i.IType.imm));
+				break;
+
+#if defined(__mips_n64)
+			case OP_SD:
+				/* look for saved registers on the stack */
+				if (i.IType.rs != 29)
+					break;
+				/* only restore the first one */
+				if (mask & (1 << i.IType.rt))
+					break;
+				mask |= (1 << i.IType.rt);
+				/* ra */
+				if (i.IType.rt == 31)
+					*ra = fuword64((void *)(*sp + (short)i.IType.imm));
+			break;
+#endif
+
+			case OP_ADDI:
+			case OP_ADDIU:
+			case OP_DADDI:
+			case OP_DADDIU:
+				/* look for stack pointer adjustment */
+				if (i.IType.rs != 29 || i.IType.rt != 29)
+					break;
+				stksize = -((short)i.IType.imm);
+			}
+
+			offset += sizeof(int);
+		}
+	}
+
+	/*
+	 * We reached the end of backtrace
+	 */
+	if (*pc == *ra)
+		return (-1);
+
+	*pc = *ra;
+	*sp += stksize;
+
+	return (0);
+}
+
+#endif /* HWPMC_MIPS_BACKTRACE */
+
+struct pmc_mdep *
+pmc_md_initialize()
+{
+	return pmc_mips_initialize();
+}
+
+void
+pmc_md_finalize(struct pmc_mdep *md)
+{
+	return pmc_mips_finalize(md);
+}
+
+int
+pmc_save_kernel_callchain(uintptr_t *cc, int nframes,
+    struct trapframe *tf)
+{
+	register_t pc, ra, sp;
+	int frames = 0;
+
+	pc = tf->pc;
+	sp = tf->sp;
+	ra = tf->ra;
+
+	cc[frames++] = pc;
+
+#ifdef	HWPMC_MIPS_BACKTRACE
+	/*
+	 * Unwind, and unwind, and unwind
+	 */
+	while (1) {
+		if (frames >= nframes)
+			break;
+
+		if (pmc_next_frame(&pc, &sp) < 0)
+			break;
+
+		cc[frames++] = pc;
+	}
+#endif
+
+	return (frames);
+}
+
+int
+pmc_save_user_callchain(uintptr_t *cc, int nframes,
+    struct trapframe *tf)
+{
+	register_t pc, ra, sp;
+	int frames = 0;
+
+	pc = tf->pc;
+	sp = tf->sp;
+	ra = tf->ra;
+
+	cc[frames++] = pc;
+
+#ifdef	HWPMC_MIPS_BACKTRACE
+
+	/*
+	 * Unwind, and unwind, and unwind
+	 */
+	while (1) {
+		if (frames >= nframes)
+			break;
+
+		if (pmc_next_uframe(&pc, &sp, &ra) < 0)
+			break;
+
+		cc[frames++] = pc;
+	}
+#endif
+
+	return (frames);
 }

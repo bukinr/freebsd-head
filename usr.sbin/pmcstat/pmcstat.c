@@ -999,6 +999,7 @@ main(int argc, char **argv)
 	 */
 	(void) snprintf(buffer, sizeof(buffer), "%s%s", args.pa_fsroot,
 	    args.pa_kernel);
+#if 0
 	if (stat(buffer, &sb) < 0)
 		err(EX_OSERR, "ERROR: Cannot locate kernel \"%s\"",
 		    buffer);
@@ -1021,6 +1022,7 @@ main(int argc, char **argv)
 			    "ERROR: \"%s\" is not a directory.",
 			    buffer);
 	}
+#endif
 
 	/*
 	 * If we have a callgraph be created, select the outputfile.
