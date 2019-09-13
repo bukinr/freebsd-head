@@ -66,12 +66,17 @@
 #define	X86_PG_AVAIL2	0x400	/*   <	programmers use		*/
 #define	X86_PG_AVAIL3	0x800	/*    \				*/
 #define	X86_PG_PDE_PAT	0x1000	/* PAT	PAT index		*/
+#define	X86_PG_PKU(idx)	((pt_entry_t)idx << 59)
 #define	X86_PG_NX	(1ul<<63) /* No-execute */
 #define	X86_PG_AVAIL(x)	(1ul << (x))
 
 /* Page level cache control fields used to determine the PAT type */
 #define	X86_PG_PDE_CACHE (X86_PG_PDE_PAT | X86_PG_NC_PWT | X86_PG_NC_PCD)
 #define	X86_PG_PTE_CACHE (X86_PG_PTE_PAT | X86_PG_NC_PWT | X86_PG_NC_PCD)
+
+/* Protection keys indexes */
+#define	PMAP_MAX_PKRU_IDX	0xf
+#define	X86_PG_PKU_MASK		X86_PG_PKU(PMAP_MAX_PKRU_IDX)
 
 /*
  * Intel extended page table (EPT) bit definitions.
@@ -114,13 +119,14 @@
 #define	PG_PROMOTED	X86_PG_AVAIL(54)	/* PDE only */
 #define	PG_FRAME	(0x000ffffffffff000ul)
 #define	PG_PS_FRAME	(0x000fffffffe00000ul)
+#define	PG_PS_PDP_FRAME	(0x000fffffc0000000ul)
 
 /*
  * Promotion to a 2MB (PDE) page mapping requires that the corresponding 4KB
  * (PTE) page mappings have identical settings for the following fields:
  */
 #define	PG_PTE_PROMOTE	(PG_NX | PG_MANAGED | PG_W | PG_G | PG_PTE_CACHE | \
-	    PG_M | PG_A | PG_U | PG_RW | PG_V)
+	    PG_M | PG_A | PG_U | PG_RW | PG_V | PG_PKU_MASK)
 
 /*
  * Page Protection Exception bits
@@ -131,6 +137,8 @@
 #define PGEX_U		0x04	/* access from User mode (UPL) */
 #define PGEX_RSV	0x08	/* reserved PTE field is non-zero */
 #define PGEX_I		0x10	/* during an instruction fetch */
+#define	PGEX_PK		0x20	/* protection key violation */
+#define	PGEX_SGX	0x8000	/* SGX-related */
 
 /* 
  * undef the PG_xx macros that define bits in the regular x86 PTEs that
@@ -193,6 +201,13 @@
 #define	NDMPML4E	8
 
 /*
+ * NPAPML4E is the maximum number of PML4 entries that will be
+ * used to implement the page array.  This should be roughly 3% of
+ * NPDPML4E owing to 3% overhead for struct vm_page.
+ */
+#define	NPAPML4E	1
+
+/*
  * These values control the layout of virtual memory.  The starting address
  * of the direct map, which is controlled by DMPML4I, must be a multiple of
  * its size.  (See the PHYS_TO_DMAP() and DMAP_TO_PHYS() macros.)
@@ -211,7 +226,8 @@
 #define	PML4PML4I	(NPML4EPG/2)	/* Index of recursive pml4 mapping */
 
 #define	KPML4BASE	(NPML4EPG-NKPML4E) /* KVM at highest addresses */
-#define	DMPML4I		rounddown(KPML4BASE-NDMPML4E, NDMPML4E) /* Below KVM */
+#define	PAPML4I		(KPML4BASE-1-NPAPML4E) /* Below KVM */
+#define	DMPML4I		rounddown(PAPML4I-NDMPML4E, NDMPML4E) /* Below pages */
 
 #define	KPML4I		(NPML4EPG-1)
 #define	KPDPI		(NPDPEPG-2)	/* kernbase at -2GB */
@@ -240,6 +256,8 @@
 #include <sys/_cpuset.h>
 #include <sys/_lock.h>
 #include <sys/_mutex.h>
+#include <sys/_pctrie.h>
+#include <sys/_rangeset.h>
 
 #include <vm/_vm_radix.h>
 
@@ -334,6 +352,7 @@ struct pmap {
 	long			pm_eptgen;	/* EPT pmap generation id */
 	int			pm_flags;
 	struct pmap_pcids	pm_pcids[MAXCPU];
+	struct rangeset		pm_pkru;
 };
 
 /* flags */
@@ -397,8 +416,6 @@ struct pv_chunk {
 
 extern caddr_t	CADDR1;
 extern pt_entry_t *CMAP1;
-extern vm_paddr_t phys_avail[];
-extern vm_paddr_t dump_avail[];
 extern vm_offset_t virtual_avail;
 extern vm_offset_t virtual_end;
 extern vm_paddr_t dmaplimit;
@@ -431,6 +448,7 @@ void	*pmap_mapbios(vm_paddr_t, vm_size_t);
 void	*pmap_mapdev(vm_paddr_t, vm_size_t);
 void	*pmap_mapdev_attr(vm_paddr_t, vm_size_t, int);
 void	*pmap_mapdev_pciecfg(vm_paddr_t pa, vm_size_t size);
+bool	pmap_not_in_di(void);
 boolean_t pmap_page_is_mapped(vm_page_t m);
 void	pmap_page_set_memattr(vm_page_t m, vm_memattr_t ma);
 void	pmap_pinit_pml4(vm_page_t);
@@ -452,6 +470,12 @@ void	pmap_pti_pcid_invalidate(uint64_t ucr3, uint64_t kcr3);
 void	pmap_pti_pcid_invlpg(uint64_t ucr3, uint64_t kcr3, vm_offset_t va);
 void	pmap_pti_pcid_invlrng(uint64_t ucr3, uint64_t kcr3, vm_offset_t sva,
 	    vm_offset_t eva);
+int	pmap_pkru_clear(pmap_t pmap, vm_offset_t sva, vm_offset_t eva);
+int	pmap_pkru_set(pmap_t pmap, vm_offset_t sva, vm_offset_t eva,
+	    u_int keyidx, int flags);
+void	pmap_thread_init_invl_gen(struct thread *td);
+int	pmap_vmspace_copy(pmap_t dst_pmap, pmap_t src_pmap);
+void	pmap_page_array_startup(long count);
 #endif /* _KERNEL */
 
 /* Return various clipped indexes for a given VA */

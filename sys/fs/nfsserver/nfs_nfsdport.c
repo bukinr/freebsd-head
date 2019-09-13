@@ -110,9 +110,9 @@ static void nfsrv_pnfsremovesetup(struct vnode *, NFSPROC_T *, struct vnode **,
     int *, char *, fhandle_t *);
 static void nfsrv_pnfsremove(struct vnode **, int, char *, fhandle_t *,
     NFSPROC_T *);
-static int nfsrv_proxyds(struct nfsrv_descript *, struct vnode *, off_t, int,
-    struct ucred *, struct thread *, int, struct mbuf **, char *,
-    struct mbuf **, struct nfsvattr *, struct acl *);
+static int nfsrv_proxyds(struct vnode *, off_t, int, struct ucred *,
+    struct thread *, int, struct mbuf **, char *, struct mbuf **,
+    struct nfsvattr *, struct acl *);
 static int nfsrv_setextattr(struct vnode *, struct nfsvattr *, NFSPROC_T *);
 static int nfsrv_readdsrpc(fhandle_t *, off_t, int, struct ucred *,
     NFSPROC_T *, struct nfsmount *, struct mbuf **, struct mbuf **);
@@ -293,7 +293,7 @@ nfsvno_getattr(struct vnode *vp, struct nfsvattr *nvap,
 	    NFSISSET_ATTRBIT(attrbitp, NFSATTRBIT_SIZE) ||
 	    NFSISSET_ATTRBIT(attrbitp, NFSATTRBIT_TIMEACCESS) ||
 	    NFSISSET_ATTRBIT(attrbitp, NFSATTRBIT_TIMEMODIFY))) {
-		error = nfsrv_proxyds(nd, vp, 0, 0, nd->nd_cred, p,
+		error = nfsrv_proxyds(vp, 0, 0, nd->nd_cred, p,
 		    NFSPROC_GETATTR, NULL, NULL, NULL, &na, NULL);
 		if (error == 0)
 			gotattr = 1;
@@ -476,7 +476,7 @@ nfsvno_setattr(struct vnode *vp, struct nfsvattr *nvap, struct ucred *cred,
 	    nvap->na_vattr.va_atime.tv_sec != VNOVAL ||
 	    nvap->na_vattr.va_mtime.tv_sec != VNOVAL)) {
 		/* For a pNFS server, set the attributes on the DS file. */
-		error = nfsrv_proxyds(NULL, vp, 0, 0, cred, p, NFSPROC_SETATTR,
+		error = nfsrv_proxyds(vp, 0, 0, cred, p, NFSPROC_SETATTR,
 		    NULL, NULL, NULL, nvap, NULL);
 		if (error == ENOENT)
 			error = 0;
@@ -795,7 +795,7 @@ nfsvno_read(struct vnode *vp, off_t off, int cnt, struct ucred *cred,
 	 * Attempt to read from a DS file. A return of ENOENT implies
 	 * there is no DS file to read.
 	 */
-	error = nfsrv_proxyds(NULL, vp, off, cnt, cred, p, NFSPROC_READDS, mpp,
+	error = nfsrv_proxyds(vp, off, cnt, cred, p, NFSPROC_READDS, mpp,
 	    NULL, mpendp, NULL, NULL);
 	if (error != ENOENT)
 		return (error);
@@ -891,7 +891,7 @@ nfsvno_write(struct vnode *vp, off_t off, int retlen, int cnt, int *stable,
 	 * Attempt to write to a DS file. A return of ENOENT implies
 	 * there is no DS file to write.
 	 */
-	error = nfsrv_proxyds(NULL, vp, off, retlen, cred, p, NFSPROC_WRITEDS,
+	error = nfsrv_proxyds(vp, off, retlen, cred, p, NFSPROC_WRITEDS,
 	    &mp, cp, NULL, NULL, NULL);
 	if (error != ENOENT) {
 		*stable = NFSWRITE_FILESYNC;
@@ -949,10 +949,11 @@ nfsvno_write(struct vnode *vp, off_t off, int retlen, int cnt, int *stable,
 int
 nfsvno_createsub(struct nfsrv_descript *nd, struct nameidata *ndp,
     struct vnode **vpp, struct nfsvattr *nvap, int *exclusive_flagp,
-    int32_t *cverf, NFSDEV_T rdev, struct thread *p, struct nfsexstuff *exp)
+    int32_t *cverf, NFSDEV_T rdev, struct nfsexstuff *exp)
 {
 	u_quad_t tempsize;
 	int error;
+	struct thread *p = curthread;
 
 	error = nd->nd_repstat;
 	if (!error && ndp->ni_vp == NULL) {
@@ -1631,12 +1632,13 @@ void
 nfsvno_open(struct nfsrv_descript *nd, struct nameidata *ndp,
     nfsquad_t clientid, nfsv4stateid_t *stateidp, struct nfsstate *stp,
     int *exclusive_flagp, struct nfsvattr *nvap, int32_t *cverf, int create,
-    NFSACL_T *aclp, nfsattrbit_t *attrbitp, struct ucred *cred, struct thread *p,
+    NFSACL_T *aclp, nfsattrbit_t *attrbitp, struct ucred *cred,
     struct nfsexstuff *exp, struct vnode **vpp)
 {
 	struct vnode *vp = NULL;
 	u_quad_t tempsize;
 	struct nfsexstuff nes;
+	struct thread *p = curthread;
 
 	if (ndp->ni_vp == NULL)
 		nd->nd_repstat = nfsrv_opencheck(clientid,
@@ -1813,7 +1815,7 @@ nfsvno_fillattr(struct nfsrv_descript *nd, struct mount *mp, struct vnode *vp,
  */
 int
 nfsrvd_readdir(struct nfsrv_descript *nd, int isdgram,
-    struct vnode *vp, struct thread *p, struct nfsexstuff *exp)
+    struct vnode *vp, struct nfsexstuff *exp)
 {
 	struct dirent *dp;
 	u_int32_t *tl;
@@ -1827,6 +1829,7 @@ nfsrvd_readdir(struct nfsrv_descript *nd, int isdgram,
 	struct uio io;
 	struct iovec iv;
 	int is_ufs;
+	struct thread *p = curthread;
 
 	if (nd->nd_repstat) {
 		nfsrv_postopattr(nd, getret, &at);
@@ -2057,7 +2060,7 @@ nfsmout:
  */
 int
 nfsrvd_readdirplus(struct nfsrv_descript *nd, int isdgram,
-    struct vnode *vp, struct thread *p, struct nfsexstuff *exp)
+    struct vnode *vp, struct nfsexstuff *exp)
 {
 	struct dirent *dp;
 	u_int32_t *tl;
@@ -2080,6 +2083,7 @@ nfsrvd_readdirplus(struct nfsrv_descript *nd, int isdgram,
 	int at_root, is_ufs, is_zfs, needs_unbusy, supports_nfsv4acls;
 	struct mount *mp, *new_mp;
 	uint64_t mounted_on_fileno;
+	struct thread *p = curthread;
 
 	if (nd->nd_repstat) {
 		nfsrv_postopattr(nd, getret, &at);
@@ -2122,7 +2126,7 @@ nfsrvd_readdirplus(struct nfsrv_descript *nd, int isdgram,
 		if (error)
 			goto nfsmout;
 		NFSSET_ATTRBIT(&savbits, &attrbits);
-		NFSCLRNOTFILLABLE_ATTRBIT(&attrbits);
+		NFSCLRNOTFILLABLE_ATTRBIT(&attrbits, nd);
 		NFSZERO_ATTRBIT(&rderrbits);
 		NFSSETBIT_ATTRBIT(&rderrbits, NFSATTRBIT_RDATTRERROR);
 	} else {
@@ -2695,10 +2699,12 @@ nfsv4_sattr(struct nfsrv_descript *nd, vnode_t vp, struct nfsvattr *nvap,
 	int attrsum = 0;
 	int i, j;
 	int error, attrsize, bitpos, aclsize, aceerr, retnotsup = 0;
-	int toclient = 0;
+	int moderet, toclient = 0;
 	u_char *cp, namestr[NFSV4_SMALLSTR + 1];
 	uid_t uid;
 	gid_t gid;
+	u_short mode, mask;		/* Same type as va_mode. */
+	struct vattr va;
 
 	error = nfsrv_getattrbits(nd, attrbitp, NULL, &retnotsup);
 	if (error)
@@ -2716,6 +2722,7 @@ nfsv4_sattr(struct nfsrv_descript *nd, vnode_t vp, struct nfsvattr *nvap,
 	} else {
 		bitpos = 0;
 	}
+	moderet = 0;
 	for (; bitpos < NFSATTRBIT_MAX; bitpos++) {
 	    if (attrsum > attrsize) {
 		error = NFSERR_BADXDR;
@@ -2765,6 +2772,7 @@ nfsv4_sattr(struct nfsrv_descript *nd, vnode_t vp, struct nfsvattr *nvap,
 			attrsum += (NFSX_UNSIGNED + NFSM_RNDUP(i));
 			break;
 		case NFSATTRBIT_MODE:
+			moderet = NFSERR_INVAL;	/* Can't do MODESETMASKED. */
 			NFSM_DISSECT(tl, u_int32_t *, NFSX_UNSIGNED);
 			nvap->na_mode = nfstov_mode(*tl);
 			attrsum += NFSX_UNSIGNED;
@@ -2787,8 +2795,8 @@ nfsv4_sattr(struct nfsrv_descript *nd, vnode_t vp, struct nfsvattr *nvap,
 				goto nfsmout;
 			}
 			if (!nd->nd_repstat) {
-				nd->nd_repstat = nfsv4_strtouid(nd, cp, j, &uid,
-				    p);
+				nd->nd_repstat = nfsv4_strtouid(nd, cp, j,
+				    &uid);
 				if (!nd->nd_repstat)
 					nvap->na_uid = uid;
 			}
@@ -2814,8 +2822,8 @@ nfsv4_sattr(struct nfsrv_descript *nd, vnode_t vp, struct nfsvattr *nvap,
 				goto nfsmout;
 			}
 			if (!nd->nd_repstat) {
-				nd->nd_repstat = nfsv4_strtogid(nd, cp, j, &gid,
-				    p);
+				nd->nd_repstat = nfsv4_strtogid(nd, cp, j,
+				    &gid);
 				if (!nd->nd_repstat)
 					nvap->na_gid = gid;
 			}
@@ -2867,6 +2875,32 @@ nfsv4_sattr(struct nfsrv_descript *nd, vnode_t vp, struct nfsvattr *nvap,
 			    if (!toclient)
 				nvap->na_vaflags |= VA_UTIMES_NULL;
 			}
+			break;
+		case NFSATTRBIT_MODESETMASKED:
+			NFSM_DISSECT(tl, uint32_t *, 2 * NFSX_UNSIGNED);
+			mode = fxdr_unsigned(u_short, *tl++);
+			mask = fxdr_unsigned(u_short, *tl);
+			/*
+			 * vp == NULL implies an Open/Create operation.
+			 * This attribute can only be used for Setattr and
+			 * only for NFSv4.1 or higher.
+			 * If moderet != 0, a mode attribute has also been
+			 * specified and this attribute cannot be done in the
+			 * same Setattr operation.
+			 */
+			if ((nd->nd_flag & ND_NFSV41) == 0)
+				nd->nd_repstat = NFSERR_ATTRNOTSUPP;
+			else if ((mode & ~07777) != 0 || (mask & ~07777) != 0 ||
+			    vp == NULL)
+				nd->nd_repstat = NFSERR_INVAL;
+			else if (moderet == 0)
+				moderet = VOP_GETATTR(vp, &va, nd->nd_cred);
+			if (moderet == 0)
+				nvap->na_mode = (mode & mask) |
+				    (va.va_mode & ~mask);
+			else
+				nd->nd_repstat = moderet;
+			attrsum += 2 * NFSX_UNSIGNED;
 			break;
 		default:
 			nd->nd_repstat = NFSERR_ATTRNOTSUPP;
@@ -3039,7 +3073,7 @@ nfsvno_fhtovp(struct mount *mp, fhandle_t *fhp, struct sockaddr *nam,
 void
 nfsd_fhtovp(struct nfsrv_descript *nd, struct nfsrvfh *nfp, int lktype,
     struct vnode **vpp, struct nfsexstuff *exp,
-    struct mount **mpp, int startwrite, struct thread *p)
+    struct mount **mpp, int startwrite)
 {
 	struct mount *mp;
 	struct ucred *credanon;
@@ -4343,7 +4377,7 @@ nfsrv_updatemdsattr(struct vnode *vp, struct nfsvattr *nap, NFSPROC_T *p)
 
 	/* Do this as root so that it won't fail with EACCES. */
 	tcred = newnfs_getcred();
-	error = nfsrv_proxyds(NULL, vp, 0, 0, tcred, p, NFSPROC_LAYOUTRETURN,
+	error = nfsrv_proxyds(vp, 0, 0, tcred, p, NFSPROC_LAYOUTRETURN,
 	    NULL, NULL, NULL, nap, NULL);
 	NFSFREECRED(tcred);
 	return (error);
@@ -4358,15 +4392,15 @@ nfsrv_dssetacl(struct vnode *vp, struct acl *aclp, struct ucred *cred,
 {
 	int error;
 
-	error = nfsrv_proxyds(NULL, vp, 0, 0, cred, p, NFSPROC_SETACL,
+	error = nfsrv_proxyds(vp, 0, 0, cred, p, NFSPROC_SETACL,
 	    NULL, NULL, NULL, NULL, aclp);
 	return (error);
 }
 
 static int
-nfsrv_proxyds(struct nfsrv_descript *nd, struct vnode *vp, off_t off, int cnt,
-    struct ucred *cred, struct thread *p, int ioproc, struct mbuf **mpp,
-    char *cp, struct mbuf **mpp2, struct nfsvattr *nap, struct acl *aclp)
+nfsrv_proxyds(struct vnode *vp, off_t off, int cnt, struct ucred *cred,
+    struct thread *p, int ioproc, struct mbuf **mpp, char *cp,
+    struct mbuf **mpp2, struct nfsvattr *nap, struct acl *aclp)
 {
 	struct nfsmount *nmp[NFSDEV_MAXMIRRORS], *failnmp;
 	fhandle_t fh[NFSDEV_MAXMIRRORS];
@@ -4414,7 +4448,7 @@ nfsrv_proxyds(struct nfsrv_descript *nd, struct vnode *vp, off_t off, int cnt,
 			 * delegation issued to a client for the file.
 			 */
 			if (nfsrv_pnfsgetdsattr == 0 ||
-			    nfsrv_checkdsattr(nd, vp, p) == 0) {
+			    nfsrv_checkdsattr(vp, p) == 0) {
 				free(buf, M_TEMP);
 				return (error);
 			}

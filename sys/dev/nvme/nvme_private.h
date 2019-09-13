@@ -37,6 +37,7 @@
 #include <sys/kernel.h>
 #include <sys/lock.h>
 #include <sys/malloc.h>
+#include <sys/module.h>
 #include <sys/mutex.h>
 #include <sys/rman.h>
 #include <sys/systm.h>
@@ -112,18 +113,9 @@ MALLOC_DECLARE(M_NVME);
 #define CACHE_LINE_SIZE		(64)
 #endif
 
-/*
- * Use presence of the BIO_UNMAPPED flag to determine whether unmapped I/O
- *  support and the bus_dmamap_load_bio API are available on the target
- *  kernel.  This will ease porting back to earlier stable branches at a
- *  later point.
- */
-#ifdef BIO_UNMAPPED
-#define NVME_UNMAPPED_BIO_SUPPORT
-#endif
-
 extern uma_zone_t	nvme_request_zone;
 extern int32_t		nvme_retry_count;
+extern bool		nvme_verbose_cmd_dump;
 
 struct nvme_completion_poll_status {
 
@@ -131,12 +123,12 @@ struct nvme_completion_poll_status {
 	int			done;
 };
 
+extern devclass_t nvme_devclass;
+
 #define NVME_REQUEST_VADDR	1
 #define NVME_REQUEST_NULL	2 /* For requests with no payload. */
 #define NVME_REQUEST_UIO	3
-#ifdef NVME_UNMAPPED_BIO_SUPPORT
 #define NVME_REQUEST_BIO	4
-#endif
 #define NVME_REQUEST_CCB        5
 
 struct nvme_request {
@@ -201,6 +193,8 @@ struct nvme_qpair {
 
 	int64_t			num_cmds;
 	int64_t			num_intr_handler_calls;
+	int64_t			num_retries;
+	int64_t			num_failures;
 
 	struct nvme_command	*cmd;
 	struct nvme_completion	*cpl;
@@ -232,7 +226,7 @@ struct nvme_namespace {
 	uint32_t			flags;
 	struct cdev			*cdev;
 	void				*cons_cookie[NVME_MAX_CONSUMERS];
-	uint32_t			stripesize;
+	uint32_t			boundary;
 	struct mtx			lock;
 };
 
@@ -303,6 +297,9 @@ struct nvme_controller {
 	/** timeout period in seconds */
 	uint32_t		timeout_period;
 
+	/** doorbell stride */
+	uint32_t		dstrd;
+
 	struct nvme_qpair	adminq;
 	struct nvme_qpair	*ioq;
 
@@ -348,11 +345,6 @@ struct nvme_controller {
 		    nvme_mmio_offsetof(reg)+4,				       \
 		    (val & 0xFFFFFFFF00000000ULL) >> 32);		       \
 	} while (0);
-
-#if __FreeBSD_version < 800054
-#define wmb()	__asm volatile("sfence" ::: "memory")
-#define mb()	__asm volatile("mfence" ::: "memory")
-#endif
 
 #define nvme_printf(ctrlr, fmt, args...)	\
     device_printf(ctrlr->dev, fmt, ##args)
@@ -434,8 +426,7 @@ void	nvme_qpair_reset(struct nvme_qpair *qpair);
 void	nvme_qpair_fail(struct nvme_qpair *qpair);
 void	nvme_qpair_manual_complete_request(struct nvme_qpair *qpair,
 					   struct nvme_request *req,
-					   uint32_t sct, uint32_t sc,
-					   boolean_t print_on_error);
+                                           uint32_t sct, uint32_t sc);
 
 void	nvme_admin_qpair_enable(struct nvme_qpair *qpair);
 void	nvme_admin_qpair_disable(struct nvme_qpair *qpair);
@@ -453,6 +444,30 @@ void	nvme_sysctl_initialize_ctrlr(struct nvme_controller *ctrlr);
 
 void	nvme_dump_command(struct nvme_command *cmd);
 void	nvme_dump_completion(struct nvme_completion *cpl);
+
+int	nvme_attach(device_t dev);
+int	nvme_shutdown(device_t dev);
+int	nvme_detach(device_t dev);
+
+/*
+ * Wait for a command to complete using the nvme_completion_poll_cb.
+ * Used in limited contexts where the caller knows it's OK to block
+ * briefly while the command runs. The ISR will run the callback which
+ * will set status->done to true.usually within microseconds. A 1s
+ * pause means something is seriously AFU and we should panic to
+ * provide the proper context to diagnose.
+ */
+static __inline
+void
+nvme_completion_poll(struct nvme_completion_poll_status *status)
+{
+	int sanity = hz * 1;
+
+	while (!atomic_load_acq_int(&status->done) && --sanity > 0)
+		pause("nvme", 1);
+	if (sanity <= 0)
+		panic("NVME polled command failed to complete within 1s.");
+}
 
 static __inline void
 nvme_single_map(void *arg, bus_dma_segment_t *seg, int nseg, int error)
@@ -511,14 +526,8 @@ nvme_allocate_request_bio(struct bio *bio, nvme_cb_fn_t cb_fn, void *cb_arg)
 
 	req = _nvme_allocate_request(cb_fn, cb_arg);
 	if (req != NULL) {
-#ifdef NVME_UNMAPPED_BIO_SUPPORT
 		req->type = NVME_REQUEST_BIO;
 		req->u.bio = bio;
-#else
-		req->type = NVME_REQUEST_VADDR;
-		req->u.payload = bio->bio_data;
-		req->payload_size = bio->bio_bcount;
-#endif
 	}
 	return (req);
 }
@@ -549,5 +558,8 @@ void	nvme_notify_ns(struct nvme_controller *ctrlr, int nsid);
 
 void	nvme_ctrlr_intx_handler(void *arg);
 void	nvme_ctrlr_poll(struct nvme_controller *ctrlr);
+
+int	nvme_ctrlr_suspend(struct nvme_controller *ctrlr);
+int	nvme_ctrlr_resume(struct nvme_controller *ctrlr);
 
 #endif /* __NVME_PRIVATE_H__ */

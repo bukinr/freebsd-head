@@ -44,9 +44,12 @@ static char sccsid[] = "@(#)calendar.c	8.3 (Berkeley) 3/25/94";
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
+#include <sys/types.h>
 #include <err.h>
 #include <errno.h>
 #include <locale.h>
+#include <login_cap.h>
+#include <langinfo.h>
 #include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -66,6 +69,9 @@ static char	*DEBUG = NULL;
 static time_t	f_time = 0;
 double		UTCOffset = UTCOFFSET_NOTSET;
 int		EastLongitude = LONGITUDE_NOTSET;
+#ifdef WITH_ICONV
+const char	*outputEncoding = NULL;
+#endif
 
 static void	usage(void) __dead2;
 
@@ -208,15 +214,33 @@ main(int argc, char *argv[])
 
 	if (doall)
 		while ((pw = getpwent()) != NULL) {
-			(void)setegid(pw->pw_gid);
-			(void)initgroups(pw->pw_name, pw->pw_gid);
-			(void)seteuid(pw->pw_uid);
-			if (!chdir(pw->pw_dir))
+			pid_t pid;
+
+			if (chdir(pw->pw_dir) == -1)
+				continue;
+			pid = fork();
+			if (pid < 0)
+				err(1, "fork");
+			if (pid == 0) {
+				login_cap_t *lc;
+
+				lc = login_getpwclass(pw);
+				if (setusercontext(lc, pw, pw->pw_uid,
+				    LOGIN_SETALL) != 0)
+					errx(1, "setusercontext");
 				cal();
-			(void)seteuid(0);
+				exit(0);
+			}
 		}
-	else
+	else {
+#ifdef WITH_ICONV
+		/* Save the information about the encoding used in the terminal. */
+		outputEncoding = strdup(nl_langinfo(CODESET));
+		if (outputEncoding == NULL)
+			errx(1, "cannot allocate memory");
+#endif
 		cal();
+	}
 	exit(0);
 }
 

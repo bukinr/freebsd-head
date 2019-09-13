@@ -132,11 +132,14 @@ struct netmap_adapter *netmap_getna(if_t ifp);
 #define MBUF_QUEUED(m)		1
 
 struct nm_selinfo {
+	/* Support for select(2) and poll(2). */
 	struct selinfo si;
+	/* Support for kqueue(9). See comments in netmap_freebsd.c */
 	struct taskqueue *ntfytq;
 	struct task ntfytask;
 	struct mtx m;
 	char mtxname[32];
+	int kqueue_users;
 };
 
 
@@ -2387,8 +2390,7 @@ nm_os_get_mbuf(struct ifnet *ifp, int len)
 #endif /* __FreeBSD_version >= 1100000 */
 #endif /* __FreeBSD__ */
 
-struct nmreq_option * nmreq_findoption(struct nmreq_option *, uint16_t);
-int nmreq_checkduplicate(struct nmreq_option *);
+struct nmreq_option * nmreq_getoption(struct nmreq_header *, uint16_t);
 
 int netmap_init_bridges(void);
 void netmap_uninit_bridges(void);

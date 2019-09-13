@@ -7,7 +7,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-// C Includes
 #include <errno.h>
 #include <poll.h>
 #include <signal.h>
@@ -19,16 +18,14 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-// C++ Includes
-// Other libraries and framework includes
-#include "lldb/Core/RegisterValue.h"
-#include "lldb/Core/Scalar.h"
 #include "lldb/Host/Host.h"
 #include "lldb/Host/PseudoTerminal.h"
 #include "lldb/Host/ThreadLauncher.h"
 #include "lldb/Target/RegisterContext.h"
 #include "lldb/Target/Thread.h"
 #include "lldb/Target/UnixSignals.h"
+#include "lldb/Utility/RegisterValue.h"
+#include "lldb/Utility/Scalar.h"
 #include "lldb/Utility/Status.h"
 #include "llvm/Support/Errno.h"
 
@@ -812,7 +809,7 @@ ProcessMonitor::~ProcessMonitor() { StopMonitor(); }
 //------------------------------------------------------------------------------
 // Thread setup and tear down.
 void ProcessMonitor::StartLaunchOpThread(LaunchArgs *args, Status &error) {
-  static const char *g_thread_name = "lldb.process.freebsd.operation";
+  static const char *g_thread_name = "freebsd.op";
 
   if (m_operation_thread.IsJoinable())
     return;
@@ -978,7 +975,7 @@ FINISH:
 
 void ProcessMonitor::StartAttachOpThread(AttachArgs *args,
                                          lldb_private::Status &error) {
-  static const char *g_thread_name = "lldb.process.freebsd.operation";
+  static const char *g_thread_name = "freebsd.op";
 
   if (m_operation_thread.IsJoinable())
     return;

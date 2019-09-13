@@ -2,6 +2,8 @@
 
 . $(atf_get_srcdir)/utils.subr
 
+common_dir=$(atf_get_srcdir)/../common
+
 atf_test_case "v4" "cleanup"
 v4_head()
 {
@@ -14,15 +16,19 @@ v4_head()
 
 v4_body()
 {
+	if [ `uname -p` = "i386" ]; then
+		atf_skip "https://bugs.freebsd.org/239380"
+	fi
+
 	pft_init
 
-	epair_send=$(pft_mkepair)
+	epair_send=$(vnet_mkepair)
 	ifconfig ${epair_send}a 192.0.2.1/24 up
 
-	epair_recv=$(pft_mkepair)
+	epair_recv=$(vnet_mkepair)
 	ifconfig ${epair_recv}a up
 
-	pft_mkjail alcatraz ${epair_send}b ${epair_recv}b
+	vnet_mkjail alcatraz ${epair_send}b ${epair_recv}b
 	jexec alcatraz ifconfig ${epair_send}b 192.0.2.2/24 up
 	jexec alcatraz ifconfig ${epair_recv}b 198.51.100.2/24 up
 	jexec alcatraz sysctl net.inet.ip.forwarding=1
@@ -30,7 +36,7 @@ v4_body()
 	route add -net 198.51.100.0/24 192.0.2.2
 
 	# Sanity check, can we forward ICMP echo requests without pf?
-	atf_check -s exit:0 $(atf_get_srcdir)/pft_ping.py \
+	atf_check -s exit:0 ${common_dir}/pft_ping.py \
 		--sendif ${epair_send}a \
 		--to 198.51.100.3 \
 		--recvif ${epair_recv}a
@@ -39,20 +45,20 @@ v4_body()
 
 	# Forward with pf enabled
 	pft_set_rules alcatraz "block in"
-	atf_check -s exit:1 $(atf_get_srcdir)/pft_ping.py \
+	atf_check -s exit:1 ${common_dir}/pft_ping.py \
 		--sendif ${epair_send}a \
 		--to 198.51.100.3 \
 		--recvif ${epair_recv}a
 
 	pft_set_rules alcatraz "block out"
-	atf_check -s exit:1 $(atf_get_srcdir)/pft_ping.py \
+	atf_check -s exit:1 ${common_dir}/pft_ping.py \
 		--sendif ${epair_send}a \
 		--to 198.51.100.3 \
 		--recv ${epair_recv}a
 
 	# Allow ICMP
 	pft_set_rules alcatraz "block in" "pass in proto icmp"
-	atf_check -s exit:0 $(atf_get_srcdir)/pft_ping.py \
+	atf_check -s exit:0 ${common_dir}/pft_ping.py \
 		--sendif ${epair_send}a \
 		--to 198.51.100.3 \
 		--recvif ${epair_recv}a
@@ -73,15 +79,19 @@ v6_head()
 
 v6_body()
 {
+	if [ `uname -p` = "i386" ]; then
+		atf_skip "https://bugs.freebsd.org/239380"
+	fi
+
 	pft_init
 
-	epair_send=$(pft_mkepair)
-	epair_recv=$(pft_mkepair)
+	epair_send=$(vnet_mkepair)
+	epair_recv=$(vnet_mkepair)
 
 	ifconfig ${epair_send}a inet6 2001:db8:42::1/64 up no_dad -ifdisabled
 	ifconfig ${epair_recv}a up
 
-	pft_mkjail alcatraz ${epair_send}b ${epair_recv}b
+	vnet_mkjail alcatraz ${epair_send}b ${epair_recv}b
 
 	jexec alcatraz ifconfig ${epair_send}b inet6 2001:db8:42::2/64 up no_dad
 	jexec alcatraz ifconfig ${epair_recv}b inet6 2001:db8:43::2/64 up no_dad
@@ -90,7 +100,7 @@ v6_body()
 	route add -6 2001:db8:43::/64 2001:db8:42::2
 
 	# Sanity check, can we forward ICMP echo requests without pf?
-	atf_check -s exit:0 $(atf_get_srcdir)/pft_ping.py \
+	atf_check -s exit:0 ${common_dir}/pft_ping.py \
 		--ip6 \
 		--sendif ${epair_send}a \
 		--to 2001:db8:43::3 \
@@ -101,7 +111,7 @@ v6_body()
 	# Block incoming echo request packets
 	pft_set_rules alcatraz \
 		"block in inet6 proto icmp6 icmp6-type echoreq"
-	atf_check -s exit:1 $(atf_get_srcdir)/pft_ping.py \
+	atf_check -s exit:1 ${common_dir}/pft_ping.py \
 		--ip6 \
 		--sendif ${epair_send}a \
 		--to 2001:db8:43::3 \
@@ -110,7 +120,7 @@ v6_body()
 	# Block outgoing echo request packets
 	pft_set_rules alcatraz \
 		"block out inet6 proto icmp6 icmp6-type echoreq"
-	atf_check -s exit:1 -e ignore $(atf_get_srcdir)/pft_ping.py \
+	atf_check -s exit:1 -e ignore ${common_dir}/pft_ping.py \
 		--ip6 \
 		--sendif ${epair_send}a \
 		--to 2001:db8:43::3 \
@@ -120,7 +130,7 @@ v6_body()
 	pft_set_rules alcatraz \
 		"block out" \
 		"pass out inet6 proto icmp6"
-	atf_check -s exit:0 $(atf_get_srcdir)/pft_ping.py \
+	atf_check -s exit:0 ${common_dir}/pft_ping.py \
 		--ip6 \
 		--sendif ${epair_send}a \
 		--to 2001:db8:43::3 \
@@ -130,7 +140,7 @@ v6_body()
 	pft_set_rules alcatraz \
 		"block out inet6 proto icmp6 icmp6-type echoreq" \
 		"pass in proto icmp"
-	atf_check -s exit:1 $(atf_get_srcdir)/pft_ping.py \
+	atf_check -s exit:1 ${common_dir}/pft_ping.py \
 		--ip6 \
 		--sendif ${epair_send}a \
 		--to 2001:db8:43::3 \

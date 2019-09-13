@@ -32,7 +32,7 @@
 .\"     @(#)dd.1	8.2 (Berkeley) 1/13/94
 .\" $FreeBSD$
 .\"
-.Dd August 8, 2018
+.Dd March 26, 2019
 .Dt DD 1
 .Os
 .Sh NAME
@@ -252,6 +252,10 @@ are maps used in historic
 and
 .No pre- Ns Bx 4.3 reno
 systems.
+.It Cm fsync
+Perform an
+.Xr fsync 2
+on the output file before closing it.
 .It Cm lcase
 Transform uppercase characters into lowercase characters.
 .It Cm pareven , parnone , parodd , parset
@@ -427,7 +431,8 @@ if necessary, to a 1MiB boundary:
 .Xr mt 1 ,
 .Xr recoverdisk 1 ,
 .Xr tr 1 ,
-.Xr geom 4
+.Xr geom 4 ,
+.Xr trim 8
 .Sh STANDARDS
 The
 .Nm

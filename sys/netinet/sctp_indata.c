@@ -915,6 +915,9 @@ restart:
 			break;
 		}
 	}
+	if (cnt_added && strm->pd_api_started) {
+		sctp_wakeup_the_read_socket(stcb->sctp_ep, stcb, SCTP_SO_NOT_LOCKED);
+	}
 	if ((control->length > pd_point) && (strm->pd_api_started == 0)) {
 		strm->pd_api_started = 1;
 		control->pdapi_started = 1;
@@ -947,6 +950,15 @@ sctp_inject_old_unordered_data(struct sctp_tcb *stcb,
 		SCTPDBG(SCTP_DEBUG_XXX,
 		    "chunk is a first fsn: %u becomes fsn_included\n",
 		    chk->rec.data.fsn);
+		at = TAILQ_FIRST(&control->reasm);
+		if (at && SCTP_TSN_GT(chk->rec.data.fsn, at->rec.data.fsn)) {
+			/*
+			 * The first chunk in the reassembly is a smaller
+			 * TSN than this one, even though this has a first,
+			 * it must be from a subsequent msg.
+			 */
+			goto place_chunk;
+		}
 		if (control->first_frag_seen) {
 			/*
 			 * In old un-ordered we can reassembly on one
@@ -1467,6 +1479,16 @@ sctp_queue_data_for_reasm(struct sctp_tcb *stcb, struct sctp_association *asoc,
 				    "The last fsn is now in place fsn: %u\n",
 				    chk->rec.data.fsn);
 				control->last_frag_seen = 1;
+				if (SCTP_TSN_GT(control->top_fsn, chk->rec.data.fsn)) {
+					SCTPDBG(SCTP_DEBUG_XXX,
+					    "New fsn: %u is not at top_fsn: %u -- abort\n",
+					    chk->rec.data.fsn,
+					    control->top_fsn);
+					sctp_abort_in_reasm(stcb, control, chk,
+					    abort_flag,
+					    SCTP_FROM_SCTP_INDATA + SCTP_LOC_9);
+					return;
+				}
 			}
 			if (asoc->idata_supported || control->first_frag_seen) {
 				/*
@@ -1482,7 +1504,7 @@ sctp_queue_data_for_reasm(struct sctp_tcb *stcb, struct sctp_association *asoc,
 					 */
 					sctp_abort_in_reasm(stcb, control, chk,
 					    abort_flag,
-					    SCTP_FROM_SCTP_INDATA + SCTP_LOC_9);
+					    SCTP_FROM_SCTP_INDATA + SCTP_LOC_10);
 					return;
 				}
 			}
@@ -1494,7 +1516,7 @@ sctp_queue_data_for_reasm(struct sctp_tcb *stcb, struct sctp_association *asoc,
 				    chk->rec.data.fsn, control->top_fsn);
 				sctp_abort_in_reasm(stcb, control,
 				    chk, abort_flag,
-				    SCTP_FROM_SCTP_INDATA + SCTP_LOC_10);
+				    SCTP_FROM_SCTP_INDATA + SCTP_LOC_11);
 				return;
 			}
 			if (asoc->idata_supported || control->first_frag_seen) {
@@ -1515,7 +1537,7 @@ sctp_queue_data_for_reasm(struct sctp_tcb *stcb, struct sctp_association *asoc,
 					    chk->rec.data.fsn, control->fsn_included);
 					sctp_abort_in_reasm(stcb, control, chk,
 					    abort_flag,
-					    SCTP_FROM_SCTP_INDATA + SCTP_LOC_11);
+					    SCTP_FROM_SCTP_INDATA + SCTP_LOC_12);
 					return;
 				}
 			}
@@ -1530,7 +1552,7 @@ sctp_queue_data_for_reasm(struct sctp_tcb *stcb, struct sctp_association *asoc,
 				    control->top_fsn);
 				sctp_abort_in_reasm(stcb, control, chk,
 				    abort_flag,
-				    SCTP_FROM_SCTP_INDATA + SCTP_LOC_12);
+				    SCTP_FROM_SCTP_INDATA + SCTP_LOC_13);
 				return;
 			}
 		}
@@ -1573,7 +1595,7 @@ sctp_queue_data_for_reasm(struct sctp_tcb *stcb, struct sctp_association *asoc,
 				    at->rec.data.fsn);
 				sctp_abort_in_reasm(stcb, control,
 				    chk, abort_flag,
-				    SCTP_FROM_SCTP_INDATA + SCTP_LOC_13);
+				    SCTP_FROM_SCTP_INDATA + SCTP_LOC_14);
 				return;
 			}
 		}

@@ -40,9 +40,11 @@ __FBSDID("$FreeBSD$");
 #include <sys/bus.h>
 #include <sys/cpu.h>
 #include <sys/kernel.h>
+#include <sys/ktr.h>
 #include <sys/malloc.h>
 #include <sys/module.h>
 #include <sys/mutex.h>
+#include <sys/pcpu.h>
 #include <sys/proc.h>
 #include <sys/sched.h>
 #include <sys/smp.h>
@@ -110,8 +112,6 @@ static struct intr_ipi ipi_sources[INTR_IPI_COUNT];
 static struct intr_ipi *intr_ipi_lookup(u_int);
 static void intr_pic_ipi_setup(u_int, const char *, intr_ipi_handler_t *,
     void *);
-
-extern struct pcpu __pcpu[];
 
 static void ipi_ast(void *);
 static void ipi_hardclock(void *);
@@ -638,9 +638,10 @@ cpu_find_cpu0_fdt(u_int id, phandle_t node, u_int addr_size, pcell_t *reg)
 void
 cpu_mp_setmaxid(void)
 {
-#if defined(DEV_ACPI) || defined(FDT)
 	int cores;
-#endif
+
+	mp_ncpus = 1;
+	mp_maxid = 0;
 
 	switch(arm64_bus_method) {
 #ifdef DEV_ACPI
@@ -653,7 +654,6 @@ cpu_mp_setmaxid(void)
 				    cores);
 			mp_ncpus = cores;
 			mp_maxid = cores - 1;
-			return;
 		}
 		break;
 #endif
@@ -667,18 +667,21 @@ cpu_mp_setmaxid(void)
 				    cores);
 			mp_ncpus = cores;
 			mp_maxid = cores - 1;
-			return;
 		}
 		break;
 #endif
 	default:
+		if (bootverbose)
+			printf("No CPU data, limiting to 1 core\n");
 		break;
 	}
 
-	if (bootverbose)
-		printf("No CPU data, limiting to 1 core\n");
-	mp_ncpus = 1;
-	mp_maxid = 0;
+	if (TUNABLE_INT_FETCH("hw.ncpu", &cores)) {
+		if (cores > 0 && cores < mp_ncpus) {
+			mp_ncpus = cores;
+			mp_maxid = cores - 1;
+		}
+	}
 }
 
 /*
