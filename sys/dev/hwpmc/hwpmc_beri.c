@@ -285,8 +285,14 @@ mips_read_pmc(int cpu, int ri, pmc_value_t *v)
 
 	if (start_value <= stop_value)
 		result = stop_value - start_value;
-	else
-		result = (0xffffffffffffffffUL - start_value + stop_value);
+	else {
+		if (ri == 0)
+			result = 0x00ffffffffffffffUL;
+		else
+			result = 0xffffffffffffffffUL;
+		result -= start_value;
+		result += stop_value;
+	}
 
 	saved_value = mips_pcpu[cpu]->saved_values[ri];
 
