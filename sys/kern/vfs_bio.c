@@ -67,6 +67,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/kthread.h>
 #include <sys/proc.h>
 #include <sys/racct.h>
+#include <sys/refcount.h>
 #include <sys/resourcevar.h>
 #include <sys/rwlock.h>
 #include <sys/smp.h>
@@ -2614,6 +2615,19 @@ brelse(struct buf *bp)
 		BO_UNLOCK(bp->b_bufobj);
 		bdirty(bp);
 	}
+
+	if (bp->b_iocmd == BIO_WRITE && (bp->b_ioflags & BIO_ERROR) &&
+	    (bp->b_flags & B_INVALONERR)) {
+		/*
+		 * Forced invalidation of dirty buffer contents, to be used
+		 * after a failed write in the rare case that the loss of the
+		 * contents is acceptable.  The buffer is invalidated and
+		 * freed.
+		 */
+		bp->b_flags |= B_INVAL | B_RELBUF | B_NOCACHE;
+		bp->b_flags &= ~(B_ASYNC | B_CACHE);
+	}
+
 	if (bp->b_iocmd == BIO_WRITE && (bp->b_ioflags & BIO_ERROR) &&
 	    (bp->b_error != ENXIO || !LIST_EMPTY(&bp->b_dep)) &&
 	    !(bp->b_flags & B_INVAL)) {
@@ -2829,9 +2843,9 @@ vfs_vmio_iodone(struct buf *bp)
 	bool bogus;
 
 	obj = bp->b_bufobj->bo_object;
-	KASSERT(obj->paging_in_progress >= bp->b_npages,
+	KASSERT(REFCOUNT_COUNT(obj->paging_in_progress) >= bp->b_npages,
 	    ("vfs_vmio_iodone: paging in progress(%d) < b_npages(%d)",
-	    obj->paging_in_progress, bp->b_npages));
+	    REFCOUNT_COUNT(obj->paging_in_progress), bp->b_npages));
 
 	vp = bp->b_vp;
 	KASSERT(vp->v_holdcnt > 0,
