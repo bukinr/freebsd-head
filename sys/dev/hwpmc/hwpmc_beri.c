@@ -176,7 +176,7 @@ struct mips_pmc_spec mips_pmc_spec = {
 	.ps_cpuclass = PMC_CLASS_BERI,
 	.ps_cputype = PMC_CPU_MIPS_BERI,
 	.ps_capabilities = BERI_PMC_CAPS,
-	.ps_counter_width = 32
+	.ps_counter_width = 64
 };
 
 int mips_npmcs;
@@ -186,6 +186,9 @@ int mips_npmcs;
  */
 struct mips_cpu {
 	struct pmc_hw	*pc_mipspmcs;
+	uint64_t	start_values[64];
+	uint64_t	stop_values[64];
+	uint64_t	saved_values[64];
 };
 
 static struct mips_cpu **mips_pcpu;
@@ -214,7 +217,7 @@ mips_allocate_pmc(int cpu, int ri, struct pmc *pm,
 	uint32_t event;
 	int i;
 
-	printf("%s\n", __func__);
+	//printf("%s\n", __func__);
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
 	    ("[mips,%d] illegal CPU value %d", __LINE__, cpu));
@@ -258,8 +261,6 @@ mips_read_pmc(int cpu, int ri, pmc_value_t *v)
 	pmc_value_t tmp;
 	uint32_t config;
 
-	printf("%s\n", __func__);
-
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
 	    ("[mips,%d] illegal CPU value %d", __LINE__, cpu));
 	KASSERT(ri >= 0 && ri < mips_npmcs,
@@ -271,7 +272,27 @@ mips_read_pmc(int cpu, int ri, pmc_value_t *v)
 
 	config = pm->pm_md.pm_mips_evsel;
 
-	*v = beri_event_codes[config].get_func();
+	uint64_t new;
+	new = beri_event_codes[config].get_func();
+
+	pmc_value_t start_value;
+	pmc_value_t stop_value;
+	pmc_value_t saved_value;
+	pmc_value_t result;
+
+	start_value = mips_pcpu[cpu]->start_values[ri];
+	stop_value = mips_pcpu[cpu]->stop_values[ri];
+
+	if (start_value <= stop_value)
+		result = stop_value - start_value;
+	else
+		result = (0xffffffffffffffffUL - start_value + stop_value);
+
+	saved_value = mips_pcpu[cpu]->saved_values[ri];
+
+	*v = result + saved_value;
+
+	//printf("%s: %ld\n", __func__, *v);
 
 	return (0);
 
@@ -288,7 +309,7 @@ mips_write_pmc(int cpu, int ri, pmc_value_t v)
 {
 	struct pmc *pm;
 
-	printf("%s\n", __func__);
+	//printf("%s: %ld\n", __func__, v);
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
 	    ("[mips,%d] illegal CPU value %d", __LINE__, cpu));
@@ -302,7 +323,7 @@ mips_write_pmc(int cpu, int ri, pmc_value_t v)
 	
 	PMCDBG3(MDP,WRI,1,"mips-write cpu=%d ri=%d v=%jx", cpu, ri, v);
 
-	//mips_pmcn_write(ri, v);
+	mips_pcpu[cpu]->saved_values[ri] = v;
 
 	return 0;
 }
@@ -313,8 +334,6 @@ mips_config_pmc(int cpu, int ri, struct pmc *pm)
 	struct pmc_hw *phw;
 
 	PMCDBG3(MDP,CFG,1, "cpu=%d ri=%d pm=%p", cpu, ri, pm);
-
-	printf("%s\n", __func__);
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
 	    ("[mips,%d] illegal CPU value %d", __LINE__, cpu));
@@ -339,12 +358,18 @@ mips_start_pmc(int cpu, int ri)
         struct pmc *pm;
         struct pmc_hw *phw;
 
-	printf("%s\n", __func__);
-	return (0);
-
 	phw = &mips_pcpu[cpu]->pc_mipspmcs[ri];
 	pm = phw->phw_pmc;
 	config = pm->pm_md.pm_mips_evsel;
+
+	pmc_value_t v;
+	v = beri_event_codes[config].get_func();
+	mips_pcpu[cpu]->start_values[ri] = v;
+
+	//printf("%s: %ld\n", __func__, v);
+
+	return (0);
+
 
 	/* Enable the PMC. */
 	switch (ri) {
@@ -364,13 +389,21 @@ mips_start_pmc(int cpu, int ri)
 static int
 mips_stop_pmc(int cpu, int ri)
 {
+	uint32_t config;
         struct pmc *pm;
         struct pmc_hw *phw;
 
-	printf("%s\n", __func__);
-
 	phw = &mips_pcpu[cpu]->pc_mipspmcs[ri];
 	pm = phw->phw_pmc;
+	config = pm->pm_md.pm_mips_evsel;
+
+	pmc_value_t v;
+	v = beri_event_codes[config].get_func();
+	mips_pcpu[cpu]->stop_values[ri] = v;
+
+	//printf("%s: %ld\n", __func__, v);
+
+	return (0);
 
 	/*
 	 * Disable the PMCs.
@@ -396,7 +429,7 @@ mips_release_pmc(int cpu, int ri, struct pmc *pmc)
 {
 	struct pmc_hw *phw;
 
-	printf("%s\n", __func__);
+	//printf("%s\n", __func__);
 
 	KASSERT(cpu >= 0 && cpu < pmc_cpu_max(),
 	    ("[mips,%d] illegal CPU value %d", __LINE__, cpu));
@@ -511,8 +544,6 @@ mips_describe(int cpu, int ri, struct pmc_info *pi, struct pmc **ppmc)
 static int
 mips_get_config(int cpu, int ri, struct pmc **ppm)
 {
-
-	printf("%s\n", __func__);
 
 	*ppm = mips_pcpu[cpu]->pc_mipspmcs[ri].phw_pmc;
 
