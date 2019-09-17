@@ -47,6 +47,7 @@ __FBSDID("$FreeBSD$");
 
 #include <dev/hwpmc/hwpmc_beri.h>
 
+#define	BERI_MAX_STATCOUNTERS	64
 #define	BERI_PMC_CAPS	(PMC_CAP_USER |				\
 			 PMC_CAP_SYSTEM | PMC_CAP_EDGE |	\
 			 PMC_CAP_THRESHOLD | PMC_CAP_READ |	\
@@ -183,15 +184,14 @@ struct mips_pmc_spec mips_pmc_spec = {
 };
 
 int mips_npmcs;
-
 /*
  * Per-processor information.
  */
 struct mips_cpu {
 	struct pmc_hw	*pc_mipspmcs;
-	uint64_t	start_values[64];
-	uint64_t	stop_values[64];
-	uint64_t	saved_values[64];
+	uint64_t	start_values[BERI_MAX_STATCOUNTERS];
+	uint64_t	stop_values[BERI_MAX_STATCOUNTERS];
+	uint64_t	saved_values[BERI_MAX_STATCOUNTERS];
 };
 
 static struct mips_cpu **mips_pcpu;
