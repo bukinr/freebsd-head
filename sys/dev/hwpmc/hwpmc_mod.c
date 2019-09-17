@@ -2084,8 +2084,6 @@ pmc_hook_handler(struct thread *td, int function, void *arg)
 {
 	int cpu;
 
-	//printf("%s: func %d\n", __func__, function);
-
 	PMCDBG4(MOD,PMH,1, "hook td=%p func=%d \"%s\" arg=%p", td, function,
 	    pmc_hooknames[function], arg);
 
@@ -5517,8 +5515,6 @@ pmc_initialize(void)
 	struct pmc_sample *ps;
 	struct pmc_classdep *pcd;
 	struct pmc_samplebuffer *sb;
-
-	printf("%s\n", __func__);
 
 	md = NULL;
 	error = 0;
