@@ -1,8 +1,12 @@
 /*-
- * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
+ * SPDX-License-Identifier: BSD-2-Clause
  *
- * Copyright (c) 2010, George V. Neville-Neil <gnn@freebsd.org>
- * All rights reserved.
+ * Copyright (c) 2019 Ruslan Bukin <br@bsdpad.com>
+ *
+ * This software was developed by SRI International and the University of
+ * Cambridge Computer Laboratory (Department of Computer Science and
+ * Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ * DARPA SSITH research programme.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -24,7 +28,6 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
  */
 
 #include <sys/cdefs.h>
@@ -44,7 +47,7 @@ __FBSDID("$FreeBSD$");
 
 #include <dev/hwpmc/hwpmc_beri.h>
 
-#define	BERI_PMC_CAPS	(PMC_CAP_USER |     \
+#define	BERI_PMC_CAPS	(PMC_CAP_USER |				\
 			 PMC_CAP_SYSTEM | PMC_CAP_EDGE |	\
 			 PMC_CAP_THRESHOLD | PMC_CAP_READ |	\
 			 PMC_CAP_WRITE | PMC_CAP_INVERT |	\
@@ -970,13 +973,15 @@ pmc_next_uframe(register_t *pc, register_t *sp, register_t *ra)
 struct pmc_mdep *
 pmc_md_initialize()
 {
-	return pmc_mips_initialize();
+
+	return (pmc_mips_initialize());
 }
 
 void
 pmc_md_finalize(struct pmc_mdep *md)
 {
-	return pmc_mips_finalize(md);
+
+	return (pmc_mips_finalize(md));
 }
 
 int
