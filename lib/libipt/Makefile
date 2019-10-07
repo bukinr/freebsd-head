@@ -34,6 +34,7 @@ SRCS=	\
 	pt_insn_decoder.c		\
 	pt_insn.c			\
 	pt_last_ip.c			\
+	pt_msec_cache.c			\
 	pt_packet_decoder.c		\
 	pt_packet.c			\
 	pt_query_decoder.c		\
