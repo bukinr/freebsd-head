@@ -1061,7 +1061,7 @@ struct pmc_classdep {
 	int (*pcd_read_pmc)(int _cpu, int _ri, pmc_value_t *_value);
 	int (*pcd_write_pmc)(int _cpu, int _ri, pmc_value_t _value);
 
-	/* trace */
+	/* tracing */
 	int (*pcd_read_trace)(int _cpu, int _ri, struct pmc *_pm,
 	    pmc_value_t *_cycle, pmc_value_t *_offset);
 	int (*pcd_trace_config)(int _cpu, int _ri, struct pmc *_pm,
