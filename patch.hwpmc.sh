@@ -29,6 +29,7 @@ git diff -U99999999 origin/master sys/amd64/include/pmc_mdep.h	\
 
 # 6 - pmctrace
 git diff -U99999999 origin/master usr.sbin/Makefile		\
+	lib/libipt						\
 	usr.sbin/pmctrace/Makefile usr.sbin/pmctrace/pmctrace.c	\
 	usr.sbin/pmctrace/pmctrace.h > patch.hwpmc6
 
