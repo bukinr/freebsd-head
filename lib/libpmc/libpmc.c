@@ -149,6 +149,7 @@ PMC_CLASSDEP_TABLE(k8, K8);
 PMC_CLASSDEP_TABLE(xscale, XSCALE);
 PMC_CLASSDEP_TABLE(armv7, ARMV7);
 PMC_CLASSDEP_TABLE(armv8, ARMV8);
+PMC_CLASSDEP_TABLE(beri, BERI);
 PMC_CLASSDEP_TABLE(mips24k, MIPS24K);
 PMC_CLASSDEP_TABLE(mips74k, MIPS74K);
 PMC_CLASSDEP_TABLE(octeon, OCTEON);
@@ -194,6 +195,7 @@ static const struct pmc_event_descr cortex_a57_event_table[] =
 PMC_MDEP_TABLE(kabylake, PT);
 PMC_MDEP_TABLE(k8, K8, PMC_CLASS_SOFT, PMC_CLASS_TSC);
 PMC_MDEP_TABLE(xscale, XSCALE, PMC_CLASS_SOFT, PMC_CLASS_XSCALE);
+PMC_MDEP_TABLE(beri, BERI, PMC_CLASS_SOFT, PMC_CLASS_BERI);
 PMC_MDEP_TABLE(cortex_a8, ARMV7, PMC_CLASS_SOFT, PMC_CLASS_ARMV7);
 PMC_MDEP_TABLE(cortex_a9, ARMV7, PMC_CLASS_SOFT, PMC_CLASS_ARMV7);
 PMC_MDEP_TABLE(cortex_a53, ARMV8, PMC_CLASS_SOFT, PMC_CLASS_ARMV8, PMC_CLASS_CORESIGHT);
@@ -256,6 +258,7 @@ PMC_CLASS_TABLE_DESC(cortex_a57, ARMV8, cortex_a57, arm64);
 PMC_CLASS_TABLE_DESC(coresight, CORESIGHT, coresight, coresight);
 #endif
 #if defined(__mips__)
+PMC_CLASS_TABLE_DESC(beri, BERI, beri, mips);
 PMC_CLASS_TABLE_DESC(mips24k, MIPS24K, mips24k, mips);
 PMC_CLASS_TABLE_DESC(mips74k, MIPS74K, mips74k, mips);
 PMC_CLASS_TABLE_DESC(octeon, OCTEON, octeon, mips);
@@ -989,6 +992,11 @@ coresight_allocate_pmc(enum pmc_event pe, char *ctrspec,
 
 #if defined(__mips__)
 
+static struct pmc_event_alias beri_aliases[] = {
+	EV_ALIAS("instructions",	"INST"),
+	EV_ALIAS(NULL, NULL)
+};
+
 static struct pmc_event_alias mips24k_aliases[] = {
 	EV_ALIAS("instructions",	"INSTR_EXECUTED"),
 	EV_ALIAS("branches",		"BRANCH_COMPLETED"),
@@ -1429,6 +1437,10 @@ pmc_event_names_of_class(enum pmc_class cl, const char ***eventnames,
 			break;
 		}
 		break;
+	case PMC_CLASS_BERI:
+		ev = beri_event_table;
+		count = PMC_EVENT_TABLE_SIZE(beri);
+		break;
 	case PMC_CLASS_CORESIGHT:
 		ev = coresight_event_table;
 		count = PMC_EVENT_TABLE_SIZE(coresight);
@@ -1686,6 +1698,10 @@ pmc_init(void)
 		break;
 #endif
 #if defined(__mips__)
+	case PMC_CPU_MIPS_BERI:
+		PMC_MDEP_INIT(beri);
+		pmc_class_table[n] = &beri_class_table_descr;
+		break;
 	case PMC_CPU_MIPS_24K:
 		PMC_MDEP_INIT(mips24k);
 		pmc_class_table[n] = &mips24k_class_table_descr;
@@ -1823,9 +1839,13 @@ _pmc_name_of_event(enum pmc_event pe, enum pmc_cputype cpu)
 		default:	/* Unknown CPU type. */
 			break;
 		}
+	} else if (pe >= PMC_EV_BERI_FIRST && pe <= PMC_EV_BERI_LAST) {
+		ev = beri_event_table;
+		evfence = beri_event_table + PMC_EVENT_TABLE_SIZE(beri);
 	} else if (pe == PMC_EV_CORESIGHT_CORESIGHT) {
 		ev = coresight_event_table;
-		evfence = coresight_event_table + PMC_EVENT_TABLE_SIZE(coresight);
+		evfence = coresight_event_table +
+				PMC_EVENT_TABLE_SIZE(coresight);
 	} else if (pe >= PMC_EV_MIPS24K_FIRST && pe <= PMC_EV_MIPS24K_LAST) {
 		ev = mips24k_event_table;
 		evfence = mips24k_event_table + PMC_EVENT_TABLE_SIZE(mips24k);
