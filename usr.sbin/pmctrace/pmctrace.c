@@ -77,6 +77,7 @@ __FBSDID("$FreeBSD$");
 #endif
 
 #define	MAX_CPU	4096
+#define	EV_SPEC_LEN	128
 
 #define	PMCTRACE_DEBUG
 #undef	PMCTRACE_DEBUG
@@ -538,6 +539,7 @@ main(int argc, char *argv[])
 	cpuset_t cpumask;
 	char *func_name;
 	char *func_image;
+	char *ev_spec;
 	int ncpu;
 	int i;
 
@@ -561,13 +563,29 @@ main(int argc, char *argv[])
 	pmctrace_setup_cpumask(&cpumask);
 
 	while ((option = getopt(argc, argv,
-	    "htu:s:i:f:")) != -1)
+	    "htuse:i:f:")) != -1)
 		switch (option) {
 		case 'i':
 			func_image = strdup(optarg);
 			break;
 		case 'f':
 			func_name = strdup(optarg);
+			break;
+		case 'e':
+			if (ev == NULL)
+				usage();
+
+			if (ev->ev_spec == NULL)
+				errx(EX_SOFTWARE, "ERROR: Internal");
+
+			ev_spec = malloc(EV_SPEC_LEN);
+			if (ev_spec == NULL)
+				errx(EX_SOFTWARE, "ERROR: Out of memory.");
+
+			snprintf(ev_spec, EV_SPEC_LEN, "%s,%s",
+				ev->ev_spec, optarg);
+			free(ev->ev_spec);
+			ev->ev_spec = ev_spec;
 			break;
 		case 'u':
 		case 's':
@@ -584,22 +602,20 @@ main(int argc, char *argv[])
 				ev->ev_mode = PMC_MODE_ST;
 				supervisor_mode = 1;
 			}
-			ev->ev_spec = strdup(optarg);
+
+			/*
+			 * Take the first trace device available:
+			 * Intel PT or ARM Coresight.
+			 */
+			pmctrace_cfg.trace_dev = &trace_devs[0];
+			if (pmctrace_cfg.trace_dev == NULL)
+				errx(EX_SOFTWARE,
+					"ERROR: Could not find trace device");
+
+			ev->ev_spec = strdup(pmctrace_cfg.trace_dev->ev_spec);
 			if (ev->ev_spec == NULL)
 				errx(EX_SOFTWARE, "ERROR: Out of memory.");
 
-			for (i = 0; trace_devs[i].ev_spec != NULL; i++) {
-				if (strncmp(trace_devs[i].ev_spec, ev->ev_spec,
-				    strlen(trace_devs[i].ev_spec)) == 0) {
-					/* found */
-					pmctrace_cfg.trace_dev = &trace_devs[i];
-					break;
-				}
-			}
-
-			if (pmctrace_cfg.trace_dev == NULL)
-				errx(EX_SOFTWARE,
-				    "ERROR: trace device not found");
 			break;
 		case 't':
 			if (ev == NULL)
