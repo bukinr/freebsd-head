@@ -5,7 +5,7 @@ if [ "$1" = "fast" ]; then
     A=FAST
 fi
 
-export MAKEOBJDIRPREFIX=/home/br/obj/
+export MAKEOBJDIRPREFIX=/xhome/obj/
 
 #cp lib/libpmc/pmc.h /home/br/obj/usr/home/br/dev/freebsd-head/tmp/usr/include/pmc.h
 #cp sys/dev/hwpmc/hwpmc_pt.h /home/br/obj/usr/home/br/dev/freebsd-head/tmp/usr/include/dev/hwpmc/hwpmc_pt.h
