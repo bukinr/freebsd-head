@@ -523,9 +523,12 @@ usage(void)
 {
 
 	errx(EX_USAGE,
-		"[options] [commandline]\n"
-		"\t -s device\t\tTrace kernel\n"
-		"\t -u device\t\tTrace userspace\n"
+		"[-u|-s] [-e event-spec] [-i image -f func] [commandline]\n"
+		"\t -u\t\t\tfilter by user privilege level\n"
+		"\t -s\t\t\tfilter by kernel privilege level\n"
+		"\t -e\tevent-spec\tcomma-separated event string\n"
+		"\t -i\tname\t\tfilter by dynamic library or kernel module name\n"
+		"\t -f\tname\t\tfilter by function name\n"
 	);
 }
 
@@ -576,7 +579,7 @@ main(int argc, char *argv[])
 				usage();
 
 			if (ev->ev_spec == NULL)
-				errx(EX_SOFTWARE, "ERROR: Internal");
+				errx(EX_SOFTWARE, "Internal error");
 
 			ev_spec = malloc(EV_SPEC_LEN);
 			if (ev_spec == NULL)
@@ -632,7 +635,7 @@ main(int argc, char *argv[])
 
 	if ((user_mode == 0 && supervisor_mode == 0) ||
 	    (user_mode == 1 && supervisor_mode == 1))
-		errx(EX_USAGE, "ERROR: specify -u or -s");
+		usage();
 
 	if ((func_image == NULL && func_name != NULL) ||
 	    (func_image != NULL && func_name == NULL))
