@@ -529,6 +529,11 @@ usage(void)
 		"\t -e\tevent-spec\tcomma-separated event string\n"
 		"\t -i\tname\t\tfilter by dynamic library or kernel module name\n"
 		"\t -f\tname\t\tfilter by function name\n"
+
+#if defined(__amd64__)
+		"\n\tIntel Processor-Trace decoder options:\n"
+		"\t -t\t\t\t(toggle) enable taken/not taken branches packet"
+#endif
 	);
 }
 
@@ -620,15 +625,22 @@ main(int argc, char *argv[])
 				errx(EX_SOFTWARE, "ERROR: Out of memory.");
 
 			break;
+		case 'h':
+			usage();
+			break;
+
+		/* Options passed to the trace decoder.  */
 		case 't':
+			/*
+			 * Intel Processor-Trace only:
+			 * branches taken / not taken.
+			 */
+
 			if (ev == NULL)
 				usage();
 
 			if (pmctrace_cfg.trace_dev->methods->option != NULL)
 				pmctrace_cfg.trace_dev->methods->option(option);
-			break;
-		case 'h':
-			usage();
 		default:
 			break;
 		};
