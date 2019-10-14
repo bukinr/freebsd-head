@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2014, 2019 Ruslan Bukin <br@bsdpad.com>
+ * Copyright (c) 2014-2019 Ruslan Bukin <br@bsdpad.com>
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
