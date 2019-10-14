@@ -746,6 +746,7 @@ int	vn_io_fault_pgmove(vm_page_t ma[], vm_offset_t offset, int xfersize,
 	rangelock_trywlock(&(vp)->v_rl, (start), (end), VI_MTX(vp))
 
 int	vfs_cache_lookup(struct vop_lookup_args *ap);
+int	vfs_cache_root(struct mount *mp, int flags, struct vnode **vpp);
 void	vfs_timestamp(struct timespec *);
 void	vfs_write_resume(struct mount *mp, int flags);
 int	vfs_write_suspend(struct mount *mp, int flags);
@@ -930,6 +931,7 @@ int vfs_kqfilter(struct vop_kqfilter_args *);
 void vfs_mark_atime(struct vnode *vp, struct ucred *cred);
 struct dirent;
 int vfs_read_dirent(struct vop_readdir_args *ap, struct dirent *dp, off_t off);
+int vfs_emptydir(struct vnode *vp);
 
 int vfs_unixify_accmode(accmode_t *accmode);
 

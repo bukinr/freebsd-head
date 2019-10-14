@@ -367,6 +367,9 @@ struct thread {
 	void		*td_lkpi_task;	/* LinuxKPI task struct pointer */
 	struct epoch_tracker *td_et;	/* (k) compat KPI spare tracker */
 	int		td_pmcpend;
+#ifdef EPOCH_TRACE
+	SLIST_HEAD(, epoch_tracker) td_epochs;
+#endif
 };
 
 struct thread0_storage {
@@ -1005,6 +1008,8 @@ struct	fork_req {
 	int 		*fr_pd_fd;
 	int 		fr_pd_flags;
 	struct filecaps	*fr_pd_fcaps;
+	int 		fr_flags2;
+#define	FR2_DROPSIG_CAUGHT	0x00001	/* Drop caught non-DFL signals */
 };
 
 /*

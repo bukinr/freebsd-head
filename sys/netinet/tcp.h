@@ -239,6 +239,7 @@ struct tcphdr {
 #define TCP_BBR_ACK_COMP_ALG   1096 	/* Not used */
 #define TCP_BBR_TMR_PACE_OH    1096	/* Recycled in 4.2 */
 #define TCP_BBR_EXTRA_GAIN     1097
+#define TCP_RACK_DO_DETECTION  1097	/* Recycle of extra gain for rack, attack detection */
 #define TCP_BBR_RACK_RTT_USE   1098	/* what RTT should we use 0, 1, or 2? */
 #define TCP_BBR_RETRAN_WTSO    1099
 #define TCP_DATA_AFTER_CLOSE   1100
@@ -356,6 +357,7 @@ struct tcp_function_set {
 #define	TCP_TLS_MODE_NONE	0
 #define	TCP_TLS_MODE_SW		1
 #define	TCP_TLS_MODE_IFNET	2
+#define	TCP_TLS_MODE_TOE	3
 
 /*
  * TCP Control message types
