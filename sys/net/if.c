@@ -88,8 +88,8 @@
 #include <netinet/ip.h>
 #include <netinet/ip_carp.h>
 #ifdef INET
+#include <net/debugnet.h>
 #include <netinet/if_ether.h>
-#include <netinet/netdump/netdump.h>
 #endif /* INET */
 #ifdef INET6
 #include <netinet6/in6_var.h>
@@ -2313,11 +2313,9 @@ if_link_state_change(struct ifnet *ifp, int link_state)
 static void
 do_link_state_change(void *arg, int pending)
 {
-	struct epoch_tracker et;
 	struct ifnet *ifp;
 	int link_state;
 
-	NET_EPOCH_ENTER(et);
 	ifp = arg;
 	link_state = ifp->if_link_state;
 
@@ -2345,7 +2343,6 @@ do_link_state_change(void *arg, int pending)
 	if (log_link_state_change)
 		if_printf(ifp, "link state changed to %s\n",
 		    (link_state == LINK_STATE_UP) ? "UP" : "DOWN" );
-	NET_EPOCH_EXIT(et);
 	EVENTHANDLER_INVOKE(ifnet_link_event, ifp, link_state);
 	CURVNET_RESTORE();
 }
@@ -2790,7 +2787,7 @@ ifhwioctl(u_long cmd, struct ifnet *ifp, caddr_t data, struct thread *td)
 			getmicrotime(&ifp->if_lastchange);
 			rt_ifmsg(ifp);
 #ifdef INET
-			NETDUMP_REINIT(ifp);
+			DEBUGNET_NOTIFY_MTU(ifp);
 #endif
 		}
 		/*
