@@ -135,6 +135,27 @@ SYSCTL_INT(_kern_elf32, OID_AUTO, read_exec, CTLFLAG_RW, &i386_read_exec, 0,
     "enable execution from readable segments");
 #endif
 
+static u_long __elfN(pie_base) = ET_DYN_LOAD_ADDR;
+static int
+sysctl_pie_base(SYSCTL_HANDLER_ARGS)
+{
+	u_long val;
+	int error;
+
+	val = __elfN(pie_base);
+	error = sysctl_handle_long(oidp, &val, 0, req);
+	if (error != 0 || req->newptr == NULL)
+		return (error);
+	if ((val & PAGE_MASK) != 0)
+		return (EINVAL);
+	__elfN(pie_base) = val;
+	return (0);
+}
+SYSCTL_PROC(__CONCAT(_kern_elf, __ELF_WORD_SIZE), OID_AUTO, pie_base,
+    CTLTYPE_ULONG | CTLFLAG_MPSAFE | CTLFLAG_RW, NULL, 0,
+    sysctl_pie_base, "LU",
+    "PIE load base without randomization");
+
 SYSCTL_NODE(__CONCAT(_kern_elf, __ELF_WORD_SIZE), OID_AUTO, aslr, CTLFLAG_RW, 0,
     "");
 #define	ASLR_NODE_OID	__CONCAT(__CONCAT(_kern_elf, __ELF_WORD_SIZE), _aslr)
@@ -1146,13 +1167,13 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 		if (baddr == 0) {
 			if ((sv->sv_flags & SV_ASLR) == 0 ||
 			    (fctl0 & NT_FREEBSD_FCTL_ASLR_DISABLE) != 0)
-				et_dyn_addr = ET_DYN_LOAD_ADDR;
+				et_dyn_addr = __elfN(pie_base);
 			else if ((__elfN(pie_aslr_enabled) &&
 			    (imgp->proc->p_flag2 & P2_ASLR_DISABLE) == 0) ||
 			    (imgp->proc->p_flag2 & P2_ASLR_ENABLE) != 0)
 				et_dyn_addr = ET_DYN_ADDR_RAND;
 			else
-				et_dyn_addr = ET_DYN_LOAD_ADDR;
+				et_dyn_addr = __elfN(pie_base);
 		}
 	}
 
@@ -1717,8 +1738,7 @@ each_dumpable_segment(struct thread *td, segment_callback func, void *closure)
 	boolean_t ignore_entry;
 
 	vm_map_lock_read(map);
-	for (entry = map->header.next; entry != &map->header;
-	    entry = entry->next) {
+	VM_MAP_ENTRY_FOREACH(entry, map) {
 		/*
 		 * Don't dump inaccessible mappings, deal with legacy
 		 * coredump mode.
@@ -2209,7 +2229,7 @@ __elfN(note_thrmisc)(void *arg, struct sbuf *sb, size_t *sizep)
 	td = (struct thread *)arg;
 	if (sb != NULL) {
 		KASSERT(*sizep == sizeof(thrmisc), ("invalid size"));
-		bzero(&thrmisc._pad, sizeof(thrmisc._pad));
+		bzero(&thrmisc, sizeof(thrmisc));
 		strcpy(thrmisc.pr_tname, td->td_name);
 		sbuf_bcat(sb, &thrmisc, sizeof(thrmisc));
 	}

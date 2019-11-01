@@ -663,8 +663,8 @@ pdir_unhold(mmu_t mmu, pmap_t pmap, u_int pp2d_idx)
 	/*
 	 * Free pdir page if there are no dir entries in this pdir.
 	 */
-	m->wire_count--;
-	if (m->wire_count == 0) {
+	m->ref_count--;
+	if (m->ref_count == 0) {
 		pdir_free(mmu, pmap, pp2d_idx, m);
 		return (1);
 	}
@@ -686,7 +686,7 @@ pdir_hold(mmu_t mmu, pmap_t pmap, pte_t ** pdir)
 	KASSERT((pdir != NULL), ("pdir_hold: null pdir"));
 
 	m = PHYS_TO_VM_PAGE(DMAP_TO_PHYS((vm_offset_t)pdir));
-	m->wire_count++;
+	m->ref_count++;
 }
 
 /* Allocate page table. */
@@ -765,11 +765,11 @@ ptbl_unhold(mmu_t mmu, pmap_t pmap, vm_offset_t va)
 
 	/*
 	 * Free ptbl pages if there are no pte entries in this ptbl.
-	 * wire_count has the same value for all ptbl pages, so check the
+	 * ref_count has the same value for all ptbl pages, so check the
 	 * last page.
 	 */
-	m->wire_count--;
-	if (m->wire_count == 0) {
+	m->ref_count--;
+	if (m->ref_count == 0) {
 		ptbl_free(mmu, pmap, pdir, pdir_idx, m);
 		pdir_unhold(mmu, pmap, pp2d_idx);
 		return (1);
@@ -795,7 +795,7 @@ ptbl_hold(mmu_t mmu, pmap_t pmap, pte_t ** pdir, unsigned int pdir_idx)
 	KASSERT((ptbl != NULL), ("ptbl_hold: null ptbl"));
 
 	m = PHYS_TO_VM_PAGE(DMAP_TO_PHYS((vm_offset_t) ptbl));
-	m->wire_count++;
+	m->ref_count++;
 }
 #else
 
@@ -1010,15 +1010,15 @@ ptbl_unhold(mmu_t mmu, pmap_t pmap, unsigned int pdir_idx)
 		pa = pte_vatopa(mmu, kernel_pmap,
 		    (vm_offset_t)ptbl + (i * PAGE_SIZE));
 		m = PHYS_TO_VM_PAGE(pa);
-		m->wire_count--;
+		m->ref_count--;
 	}
 
 	/*
 	 * Free ptbl pages if there are no pte etries in this ptbl.
-	 * wire_count has the same value for all ptbl pages, so check the last
+	 * ref_count has the same value for all ptbl pages, so check the last
 	 * page.
 	 */
-	if (m->wire_count == 0) {
+	if (m->ref_count == 0) {
 		ptbl_free(mmu, pmap, pdir_idx);
 
 		//debugf("ptbl_unhold: e (freed ptbl)\n");
@@ -1056,7 +1056,7 @@ ptbl_hold(mmu_t mmu, pmap_t pmap, unsigned int pdir_idx)
 		pa = pte_vatopa(mmu, kernel_pmap,
 		    (vm_offset_t)ptbl + (i * PAGE_SIZE));
 		m = PHYS_TO_VM_PAGE(pa);
-		m->wire_count++;
+		m->ref_count++;
 	}
 }
 #endif
@@ -1177,7 +1177,7 @@ pte_remove(mmu_t mmu, pmap_t pmap, vm_offset_t va, u_int8_t flags)
 
 		/* Remove pv_entry from pv_list. */
 		pv_remove(pmap, va, m);
-	} else if (m->md.pv_tracked) {
+	} else if (pmap == kernel_pmap && m && m->md.pv_tracked) {
 		pv_remove(pmap, va, m);
 		if (TAILQ_EMPTY(&m->md.pv_list))
 			m->md.pv_tracked = false;
@@ -1373,7 +1373,7 @@ pte_remove(mmu_t mmu, pmap_t pmap, vm_offset_t va, uint8_t flags)
 			vm_page_aflag_set(m, PGA_REFERENCED);
 
 		pv_remove(pmap, va, m);
-	} else if (m->md.pv_tracked) {
+	} else if (pmap == kernel_pmap && m && m->md.pv_tracked) {
 		/*
 		 * Always pv_insert()/pv_remove() on MPC85XX, in case DPAA is
 		 * used.  This is needed by the NCSW support code for fast
@@ -1787,6 +1787,8 @@ mmu_booke_bootstrap(mmu_t mmu, vm_offset_t start, vm_offset_t kernelend)
 				    hwphyssz - physsz;
 				physsz = hwphyssz;
 				phys_avail_count++;
+				dump_avail[j] = phys_avail[j];
+				dump_avail[j + 1] = phys_avail[j + 1];
 			}
 			break;
 		}
@@ -1796,6 +1798,8 @@ mmu_booke_bootstrap(mmu_t mmu, vm_offset_t start, vm_offset_t kernelend)
 		    availmem_regions[i].mr_size;
 		phys_avail_count++;
 		physsz += availmem_regions[i].mr_size;
+		dump_avail[j] = phys_avail[j];
+		dump_avail[j + 1] = phys_avail[j + 1];
 	}
 	physmem = btoc(physsz);
 
@@ -1877,7 +1881,7 @@ mmu_booke_bootstrap(mmu_t mmu, vm_offset_t start, vm_offset_t kernelend)
 }
 
 #ifdef SMP
- void
+void
 tlb1_ap_prep(void)
 {
 	tlb_entry_t *e, tmp;
@@ -2278,8 +2282,12 @@ mmu_booke_enter_locked(mmu_t mmu, pmap_t pmap, vm_offset_t va, vm_page_t m,
 		KASSERT((va <= VM_MAXUSER_ADDRESS),
 		    ("mmu_booke_enter_locked: user pmap, non user va"));
 	}
-	if ((m->oflags & VPO_UNMANAGED) == 0 && !vm_page_xbusied(m))
-		VM_OBJECT_ASSERT_LOCKED(m->object);
+	if ((m->oflags & VPO_UNMANAGED) == 0) {
+		if ((pmap_flags & PMAP_ENTER_QUICK_LOCKED) == 0)
+			VM_PAGE_OBJECT_BUSY_ASSERT(m);
+		else
+			VM_OBJECT_ASSERT_LOCKED(m->object);
+	}
 
 	PMAP_LOCK_ASSERT(pmap, MA_OWNED);
 
@@ -2447,7 +2455,7 @@ mmu_booke_enter_object(mmu_t mmu, pmap_t pmap, vm_offset_t start,
 	while (m != NULL && (diff = m->pindex - m_start->pindex) < psize) {
 		mmu_booke_enter_locked(mmu, pmap, start + ptoa(diff), m,
 		    prot & (VM_PROT_READ | VM_PROT_EXECUTE),
-		    PMAP_ENTER_NOSLEEP, 0);
+		    PMAP_ENTER_NOSLEEP | PMAP_ENTER_QUICK_LOCKED, 0);
 		m = TAILQ_NEXT(m, listq);
 	}
 	rw_wunlock(&pvh_global_lock);
@@ -2462,8 +2470,8 @@ mmu_booke_enter_quick(mmu_t mmu, pmap_t pmap, vm_offset_t va, vm_page_t m,
 	rw_wlock(&pvh_global_lock);
 	PMAP_LOCK(pmap);
 	mmu_booke_enter_locked(mmu, pmap, va, m,
-	    prot & (VM_PROT_READ | VM_PROT_EXECUTE), PMAP_ENTER_NOSLEEP,
-	    0);
+	    prot & (VM_PROT_READ | VM_PROT_EXECUTE), PMAP_ENTER_NOSLEEP |
+	    PMAP_ENTER_QUICK_LOCKED, 0);
 	rw_wunlock(&pvh_global_lock);
 	PMAP_UNLOCK(pmap);
 }
@@ -2687,15 +2695,10 @@ mmu_booke_remove_write(mmu_t mmu, vm_page_t m)
 
 	KASSERT((m->oflags & VPO_UNMANAGED) == 0,
 	    ("mmu_booke_remove_write: page %p is not managed", m));
+	vm_page_assert_busied(m);
 
-	/*
-	 * If the page is not exclusive busied, then PGA_WRITEABLE cannot be
-	 * set by another thread while the object is locked.  Thus,
-	 * if PGA_WRITEABLE is clear, no page table entries need updating.
-	 */
-	VM_OBJECT_ASSERT_WLOCKED(m->object);
-	if (!vm_page_xbusied(m) && (m->aflags & PGA_WRITEABLE) == 0)
-		return;
+	if (!pmap_page_is_write_mapped(m))
+	        return;
 	rw_wlock(&pvh_global_lock);
 	TAILQ_FOREACH(pv, &m->md.pv_list, pv_link) {
 		PMAP_LOCK(pv->pv_pmap);
@@ -2790,12 +2793,9 @@ mmu_booke_extract_and_hold(mmu_t mmu, pmap_t pmap, vm_offset_t va,
 	pte_t *pte;
 	vm_page_t m;
 	uint32_t pte_wbit;
-	vm_paddr_t pa;
-	
+
 	m = NULL;
-	pa = 0;	
 	PMAP_LOCK(pmap);
-retry:
 	pte = pte_find(mmu, pmap, va);
 	if ((pte != NULL) && PTE_ISVALID(pte)) {
 		if (pmap == kernel_pmap)
@@ -2803,15 +2803,12 @@ retry:
 		else
 			pte_wbit = PTE_UW;
 
-		if ((*pte & pte_wbit) || ((prot & VM_PROT_WRITE) == 0)) {
-			if (vm_page_pa_tryrelock(pmap, PTE_PA(pte), &pa))
-				goto retry;
+		if ((*pte & pte_wbit) != 0 || (prot & VM_PROT_WRITE) == 0) {
 			m = PHYS_TO_VM_PAGE(PTE_PA(pte));
-			vm_page_wire(m);
+			if (!vm_page_wire_mapped(m))
+				m = NULL;
 		}
 	}
-
-	PA_UNLOCK_COND(pa);
 	PMAP_UNLOCK(pmap);
 	return (m);
 }
@@ -3041,13 +3038,11 @@ mmu_booke_is_modified(mmu_t mmu, vm_page_t m)
 	rv = FALSE;
 
 	/*
-	 * If the page is not exclusive busied, then PGA_WRITEABLE cannot be
-	 * concurrently set while the object is locked.  Thus, if PGA_WRITEABLE
-	 * is clear, no PTEs can be modified.
+	 * If the page is not busied then this check is racy.
 	 */
-	VM_OBJECT_ASSERT_WLOCKED(m->object);
-	if (!vm_page_xbusied(m) && (m->aflags & PGA_WRITEABLE) == 0)
-		return (rv);
+	if (!pmap_page_is_write_mapped(m))
+		return (FALSE);
+
 	rw_wlock(&pvh_global_lock);
 	TAILQ_FOREACH(pv, &m->md.pv_list, pv_link) {
 		PMAP_LOCK(pv->pv_pmap);
@@ -3116,17 +3111,11 @@ mmu_booke_clear_modify(mmu_t mmu, vm_page_t m)
 
 	KASSERT((m->oflags & VPO_UNMANAGED) == 0,
 	    ("mmu_booke_clear_modify: page %p is not managed", m));
-	VM_OBJECT_ASSERT_WLOCKED(m->object);
-	KASSERT(!vm_page_xbusied(m),
-	    ("mmu_booke_clear_modify: page %p is exclusive busied", m));
+	vm_page_assert_busied(m);
 
-	/*
-	 * If the page is not PG_AWRITEABLE, then no PTEs can be modified.
-	 * If the object containing the page is locked and the page is not
-	 * exclusive busied, then PG_AWRITEABLE cannot be concurrently set.
-	 */
-	if ((m->aflags & PGA_WRITEABLE) == 0)
-		return;
+	if (!pmap_page_is_write_mapped(m))
+	        return;
+
 	rw_wlock(&pvh_global_lock);
 	TAILQ_FOREACH(pv, &m->md.pv_list, pv_link) {
 		PMAP_LOCK(pv->pv_pmap);
@@ -3526,8 +3515,8 @@ mmu_booke_mapdev_attr(mmu_t mmu, vm_paddr_t pa, vm_size_t size, vm_memattr_t ma)
 			} while (va % sz != 0);
 		}
 		if (bootverbose)
-			printf("Wiring VA=%lx to PA=%jx (size=%lx)\n",
-			    va, (uintmax_t)pa, sz);
+			printf("Wiring VA=%p to PA=%jx (size=%lx)\n",
+			    (void *)va, (uintmax_t)pa, (long)sz);
 		if (tlb1_set_entry(va, pa, sz,
 		    _TLB_ENTRY_SHARED | tlb_calc_wimg(pa, ma)) < 0)
 			return (NULL);
@@ -3580,7 +3569,7 @@ mmu_booke_object_init_pt(mmu_t mmu, pmap_t pmap, vm_offset_t addr,
  */
 static int
 mmu_booke_mincore(mmu_t mmu, pmap_t pmap, vm_offset_t addr,
-    vm_paddr_t *locked_pa)
+    vm_paddr_t *pap)
 {
 
 	/* XXX: this should be implemented at some point */
@@ -3787,14 +3776,34 @@ struct tlbwrite_args {
 	unsigned int idx;
 };
 
+static uint32_t
+tlb1_find_free(void)
+{
+	tlb_entry_t e;
+	int i;
+
+	for (i = 0; i < TLB1_ENTRIES; i++) {
+		tlb1_read_entry(&e, i);
+		if ((e.mas1 & MAS1_VALID) == 0)
+			return (i);
+	}
+	return (-1);
+}
+
 static void
 tlb1_write_entry_int(void *arg)
 {
 	struct tlbwrite_args *args = arg;
-	uint32_t mas0;
+	uint32_t idx, mas0;
 
+	idx = args->idx;
+	if (idx == -1) {
+		idx = tlb1_find_free();
+		if (idx == -1)
+			panic("No free TLB1 entries!\n");
+	}
 	/* Select entry */
-	mas0 = MAS0_TLBSEL(1) | MAS0_ESEL(args->idx);
+	mas0 = MAS0_TLBSEL(1) | MAS0_ESEL(idx);
 
 	mtspr(SPR_MAS0, mas0);
 	mtspr(SPR_MAS1, args->e->mas1);
@@ -3908,20 +3917,15 @@ tlb1_set_entry(vm_offset_t va, vm_paddr_t pa, vm_size_t size,
 	uint32_t ts, tid;
 	int tsize, index;
 
+	/* First try to update an existing entry. */
 	for (index = 0; index < TLB1_ENTRIES; index++) {
 		tlb1_read_entry(&e, index);
-		if ((e.mas1 & MAS1_VALID) == 0)
-			break;
 		/* Check if we're just updating the flags, and update them. */
 		if (e.phys == pa && e.virt == va && e.size == size) {
 			e.mas2 = (va & MAS2_EPN_MASK) | flags;
 			tlb1_write_entry(&e, index);
 			return (0);
 		}
-	}
-	if (index >= TLB1_ENTRIES) {
-		printf("tlb1_set_entry: TLB1 full!\n");
-		return (-1);
 	}
 
 	/* Convert size to TSIZE */
@@ -3942,13 +3946,8 @@ tlb1_set_entry(vm_offset_t va, vm_paddr_t pa, vm_size_t size,
 	e.mas3 = (pa & MAS3_RPN) | MAS3_SR | MAS3_SW | MAS3_SX;
 	e.mas7 = (pa >> 32) & MAS7_RPN;
 
-	tlb1_write_entry(&e, index);
+	tlb1_write_entry(&e, -1);
 
-	/*
-	 * XXX in general TLB1 updates should be propagated between CPUs,
-	 * since current design assumes to have the same TLB1 set-up on all
-	 * cores.
-	 */
 	return (0);
 }
 
@@ -4313,9 +4312,9 @@ tlb_print_entry(int i, uint32_t mas1, uint32_t mas2, uint32_t mas3,
 		size = tsize2size(tsize);
 
 	printf("%3d: (%s) [AS=%d] "
-	    "sz = 0x%08x tsz = %d tid = %d mas1 = 0x%08x "
+	    "sz = 0x%jx tsz = %d tid = %d mas1 = 0x%08x "
 	    "mas2(va) = 0x%"PRI0ptrX" mas3(pa) = 0x%08x mas7 = 0x%08x\n",
-	    i, desc, as, size, tsize, tid, mas1, mas2, mas3, mas7);
+	    i, desc, as, (uintmax_t)size, tsize, tid, mas1, mas2, mas3, mas7);
 }
 
 DB_SHOW_COMMAND(tlb0, tlb0_print_tlbentries)

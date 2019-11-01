@@ -976,15 +976,23 @@ exec_map_first_page(struct image_params *imgp)
 #if VM_NRESERVLEVEL > 0
 	vm_object_color(object, 0);
 #endif
+retry:
 	ma[0] = vm_page_grab(object, 0, VM_ALLOC_NORMAL | VM_ALLOC_NOBUSY |
 	    VM_ALLOC_WIRED);
-	if (ma[0]->valid != VM_PAGE_BITS_ALL) {
-		vm_page_xbusy(ma[0]);
-		if (!vm_pager_has_page(object, 0, NULL, &after)) {
-			vm_page_lock(ma[0]);
+	if (!vm_page_all_valid(ma[0])) {
+		if (vm_page_busy_acquire(ma[0], VM_ALLOC_WAITFAIL) == 0) {
 			vm_page_unwire_noq(ma[0]);
-			vm_page_free(ma[0]);
-			vm_page_unlock(ma[0]);
+			goto retry;
+		}
+		if (vm_page_all_valid(ma[0])) {
+			vm_page_xunbusy(ma[0]);
+			goto out;
+		}
+		if (!vm_pager_has_page(object, 0, NULL, &after)) {
+			if (vm_page_unwire_noq(ma[0]))
+				vm_page_free(ma[0]);
+			else
+				vm_page_xunbusy(ma[0]);
 			VM_OBJECT_WUNLOCK(object);
 			return (EIO);
 		}
@@ -1008,12 +1016,15 @@ exec_map_first_page(struct image_params *imgp)
 		initial_pagein = i;
 		rv = vm_pager_get_pages(object, ma, initial_pagein, NULL, NULL);
 		if (rv != VM_PAGER_OK) {
-			for (i = 0; i < initial_pagein; i++) {
-				vm_page_lock(ma[i]);
-				if (i == 0)
-					vm_page_unwire_noq(ma[i]);
-				vm_page_free(ma[i]);
-				vm_page_unlock(ma[i]);
+			if (vm_page_unwire_noq(ma[0]))
+				vm_page_free(ma[0]);
+			else
+				vm_page_xunbusy(ma[0]);
+			for (i = 1; i < initial_pagein; i++) {
+				if (!vm_page_wired(ma[i]))
+					vm_page_free(ma[i]);
+				else
+					vm_page_xunbusy(ma[i]);
 			}
 			VM_OBJECT_WUNLOCK(object);
 			return (EIO);
@@ -1022,6 +1033,8 @@ exec_map_first_page(struct image_params *imgp)
 		for (i = 1; i < initial_pagein; i++)
 			vm_page_readahead_finish(ma[i]);
 	}
+
+out:
 	VM_OBJECT_WUNLOCK(object);
 
 	imgp->firstpage = sf_buf_alloc(ma[0], 0);
@@ -1039,9 +1052,7 @@ exec_unmap_first_page(struct image_params *imgp)
 		m = sf_buf_page(imgp->firstpage);
 		sf_buf_free(imgp->firstpage);
 		imgp->firstpage = NULL;
-		vm_page_lock(m);
 		vm_page_unwire(m, PQ_ACTIVE);
-		vm_page_unlock(m);
 	}
 }
 

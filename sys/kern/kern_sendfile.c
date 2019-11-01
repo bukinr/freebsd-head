@@ -56,6 +56,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/vnode.h>
 
 #include <net/vnet.h>
+#include <netinet/tcp.h>
 
 #include <security/audit/audit.h>
 #include <security/mac/mac_framework.h>
@@ -295,7 +296,7 @@ sendfile_iodone(void *arg, vm_page_t *pg, int count, int error)
 
 		mb_free_notready(sfio->m, sfio->npages);
 #ifdef KERN_TLS
-	} else if (sfio->tls != NULL && sfio->tls->sw_encrypt != NULL) {
+	} else if (sfio->tls != NULL && sfio->tls->mode == TCP_TLS_MODE_SW) {
 		/*
 		 * I/O operation is complete, but we still need to
 		 * encrypt.  We cannot do this in the interrupt thread
@@ -415,11 +416,8 @@ sendfile_swapin(vm_object_t obj, struct sf_io *sfio, int *nios, off_t off,
 		    &sendfile_iodone, sfio);
 		if (rv != VM_PAGER_OK) {
 			for (j = i; j < i + count; j++) {
-				if (pa[j] != bogus_page) {
-					vm_page_lock(pa[j]);
+				if (pa[j] != bogus_page)
 					vm_page_unwire(pa[j], PQ_INACTIVE);
-					vm_page_unlock(pa[j]);
-				}
 			}
 			VM_OBJECT_WUNLOCK(obj);
 			return (EIO);
@@ -932,11 +930,8 @@ retry_space:
 			    m != NULL ? SFB_NOWAIT : SFB_CATCH);
 			if (sf == NULL) {
 				SFSTAT_INC(sf_allocfail);
-				for (int j = i; j < npages; j++) {
-					vm_page_lock(pa[j]);
+				for (int j = i; j < npages; j++)
 					vm_page_unwire(pa[j], PQ_INACTIVE);
-					vm_page_unlock(pa[j]);
-				}
 				if (m == NULL)
 					softerr = ENOBUFS;
 				fixspace(npages, i, off, &space);
@@ -1034,7 +1029,7 @@ prepend_header:
 			 */
 			free(sfio, M_TEMP);
 #ifdef KERN_TLS
-			if (tls != NULL && tls->sw_encrypt != NULL) {
+			if (tls != NULL && tls->mode == TCP_TLS_MODE_SW) {
 				error = (*so->so_proto->pr_usrreqs->pru_send)
 				    (so, PRUS_NOTREADY, m, NULL, NULL, td);
 				soref(so);

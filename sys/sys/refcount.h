@@ -39,7 +39,7 @@
 #define	KASSERT(exp, msg)	/* */
 #endif
 
-#define	REFCOUNT_WAITER			(1 << 31) /* Refcount has waiter. */
+#define	REFCOUNT_WAITER			(1U << 31) /* Refcount has waiter. */
 #define	REFCOUNT_SATURATION_VALUE	(3U << 29)
 
 #define	REFCOUNT_SATURATED(val)		(((val) & (1U << 30)) != 0)
@@ -85,11 +85,10 @@ refcount_acquire(volatile u_int *count)
 static __inline void
 refcount_acquiren(volatile u_int *count, u_int n)
 {
-
 	u_int old;
 
 	KASSERT(n < REFCOUNT_SATURATION_VALUE / 2,
-	    ("refcount_acquiren: n %d too large", n));
+	    ("refcount_acquiren: n=%u too large", n));
 	old = atomic_fetchadd_int(count, n);
 	if (__predict_false(REFCOUNT_SATURATED(old)))
 		_refcount_update_saturated(count);
@@ -115,7 +114,8 @@ refcount_releasen(volatile u_int *count, u_int n)
 	u_int old;
 
 	KASSERT(n < REFCOUNT_SATURATION_VALUE / 2,
-	    ("refcount_releasen: n %d too large", n));
+	    ("refcount_releasen: n=%u too large", n));
+
 	atomic_thread_fence_rel();
 	old = atomic_fetchadd_int(count, -n);
 	if (__predict_false(n >= REFCOUNT_COUNT(old) ||
@@ -167,6 +167,24 @@ refcount_release_if_not_last(volatile u_int *count)
 	old = *count;
 	for (;;) {
 		if (REFCOUNT_COUNT(old) == 1)
+			return (false);
+		if (__predict_false(REFCOUNT_SATURATED(old)))
+			return (true);
+		if (atomic_fcmpset_int(count, &old, old - 1))
+			return (true);
+	}
+}
+
+static __inline __result_use_check bool
+refcount_release_if_gt(volatile u_int *count, u_int n)
+{
+	u_int old;
+
+	KASSERT(n > 0,
+	    ("refcount_release_if_gt: Use refcount_release for final ref"));
+	old = *count;
+	for (;;) {
+		if (REFCOUNT_COUNT(old) <= n)
 			return (false);
 		if (__predict_false(REFCOUNT_SATURATED(old)))
 			return (true);

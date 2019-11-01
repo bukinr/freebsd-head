@@ -74,7 +74,7 @@ efi_destroy_1t1_map(void)
 	if (obj_1t1_pt != NULL) {
 		VM_OBJECT_RLOCK(obj_1t1_pt);
 		TAILQ_FOREACH(m, &obj_1t1_pt->memq, listq)
-			m->wire_count = 0;
+			m->ref_count = VPRC_OBJREF;
 		vm_wire_sub(obj_1t1_pt->resident_page_count);
 		VM_OBJECT_RUNLOCK(obj_1t1_pt);
 		vm_object_deallocate(obj_1t1_pt);
@@ -176,7 +176,6 @@ efi_create_1t1_map(struct efi_md *map, int ndesc, int descsz)
 	efi_l0_page = efi_1t1_page();
 	VM_OBJECT_WUNLOCK(obj_1t1_pt);
 	efi_l0 = (pd_entry_t *)PHYS_TO_DMAP(VM_PAGE_TO_PHYS(efi_l0_page));
-	bzero(efi_l0, L0_ENTRIES * sizeof(*efi_l0));
 
 	for (i = 0, p = map; i < ndesc; i++, p = efi_next_descriptor(p,
 	    descsz)) {

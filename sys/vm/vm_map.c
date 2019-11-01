@@ -739,46 +739,7 @@ static int enable_vmmap_check = 0;
 SYSCTL_INT(_debug, OID_AUTO, vmmap_check, CTLFLAG_RWTUN,
     &enable_vmmap_check, 0, "Enable vm map consistency checking");
 
-static void
-_vm_map_assert_consistent(vm_map_t map)
-{
-	vm_map_entry_t child, entry, prev;
-	vm_size_t max_left, max_right;
-
-	if (!enable_vmmap_check)
-		return;
-
-	for (prev = &map->header; (entry = prev->next) != &map->header;
-	    prev = entry) {
-		KASSERT(prev->end <= entry->start,
-		    ("map %p prev->end = %jx, start = %jx", map,
-		    (uintmax_t)prev->end, (uintmax_t)entry->start));
-		KASSERT(entry->start < entry->end,
-		    ("map %p start = %jx, end = %jx", map,
-		    (uintmax_t)entry->start, (uintmax_t)entry->end));
-		KASSERT(entry->end <= entry->next->start,
-		    ("map %p end = %jx, next->start = %jx", map,
-		    (uintmax_t)entry->end, (uintmax_t)entry->next->start));
-		KASSERT(entry->left == NULL ||
-		    entry->left->start < entry->start,
-		    ("map %p left->start = %jx, start = %jx", map,
-		    (uintmax_t)entry->left->start, (uintmax_t)entry->start));
-		KASSERT(entry->right == NULL ||
-		    entry->start < entry->right->start,
-		    ("map %p start = %jx, right->start = %jx", map,
-		    (uintmax_t)entry->start, (uintmax_t)entry->right->start));
-		child = entry->left;
-		max_left = (child != NULL) ? child->max_free :
-			entry->start - prev->end;
-		child = entry->right;
-		max_right = (child != NULL) ? child->max_free :
-			entry->next->start - entry->end;
-		KASSERT(entry->max_free == MAX(max_left, max_right),
-		    ("map %p max = %jx, max_left = %jx, max_right = %jx", map,
-		     (uintmax_t)entry->max_free,
-		     (uintmax_t)max_left, (uintmax_t)max_right));
-	}	
-}
+static void _vm_map_assert_consistent(vm_map_t map);
 
 #define VM_MAP_ASSERT_CONSISTENT(map) \
     _vm_map_assert_consistent(map)
@@ -1250,7 +1211,6 @@ vm_map_entry_link(vm_map_t map, vm_map_entry_t entry)
 }
 
 enum unlink_merge_type {
-	UNLINK_MERGE_PREV,
 	UNLINK_MERGE_NONE,
 	UNLINK_MERGE_NEXT
 };
@@ -1266,17 +1226,9 @@ vm_map_entry_unlink(vm_map_t map, vm_map_entry_t entry,
 	KASSERT(root != NULL,
 	    ("vm_map_entry_unlink: unlink object not mapped"));
 
+	vm_map_splay_findnext(root, &rlist);
 	switch (op) {
-	case UNLINK_MERGE_PREV:
-		vm_map_splay_findprev(root, &llist);
-		llist->end = root->end;
-		y = root->right;
-		root = llist;
-		llist = root->right;
-		root->right = y;
-		break;
 	case UNLINK_MERGE_NEXT:
-		vm_map_splay_findnext(root, &rlist);
 		rlist->start = root->start;
 		rlist->offset = root->offset;
 		y = root->left;
@@ -1286,7 +1238,6 @@ vm_map_entry_unlink(vm_map_t map, vm_map_entry_t entry,
 		break;
 	case UNLINK_MERGE_NONE:
 		vm_map_splay_findprev(root, &llist);
-		vm_map_splay_findnext(root, &rlist);
 		if (llist != &map->header) {
 			root = llist;
 			llist = root->right;
@@ -2407,7 +2358,7 @@ vm_map_pmap_enter(vm_map_t map, vm_offset_t addr, vm_prot_t prot,
 			psize = tmpidx;
 			break;
 		}
-		if (p->valid == VM_PAGE_BITS_ALL) {
+		if (vm_page_all_valid(p)) {
 			if (p_start == NULL) {
 				start = addr + ptoa(tmpidx);
 				p_start = p;
@@ -3201,8 +3152,9 @@ vm_map_wire_locked(vm_map_t map, vm_offset_t start, vm_offset_t end, int flags)
 				 * Simulate a fault to get the page and enter
 				 * it into the physical map.
 				 */
-				if ((rv = vm_fault(map, faddr, VM_PROT_NONE,
-				    VM_FAULT_WIRE)) != KERN_SUCCESS)
+				if ((rv = vm_fault(map, faddr,
+				    VM_PROT_NONE, VM_FAULT_WIRE, NULL)) !=
+				    KERN_SUCCESS)
 					break;
 			} while ((faddr += PAGE_SIZE) < saved_end);
 			vm_map_lock(map);
@@ -4832,6 +4784,49 @@ vm_map_pmap_KBI(vm_map_t map)
 	return (map->pmap);
 }
 
+#ifdef INVARIANTS
+static void
+_vm_map_assert_consistent(vm_map_t map)
+{
+	vm_map_entry_t entry, prev;
+	vm_size_t max_left, max_right;
+
+	if (!enable_vmmap_check)
+		return;
+
+	prev = &map->header;
+	VM_MAP_ENTRY_FOREACH(entry, map) {
+		KASSERT(prev->end <= entry->start,
+		    ("map %p prev->end = %jx, start = %jx", map,
+		    (uintmax_t)prev->end, (uintmax_t)entry->start));
+		KASSERT(entry->start < entry->end,
+		    ("map %p start = %jx, end = %jx", map,
+		    (uintmax_t)entry->start, (uintmax_t)entry->end));
+		KASSERT(entry->end <= entry->next->start,
+		    ("map %p end = %jx, next->start = %jx", map,
+		    (uintmax_t)entry->end, (uintmax_t)entry->next->start));
+		KASSERT(entry->left == NULL ||
+		    entry->left->start < entry->start,
+		    ("map %p left->start = %jx, start = %jx", map,
+		    (uintmax_t)entry->left->start, (uintmax_t)entry->start));
+		KASSERT(entry->right == NULL ||
+		    entry->start < entry->right->start,
+		    ("map %p start = %jx, right->start = %jx", map,
+		    (uintmax_t)entry->start, (uintmax_t)entry->right->start));
+		max_left = vm_map_entry_max_free_left(entry, entry->prev);
+		max_right = vm_map_entry_max_free_right(entry, entry->next);
+		KASSERT(entry->max_free == MAX(max_left, max_right),
+		    ("map %p max = %jx, max_left = %jx, max_right = %jx", map,
+		    (uintmax_t)entry->max_free,
+		    (uintmax_t)max_left, (uintmax_t)max_right));
+		prev = entry;
+	}	
+	KASSERT(prev->end <= entry->start,
+	    ("map %p prev->end = %jx, start = %jx", map,
+	    (uintmax_t)prev->end, (uintmax_t)entry->start));
+}
+#endif
+
 #include "opt_ddb.h"
 #ifdef DDB
 #include <sys/kernel.h>
@@ -4848,8 +4843,8 @@ vm_map_print(vm_map_t map)
 	    (void *)map->pmap, map->nentries, map->timestamp);
 
 	db_indent += 2;
-	for (prev = &map->header; (entry = prev->next) != &map->header;
-	    prev = entry) {
+	prev = &map->header;
+	VM_MAP_ENTRY_FOREACH(entry, map) {
 		db_iprintf("map entry %p: start=%p, end=%p, eflags=%#x, \n",
 		    (void *)entry, (void *)entry->start, (void *)entry->end,
 		    entry->eflags);
@@ -4901,6 +4896,7 @@ vm_map_print(vm_map_t map)
 				db_indent -= 2;
 			}
 		}
+		prev = entry;
 	}
 	db_indent -= 2;
 }

@@ -136,7 +136,7 @@ efi_text_cursor(void *s __unused, const teken_pos_t *p)
 }
 
 static void
-efi_text_printchar(const teken_pos_t *p)
+efi_text_printchar(const teken_pos_t *p, bool autoscroll)
 {
 	UINTN a, attr;
 	struct text_pixel *px;
@@ -164,7 +164,8 @@ efi_text_printchar(const teken_pos_t *p)
 	conout->SetCursorPosition(conout, p->tp_col, p->tp_row);
 
 	/* to prvent autoscroll, skip print of lower right char */
-	if (p->tp_row == tp.tp_row - 1 &&
+	if (!autoscroll &&
+	    p->tp_row == tp.tp_row - 1 &&
 	    p->tp_col == tp.tp_col - 1)
 		return;
 
@@ -183,7 +184,7 @@ efi_text_putchar(void *s __unused, const teken_pos_t *p, teken_char_t c,
 	idx = p->tp_col + p->tp_row * tp.tp_col;
 	buffer[idx].c = c;
 	buffer[idx].a = *a;
-	efi_text_printchar(p);
+	efi_text_printchar(p, false);
 }
 
 static void
@@ -226,6 +227,7 @@ efi_text_copy(void *ptr __unused, const teken_rect_t *r, const teken_pos_t *p)
 	int srow, drow;
 	int nrow, ncol, x, y; /* Has to be signed - >= 0 comparison */
 	teken_pos_t d, s;
+	bool scroll = false;
 
 	/*
 	 * Copying is a little tricky. We must make sure we do it in
@@ -234,6 +236,13 @@ efi_text_copy(void *ptr __unused, const teken_rect_t *r, const teken_pos_t *p)
 
 	nrow = r->tr_end.tp_row - r->tr_begin.tp_row;
 	ncol = r->tr_end.tp_col - r->tr_begin.tp_col;
+
+	/*
+	 * Check if we do copy whole screen.
+	 */
+	if (p->tp_row == 0 && p->tp_col == 0 &&
+	    nrow == tp.tp_row - 2 && ncol == tp.tp_col - 2)
+		scroll = true;
 
 	conout->EnableCursor(conout, FALSE);
 	if (p->tp_row < r->tr_begin.tp_row) {
@@ -252,7 +261,17 @@ efi_text_copy(void *ptr __unused, const teken_rect_t *r, const teken_pos_t *p)
 				    &buffer[s.tp_col + srow])) {
 					buffer[d.tp_col + drow] =
 					    buffer[s.tp_col + srow];
-					efi_text_printchar(&d);
+					if (!scroll)
+						efi_text_printchar(&d, false);
+				} else if (scroll) {
+					/*
+					 * Draw last char and trigger
+					 * scroll.
+					 */
+					if (y == nrow - 1 &&
+					    x == ncol - 1) {
+						efi_text_printchar(&d, true);
+					}
 				}
 			}
 		}
@@ -274,7 +293,7 @@ efi_text_copy(void *ptr __unused, const teken_rect_t *r, const teken_pos_t *p)
 					    &buffer[s.tp_col + srow])) {
 						buffer[d.tp_col + drow] =
 						    buffer[s.tp_col + srow];
-						efi_text_printchar(&d);
+						efi_text_printchar(&d, false);
 					}
 				}
 			}
@@ -294,7 +313,7 @@ efi_text_copy(void *ptr __unused, const teken_rect_t *r, const teken_pos_t *p)
 					    &buffer[s.tp_col + srow])) {
 						buffer[d.tp_col + drow] =
 						    buffer[s.tp_col + srow];
-						efi_text_printchar(&d);
+						efi_text_printchar(&d, false);
 					}
 				}
 			}
@@ -343,6 +362,91 @@ efi_cons_probe(struct console *cp)
 	cp->c_flags |= C_PRESENTIN | C_PRESENTOUT;
 }
 
+static bool
+color_name_to_teken(const char *name, int *val)
+{
+	if (strcasecmp(name, "black") == 0) {
+		*val = TC_BLACK;
+		return (true);
+	}
+	if (strcasecmp(name, "red") == 0) {
+		*val = TC_RED;
+		return (true);
+	}
+	if (strcasecmp(name, "green") == 0) {
+		*val = TC_GREEN;
+		return (true);
+	}
+	if (strcasecmp(name, "brown") == 0) {
+		*val = TC_BROWN;
+		return (true);
+	}
+	if (strcasecmp(name, "blue") == 0) {
+		*val = TC_BLUE;
+		return (true);
+	}
+	if (strcasecmp(name, "magenta") == 0) {
+		*val = TC_MAGENTA;
+		return (true);
+	}
+	if (strcasecmp(name, "cyan") == 0) {
+		*val = TC_CYAN;
+		return (true);
+	}
+	if (strcasecmp(name, "white") == 0) {
+		*val = TC_WHITE;
+		return (true);
+	}
+	return (false);
+}
+
+static int
+efi_set_colors(struct env_var *ev, int flags, const void *value)
+{
+	int val = 0;
+	char buf[2];
+	const void *evalue;
+	const teken_attr_t *ap;
+	teken_attr_t a;
+
+	if (value == NULL)
+		return (CMD_OK);
+
+	if (color_name_to_teken(value, &val)) {
+		snprintf(buf, sizeof (buf), "%d", val);
+		evalue = buf;
+	} else {
+		char *end;
+
+		errno = 0;
+		val = (int)strtol(value, &end, 0);
+		if (errno != 0 || *end != '\0') {
+			printf("Allowed values are either ansi color name or "
+			    "number from range [0-7].\n");
+			return (CMD_OK);
+		}
+		evalue = value;
+	}
+
+	ap = teken_get_defattr(&teken);
+	a = *ap;
+	if (strcmp(ev->ev_name, "teken.fg_color") == 0) {
+		/* is it already set? */
+		if (ap->ta_fgcolor == val)
+			return (CMD_OK);
+		a.ta_fgcolor = val;
+	}
+	if (strcmp(ev->ev_name, "teken.bg_color") == 0) {
+		/* is it already set? */
+		if (ap->ta_bgcolor == val)
+			return (CMD_OK);
+		a.ta_bgcolor = val;
+	}
+	env_setenv(ev->ev_name, flags | EV_NOHOOK, evalue, NULL, NULL);
+	teken_set_defattr(&teken, &a);
+	return (CMD_OK);
+}
+
 bool
 efi_cons_update_mode(void)
 {
@@ -373,6 +477,13 @@ efi_cons_update_mode(void)
 
 	teken_set_winsize(&teken, &tp);
 	a = teken_get_defattr(&teken);
+
+	snprintf(env, sizeof(env), "%d", a->ta_fgcolor);
+	env_setenv("teken.fg_color", EV_VOLATILE, env, efi_set_colors,
+	    env_nounset);
+	snprintf(env, sizeof(env), "%d", a->ta_bgcolor);
+	env_setenv("teken.bg_color", EV_VOLATILE, env, efi_set_colors,
+	    env_nounset);
 
 	for (int row = 0; row < rows; row++)
 		for (int col = 0; col < cols; col++) {

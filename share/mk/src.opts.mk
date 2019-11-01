@@ -77,6 +77,7 @@ __DEFAULT_YES_OPTIONS = \
     BZIP2 \
     CALENDAR \
     CAPSICUM \
+    CAROOT \
     CASPER \
     CCD \
     CDDL \
@@ -108,7 +109,6 @@ __DEFAULT_YES_OPTIONS = \
     GDB \
     GNU_DIFF \
     GNU_GREP \
-    GOOGLETEST \
     GPIO \
     HAST \
     HTML \
@@ -166,10 +166,12 @@ __DEFAULT_YES_OPTIONS = \
     SENDMAIL \
     SERVICESDB \
     SETUID_LOGIN \
+    SHARED_TOOLCHAIN \
     SHAREDOCS \
     SOURCELESS \
     SOURCELESS_HOST \
     SOURCELESS_UCODE \
+    STATS \
     SVNLITE \
     SYSCONS \
     SYSTEM_COMPILER \
@@ -199,6 +201,7 @@ __DEFAULT_NO_OPTIONS = \
     EXPERIMENTAL \
     GNU_GREP_COMPAT \
     HESIOD \
+    HTTPD \
     LIBSOFT \
     LOADER_FIREWIRE \
     LOADER_FORCE_LE \
@@ -208,7 +211,6 @@ __DEFAULT_NO_OPTIONS = \
     OPENLDAP \
     REPRODUCIBLE_BUILD \
     RPCBIND_WARMSTART_SUPPORT \
-    SHARED_TOOLCHAIN \
     SORT_THREADS \
     SVN \
     ZONEINFO_LEAPSECONDS_SUPPORT \
@@ -258,6 +260,15 @@ __T=${MACHINE_ARCH}
 __TT=${TARGET}
 .else
 __TT=${MACHINE}
+.endif
+
+# Default GOOGLETEST to off for MIPS while LLVM PR 43263 is active.  Part
+# of the fusefs tests trigger excessively long compile times.  It does
+# eventually succeed, but this shouldn't be forced on those building by default.
+.if ${__TT} == "mips"
+__DEFAULT_NO_OPTIONS+=	GOOGLETEST
+.else
+__DEFAULT_YES_OPTIONS+=	GOOGLETEST
 .endif
 
 # All supported backends for LLVM_TARGET_XXX
@@ -389,7 +400,8 @@ BROKEN_OPTIONS+=HYPERV
 .endif
 
 # NVME is only aarch64, x86 and powerpc64
-.if ${__T} != "aarch64" && ${__T} != "amd64" && ${__T} != "i386" && ${__T} != "powerpc64"
+.if ${__T} != "aarch64" && ${__T} != "amd64" && ${__T} != "i386" && \
+    ${__T} != "powerpc64"
 BROKEN_OPTIONS+=NVME
 .endif
 
@@ -398,7 +410,8 @@ BROKEN_OPTIONS+=NVME
 BROKEN_OPTIONS+=BSD_CRTBEGIN
 .endif
 
-.if ${COMPILER_FEATURES:Mc++11} && (${__T} == "amd64" || ${__T} == "i386")
+.if ${COMPILER_FEATURES:Mc++11} && \
+    (${__T} == "amd64" || ${__T} == "i386" || ${__T} == "powerpc64")
 __DEFAULT_YES_OPTIONS+=OPENMP
 .else
 __DEFAULT_NO_OPTIONS+=OPENMP

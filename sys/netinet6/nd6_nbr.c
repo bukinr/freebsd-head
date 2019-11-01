@@ -614,7 +614,6 @@ nd6_ns_output(struct ifnet *ifp, const struct in6_addr *saddr6,
 void
 nd6_na_input(struct mbuf *m, int off, int icmp6len)
 {
-	struct epoch_tracker et;
 	struct ifnet *ifp = m->m_pkthdr.rcvif;
 	struct ip6_hdr *ip6 = mtod(m, struct ip6_hdr *);
 	struct nd_neighbor_advert *nd_na;
@@ -636,6 +635,8 @@ nd6_na_input(struct mbuf *m, int off, int icmp6len)
 	size_t linkhdrsize;
 	int lladdr_off;
 	char ip6bufs[INET6_ADDRSTRLEN], ip6bufd[INET6_ADDRSTRLEN];
+
+	NET_EPOCH_ASSERT();
 
 	/* RFC 6980: Nodes MUST silently ignore fragments */
 	if(m->m_flags & M_FRAGMENTED)
@@ -742,9 +743,7 @@ nd6_na_input(struct mbuf *m, int off, int icmp6len)
 	 * If no neighbor cache entry is found, NA SHOULD silently be
 	 * discarded.
 	 */
-	NET_EPOCH_ENTER(et);
 	ln = nd6_lookup(&taddr6, LLE_EXCLUSIVE, ifp);
-	NET_EPOCH_EXIT(et);
 	if (ln == NULL) {
 		goto freeit;
 	}
@@ -1193,6 +1192,8 @@ static void
 nd6_dad_starttimer(struct dadq *dp, int ticks, int send_ns)
 {
 
+	NET_EPOCH_ASSERT();
+
 	if (send_ns != 0)
 		nd6_dad_ns_output(dp);
 	callout_reset(&dp->dad_timer_ch, ticks,
@@ -1233,6 +1234,7 @@ nd6_dad_start(struct ifaddr *ifa, int delay)
 	struct in6_ifaddr *ia = (struct in6_ifaddr *)ifa;
 	struct dadq *dp;
 	char ip6buf[INET6_ADDRSTRLEN];
+	struct epoch_tracker et;
 
 	KASSERT((ia->ia6_flags & IN6_IFF_TENTATIVE) != 0,
 	    ("starting DAD on non-tentative address %p", ifa));
@@ -1294,7 +1296,9 @@ nd6_dad_start(struct ifaddr *ifa, int delay)
 	/* Add this to the dadq and add a reference for the dadq. */
 	refcount_init(&dp->dad_refcnt, 1);
 	nd6_dad_add(dp);
+	NET_EPOCH_ENTER(et);
 	nd6_dad_starttimer(dp, delay, 0);
+	NET_EPOCH_EXIT(et);
 }
 
 /*
@@ -1326,9 +1330,11 @@ nd6_dad_timer(struct dadq *dp)
 	struct ifnet *ifp = dp->dad_ifa->ifa_ifp;
 	struct in6_ifaddr *ia = (struct in6_ifaddr *)ifa;
 	char ip6buf[INET6_ADDRSTRLEN];
+	struct epoch_tracker et;
 
 	KASSERT(ia != NULL, ("DAD entry %p with no address", dp));
 
+	NET_EPOCH_ENTER(et);
 	if (ND_IFINFO(ifp)->flags & ND6_IFF_IFDISABLED) {
 		/* Do not need DAD for ifdisabled interface. */
 		log(LOG_ERR, "nd6_dad_timer: cancel DAD on %s because of "
@@ -1425,6 +1431,7 @@ nd6_dad_timer(struct dadq *dp)
 err:
 	nd6_dad_del(dp);
 done:
+	NET_EPOCH_EXIT(et);
 	CURVNET_RESTORE();
 }
 
