@@ -7,7 +7,8 @@ fi
 
 make -j6 TARGET=arm64 KERN${A}=GENERIC buildkernel
 
-cp /xhome/obj/usr/home/br/dev/freebsd-head/arm64.aarch64/sys/GENERIC/kernel /tftpboot/stratix10/
+# cp /xhome/obj/usr/home/br/dev/freebsd-head/arm64.aarch64/sys/GENERIC/kernel /tftpboot/stratix10/
+cp /home/br/obj/usr/home/br/dev/freebsd-head/arm64.aarch64/sys/GENERIC/kernel /tftpboot/stratix10/
 
 #echo 'setenv serverip 10.5.0.1; setenv ipaddr 10.5.0.33; setenv netmask 255.255.255.0; tftpboot stratix10/kernel'
 
