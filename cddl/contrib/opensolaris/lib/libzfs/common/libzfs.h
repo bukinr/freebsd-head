@@ -28,7 +28,7 @@
  * Copyright (c) 2013 Steven Hartland. All rights reserved.
  * Copyright (c) 2014 Integros [integros.com]
  * Copyright 2016 Nexenta Systems, Inc.
- * Copyright (c) 2017 Datto Inc.
+ * Copyright (c) 2019 Datto Inc.
  */
 
 #ifndef	_LIBZFS_H
@@ -570,8 +570,10 @@ extern int zfs_iter_root(libzfs_handle_t *, zfs_iter_f, void *);
 extern int zfs_iter_children(zfs_handle_t *, zfs_iter_f, void *);
 extern int zfs_iter_dependents(zfs_handle_t *, boolean_t, zfs_iter_f, void *);
 extern int zfs_iter_filesystems(zfs_handle_t *, zfs_iter_f, void *);
-extern int zfs_iter_snapshots(zfs_handle_t *, boolean_t, zfs_iter_f, void *);
-extern int zfs_iter_snapshots_sorted(zfs_handle_t *, zfs_iter_f, void *);
+extern int zfs_iter_snapshots(zfs_handle_t *, boolean_t, zfs_iter_f, void *,
+    uint64_t, uint64_t);
+extern int zfs_iter_snapshots_sorted(zfs_handle_t *, zfs_iter_f, void *,
+    uint64_t, uint64_t);
 extern int zfs_iter_snapspec(zfs_handle_t *, const char *, zfs_iter_f, void *);
 extern int zfs_iter_bookmarks(zfs_handle_t *, zfs_iter_f, void *);
 
@@ -660,7 +662,7 @@ typedef boolean_t (snapfilter_cb_t)(zfs_handle_t *, void *);
 
 extern int zfs_send(zfs_handle_t *, const char *, const char *,
     sendflags_t *, int, snapfilter_cb_t, void *, nvlist_t **);
-extern int zfs_send_one(zfs_handle_t *, const char *, int, enum lzc_send_flags);
+extern int zfs_send_one(zfs_handle_t *, const char *, int, sendflags_t flags);
 extern int zfs_send_resume(libzfs_handle_t *, sendflags_t *, int outfd,
     const char *);
 extern nvlist_t *zfs_send_resume_token_to_nvlist(libzfs_handle_t *hdl,

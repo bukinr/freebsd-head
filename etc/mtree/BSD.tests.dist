@@ -384,6 +384,8 @@
         ..
         libdevdctl
         ..
+        libexecinfo
+        ..
         libkvm
         ..
         libmp
@@ -792,6 +794,10 @@
         ..
         netinet
         ..
+        netinet6
+            frag6
+            ..
+        ..
         netipsec
             tunnel
             ..
@@ -1010,6 +1016,8 @@
         ..
         limits
         ..
+        locale
+        ..
         m4
         ..
         mkimg
@@ -1079,6 +1087,8 @@
         extattr
         ..
         fstyp
+        ..
+        jail
         ..
         makefs
         ..
