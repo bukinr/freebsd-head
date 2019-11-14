@@ -220,12 +220,15 @@ ofwbus_alloc_resource(device_t bus, device_t child, int type, int *rid,
 
 	rv = rman_reserve_resource(rm, start, end, count, flags & ~RF_ACTIVE,
 	    child);
-	if (rv == NULL)
+	if (rv == NULL) {
+		printf("%s: could not reserve resource\n", __func__);
 		return (NULL);
+	}
 	rman_set_rid(rv, *rid);
 
 	if ((flags & RF_ACTIVE) != 0 && bus_activate_resource(child, type,
 	    *rid, rv) != 0) {
+		printf("%s: could not activate resource\n", __func__);
 		rman_release_resource(rv);
 		return (NULL);
 	}
