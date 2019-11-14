@@ -66,10 +66,10 @@ static struct resource_spec beri_epw_test_spec[] = {
 	{ -1, 0 }
 };
 
-#define	BERIPIC1_CFG		0x7f808000
-#define	BERIPIC1_IP_READ	0x7f80a000
-#define	BERIPIC1_IP_SET		0x7f80a080
-#define	BERIPIC1_IP_CLEAR	0x7f80a100
+#define	BERIPIC1_CFG		0xff7f808000
+#define	BERIPIC1_IP_READ	0xff7f80a000
+#define	BERIPIC1_IP_SET		0xff7f80a080
+#define	BERIPIC1_IP_CLEAR	0xff7f80a100
 #define	MIPS_XKPHYS_UNCACHED_BASE	0x9000000000000000ULL
 
 static int
@@ -93,7 +93,7 @@ beri_close(struct cdev *dev, int flags __unused,
 
 	sc = dev->si_drv1;
 
-	printf("%s\n", __func__);
+	printf("%s: base %lx\n", __func__, rman_get_start(sc->res[0]));
 
 #if 1
 	printf("%s: write8 to window offset 0x3000\n", __func__);
