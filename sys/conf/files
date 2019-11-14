@@ -1422,6 +1422,8 @@ dev/cxgbe/common/t4_hw.c	optional cxgbe pci \
 	compile-with "${NORMAL_C} -I$S/dev/cxgbe"
 dev/cxgbe/common/t4vf_hw.c	optional cxgbev pci \
 	compile-with "${NORMAL_C} -I$S/dev/cxgbe"
+dev/cxgbe/crypto/t4_keyctx.c	optional cxgbe pci \
+	compile-with "${NORMAL_C} -I$S/dev/cxgbe"
 dev/cxgbe/cudbg/cudbg_common.c	optional cxgbe \
 	compile-with "${NORMAL_C} -I$S/dev/cxgbe"
 dev/cxgbe/cudbg/cudbg_flash_utils.c	optional cxgbe \
@@ -1921,6 +1923,8 @@ iwi_monitor.fw			optional iwimonitorfw | iwifw		\
 dev/iwm/if_iwm.c		optional iwm
 dev/iwm/if_iwm_7000.c		optional iwm
 dev/iwm/if_iwm_8000.c		optional iwm
+dev/iwm/if_iwm_9000.c		optional iwm
+dev/iwm/if_iwm_9260.c		optional iwm
 dev/iwm/if_iwm_binding.c	optional iwm
 dev/iwm/if_iwm_fw.c		optional iwm
 dev/iwm/if_iwm_led.c		optional iwm
