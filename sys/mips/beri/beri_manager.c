@@ -85,10 +85,10 @@ struct spin_entry {
 	uint64_t rsvd2;
 };
 
-#define	BERIPIC1_CFG			0x7f808000
-#define	BERIPIC1_IP_READ		0x7f80a000
-#define	BERIPIC1_IP_SET			0x7f80a080
-#define	BERIPIC1_IP_CLEAR		0x7f80a100
+#define	BERIPIC1_CFG			0xff7f808000
+#define	BERIPIC1_IP_READ		0xff7f80a000
+#define	BERIPIC1_IP_SET			0xff7f80a080
+#define	BERIPIC1_IP_CLEAR		0xff7f80a100
 #define	MIPS_XKPHYS_UNCACHED_BASE	0x9000000000000000ULL
 #define	SOFT_IRQ_N			16
 
