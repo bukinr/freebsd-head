@@ -395,6 +395,8 @@ frag6_input(struct mbuf **mp, int *offp, int proto)
 	m = *mp;
 	offset = *offp;
 
+	M_ASSERTPKTHDR(m);
+
 	ip6 = mtod(m, struct ip6_hdr *);
 #ifndef PULLDOWN_TEST
 	IP6_EXTHDR_CHECK(m, offset, sizeof(struct ip6_frag), IPPROTO_DONE);
@@ -417,6 +419,7 @@ frag6_input(struct mbuf **mp, int *offp, int proto)
 	if (ip6->ip6_plen == 0) {
 		icmp6_error(m, ICMP6_PARAM_PROB, ICMP6_PARAMPROB_HEADER, offset);
 		in6_ifstat_inc(dstifp, ifs6_reass_fail);
+		*mp = NULL;
 		return (IPPROTO_DONE);
 	}
 
@@ -431,28 +434,42 @@ frag6_input(struct mbuf **mp, int *offp, int proto)
 		icmp6_error(m, ICMP6_PARAM_PROB, ICMP6_PARAMPROB_HEADER,
 		    offsetof(struct ip6_hdr, ip6_plen));
 		in6_ifstat_inc(dstifp, ifs6_reass_fail);
+		*mp = NULL;
 		return (IPPROTO_DONE);
 	}
 
 	IP6STAT_INC(ip6s_fragments);
 	in6_ifstat_inc(dstifp, ifs6_reass_reqd);
 
-	/* Offset now points to data portion. */
-	offset += sizeof(struct ip6_frag);
-
 	/*
 	 * Handle "atomic" fragments (offset and m bit set to 0) upfront,
-	 * unrelated to any reassembly.  Still need to remove the frag hdr.
+	 * unrelated to any reassembly.  We need to remove the frag hdr
+	 * which is ugly.
 	 * See RFC 6946 and section 4.5 of RFC 8200.
 	 */
 	if ((ip6f->ip6f_offlg & ~IP6F_RESERVED_MASK) == 0) {
 		IP6STAT_INC(ip6s_atomicfrags);
-		/* XXX-BZ handle correctly. */
+		nxt = ip6f->ip6f_nxt;
+		/*
+		 * Set nxt(-hdr field value) to the original value.
+		 * We cannot just set ip6->ip6_nxt as there might be
+		 * an unfragmentable part with extension headers and
+		 * we must update the last one.
+		 */
+		m_copyback(m, ip6_get_prevhdr(m, offset), sizeof(uint8_t),
+		    (caddr_t)&nxt);
+		ip6->ip6_plen = htons(ntohs(ip6->ip6_plen) -
+		    sizeof(struct ip6_frag));
+		if (ip6_deletefraghdr(m, offset, M_NOWAIT) != 0)
+			goto dropfrag2;
+		m->m_pkthdr.len -= sizeof(struct ip6_frag);
 		in6_ifstat_inc(dstifp, ifs6_reass_ok);
-		*offp = offset;
-		m->m_flags |= M_FRAGMENTED;
-		return (ip6f->ip6f_nxt);
+		*mp = m;
+		return (nxt);
 	}
+
+	/* Offset now points to data portion. */
+	offset += sizeof(struct ip6_frag);
 
 	/* Get fragment length and discard 0-byte fragments. */
 	frgpartlen = sizeof(struct ip6_hdr) + ntohs(ip6->ip6_plen) - offset;
@@ -461,6 +478,7 @@ frag6_input(struct mbuf **mp, int *offp, int proto)
 		    offsetof(struct ip6_hdr, ip6_plen));
 		in6_ifstat_inc(dstifp, ifs6_reass_fail);
 		IP6STAT_INC(ip6s_fragdropped);
+		*mp = NULL;
 		return (IPPROTO_DONE);
 	}
 
@@ -596,6 +614,7 @@ frag6_input(struct mbuf **mp, int *offp, int proto)
 			icmp6_error(m, ICMP6_PARAM_PROB, ICMP6_PARAMPROB_HEADER,
 			    offset - sizeof(struct ip6_frag) +
 			    offsetof(struct ip6_frag, ip6f_offlg));
+			*mp = NULL;
 			return (IPPROTO_DONE);
 		}
 	} else if (fragoff + frgpartlen > IPV6_MAXPACKET) {
@@ -612,6 +631,7 @@ frag6_input(struct mbuf **mp, int *offp, int proto)
 		icmp6_error(m, ICMP6_PARAM_PROB, ICMP6_PARAMPROB_HEADER,
 		    offset - sizeof(struct ip6_frag) +
 		    offsetof(struct ip6_frag, ip6f_offlg));
+		*mp = NULL;
 		return (IPPROTO_DONE);
 	}
 
@@ -762,6 +782,7 @@ postinsert:
 				frag6_freef(q6, bucket);
 			}
 			IP6QB_UNLOCK(bucket);
+			*mp = NULL;
 			return (IPPROTO_DONE);
 		}
 		plen += af6->ip6af_frglen;
@@ -773,6 +794,7 @@ postinsert:
 			frag6_freef(q6, bucket);
 		}
 		IP6QB_UNLOCK(bucket);
+		*mp = NULL;
 		return (IPPROTO_DONE);
 	}
 
@@ -862,6 +884,7 @@ postinsert:
 #ifdef RSS
 	/* Queue/dispatch for reprocessing. */
 	netisr_dispatch(NETISR_IPV6_DIRECT, m);
+	*mp = NULL;
 	return (IPPROTO_DONE);
 #endif
 
@@ -877,6 +900,7 @@ dropfrag2:
 	in6_ifstat_inc(dstifp, ifs6_reass_fail);
 	IP6STAT_INC(ip6s_fragdropped);
 	m_freem(m);
+	*mp = NULL;
 	return (IPPROTO_DONE);
 }
 

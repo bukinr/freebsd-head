@@ -64,10 +64,13 @@ __FBSDID("$FreeBSD$");
 int
 dest6_input(struct mbuf **mp, int *offp, int proto)
 {
-	struct mbuf *m = *mp;
-	int off = *offp, dstoptlen, optlen;
+	struct mbuf *m;
+	int off, dstoptlen, optlen;
 	struct ip6_dest *dstopts;
 	u_int8_t *opt;
+
+	m = *mp;
+	off = *offp;
 
 	/* validation of the length of the header */
 #ifndef PULLDOWN_TEST
@@ -110,17 +113,21 @@ dest6_input(struct mbuf **mp, int *offp, int proto)
 		default:		/* unknown option */
 			optlen = ip6_unknown_opt(opt, m,
 			    opt - mtod(m, u_int8_t *));
-			if (optlen == -1)
+			if (optlen == -1) {
+				*mp = NULL;
 				return (IPPROTO_DONE);
+			}
 			optlen += 2;
 			break;
 		}
 	}
 
 	*offp = off;
+	*mp = m;
 	return (dstopts->ip6d_nxt);
 
   bad:
 	m_freem(m);
+	*mp = NULL;
 	return (IPPROTO_DONE);
 }
