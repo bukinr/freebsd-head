@@ -1,5 +1,5 @@
 #
-# GENERIC -- Generic kernel configuration file for FreeBSD/arm64
+# 410C -- Generic kernel configuration file for Dragonboard 410C
 #
 # For more information on this file, please read the config(5) manual page,
 # and/or the handbook section on Kernel Configuration Files:
@@ -23,6 +23,7 @@ ident		GENERIC
 
 makeoptions	DEBUG=-g		# Build kernel with gdb(1) debug symbols
 makeoptions	WITH_CTF=1		# Run ctfconvert(1) for DTrace support
+
 makeoptions	MODULES_OVERRIDE="hwpmc"
 
 options 	SCHED_ULE		# ULE scheduler
@@ -76,8 +77,10 @@ options 	VFP			# Floating-point support
 options 	RACCT			# Resource accounting framework
 options 	RACCT_DEFAULT_TO_DISABLED # Set kern.racct.enable=0 by default
 options 	RCTL			# Resource limits
-options 	SMP
+# options 	SMP
 options 	INTRNG
+
+options		ROOTDEVNAME=\"ufs:mmcsd0s2\"
 
 # Debugging support.  Always need this:
 options 	KDB			# Enable kernel debugger support.
@@ -228,8 +231,10 @@ device		rk_dwc3			# Rockchip DWC3 controller
 device		usb			# USB Bus (required)
 device		ukbd			# Keyboard
 device		umass			# Disks/Mass storage - Requires scbus and da
+device		ehci_msm
 
 # USB ethernet support
+device		axe
 device		muge
 device		smcphy
 device		smsc
