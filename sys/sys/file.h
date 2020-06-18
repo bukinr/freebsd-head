@@ -125,6 +125,8 @@ typedef int fo_mmap_t(struct file *fp, vm_map_t map, vm_offset_t *addr,
 typedef int fo_aio_queue_t(struct file *fp, struct kaiocb *job);
 typedef int fo_add_seals_t(struct file *fp, int flags);
 typedef int fo_get_seals_t(struct file *fp, int *flags);
+typedef int fo_fallocate_t(struct file *fp, off_t offset, off_t len,
+		    struct thread *td);
 typedef	int fo_flags_t;
 
 struct fileops {
@@ -145,6 +147,7 @@ struct fileops {
 	fo_aio_queue_t	*fo_aio_queue;
 	fo_add_seals_t	*fo_add_seals;
 	fo_get_seals_t	*fo_get_seals;
+	fo_fallocate_t	*fo_fallocate;
 	fo_flags_t	fo_flags;	/* DFLAG_* below */
 };
 
@@ -160,7 +163,7 @@ struct fileops {
  * Below is the list of locks that protects members in struct file.
  *
  * (a) f_vnode lock required (shared allows both reads and writes)
- * (f) protected with mtx_lock(mtx_pool_find(fp))
+ * (f) updated with atomics and blocking on sleepq
  * (d) cdevpriv_mtx
  * none	not locked
  */
@@ -197,10 +200,6 @@ struct file {
 	 *  DFLAG_SEEKABLE specific fields
 	 */
 	off_t		f_offset;
-	/*
-	 * Mandatory Access control information.
-	 */
-	void		*f_label;	/* Place-holder for MAC label. */
 };
 
 #define	f_cdevpriv	f_vnun.fvn_cdevpriv
@@ -241,11 +240,10 @@ extern struct fileops badfileops;
 extern struct fileops socketops;
 extern int maxfiles;		/* kernel limit on number of open files */
 extern int maxfilesperproc;	/* per process limit on number of open files */
-extern volatile int openfiles;	/* actual number of open files */
 
 int fget(struct thread *td, int fd, cap_rights_t *rightsp, struct file **fpp);
 int fget_mmap(struct thread *td, int fd, cap_rights_t *rightsp,
-    u_char *maxprotp, struct file **fpp);
+    vm_prot_t *maxprotp, struct file **fpp);
 int fget_read(struct thread *td, int fd, cap_rights_t *rightsp,
     struct file **fpp);
 int fget_write(struct thread *td, int fd, cap_rights_t *rightsp,
@@ -445,6 +443,15 @@ fo_get_seals(struct file *fp, int *seals)
 	if (fp->f_ops->fo_get_seals == NULL)
 		return (EINVAL);
 	return ((*fp->f_ops->fo_get_seals)(fp, seals));
+}
+
+static __inline int
+fo_fallocate(struct file *fp, off_t offset, off_t len, struct thread *td)
+{
+
+	if (fp->f_ops->fo_fallocate == NULL)
+		return (ENODEV);
+	return ((*fp->f_ops->fo_fallocate)(fp, offset, len, td));
 }
 
 #endif /* _KERNEL */

@@ -321,6 +321,7 @@ struct {								\
 #define RB_RIGHT(elm, field)		(elm)->field.rbe_right
 #define RB_PARENT(elm, field)		(elm)->field.rbe_parent
 #define RB_COLOR(elm, field)		(elm)->field.rbe_color
+#define RB_ISRED(elm, field)		((elm) != NULL && RB_COLOR(elm, field) == RB_RED)
 #define RB_ROOT(head)			(head)->rbh_root
 #define RB_EMPTY(head)			(RB_ROOT(head) == NULL)
 
@@ -335,8 +336,12 @@ struct {								\
 	RB_COLOR(red, field) = RB_RED;					\
 } while (/*CONSTCOND*/ 0)
 
+/*
+ * Something to be invoked in a loop at the root of every modified subtree,
+ * from the bottom up to the root, to update augmented node data.
+ */
 #ifndef RB_AUGMENT
-#define RB_AUGMENT(x)	do {} while (0)
+#define RB_AUGMENT(x)	break
 #endif
 
 #define RB_ROTATE_LEFT(head, elm, tmp, field) do {			\
@@ -344,7 +349,6 @@ struct {								\
 	if ((RB_RIGHT(elm, field) = RB_LEFT(tmp, field)) != NULL) {	\
 		RB_PARENT(RB_LEFT(tmp, field), field) = (elm);		\
 	}								\
-	RB_AUGMENT(elm);						\
 	if ((RB_PARENT(tmp, field) = RB_PARENT(elm, field)) != NULL) {	\
 		if ((elm) == RB_LEFT(RB_PARENT(elm, field), field))	\
 			RB_LEFT(RB_PARENT(elm, field), field) = (tmp);	\
@@ -354,9 +358,7 @@ struct {								\
 		(head)->rbh_root = (tmp);				\
 	RB_LEFT(tmp, field) = (elm);					\
 	RB_PARENT(elm, field) = (tmp);					\
-	RB_AUGMENT(tmp);						\
-	if ((RB_PARENT(tmp, field)))					\
-		RB_AUGMENT(RB_PARENT(tmp, field));			\
+	RB_AUGMENT(elm);						\
 } while (/*CONSTCOND*/ 0)
 
 #define RB_ROTATE_RIGHT(head, elm, tmp, field) do {			\
@@ -364,7 +366,6 @@ struct {								\
 	if ((RB_LEFT(elm, field) = RB_RIGHT(tmp, field)) != NULL) {	\
 		RB_PARENT(RB_RIGHT(tmp, field), field) = (elm);		\
 	}								\
-	RB_AUGMENT(elm);						\
 	if ((RB_PARENT(tmp, field) = RB_PARENT(elm, field)) != NULL) {	\
 		if ((elm) == RB_LEFT(RB_PARENT(elm, field), field))	\
 			RB_LEFT(RB_PARENT(elm, field), field) = (tmp);	\
@@ -374,9 +375,7 @@ struct {								\
 		(head)->rbh_root = (tmp);				\
 	RB_RIGHT(tmp, field) = (elm);					\
 	RB_PARENT(elm, field) = (tmp);					\
-	RB_AUGMENT(tmp);						\
-	if ((RB_PARENT(tmp, field)))					\
-		RB_AUGMENT(RB_PARENT(tmp, field));			\
+	RB_AUGMENT(elm);						\
 } while (/*CONSTCOND*/ 0)
 
 /* Generates prototypes and inline functions */
@@ -398,7 +397,7 @@ struct {								\
 #define RB_PROTOTYPE_INSERT_COLOR(name, type, attr)			\
 	attr void name##_RB_INSERT_COLOR(struct name *, struct type *)
 #define RB_PROTOTYPE_REMOVE_COLOR(name, type, attr)			\
-	attr void name##_RB_REMOVE_COLOR(struct name *, struct type *, struct type *)
+	attr void name##_RB_REMOVE_COLOR(struct name *, struct type *)
 #define RB_PROTOTYPE_REMOVE(name, type, attr)				\
 	attr struct type *name##_RB_REMOVE(struct name *, struct type *)
 #define RB_PROTOTYPE_INSERT(name, type, attr)				\
@@ -441,12 +440,11 @@ attr void								\
 name##_RB_INSERT_COLOR(struct name *head, struct type *elm)		\
 {									\
 	struct type *parent, *gparent, *tmp;				\
-	while ((parent = RB_PARENT(elm, field)) != NULL &&		\
-	    RB_COLOR(parent, field) == RB_RED) {			\
+	while (RB_ISRED((parent = RB_PARENT(elm, field)), field)) {	\
 		gparent = RB_PARENT(parent, field);			\
 		if (parent == RB_LEFT(gparent, field)) {		\
 			tmp = RB_RIGHT(gparent, field);			\
-			if (tmp && RB_COLOR(tmp, field) == RB_RED) {	\
+			if (RB_ISRED(tmp, field)) {			\
 				RB_COLOR(tmp, field) = RB_BLACK;	\
 				RB_SET_BLACKRED(parent, gparent, field);\
 				elm = gparent;				\
@@ -462,7 +460,7 @@ name##_RB_INSERT_COLOR(struct name *head, struct type *elm)		\
 			RB_ROTATE_RIGHT(head, gparent, tmp, field);	\
 		} else {						\
 			tmp = RB_LEFT(gparent, field);			\
-			if (tmp && RB_COLOR(tmp, field) == RB_RED) {	\
+			if (RB_ISRED(tmp, field)) {			\
 				RB_COLOR(tmp, field) = RB_BLACK;	\
 				RB_SET_BLACKRED(parent, gparent, field);\
 				elm = gparent;				\
@@ -483,11 +481,11 @@ name##_RB_INSERT_COLOR(struct name *head, struct type *elm)		\
 
 #define RB_GENERATE_REMOVE_COLOR(name, type, field, attr)		\
 attr void								\
-name##_RB_REMOVE_COLOR(struct name *head, struct type *parent, struct type *elm) \
+name##_RB_REMOVE_COLOR(struct name *head, struct type *parent)		\
 {									\
-	struct type *tmp;						\
-	while ((elm == NULL || RB_COLOR(elm, field) == RB_BLACK) &&	\
-	    elm != RB_ROOT(head)) {					\
+	struct type *elm, *tmp;						\
+	elm = NULL;							\
+	do {								\
 		if (RB_LEFT(parent, field) == elm) {			\
 			tmp = RB_RIGHT(parent, field);			\
 			if (RB_COLOR(tmp, field) == RB_RED) {		\
@@ -495,32 +493,26 @@ name##_RB_REMOVE_COLOR(struct name *head, struct type *parent, struct type *elm)
 				RB_ROTATE_LEFT(head, parent, tmp, field);\
 				tmp = RB_RIGHT(parent, field);		\
 			}						\
-			if ((RB_LEFT(tmp, field) == NULL ||		\
-			    RB_COLOR(RB_LEFT(tmp, field), field) == RB_BLACK) &&\
-			    (RB_RIGHT(tmp, field) == NULL ||		\
-			    RB_COLOR(RB_RIGHT(tmp, field), field) == RB_BLACK)) {\
+			if (RB_ISRED(RB_LEFT(tmp, field), field)) {	\
+				struct type *oleft;			\
+				oleft = RB_LEFT(tmp, field);		\
+				RB_COLOR(oleft, field) = RB_BLACK;	\
+				RB_COLOR(tmp, field) = RB_RED;		\
+				RB_ROTATE_RIGHT(head, tmp, oleft, field); \
+				tmp = RB_RIGHT(parent, field);		\
+			} else if (!RB_ISRED(RB_RIGHT(tmp, field), field)) { \
 				RB_COLOR(tmp, field) = RB_RED;		\
 				elm = parent;				\
 				parent = RB_PARENT(elm, field);		\
-			} else {					\
-				if (RB_RIGHT(tmp, field) == NULL ||	\
-				    RB_COLOR(RB_RIGHT(tmp, field), field) == RB_BLACK) {\
-					struct type *oleft;		\
-					if ((oleft = RB_LEFT(tmp, field)) \
-					    != NULL)			\
-						RB_COLOR(oleft, field) = RB_BLACK;\
-					RB_COLOR(tmp, field) = RB_RED;	\
-					RB_ROTATE_RIGHT(head, tmp, oleft, field);\
-					tmp = RB_RIGHT(parent, field);	\
-				}					\
-				RB_COLOR(tmp, field) = RB_COLOR(parent, field);\
-				RB_COLOR(parent, field) = RB_BLACK;	\
-				if (RB_RIGHT(tmp, field))		\
-					RB_COLOR(RB_RIGHT(tmp, field), field) = RB_BLACK;\
-				RB_ROTATE_LEFT(head, parent, tmp, field);\
-				elm = RB_ROOT(head);			\
-				break;					\
+				continue;				\
 			}						\
+			if (RB_ISRED(RB_RIGHT(tmp, field), field))	\
+				RB_COLOR(RB_RIGHT(tmp, field), field) = RB_BLACK; \
+			RB_COLOR(tmp, field) = RB_COLOR(parent, field);	\
+			RB_COLOR(parent, field) = RB_BLACK;		\
+			RB_ROTATE_LEFT(head, parent, tmp, field);	\
+			elm = RB_ROOT(head);				\
+			break;						\
 		} else {						\
 			tmp = RB_LEFT(parent, field);			\
 			if (RB_COLOR(tmp, field) == RB_RED) {		\
@@ -528,105 +520,81 @@ name##_RB_REMOVE_COLOR(struct name *head, struct type *parent, struct type *elm)
 				RB_ROTATE_RIGHT(head, parent, tmp, field);\
 				tmp = RB_LEFT(parent, field);		\
 			}						\
-			if ((RB_LEFT(tmp, field) == NULL ||		\
-			    RB_COLOR(RB_LEFT(tmp, field), field) == RB_BLACK) &&\
-			    (RB_RIGHT(tmp, field) == NULL ||		\
-			    RB_COLOR(RB_RIGHT(tmp, field), field) == RB_BLACK)) {\
+			if (RB_ISRED(RB_RIGHT(tmp, field), field)) {	\
+				struct type *oright;			\
+				oright = RB_RIGHT(tmp, field);		\
+				RB_COLOR(oright, field) = RB_BLACK;	\
+				RB_COLOR(tmp, field) = RB_RED;		\
+				RB_ROTATE_LEFT(head, tmp, oright, field); \
+				tmp = RB_LEFT(parent, field);		\
+			} else if (!RB_ISRED(RB_LEFT(tmp, field), field)) { \
 				RB_COLOR(tmp, field) = RB_RED;		\
 				elm = parent;				\
 				parent = RB_PARENT(elm, field);		\
-			} else {					\
-				if (RB_LEFT(tmp, field) == NULL ||	\
-				    RB_COLOR(RB_LEFT(tmp, field), field) == RB_BLACK) {\
-					struct type *oright;		\
-					if ((oright = RB_RIGHT(tmp, field)) \
-					    != NULL)			\
-						RB_COLOR(oright, field) = RB_BLACK;\
-					RB_COLOR(tmp, field) = RB_RED;	\
-					RB_ROTATE_LEFT(head, tmp, oright, field);\
-					tmp = RB_LEFT(parent, field);	\
-				}					\
-				RB_COLOR(tmp, field) = RB_COLOR(parent, field);\
-				RB_COLOR(parent, field) = RB_BLACK;	\
-				if (RB_LEFT(tmp, field))		\
-					RB_COLOR(RB_LEFT(tmp, field), field) = RB_BLACK;\
-				RB_ROTATE_RIGHT(head, parent, tmp, field);\
-				elm = RB_ROOT(head);			\
-				break;					\
+				continue;				\
 			}						\
+			if (RB_ISRED(RB_LEFT(tmp, field), field))	\
+				RB_COLOR(RB_LEFT(tmp, field), field) = RB_BLACK; \
+			RB_COLOR(tmp, field) = RB_COLOR(parent, field);	\
+			RB_COLOR(parent, field) = RB_BLACK;		\
+			RB_ROTATE_RIGHT(head, parent, tmp, field);	\
+			elm = RB_ROOT(head);				\
+			break;						\
 		}							\
-	}								\
-	if (elm)							\
-		RB_COLOR(elm, field) = RB_BLACK;			\
+	} while (!RB_ISRED(elm, field) && parent != NULL);		\
+	RB_COLOR(elm, field) = RB_BLACK;				\
 }
 
 #define RB_GENERATE_REMOVE(name, type, field, attr)			\
 attr struct type *							\
 name##_RB_REMOVE(struct name *head, struct type *elm)			\
 {									\
-	struct type *child, *parent, *old = elm;			\
+	struct type *child, *old, *parent, *parent_old, *right;		\
 	int color;							\
-	if (RB_LEFT(elm, field) == NULL)				\
-		child = RB_RIGHT(elm, field);				\
-	else if (RB_RIGHT(elm, field) == NULL)				\
-		child = RB_LEFT(elm, field);				\
-	else {								\
-		struct type *left;					\
-		elm = RB_RIGHT(elm, field);				\
-		while ((left = RB_LEFT(elm, field)) != NULL)		\
-			elm = left;					\
-		child = RB_RIGHT(elm, field);				\
-		parent = RB_PARENT(elm, field);				\
-		color = RB_COLOR(elm, field);				\
-		if (child)						\
-			RB_PARENT(child, field) = parent;		\
-		if (parent) {						\
-			if (RB_LEFT(parent, field) == elm)		\
-				RB_LEFT(parent, field) = child;		\
-			else						\
-				RB_RIGHT(parent, field) = child;	\
-			RB_AUGMENT(parent);				\
-		} else							\
-			RB_ROOT(head) = child;				\
-		if (RB_PARENT(elm, field) == old)			\
-			parent = elm;					\
-		(elm)->field = (old)->field;				\
-		if (RB_PARENT(old, field)) {				\
-			if (RB_LEFT(RB_PARENT(old, field), field) == old)\
-				RB_LEFT(RB_PARENT(old, field), field) = elm;\
-			else						\
-				RB_RIGHT(RB_PARENT(old, field), field) = elm;\
-			RB_AUGMENT(RB_PARENT(old, field));		\
-		} else							\
-			RB_ROOT(head) = elm;				\
-		RB_PARENT(RB_LEFT(old, field), field) = elm;		\
-		if (RB_RIGHT(old, field))				\
-			RB_PARENT(RB_RIGHT(old, field), field) = elm;	\
-		if (parent) {						\
-			left = parent;					\
-			do {						\
-				RB_AUGMENT(left);			\
-			} while ((left = RB_PARENT(left, field)) != NULL); \
-		}							\
-		goto color;						\
-	}								\
-	parent = RB_PARENT(elm, field);					\
+									\
+	old = elm;							\
+	parent_old = parent = RB_PARENT(elm, field);			\
+	right = RB_RIGHT(elm, field);					\
 	color = RB_COLOR(elm, field);					\
-	if (child)							\
-		RB_PARENT(child, field) = parent;			\
-	if (parent) {							\
-		if (RB_LEFT(parent, field) == elm)			\
+	if (RB_LEFT(elm, field) == NULL)				\
+		elm = child = right;					\
+	else if (right == NULL)						\
+		elm = child = RB_LEFT(elm, field);			\
+	else {								\
+		if ((child = RB_LEFT(right, field)) == NULL) {		\
+			child = RB_RIGHT(right, field);			\
+			RB_RIGHT(old, field) = child;			\
+			parent = elm = right;				\
+		} else {						\
+			do						\
+				elm = child;				\
+			while ((child = RB_LEFT(elm, field)) != NULL);	\
+			child = RB_RIGHT(elm, field);			\
+			parent = RB_PARENT(elm, field);			\
 			RB_LEFT(parent, field) = child;			\
-		else							\
-			RB_RIGHT(parent, field) = child;		\
+			RB_PARENT(RB_RIGHT(old, field), field) = elm;	\
+		}							\
+		RB_PARENT(RB_LEFT(old, field), field) = elm;		\
+		color = RB_COLOR(elm, field);				\
+		elm->field = old->field;				\
+	}								\
+	if (parent_old == NULL)						\
+		RB_ROOT(head) = elm;					\
+	else if (RB_LEFT(parent_old, field) == old)			\
+		RB_LEFT(parent_old, field) = elm;			\
+	else								\
+		RB_RIGHT(parent_old, field) = elm;			\
+	if (child != NULL) {						\
+		RB_PARENT(child, field) = parent;			\
+		RB_COLOR(child, field) = RB_BLACK;			\
+	} else if (color != RB_RED && parent != NULL)			\
+		name##_RB_REMOVE_COLOR(head, parent);			\
+	while (parent != NULL) {					\
 		RB_AUGMENT(parent);					\
-	} else								\
-		RB_ROOT(head) = child;					\
-color:									\
-	if (color == RB_BLACK)						\
-		name##_RB_REMOVE_COLOR(head, parent, child);		\
+		parent = RB_PARENT(parent, field);			\
+	}								\
 	return (old);							\
-}									\
+}
 
 #define RB_GENERATE_INSERT(name, type, field, cmp, attr)		\
 /* Inserts a node into the RB tree */					\
@@ -653,10 +621,13 @@ name##_RB_INSERT(struct name *head, struct type *elm)			\
 			RB_LEFT(parent, field) = elm;			\
 		else							\
 			RB_RIGHT(parent, field) = elm;			\
-		RB_AUGMENT(parent);					\
 	} else								\
 		RB_ROOT(head) = elm;					\
 	name##_RB_INSERT_COLOR(head, elm);				\
+	while (elm != NULL) {						\
+		RB_AUGMENT(elm);					\
+		elm = RB_PARENT(elm, field);				\
+	}								\
 	return (NULL);							\
 }
 

@@ -845,6 +845,7 @@ static int ipoib_cm_rep_handler(struct ib_cm_id *cm_id, struct ib_cm_event *even
 	struct ipoib_cm_tx *p = cm_id->context;
 	struct ipoib_dev_priv *priv = p->priv;
 	struct ipoib_cm_data *data = event->private_data;
+	struct epoch_tracker et;
 	struct ifqueue mbqueue;
 	struct ib_qp_attr qp_attr;
 	int qp_attr_mask, ret;
@@ -898,6 +899,7 @@ static int ipoib_cm_rep_handler(struct ib_cm_id *cm_id, struct ib_cm_event *even
 		}
 	spin_unlock_irq(&priv->lock);
 
+	NET_EPOCH_ENTER(et);
 	for (;;) {
 		struct ifnet *dev = p->priv->dev;
 		_IF_DEQUEUE(&mbqueue, mb);
@@ -908,6 +910,7 @@ static int ipoib_cm_rep_handler(struct ib_cm_id *cm_id, struct ib_cm_event *even
 			ipoib_warn(priv, "dev_queue_xmit failed "
 				   "to requeue packet\n");
 	}
+	NET_EPOCH_EXIT(et);
 
 	ret = ib_send_cm_rtu(cm_id, NULL, 0);
 	if (ret) {
@@ -1265,6 +1268,8 @@ static void ipoib_cm_mb_reap(struct work_struct *work)
 
 	spin_lock_irqsave(&priv->lock, flags);
 
+	CURVNET_SET_QUIET(priv->dev->if_vnet);
+
 	for (;;) {
 		IF_DEQUEUE(&priv->cm.mb_queue, mb);
 		if (mb == NULL)
@@ -1290,6 +1295,8 @@ static void ipoib_cm_mb_reap(struct work_struct *work)
 
 		spin_lock_irqsave(&priv->lock, flags);
 	}
+
+	CURVNET_RESTORE();
 
 	spin_unlock_irqrestore(&priv->lock, flags);
 }

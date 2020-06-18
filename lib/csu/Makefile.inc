@@ -2,16 +2,19 @@
 
 SSP_CFLAGS=
 
-SED_FIX_NOTE = -i "" -e '/\.note\.tag/s/progbits/note/'
-
 NO_WMISSING_VARIABLE_DECLARATIONS=
 
 .include <src.opts.mk>
 
-.if ${MK_BSD_CRTBEGIN} != "no" && !defined(BUILDING_TESTS)
+.if !defined(BUILDING_TESTS)
 
 OBJS+=	crtbegin.o crtbeginS.o crtbeginT.o
 OBJS+=	crtend.o crtendS.o
+
+ACFLAGS+=	-DLOCORE
+
+CFLAGS+=	-fno-asynchronous-unwind-tables
+CFLAGS+=	-fno-omit-frame-pointer
 
 CFLAGS_CRTS=	-DSHARED ${PICFLAG}
 

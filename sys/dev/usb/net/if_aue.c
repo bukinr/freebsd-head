@@ -114,7 +114,8 @@ __FBSDID("$FreeBSD$");
 #ifdef USB_DEBUG
 static int aue_debug = 0;
 
-static SYSCTL_NODE(_hw_usb, OID_AUTO, aue, CTLFLAG_RW, 0, "USB aue");
+static SYSCTL_NODE(_hw_usb, OID_AUTO, aue, CTLFLAG_RW | CTLFLAG_MPSAFE, 0,
+    "USB aue");
 SYSCTL_INT(_hw_usb_aue, OID_AUTO, debug, CTLFLAG_RWTUN, &aue_debug, 0,
     "Debug level");
 #endif
@@ -540,13 +541,23 @@ aue_miibus_statchg(device_t dev)
 }
 
 #define	AUE_BITS	6
+static u_int
+aue_hash_maddr(void *arg, struct sockaddr_dl *sdl, u_int cnt)
+{
+	uint8_t *hashtbl = arg;
+	uint32_t h;
+
+	h = ether_crc32_le(LLADDR(sdl), ETHER_ADDR_LEN) & ((1 << AUE_BITS) - 1);
+	hashtbl[(h >> 3)] |=  1 << (h & 0x7);
+
+	return (1);
+}
+
 static void
 aue_setmulti(struct usb_ether *ue)
 {
 	struct aue_softc *sc = uether_getsc(ue);
 	struct ifnet *ifp = uether_getifp(ue);
-	struct ifmultiaddr *ifma;
-	uint32_t h = 0;
 	uint32_t i;
 	uint8_t hashtbl[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 
@@ -560,15 +571,7 @@ aue_setmulti(struct usb_ether *ue)
 	AUE_CLRBIT(sc, AUE_CTL0, AUE_CTL0_ALLMULTI);
 
 	/* now program new ones */
-	if_maddr_rlock(ifp);
-	CK_STAILQ_FOREACH(ifma, &ifp->if_multiaddrs, ifma_link) {
-		if (ifma->ifma_addr->sa_family != AF_LINK)
-			continue;
-		h = ether_crc32_le(LLADDR((struct sockaddr_dl *)
-		    ifma->ifma_addr), ETHER_ADDR_LEN) & ((1 << AUE_BITS) - 1);
-		hashtbl[(h >> 3)] |=  1 << (h & 0x7);
-	}
-	if_maddr_runlock(ifp);
+	if_foreach_llmaddr(ifp, aue_hash_maddr, hashtbl);
 
 	/* write the hashtable */
 	for (i = 0; i != 8; i++)

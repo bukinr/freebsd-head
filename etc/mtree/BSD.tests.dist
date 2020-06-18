@@ -384,6 +384,8 @@
         ..
         libdevdctl
         ..
+        libexecinfo
+        ..
         libkvm
         ..
         libmp
@@ -435,6 +437,8 @@
         ifconfig
         ..
         mdconfig
+        ..
+        nvmecontrol
         ..
         pfctl
             files
@@ -752,6 +756,8 @@
                 ..
                 mirror
                 ..
+                multipath
+                ..
                 nop
                 ..
                 part
@@ -791,6 +797,10 @@
         net
         ..
         netinet
+        ..
+        netinet6
+            frag6
+            ..
         ..
         netipsec
             tunnel
@@ -1057,6 +1067,8 @@
         uudecode
         ..
         uuencode
+        ..
+        unifdef
         ..
         uniq
         ..

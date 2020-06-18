@@ -409,10 +409,12 @@ opalpci_attach(device_t dev)
 
 	/*
 	 * Invalidate all previous TCE entries.
-	 *
-	 * TODO: add support for other PHBs than PHB3
 	 */
-	pci_phb3_tce_invalidate_entire(sc);
+	if (ofw_bus_is_compatible(dev, "power8-pciex"))
+		pci_phb3_tce_invalidate_entire(sc);
+	else
+		opal_call(OPAL_PCI_TCE_KILL, sc->phb_id, OPAL_PCI_TCE_KILL_ALL,
+		    OPAL_PCI_DEFAULT_PE, 0, 0, 0);
 
 	/*
 	 * Get MSI properties
@@ -425,7 +427,7 @@ opalpci_attach(device_t dev)
 		sc->msi_base = msi_ranges[0];
 
 		sc->msi_vmem = vmem_create("OPAL MSI", msi_ranges[0],
-		    msi_ranges[1], 1, 16, M_BESTFIT | M_WAITOK);
+		    msi_ranges[1], 1, 0, M_BESTFIT | M_WAITOK);
 
 		sc->base_msi_irq = powerpc_register_pic(dev,
 		    OF_xref_from_node(node),

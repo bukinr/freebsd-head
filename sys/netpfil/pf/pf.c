@@ -44,6 +44,7 @@ __FBSDID("$FreeBSD$");
 #include "opt_inet6.h"
 #include "opt_bpf.h"
 #include "opt_pf.h"
+#include "opt_sctp.h"
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -68,7 +69,7 @@ __FBSDID("$FreeBSD$");
 #include <net/if_types.h>
 #include <net/if_vlan_var.h>
 #include <net/route.h>
-#include <net/radix_mpath.h>
+#include <net/route/nhop.h>
 #include <net/vnet.h>
 
 #include <net/pfil.h>
@@ -101,6 +102,10 @@ __FBSDID("$FreeBSD$");
 #include <netinet6/in6_fib.h>
 #include <netinet6/scope6_var.h>
 #endif /* INET6 */
+
+#ifdef SCTP
+#include <netinet/sctp_crc32.h>
+#endif
 
 #include <machine/in_cksum.h>
 #include <security/mac/mac_framework.h>
@@ -364,7 +369,8 @@ VNET_DEFINE(struct pf_keyhash *, pf_keyhash);
 VNET_DEFINE(struct pf_idhash *, pf_idhash);
 VNET_DEFINE(struct pf_srchash *, pf_srchash);
 
-SYSCTL_NODE(_net, OID_AUTO, pf, CTLFLAG_RW, 0, "pf(4)");
+SYSCTL_NODE(_net, OID_AUTO, pf, CTLFLAG_RW | CTLFLAG_MPSAFE, 0,
+    "pf(4)");
 
 u_long	pf_hashmask;
 u_long	pf_srchashmask;
@@ -376,7 +382,7 @@ SYSCTL_ULONG(_net_pf, OID_AUTO, states_hashsize, CTLFLAG_RDTUN,
     &pf_hashsize, 0, "Size of pf(4) states hashtable");
 SYSCTL_ULONG(_net_pf, OID_AUTO, source_nodes_hashsize, CTLFLAG_RDTUN,
     &pf_srchashsize, 0, "Size of pf(4) source nodes hashtable");
-SYSCTL_ULONG(_net_pf, OID_AUTO, request_maxcount, CTLFLAG_RDTUN,
+SYSCTL_ULONG(_net_pf, OID_AUTO, request_maxcount, CTLFLAG_RW,
     &pf_ioctl_maxcount, 0, "Maximum number of tables, addresses, ... in a single ioctl() call");
 
 VNET_DEFINE(void *, pf_swi_cookie);
@@ -1423,6 +1429,7 @@ pf_send(struct pf_send_entry *pfse)
 void
 pf_intr(void *v)
 {
+	struct epoch_tracker et;
 	struct pf_send_head queue;
 	struct pf_send_entry *pfse, *next;
 
@@ -1432,6 +1439,8 @@ pf_intr(void *v)
 	queue = V_pf_sendqueue;
 	STAILQ_INIT(&V_pf_sendqueue);
 	PF_SENDQ_UNLOCK();
+
+	NET_EPOCH_ENTER(et);
 
 	STAILQ_FOREACH_SAFE(pfse, &queue, pfse_next, next) {
 		switch (pfse->pfse_type) {
@@ -1459,6 +1468,7 @@ pf_intr(void *v)
 		}
 		free(pfse, M_PFTEMP);
 	}
+	NET_EPOCH_EXIT(et);
 	CURVNET_RESTORE();
 }
 
@@ -3166,31 +3176,32 @@ pf_get_mss(struct mbuf *m, int off, u_int16_t th_off, sa_family_t af)
 static u_int16_t
 pf_calc_mss(struct pf_addr *addr, sa_family_t af, int rtableid, u_int16_t offer)
 {
-#ifdef INET
-	struct nhop4_basic	nh4;
-#endif /* INET */
+	struct nhop_object *nh;
 #ifdef INET6
-	struct nhop6_basic	nh6;
 	struct in6_addr		dst6;
 	uint32_t		scopeid;
 #endif /* INET6 */
 	int			 hlen = 0;
 	uint16_t		 mss = 0;
 
+	NET_EPOCH_ASSERT();
+
 	switch (af) {
 #ifdef INET
 	case AF_INET:
 		hlen = sizeof(struct ip);
-		if (fib4_lookup_nh_basic(rtableid, addr->v4, 0, 0, &nh4) == 0)
-			mss = nh4.nh_mtu - hlen - sizeof(struct tcphdr);
+		nh = fib4_lookup(rtableid, addr->v4, 0, 0, 0);
+		if (nh != NULL)
+			mss = nh->nh_mtu - hlen - sizeof(struct tcphdr);
 		break;
 #endif /* INET */
 #ifdef INET6
 	case AF_INET6:
 		hlen = sizeof(struct ip6_hdr);
 		in6_splitscope(&addr->v6, &dst6, &scopeid);
-		if (fib6_lookup_nh_basic(rtableid, &dst6, scopeid, 0,0,&nh6)==0)
-			mss = nh6.nh_mtu - hlen - sizeof(struct tcphdr);
+		nh = fib6_lookup(rtableid, &dst6, scopeid, 0, 0);
+		if (nh != NULL)
+			mss = nh->nh_mtu - hlen - sizeof(struct tcphdr);
 		break;
 #endif /* INET6 */
 	}
@@ -3746,7 +3757,8 @@ pf_create_state(struct pf_rule *r, struct pf_rule *nr, struct pf_rule *a,
 		    &s->src, &s->dst, rewrite)) {
 			/* This really shouldn't happen!!! */
 			DPFPRINTF(PF_DEBUG_URGENT,
-			    ("pf_normalize_tcp_stateful failed on first pkt"));
+			    ("pf_normalize_tcp_stateful failed on first "
+			     "pkt\n"));
 			pf_normalize_tcp_cleanup(s);
 			pf_src_tree_remove_state(s);
 			STATE_DEC_COUNTERS(s);
@@ -5327,122 +5339,12 @@ pf_pull_hdr(struct mbuf *m, int off, void *p, int len,
 	return (p);
 }
 
-#ifdef RADIX_MPATH
-static int
-pf_routable_oldmpath(struct pf_addr *addr, sa_family_t af, struct pfi_kif *kif,
-    int rtableid)
-{
-	struct radix_node_head	*rnh;
-	struct sockaddr_in	*dst;
-	int			 ret = 1;
-	int			 check_mpath;
-#ifdef INET6
-	struct sockaddr_in6	*dst6;
-	struct route_in6	 ro;
-#else
-	struct route		 ro;
-#endif
-	struct radix_node	*rn;
-	struct rtentry		*rt;
-	struct ifnet		*ifp;
-
-	check_mpath = 0;
-	/* XXX: stick to table 0 for now */
-	rnh = rt_tables_get_rnh(0, af);
-	if (rnh != NULL && rn_mpath_capable(rnh))
-		check_mpath = 1;
-	bzero(&ro, sizeof(ro));
-	switch (af) {
-	case AF_INET:
-		dst = satosin(&ro.ro_dst);
-		dst->sin_family = AF_INET;
-		dst->sin_len = sizeof(*dst);
-		dst->sin_addr = addr->v4;
-		break;
-#ifdef INET6
-	case AF_INET6:
-		/*
-		 * Skip check for addresses with embedded interface scope,
-		 * as they would always match anyway.
-		 */
-		if (IN6_IS_SCOPE_EMBED(&addr->v6))
-			goto out;
-		dst6 = (struct sockaddr_in6 *)&ro.ro_dst;
-		dst6->sin6_family = AF_INET6;
-		dst6->sin6_len = sizeof(*dst6);
-		dst6->sin6_addr = addr->v6;
-		break;
-#endif /* INET6 */
-	default:
-		return (0);
-	}
-
-	/* Skip checks for ipsec interfaces */
-	if (kif != NULL && kif->pfik_ifp->if_type == IFT_ENC)
-		goto out;
-
-	switch (af) {
-#ifdef INET6
-	case AF_INET6:
-		in6_rtalloc_ign(&ro, 0, rtableid);
-		break;
-#endif
-#ifdef INET
-	case AF_INET:
-		in_rtalloc_ign((struct route *)&ro, 0, rtableid);
-		break;
-#endif
-	}
-
-	if (ro.ro_rt != NULL) {
-		/* No interface given, this is a no-route check */
-		if (kif == NULL)
-			goto out;
-
-		if (kif->pfik_ifp == NULL) {
-			ret = 0;
-			goto out;
-		}
-
-		/* Perform uRPF check if passed input interface */
-		ret = 0;
-		rn = (struct radix_node *)ro.ro_rt;
-		do {
-			rt = (struct rtentry *)rn;
-			ifp = rt->rt_ifp;
-
-			if (kif->pfik_ifp == ifp)
-				ret = 1;
-			rn = rn_mpath_next(rn);
-		} while (check_mpath == 1 && rn != NULL && ret == 0);
-	} else
-		ret = 0;
-out:
-	if (ro.ro_rt != NULL)
-		RTFREE(ro.ro_rt);
-	return (ret);
-}
-#endif
-
 int
 pf_routable(struct pf_addr *addr, sa_family_t af, struct pfi_kif *kif,
     int rtableid)
 {
-#ifdef INET
-	struct nhop4_basic	nh4;
-#endif
-#ifdef INET6
-	struct nhop6_basic	nh6;
-#endif
 	struct ifnet		*ifp;
-#ifdef RADIX_MPATH
-	struct radix_node_head	*rnh;
 
-	/* XXX: stick to table 0 for now */
-	rnh = rt_tables_get_rnh(0, af);
-	if (rnh != NULL && rn_mpath_capable(rnh))
-		return (pf_routable_oldmpath(addr, af, kif, rtableid));
-#endif
 	/*
 	 * Skip check for addresses with embedded interface scope,
 	 * as they would always match anyway.
@@ -5457,35 +5359,21 @@ pf_routable(struct pf_addr *addr, sa_family_t af, struct pfi_kif *kif,
 	if (kif != NULL && kif->pfik_ifp->if_type == IFT_ENC)
 		return (1);
 
-	ifp = NULL;
+	ifp = (kif != NULL) ? kif->pfik_ifp : NULL;
 
 	switch (af) {
 #ifdef INET6
 	case AF_INET6:
-		if (fib6_lookup_nh_basic(rtableid, &addr->v6, 0, 0, 0, &nh6)!=0)
-			return (0);
-		ifp = nh6.nh_ifp;
-		break;
+		return (fib6_check_urpf(rtableid, &addr->v6, 0, NHR_NONE,
+		    ifp));
 #endif
 #ifdef INET
 	case AF_INET:
-		if (fib4_lookup_nh_basic(rtableid, addr->v4, 0, 0, &nh4) != 0)
-			return (0);
-		ifp = nh4.nh_ifp;
-		break;
+		return (fib4_check_urpf(rtableid, addr->v4, 0, NHR_NONE,
+		    ifp));
 #endif
 	}
 
-	/* No interface given, this is a no-route check */
-	if (kif == NULL)
-		return (1);
-
-	if (kif->pfik_ifp == NULL)
-		return (0);
-
-	/* Perform uRPF check if passed input interface */
-	if (kif->pfik_ifp == ifp)
-		return (1);
 	return (0);
 }
 
@@ -5588,7 +5476,7 @@ pf_route(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 	}
 #ifdef SCTP
 	if (m0->m_pkthdr.csum_flags & CSUM_SCTP & ~ifp->if_hwassist) {
-		sctp_delayed_cksum(m, (uint32_t)(ip->ip_hl << 2));
+		sctp_delayed_cksum(m0, (uint32_t)(ip->ip_hl << 2));
 		m0->m_pkthdr.csum_flags &= ~CSUM_SCTP;
 	}
 #endif

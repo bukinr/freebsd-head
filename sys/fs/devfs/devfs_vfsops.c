@@ -130,7 +130,8 @@ devfs_mount(struct mount *mp)
 
 	MNT_ILOCK(mp);
 	mp->mnt_flag |= MNT_LOCAL;
-	mp->mnt_kern_flag |= MNTK_LOOKUP_SHARED | MNTK_EXTENDED_SHARED;
+	mp->mnt_kern_flag |= MNTK_LOOKUP_SHARED | MNTK_EXTENDED_SHARED |
+	    MNTK_NOMSYNC;
 #ifdef MAC
 	mp->mnt_flag |= MNT_MULTILABEL;
 #endif
@@ -155,7 +156,7 @@ devfs_mount(struct mount *mp)
 		sx_xunlock(&fmp->dm_lock);
 	}
 
-	VOP_UNLOCK(rvp, 0);
+	VOP_UNLOCK(rvp);
 	vfs_cache_root_set(mp, rvp);
 
 	vfs_mountedfrom(mp, "devfs");

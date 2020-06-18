@@ -172,7 +172,8 @@ static int	 syncookie_cmp(struct in_conninfo *inc, struct syncache_head *sch,
 VNET_DEFINE_STATIC(struct tcp_syncache, tcp_syncache);
 #define	V_tcp_syncache			VNET(tcp_syncache)
 
-static SYSCTL_NODE(_net_inet_tcp, OID_AUTO, syncache, CTLFLAG_RW, 0,
+static SYSCTL_NODE(_net_inet_tcp, OID_AUTO, syncache,
+    CTLFLAG_RW | CTLFLAG_MPSAFE, 0,
     "TCP SYN cache");
 
 SYSCTL_UINT(_net_inet_tcp_syncache, OID_AUTO, bucketlimit, CTLFLAG_VNET | CTLFLAG_RDTUN,
@@ -208,7 +209,7 @@ sysctl_net_inet_tcp_syncache_rexmtlimit_check(SYSCTL_HANDLER_ARGS)
 }
 
 SYSCTL_PROC(_net_inet_tcp_syncache, OID_AUTO, rexmtlimit,
-    CTLFLAG_VNET | CTLTYPE_UINT | CTLFLAG_RW,
+    CTLFLAG_VNET | CTLTYPE_UINT | CTLFLAG_RW | CTLFLAG_NEEDGIANT,
     &VNET_NAME(tcp_syncache.rexmt_limit), 0,
     sysctl_net_inet_tcp_syncache_rexmtlimit_check, "UI",
     "Limit on SYN/ACK retransmissions");
@@ -467,6 +468,7 @@ syncache_timer(void *xsch)
 {
 	struct syncache_head *sch = (struct syncache_head *)xsch;
 	struct syncache *sc, *nsc;
+	struct epoch_tracker et;
 	int tick = ticks;
 	char *s;
 	bool paused;
@@ -526,7 +528,9 @@ syncache_timer(void *xsch)
 			free(s, M_TCPLOG);
 		}
 
+		NET_EPOCH_ENTER(et);
 		syncache_respond(sc, NULL, TH_SYN|TH_ACK);
+		NET_EPOCH_EXIT(et);
 		TCPSTAT_INC(tcps_sc_retransmitted);
 		syncache_timeout(sc, sch, 0);
 	}
@@ -771,7 +775,7 @@ syncache_socket(struct syncache *sc, struct socket *lso, struct mbuf *m)
 	int error;
 	char *s;
 
-	INP_INFO_RLOCK_ASSERT(&V_tcbinfo);
+	NET_EPOCH_ASSERT();
 
 	/*
 	 * Ok, create the full blown connection, and set things up
@@ -841,33 +845,7 @@ syncache_socket(struct syncache *sc, struct socket *lso, struct mbuf *m)
 #endif
 	}
 
-	/*
-	 * Install in the reservation hash table for now, but don't yet
-	 * install a connection group since the full 4-tuple isn't yet
-	 * configured.
-	 */
 	inp->inp_lport = sc->sc_inc.inc_lport;
-	if ((error = in_pcbinshash_nopcbgroup(inp)) != 0) {
-		/*
-		 * Undo the assignments above if we failed to
-		 * put the PCB on the hash lists.
-		 */
-#ifdef INET6
-		if (sc->sc_inc.inc_flags & INC_ISIPV6)
-			inp->in6p_laddr = in6addr_any;
-		else
-#endif
-			inp->inp_laddr.s_addr = INADDR_ANY;
-		inp->inp_lport = 0;
-		if ((s = tcp_log_addrs(&sc->sc_inc, NULL, NULL, NULL))) {
-			log(LOG_DEBUG, "%s; %s: in_pcbinshash failed "
-			    "with error %i\n",
-			    s, __func__, error);
-			free(s, M_TCPLOG);
-		}
-		INP_HASH_WUNLOCK(&V_tcbinfo);
-		goto abort;
-	}
 #ifdef INET6
 	if (inp->inp_vflag & INP_IPV6PROTO) {
 		struct inpcb *oinp = sotoinpcb(lso);
@@ -900,7 +878,7 @@ syncache_socket(struct syncache *sc, struct socket *lso, struct mbuf *m)
 		if (IN6_IS_ADDR_UNSPECIFIED(&inp->in6p_laddr))
 			inp->in6p_laddr = sc->sc_inc.inc6_laddr;
 		if ((error = in6_pcbconnect_mbuf(inp, (struct sockaddr *)&sin6,
-		    thread0.td_ucred, m)) != 0) {
+		    thread0.td_ucred, m, false)) != 0) {
 			inp->in6p_laddr = laddr6;
 			if ((s = tcp_log_addrs(&sc->sc_inc, NULL, NULL, NULL))) {
 				log(LOG_DEBUG, "%s; %s: in6_pcbconnect failed "
@@ -925,7 +903,7 @@ syncache_socket(struct syncache *sc, struct socket *lso, struct mbuf *m)
 		struct sockaddr_in sin;
 
 		inp->inp_options = (m) ? ip_srcroute(m) : NULL;
-		
+
 		if (inp->inp_options == NULL) {
 			inp->inp_options = sc->sc_ipopts;
 			sc->sc_ipopts = NULL;
@@ -940,7 +918,7 @@ syncache_socket(struct syncache *sc, struct socket *lso, struct mbuf *m)
 		if (inp->inp_laddr.s_addr == INADDR_ANY)
 			inp->inp_laddr = sc->sc_inc.inc_laddr;
 		if ((error = in_pcbconnect_mbuf(inp, (struct sockaddr *)&sin,
-		    thread0.td_ucred, m)) != 0) {
+		    thread0.td_ucred, m, false)) != 0) {
 			inp->inp_laddr = laddr;
 			if ((s = tcp_log_addrs(&sc->sc_inc, NULL, NULL, NULL))) {
 				log(LOG_DEBUG, "%s; %s: in_pcbconnect failed "
@@ -969,11 +947,11 @@ syncache_socket(struct syncache *sc, struct socket *lso, struct mbuf *m)
 	if (V_functions_inherit_listen_socket_stack && blk != tp->t_fb) {
 		/*
 		 * Our parents t_fb was not the default,
-		 * we need to release our ref on tp->t_fb and 
+		 * we need to release our ref on tp->t_fb and
 		 * pickup one on the new entry.
 		 */
 		struct tcp_function_block *rblk;
-		
+
 		rblk = find_and_ref_tcp_fb(blk);
 		KASSERT(rblk != NULL,
 		    ("cannot find blk %p out of syncache?", blk));
@@ -990,7 +968,7 @@ syncache_socket(struct syncache *sc, struct socket *lso, struct mbuf *m)
 		if (tp->t_fb->tfb_tcp_fb_init) {
 			(*tp->t_fb->tfb_tcp_fb_init)(tp);
 		}
-	}		
+	}
 	tp->snd_wl1 = sc->sc_irs;
 	tp->snd_max = tp->iss + 1;
 	tp->snd_nxt = tp->iss + 1;
@@ -1023,7 +1001,7 @@ syncache_socket(struct syncache *sc, struct socket *lso, struct mbuf *m)
 	}
 
 	if (sc->sc_flags & SCF_ECN)
-		tp->t_flags |= TF_ECN_PERMIT;
+		tp->t_flags2 |= TF2_ECN_PERMIT;
 
 	/*
 	 * Set up MSS and get cached values from tcp_hostcache.
@@ -1091,11 +1069,7 @@ syncache_expand(struct in_conninfo *inc, struct tcpopt *to, struct tcphdr *th,
 	char *s;
 	bool locked;
 
-	/*
-	 * Global TCP locks are held because we manipulate the PCB lists
-	 * and create a new socket.
-	 */
-	INP_INFO_RLOCK_ASSERT(&V_tcbinfo);
+	NET_EPOCH_ASSERT();
 	KASSERT((th->th_flags & (TH_RST|TH_ACK|TH_SYN)) == TH_ACK,
 	    ("%s: can handle only ACK", __func__));
 
@@ -1234,7 +1208,7 @@ syncache_expand(struct in_conninfo *inc, struct tcpopt *to, struct tcphdr *th,
 
 		/*
 		 * Pull out the entry to unlock the bucket row.
-		 * 
+		 *
 		 * NOTE: We must decrease TCPS_SYN_RECEIVED count here, not
 		 * tcp_state_change().  The tcpcb is not existent at this
 		 * moment.  A new one will be allocated via syncache_socket->
@@ -1331,11 +1305,7 @@ syncache_tfo_expand(struct syncache *sc, struct socket **lsop, struct mbuf *m,
 	struct tcpcb *tp;
 	unsigned int *pending_counter;
 
-	/*
-	 * Global TCP locks are held because we manipulate the PCB lists
-	 * and create a new socket.
-	 */
-	INP_INFO_RLOCK_ASSERT(&V_tcbinfo);
+	NET_EPOCH_ASSERT();
 
 	pending_counter = intotcpcb(sotoinpcb(*lsop))->t_tfo_pending;
 	*lsop = syncache_socket(sc, *lsop, m);
@@ -1377,7 +1347,7 @@ syncache_tfo_expand(struct syncache *sc, struct socket **lsop, struct mbuf *m,
 int
 syncache_add(struct in_conninfo *inc, struct tcpopt *to, struct tcphdr *th,
     struct inpcb *inp, struct socket **lsop, struct mbuf *m, void *tod,
-    void *todctx)
+    void *todctx, uint8_t iptos)
 {
 	struct tcpcb *tp;
 	struct socket *so;
@@ -1699,7 +1669,8 @@ skip_alloc:
 		sc->sc_peer_mss = to->to_mss;	/* peer mss may be zero */
 	if (ltflags & TF_NOOPT)
 		sc->sc_flags |= SCF_NOOPT;
-	if ((th->th_flags & (TH_ECE|TH_CWR)) && V_tcp_do_ecn)
+	if (((th->th_flags & (TH_ECE|TH_CWR)) == (TH_ECE|TH_CWR)) &&
+	    V_tcp_do_ecn)
 		sc->sc_flags |= SCF_ECN;
 
 	if (V_tcp_syncookies)
@@ -1785,6 +1756,9 @@ syncache_respond(struct syncache *sc, const struct mbuf *m0, int flags)
 #ifdef INET6
 	struct ip6_hdr *ip6 = NULL;
 #endif
+
+	NET_EPOCH_ASSERT();
+
 	hlen =
 #ifdef INET6
 	       (sc->sc_inc.inc_flags & INC_ISIPV6) ? sizeof(struct ip6_hdr) :
@@ -1820,7 +1794,8 @@ syncache_respond(struct syncache *sc, const struct mbuf *m0, int flags)
 		ip6->ip6_dst = sc->sc_inc.inc6_faddr;
 		ip6->ip6_plen = htons(tlen - hlen);
 		/* ip6_hlim is set after checksum */
-		ip6->ip6_flow &= ~IPV6_FLOWLABEL_MASK;
+		/* Zero out traffic class and flow label. */
+		ip6->ip6_flow &= ~IPV6_FLOWINFO_MASK;
 		ip6->ip6_flow |= sc->sc_flowlabel;
 
 		th = (struct tcphdr *)(ip6 + 1);
@@ -2199,7 +2174,7 @@ syncookie_generate(struct syncache_head *sch, struct syncache *sc)
 }
 
 static struct syncache *
-syncookie_lookup(struct in_conninfo *inc, struct syncache_head *sch, 
+syncookie_lookup(struct in_conninfo *inc, struct syncache_head *sch,
     struct syncache *sc, struct tcphdr *th, struct tcpopt *to,
     struct socket *lso)
 {
@@ -2235,7 +2210,7 @@ syncookie_lookup(struct in_conninfo *inc, struct syncache_head *sch,
 	sc->sc_flags = 0;
 	bcopy(inc, &sc->sc_inc, sizeof(struct in_conninfo));
 	sc->sc_ipopts = NULL;
-	
+
 	sc->sc_irs = seq;
 	sc->sc_iss = ack;
 
@@ -2249,7 +2224,8 @@ syncookie_lookup(struct in_conninfo *inc, struct syncache_head *sch,
 #ifdef INET6
 	case INC_ISIPV6:
 		if (sotoinpcb(lso)->inp_flags & IN6P_AUTOFLOWLABEL)
-			sc->sc_flowlabel = sc->sc_iss & IPV6_FLOWLABEL_MASK;
+			sc->sc_flowlabel =
+			    htonl(sc->sc_iss) & IPV6_FLOWLABEL_MASK;
 		break;
 #endif
 	}
@@ -2460,46 +2436,41 @@ syncache_unpause(void *arg)
  * amount of space the caller allocated for this function to use.
  */
 int
-syncache_pcblist(struct sysctl_req *req, int max_pcbs, int *pcbs_exported)
+syncache_pcblist(struct sysctl_req *req)
 {
 	struct xtcpcb xt;
 	struct syncache *sc;
 	struct syncache_head *sch;
-	int count, error, i;
+	int error, i;
 
-	for (count = 0, error = 0, i = 0; i < V_tcp_syncache.hashsize; i++) {
+	bzero(&xt, sizeof(xt));
+	xt.xt_len = sizeof(xt);
+	xt.t_state = TCPS_SYN_RECEIVED;
+	xt.xt_inp.xi_socket.xso_protocol = IPPROTO_TCP;
+	xt.xt_inp.xi_socket.xso_len = sizeof (struct xsocket);
+	xt.xt_inp.xi_socket.so_type = SOCK_STREAM;
+	xt.xt_inp.xi_socket.so_state = SS_ISCONNECTING;
+
+	for (i = 0; i < V_tcp_syncache.hashsize; i++) {
 		sch = &V_tcp_syncache.hashbase[i];
 		SCH_LOCK(sch);
 		TAILQ_FOREACH(sc, &sch->sch_bucket, sc_hash) {
-			if (count >= max_pcbs) {
-				SCH_UNLOCK(sch);
-				goto exit;
-			}
 			if (cr_cansee(req->td->td_ucred, sc->sc_cred) != 0)
 				continue;
-			bzero(&xt, sizeof(xt));
-			xt.xt_len = sizeof(xt);
 			if (sc->sc_inc.inc_flags & INC_ISIPV6)
 				xt.xt_inp.inp_vflag = INP_IPV6;
 			else
 				xt.xt_inp.inp_vflag = INP_IPV4;
 			bcopy(&sc->sc_inc, &xt.xt_inp.inp_inc,
 			    sizeof (struct in_conninfo));
-			xt.t_state = TCPS_SYN_RECEIVED;
-			xt.xt_inp.xi_socket.xso_protocol = IPPROTO_TCP;
-			xt.xt_inp.xi_socket.xso_len = sizeof (struct xsocket);
-			xt.xt_inp.xi_socket.so_type = SOCK_STREAM;
-			xt.xt_inp.xi_socket.so_state = SS_ISCONNECTING;
 			error = SYSCTL_OUT(req, &xt, sizeof xt);
 			if (error) {
 				SCH_UNLOCK(sch);
-				goto exit;
+				return (0);
 			}
-			count++;
 		}
 		SCH_UNLOCK(sch);
 	}
-exit:
-	*pcbs_exported = count;
-	return error;
+
+	return (0);
 }

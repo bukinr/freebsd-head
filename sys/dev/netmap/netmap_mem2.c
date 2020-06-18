@@ -1523,11 +1523,12 @@ static int
 netmap_mem_unmap(struct netmap_obj_pool *p, struct netmap_adapter *na)
 {
 	int i, lim = p->objtotal;
-	struct netmap_lut *lut = &na->na_lut;
+	struct netmap_lut *lut;
 
 	if (na == NULL || na->pdev == NULL)
 		return 0;
 
+	lut = &na->na_lut;
 #if defined(__FreeBSD__)
 	/* On FreeBSD mapping and unmapping is performed by the txsync
 	 * and rxsync routine, packet by packet. */
@@ -2447,8 +2448,8 @@ netmap_mem_pt_guest_ifp_del(struct netmap_mem_d *nmd, struct ifnet *ifp)
 			} else {
 				ptnmd->pt_ifs = curr->next;
 			}
-			nm_prinf("removed (ifp=%p,nifp_offset=%u)",
-			  curr->ifp, curr->nifp_offset);
+			nm_prinf("removed (ifp=%s,nifp_offset=%u)",
+			  curr->ifp->if_xname, curr->nifp_offset);
 			nm_os_free(curr);
 			ret = 0;
 			break;

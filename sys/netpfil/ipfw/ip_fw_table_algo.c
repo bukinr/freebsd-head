@@ -51,7 +51,7 @@ __FBSDID("$FreeBSD$");
 #include <net/if.h>	/* ip_fw.h requires IFNAMSIZ */
 #include <net/radix.h>
 #include <net/route.h>
-#include <net/route_var.h>
+#include <net/route/route_var.h>
 
 #include <netinet/in.h>
 #include <netinet/in_fib.h>
@@ -3204,7 +3204,8 @@ ta_lookup_fhash(struct table_info *ti, void *key, uint32_t keylen,
 	struct fhashentry *ent;
 	struct fhashentry4 *m4;
 	struct ipfw_flow_id *id;
-	uint16_t hash, hsize;
+	uint32_t hsize;
+	uint16_t hash;
 
 	id = (struct ipfw_flow_id *)key;
 	head = (struct fhashbhead *)ti->state;

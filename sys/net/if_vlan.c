@@ -46,6 +46,7 @@
 __FBSDID("$FreeBSD$");
 
 #include "opt_inet.h"
+#include "opt_inet6.h"
 #include "opt_kern_tls.h"
 #include "opt_vlan.h"
 #include "opt_ratelimit.h"
@@ -75,11 +76,20 @@ __FBSDID("$FreeBSD$");
 #include <net/if_dl.h>
 #include <net/if_types.h>
 #include <net/if_vlan_var.h>
+#include <net/route.h>
 #include <net/vnet.h>
 
 #ifdef INET
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
+#endif
+
+#ifdef INET6
+/*
+ * XXX: declare here to avoid to include many inet6 related files..
+ * should be more generalized?
+ */
+extern void	nd6_setmtu(struct ifnet *);
 #endif
 
 #define	VLAN_DEF_HWIDTH	4
@@ -584,7 +594,7 @@ vlan_setmulti(struct ifnet *ifp)
 	while ((mc = CK_SLIST_FIRST(&sc->vlan_mc_listhead)) != NULL) {
 		CK_SLIST_REMOVE_HEAD(&sc->vlan_mc_listhead, mc_entries);
 		(void)if_delmulti(ifp_p, (struct sockaddr *)&mc->mc_addr);
-		epoch_call(net_epoch_preempt, &mc->mc_epoch_ctx, vlan_mc_free);
+		NET_EPOCH_CALL(vlan_mc_free, &mc->mc_epoch_ctx);
 	}
 
 	/* Now program new ones. */
@@ -911,7 +921,7 @@ vnet_vlan_uninit(const void *unused __unused)
 
 	if_clone_detach(V_vlan_cloner);
 }
-VNET_SYSUNINIT(vnet_vlan_uninit, SI_SUB_INIT_IF, SI_ORDER_FIRST,
+VNET_SYSUNINIT(vnet_vlan_uninit, SI_SUB_INIT_IF, SI_ORDER_ANY,
     vnet_vlan_uninit, NULL);
 #endif
 
@@ -953,10 +963,14 @@ vlan_clone_match_ethervid(const char *name, int *vidp)
 static int
 vlan_clone_match(struct if_clone *ifc, const char *name)
 {
+	struct ifnet *ifp;
 	const char *cp;
 
-	if (vlan_clone_match_ethervid(name, NULL) != NULL)
+	ifp = vlan_clone_match_ethervid(name, NULL);
+	if (ifp != NULL) {
+		if_rele(ifp);
 		return (1);
+	}
 
 	if (strncmp(vlanname, name, strlen(vlanname)) != 0)
 		return (0);
@@ -1346,11 +1360,10 @@ vlan_lladdr_fn(void *arg, int pending __unused)
 static int
 vlan_config(struct ifvlan *ifv, struct ifnet *p, uint16_t vid)
 {
+	struct epoch_tracker et;
 	struct ifvlantrunk *trunk;
 	struct ifnet *ifp;
 	int error = 0;
-
-	NET_EPOCH_ASSERT();
 
 	/*
 	 * We can handle non-ethernet hardware types as long as
@@ -1452,17 +1465,27 @@ vlan_config(struct ifvlan *ifv, struct ifnet *p, uint16_t vid)
 
 	ifp->if_link_state = p->if_link_state;
 
+	NET_EPOCH_ENTER(et);
 	vlan_capabilities(ifv);
+	NET_EPOCH_EXIT(et);
 
 	/*
 	 * Set up our interface address to reflect the underlying
 	 * physical interface's.
 	 */
-	bcopy(IF_LLADDR(p), IF_LLADDR(ifp), p->if_addrlen);
+	TASK_INIT(&ifv->lladdr_task, 0, vlan_lladdr_fn, ifv);
 	((struct sockaddr_dl *)ifp->if_addr->ifa_addr)->sdl_alen =
 	    p->if_addrlen;
 
-	TASK_INIT(&ifv->lladdr_task, 0, vlan_lladdr_fn, ifv);
+	/*
+	 * Do not schedule link address update if it was the same
+	 * as previous parent's. This helps avoid updating for each
+	 * associated llentry.
+	 */
+	if (memcmp(IF_LLADDR(p), IF_LLADDR(ifp), p->if_addrlen) != 0) {
+		bcopy(IF_LLADDR(p), IF_LLADDR(ifp), p->if_addrlen);
+		taskqueue_enqueue(taskqueue_thread, &ifv->lladdr_task);
+	}
 
 	/* We are ready for operation now. */
 	ifp->if_drv_flags |= IFF_DRV_RUNNING;
@@ -1534,7 +1557,7 @@ vlan_unconfig_locked(struct ifnet *ifp, int departing)
 					    error);
 			}
 			CK_SLIST_REMOVE_HEAD(&ifv->vlan_mc_listhead, mc_entries);
-			epoch_call(net_epoch_preempt, &mc->mc_epoch_ctx, vlan_mc_free);
+			NET_EPOCH_CALL(vlan_mc_free, &mc->mc_epoch_ctx);
 		}
 
 		vlan_setflags(ifp, 0); /* clear special flags on parent */
@@ -1624,14 +1647,16 @@ vlan_setflags(struct ifnet *ifp, int status)
 static void
 vlan_link_state(struct ifnet *ifp)
 {
+	struct epoch_tracker et;
 	struct ifvlantrunk *trunk;
 	struct ifvlan *ifv;
 
-	NET_EPOCH_ASSERT();
-
+	NET_EPOCH_ENTER(et);
 	trunk = ifp->if_vlantrunk;
-	if (trunk == NULL)
+	if (trunk == NULL) {
+		NET_EPOCH_EXIT(et);
 		return;
+	}
 
 	TRUNK_WLOCK(trunk);
 	VLAN_FOREACH(ifv, trunk) {
@@ -1640,6 +1665,7 @@ vlan_link_state(struct ifnet *ifp)
 		    trunk->parent->if_link_state);
 	}
 	TRUNK_WUNLOCK(trunk);
+	NET_EPOCH_EXIT(et);
 }
 
 static void
@@ -1769,6 +1795,7 @@ vlan_capabilities(struct ifvlan *ifv)
 static void
 vlan_trunk_capabilities(struct ifnet *ifp)
 {
+	struct epoch_tracker et;
 	struct ifvlantrunk *trunk;
 	struct ifvlan *ifv;
 
@@ -1778,8 +1805,10 @@ vlan_trunk_capabilities(struct ifnet *ifp)
 		VLAN_SUNLOCK();
 		return;
 	}
+	NET_EPOCH_ENTER(et);
 	VLAN_FOREACH(ifv, trunk)
 		vlan_capabilities(ifv);
+	NET_EPOCH_EXIT(et);
 	VLAN_SUNLOCK();
 }
 
@@ -1792,9 +1821,7 @@ vlan_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	struct ifvlan *ifv;
 	struct ifvlantrunk *trunk;
 	struct vlanreq vlr;
-	int error = 0;
-
-	NET_EPOCH_ASSERT();
+	int error = 0, oldmtu;
 
 	ifr = (struct ifreq *)data;
 	ifa = (struct ifaddr *) data;
@@ -1888,8 +1915,20 @@ vlan_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			error = ENOENT;
 			break;
 		}
+		oldmtu = ifp->if_mtu;
 		error = vlan_config(ifv, p, vlr.vlr_tag);
 		if_rele(p);
+
+		/*
+		 * VLAN MTU may change during addition of the vlandev.
+		 * If it did, do network layer specific procedure.
+		 */
+		if (ifp->if_mtu != oldmtu) {
+#ifdef INET6
+			nd6_setmtu(ifp);
+#endif
+			rt_updatemtu(ifp);
+		}
 		break;
 
 	case SIOCGETVLAN:
@@ -1972,8 +2011,13 @@ vlan_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		VLAN_SLOCK();
 		ifv->ifv_capenable = ifr->ifr_reqcap;
 		trunk = TRUNK(ifv);
-		if (trunk != NULL)
+		if (trunk != NULL) {
+			struct epoch_tracker et;
+
+			NET_EPOCH_ENTER(et);
 			vlan_capabilities(ifv);
+			NET_EPOCH_EXIT(et);
+		}
 		VLAN_SUNLOCK();
 		break;
 

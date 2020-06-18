@@ -434,7 +434,16 @@ void *Reallocf(void *, size_t, const char *, int);
 void Free(void *, const char *, int);
 extern void	mallocstats(void);
 
-#ifdef DEBUG_MALLOC
+const char *x86_hypervisor(void);
+
+#ifdef USER_MALLOC
+extern void *malloc(size_t);
+extern void *memalign(size_t, size_t);
+extern void *calloc(size_t, size_t);
+extern void free(void *);
+extern void *realloc(void *, size_t);
+extern void *reallocf(void *, size_t);
+#elif defined(DEBUG_MALLOC)
 #define malloc(x)	Malloc(x, __FILE__, __LINE__)
 #define memalign(x, y)	Memalign(x, y, __FILE__, __LINE__)
 #define calloc(x, y)	Calloc(x, y, __FILE__, __LINE__)
@@ -449,5 +458,10 @@ extern void	mallocstats(void);
 #define realloc(x, y)	Realloc(x, y, NULL, 0)
 #define reallocf(x, y)	Reallocf(x, y, NULL, 0)
 #endif
+
+/*
+ * va <-> pa routines. MD code must supply.
+ */
+caddr_t ptov(uintptr_t);
 
 #endif	/* STAND_H */

@@ -751,9 +751,11 @@ pgadjustjobc(struct pgrp *pgrp, int entering)
 {
 
 	PGRP_LOCK(pgrp);
-	if (entering)
+	if (entering) {
+		MPASS(pgrp->pg_jobc >= 0);
 		pgrp->pg_jobc++;
-	else {
+	} else {
+		MPASS(pgrp->pg_jobc > 0);
 		--pgrp->pg_jobc;
 		if (pgrp->pg_jobc == 0)
 			orphanpg(pgrp);
@@ -871,7 +873,7 @@ killjobc(void)
 			sx_xunlock(&proctree_lock);
 			if (vn_lock(ttyvp, LK_EXCLUSIVE) == 0) {
 				VOP_REVOKE(ttyvp, REVOKEALL);
-				VOP_UNLOCK(ttyvp, 0);
+				VOP_UNLOCK(ttyvp);
 			}
 			vrele(ttyvp);
 			sx_xlock(&proctree_lock);
@@ -1297,7 +1299,7 @@ pstats_free(struct pstats *ps)
  * it can be replaced by assignment of zero.
  */
 static inline uint32_t
-ptr32_trim(void *ptr)
+ptr32_trim(const void *ptr)
 {
 	uintptr_t uptr;
 
@@ -2362,7 +2364,7 @@ kern_proc_vmmap_resident(vm_map_t map, vm_map_entry_t entry,
 	vm_object_t obj, tobj;
 	vm_page_t m, m_adv;
 	vm_offset_t addr;
-	vm_paddr_t locked_pa;
+	vm_paddr_t pa;
 	vm_pindex_t pi, pi_adv, pindex;
 
 	*super = false;
@@ -2370,7 +2372,7 @@ kern_proc_vmmap_resident(vm_map_t map, vm_map_entry_t entry,
 	if (vmmap_skip_res_cnt)
 		return;
 
-	locked_pa = 0;
+	pa = 0;
 	obj = entry->object.vm_object;
 	addr = entry->start;
 	m_adv = NULL;
@@ -2400,8 +2402,7 @@ kern_proc_vmmap_resident(vm_map_t map, vm_map_entry_t entry,
 		m_adv = NULL;
 		if (m->psind != 0 && addr + pagesizes[1] <= entry->end &&
 		    (addr & (pagesizes[1] - 1)) == 0 &&
-		    (pmap_mincore(map->pmap, addr, &locked_pa) &
-		    MINCORE_SUPER) != 0) {
+		    (pmap_mincore(map->pmap, addr, &pa) & MINCORE_SUPER) != 0) {
 			*super = true;
 			pi_adv = atop(pagesizes[1]);
 		} else {
@@ -2417,7 +2418,6 @@ kern_proc_vmmap_resident(vm_map_t map, vm_map_entry_t entry,
 		*resident_count += pi_adv;
 next:;
 	}
-	PA_UNLOCK_COND(locked_pa);
 }
 
 /*
@@ -2671,17 +2671,12 @@ sysctl_kern_proc_kstack(SYSCTL_HANDLER_ARGS)
 		    sizeof(kkstp->kkst_trace), SBUF_FIXEDLEN);
 		thread_lock(td);
 		kkstp->kkst_tid = td->td_tid;
-		if (TD_IS_SWAPPED(td)) {
+		if (TD_IS_SWAPPED(td))
 			kkstp->kkst_state = KKST_STATE_SWAPPED;
-		} else if (TD_IS_RUNNING(td)) {
-			if (stack_save_td_running(st, td) == 0)
-				kkstp->kkst_state = KKST_STATE_STACKOK;
-			else
-				kkstp->kkst_state = KKST_STATE_RUNNING;
-		} else {
+		else if (stack_save_td(st, td) == 0)
 			kkstp->kkst_state = KKST_STATE_STACKOK;
-			stack_save_td(st, td);
-		}
+		else
+			kkstp->kkst_state = KKST_STATE_RUNNING;
 		thread_unlock(td);
 		PROC_UNLOCK(p);
 		stack_sbuf_print(&sb, st);
@@ -2969,7 +2964,79 @@ sysctl_kern_proc_sigtramp(SYSCTL_HANDLER_ARGS)
 	return (error);
 }
 
-SYSCTL_NODE(_kern, KERN_PROC, proc, CTLFLAG_RD,  0, "Process table");
+static int
+sysctl_kern_proc_sigfastblk(SYSCTL_HANDLER_ARGS)
+{
+	int *name = (int *)arg1;
+	u_int namelen = arg2;
+	pid_t pid;
+	struct proc *p;
+	struct thread *td1;
+	uintptr_t addr;
+#ifdef COMPAT_FREEBSD32
+	uint32_t addr32;
+#endif
+	int error;
+
+	if (namelen != 1 || req->newptr != NULL)
+		return (EINVAL);
+
+	pid = (pid_t)name[0];
+	error = pget(pid, PGET_HOLD | PGET_NOTWEXIT | PGET_CANDEBUG, &p);
+	if (error != 0)
+		return (error);
+
+	PROC_LOCK(p);
+#ifdef COMPAT_FREEBSD32
+	if (SV_CURPROC_FLAG(SV_ILP32)) {
+		if (!SV_PROC_FLAG(p, SV_ILP32)) {
+			error = EINVAL;
+			goto errlocked;
+		}
+	}
+#endif
+	if (pid <= PID_MAX) {
+		td1 = FIRST_THREAD_IN_PROC(p);
+	} else {
+		FOREACH_THREAD_IN_PROC(p, td1) {
+			if (td1->td_tid == pid)
+				break;
+		}
+	}
+	if (td1 == NULL) {
+		error = ESRCH;
+		goto errlocked;
+	}
+	/*
+	 * The access to the private thread flags.  It is fine as far
+	 * as no out-of-thin-air values are read from td_pflags, and
+	 * usermode read of the td_sigblock_ptr is racy inherently,
+	 * since target process might have already changed it
+	 * meantime.
+	 */
+	if ((td1->td_pflags & TDP_SIGFASTBLOCK) != 0)
+		addr = (uintptr_t)td1->td_sigblock_ptr;
+	else
+		error = ENOTTY;
+
+errlocked:
+	_PRELE(p);
+	PROC_UNLOCK(p);
+	if (error != 0)
+		return (error);
+
+#ifdef COMPAT_FREEBSD32
+	if (SV_CURPROC_FLAG(SV_ILP32)) {
+		addr32 = addr;
+		error = SYSCTL_OUT(req, &addr32, sizeof(addr32));
+	} else
+#endif
+		error = SYSCTL_OUT(req, &addr, sizeof(addr));
+	return (error);
+}
+
+SYSCTL_NODE(_kern, KERN_PROC, proc, CTLFLAG_RD | CTLFLAG_MPSAFE,  0,
+    "Process table");
 
 SYSCTL_PROC(_kern_proc, KERN_PROC_ALL, all, CTLFLAG_RD|CTLTYPE_STRUCT|
 	CTLFLAG_MPSAFE, 0, 0, sysctl_kern_proc, "S,proc",
@@ -3081,6 +3148,10 @@ static SYSCTL_NODE(_kern_proc, KERN_PROC_OSREL, osrel, CTLFLAG_RW |
 static SYSCTL_NODE(_kern_proc, KERN_PROC_SIGTRAMP, sigtramp, CTLFLAG_RD |
 	CTLFLAG_MPSAFE, sysctl_kern_proc_sigtramp,
 	"Process signal trampoline location");
+
+static SYSCTL_NODE(_kern_proc, KERN_PROC_SIGFASTBLK, sigfastblk, CTLFLAG_RD |
+	CTLFLAG_ANYBODY | CTLFLAG_MPSAFE, sysctl_kern_proc_sigfastblk,
+	"Thread sigfastblock address");
 
 int allproc_gen;
 

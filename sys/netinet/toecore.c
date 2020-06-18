@@ -77,7 +77,7 @@ static eventhandler_tag lle_event_eh;
 
 static int
 toedev_connect(struct toedev *tod __unused, struct socket *so __unused,
-    struct rtentry *rt __unused, struct sockaddr *nam __unused)
+    struct nhop_object *nh __unused, struct sockaddr *nam __unused)
 {
 
 	return (ENOTSUP);
@@ -138,7 +138,7 @@ toedev_l2_update(struct toedev *tod __unused, struct ifnet *ifp __unused,
 
 static void
 toedev_route_redirect(struct toedev *tod __unused, struct ifnet *ifp __unused,
-    struct rtentry *rt0 __unused, struct rtentry *rt1 __unused)
+    struct nhop_object *nh0 __unused, struct nhop_object *nh1 __unused)
 {
 
 	return;
@@ -193,7 +193,7 @@ toedev_tcp_info(struct toedev *tod __unused, struct tcpcb *tp __unused,
 
 static int
 toedev_alloc_tls_session(struct toedev *tod __unused, struct tcpcb *tp __unused,
-    struct ktls_session *tls __unused)
+    struct ktls_session *tls __unused, int direction __unused)
 {
 
 	return (EINVAL);
@@ -346,13 +346,13 @@ unregister_toedev(struct toedev *tod)
 
 void
 toe_syncache_add(struct in_conninfo *inc, struct tcpopt *to, struct tcphdr *th,
-    struct inpcb *inp, void *tod, void *todctx)
+    struct inpcb *inp, void *tod, void *todctx, uint8_t iptos)
 {
 	struct socket *lso = inp->inp_socket;
 
 	INP_WLOCK_ASSERT(inp);
 
-	syncache_add(inc, to, th, inp, &lso, NULL, tod, todctx);
+	syncache_add(inc, to, th, inp, &lso, NULL, tod, todctx, iptos);
 }
 
 int
@@ -360,7 +360,7 @@ toe_syncache_expand(struct in_conninfo *inc, struct tcpopt *to,
     struct tcphdr *th, struct socket **lsop)
 {
 
-	INP_INFO_RLOCK_ASSERT(&V_tcbinfo);
+	NET_EPOCH_ASSERT();
 
 	return (syncache_expand(inc, to, th, lsop, NULL));
 }
@@ -390,8 +390,6 @@ toe_4tuple_check(struct in_conninfo *inc, struct tcphdr *th, struct ifnet *ifp)
 		INP_WLOCK_ASSERT(inp);
 
 		if ((inp->inp_flags & INP_TIMEWAIT) && th != NULL) {
-
-			INP_INFO_RLOCK_ASSERT(&V_tcbinfo); /* for twcheck */
 			if (!tcp_twcheck(inp, NULL, th, NULL, 0))
 				return (EADDRINUSE);
 		} else {
@@ -505,6 +503,7 @@ void
 toe_connect_failed(struct toedev *tod, struct inpcb *inp, int err)
 {
 
+	NET_EPOCH_ASSERT();
 	INP_WLOCK_ASSERT(inp);
 
 	if (!(inp->inp_flags & INP_DROPPED)) {
@@ -529,7 +528,6 @@ toe_connect_failed(struct toedev *tod, struct inpcb *inp, int err)
 			(void) tp->t_fb->tfb_tcp_output(tp);
 		} else {
 
-			INP_INFO_RLOCK_ASSERT(&V_tcbinfo);
 			tp = tcp_drop(tp, err);
 			if (tp == NULL)
 				INP_WLOCK(inp);	/* re-acquire */

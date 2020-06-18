@@ -80,128 +80,6 @@ struct malloc_type;
 #define UFS_FREE(ptr, type) free(ptr, type)
 #define UFS_TIME time_second
 
-/*
- * Return buffer with the contents of block "offset" from the beginning of
- * directory "ip".  If "res" is non-zero, fill it in with a pointer to the
- * remaining space in the directory.
- */
-int
-ffs_blkatoff(struct vnode *vp, off_t offset, char **res, struct buf **bpp)
-{
-	struct inode *ip;
-	struct fs *fs;
-	struct buf *bp;
-	ufs_lbn_t lbn;
-	int bsize, error;
-
-	ip = VTOI(vp);
-	fs = ITOFS(ip);
-	lbn = lblkno(fs, offset);
-	bsize = blksize(fs, ip, lbn);
-
-	*bpp = NULL;
-	error = bread(vp, lbn, bsize, NOCRED, &bp);
-	if (error) {
-		return (error);
-	}
-	if (res)
-		*res = (char *)bp->b_data + blkoff(fs, offset);
-	*bpp = bp;
-	return (0);
-}
-
-/*
- * Load up the contents of an inode and copy the appropriate pieces
- * to the incore copy.
- */
-int
-ffs_load_inode(struct buf *bp, struct inode *ip, struct fs *fs, ino_t ino)
-{
-	struct ufs1_dinode *dip1;
-	struct ufs2_dinode *dip2;
-	int error;
-
-	if (I_IS_UFS1(ip)) {
-		dip1 = ip->i_din1;
-		*dip1 =
-		    *((struct ufs1_dinode *)bp->b_data + ino_to_fsbo(fs, ino));
-		ip->i_mode = dip1->di_mode;
-		ip->i_nlink = dip1->di_nlink;
-		ip->i_effnlink = dip1->di_nlink;
-		ip->i_size = dip1->di_size;
-		ip->i_flags = dip1->di_flags;
-		ip->i_gen = dip1->di_gen;
-		ip->i_uid = dip1->di_uid;
-		ip->i_gid = dip1->di_gid;
-		return (0);
-	}
-	dip2 = ((struct ufs2_dinode *)bp->b_data + ino_to_fsbo(fs, ino));
-	if ((error = ffs_verify_dinode_ckhash(fs, dip2)) != 0) {
-		printf("%s: inode %jd: check-hash failed\n", fs->fs_fsmnt,
-		    (intmax_t)ino);
-		return (error);
-	}
-	*ip->i_din2 = *dip2;
-	dip2 = ip->i_din2;
-	ip->i_mode = dip2->di_mode;
-	ip->i_nlink = dip2->di_nlink;
-	ip->i_effnlink = dip2->di_nlink;
-	ip->i_size = dip2->di_size;
-	ip->i_flags = dip2->di_flags;
-	ip->i_gen = dip2->di_gen;
-	ip->i_uid = dip2->di_uid;
-	ip->i_gid = dip2->di_gid;
-	return (0);
-}
-
-/*
- * Verify that a filesystem block number is a valid data block.
- * This routine is only called on untrusted filesystems.
- */
-int
-ffs_check_blkno(struct mount *mp, ino_t inum, ufs2_daddr_t daddr, int blksize)
-{
-	struct fs *fs;
-	struct ufsmount *ump;
-	ufs2_daddr_t end_daddr;
-	int cg, havemtx;
-
-	KASSERT((mp->mnt_flag & MNT_UNTRUSTED) != 0,
-	    ("ffs_check_blkno called on a trusted file system"));
-	ump = VFSTOUFS(mp);
-	fs = ump->um_fs;
-	cg = dtog(fs, daddr);
-	end_daddr = daddr + numfrags(fs, blksize);
-	/*
-	 * Verify that the block number is a valid data block. Also check
-	 * that it does not point to an inode block or a superblock. Accept
-	 * blocks that are unalloacted (0) or part of snapshot metadata
-	 * (BLK_NOCOPY or BLK_SNAP).
-	 *
-	 * Thus, the block must be in a valid range for the filesystem and
-	 * either in the space before a backup superblock (except the first
-	 * cylinder group where that space is used by the bootstrap code) or
-	 * after the inode blocks and before the end of the cylinder group.
-	 */
-	if ((uint64_t)daddr <= BLK_SNAP ||
-	    ((uint64_t)end_daddr <= fs->fs_size &&
-	    ((cg > 0 && end_daddr <= cgsblock(fs, cg)) ||
-	    (daddr >= cgdmin(fs, cg) &&
-	    end_daddr <= cgbase(fs, cg) + fs->fs_fpg))))
-		return (0);
-	if ((havemtx = mtx_owned(UFS_MTX(ump))) == 0)
-		UFS_LOCK(ump);
-	if (ppsratecheck(&ump->um_last_integritymsg,
-	    &ump->um_secs_integritymsg, 1)) {
-		UFS_UNLOCK(ump);
-		uprintf("\n%s: inode %jd, out-of-range indirect block "
-		    "number %jd\n", mp->mnt_stat.f_mntonname, inum, daddr);
-		if (havemtx)
-			UFS_LOCK(ump);
-	} else if (!havemtx)
-		UFS_UNLOCK(ump);
-	return (EINTEGRITY);
-}
 #endif /* _KERNEL */
 
 /*
@@ -416,7 +294,7 @@ readsuper(void *devfd, struct fs **fsp, off_t sblockloc, int isaltsblk,
 				return (0);
 			}
 			fs->fs_fmod = 0;
-			return (EINVAL);
+			return (EINTEGRITY);
 		}
 		/* Have to set for old filesystems that predate this field */
 		fs->fs_sblockactualloc = sblockloc;

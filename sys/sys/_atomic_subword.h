@@ -41,6 +41,9 @@
 #endif
 
 #include <machine/endian.h>
+#ifndef _KERNEL
+#include <stdbool.h>
+#endif
 
 #ifndef NBBY
 #define	NBBY	8
@@ -63,6 +66,7 @@
     ((((__uintptr_t)(p) % 4)) * NBBY)
 #endif
 
+#ifndef	_atomic_cmpset_masked_word
 /*
  * Pass these bad boys a couple words and a mask of the bits you care about,
  * they'll loop until we either succeed or fail because of those bits rather
@@ -92,7 +96,9 @@ _atomic_cmpset_masked_word(uint32_t *addr, uint32_t old, uint32_t val,
 
 	return (ret);
 }
+#endif
 
+#ifndef	_atomic_fcmpset_masked_word
 static __inline int
 _atomic_fcmpset_masked_word(uint32_t *addr, uint32_t *old, uint32_t val,
     uint32_t mask)
@@ -108,7 +114,9 @@ _atomic_fcmpset_masked_word(uint32_t *addr, uint32_t *old, uint32_t val,
 	*old = (*addr & ~mask) | *old;
 	return (atomic_fcmpset_32(addr, old, (*old & ~mask) | val));
 }
+#endif
 
+#ifndef atomic_cmpset_8
 static __inline int
 atomic_cmpset_8(__volatile uint8_t *addr, uint8_t old, uint8_t val)
 {
@@ -119,7 +127,9 @@ atomic_cmpset_8(__volatile uint8_t *addr, uint8_t old, uint8_t val)
 	return (_atomic_cmpset_masked_word(_ATOMIC_WORD_ALIGNED(addr),
 	    old << shift, val << shift, 0xff << shift));
 }
+#endif
 
+#ifndef atomic_fcmpset_8
 static __inline int
 atomic_fcmpset_8(__volatile uint8_t *addr, uint8_t *old, uint8_t val)
 {
@@ -134,7 +144,9 @@ atomic_fcmpset_8(__volatile uint8_t *addr, uint8_t *old, uint8_t val)
 		*old = (wold >> shift) & 0xff;
 	return (ret);
 }
+#endif
 
+#ifndef atomic_cmpset_16
 static __inline int
 atomic_cmpset_16(__volatile uint16_t *addr, uint16_t old, uint16_t val)
 {
@@ -145,7 +157,9 @@ atomic_cmpset_16(__volatile uint16_t *addr, uint16_t old, uint16_t val)
 	return (_atomic_cmpset_masked_word(_ATOMIC_WORD_ALIGNED(addr),
 	    old << shift, val << shift, 0xffff << shift));
 }
+#endif
 
+#ifndef atomic_fcmpset_16
 static __inline int
 atomic_fcmpset_16(__volatile uint16_t *addr, uint16_t *old, uint16_t val)
 {
@@ -160,9 +174,101 @@ atomic_fcmpset_16(__volatile uint16_t *addr, uint16_t *old, uint16_t val)
 		*old = (wold >> shift) & 0xffff;
 	return (ret);
 }
+#endif
+
+#ifndef atomic_load_acq_8
+static __inline uint8_t
+atomic_load_acq_8(volatile uint8_t *p)
+{
+	int shift;
+	uint8_t ret;
+
+	shift = _ATOMIC_BYTE_SHIFT(p);
+	ret = (atomic_load_acq_32(_ATOMIC_WORD_ALIGNED(p)) >> shift) & 0xff;
+	return (ret);
+}
+#endif
+
+#ifndef atomic_load_acq_16
+static __inline uint16_t
+atomic_load_acq_16(volatile uint16_t *p)
+{
+	int shift;
+	uint16_t ret;
+
+	shift = _ATOMIC_HWORD_SHIFT(p);
+	ret = (atomic_load_acq_32(_ATOMIC_WORD_ALIGNED(p)) >> shift) &
+	    0xffff;
+	return (ret);
+}
+#endif
 
 #undef _ATOMIC_WORD_ALIGNED
 #undef _ATOMIC_BYTE_SHIFT
 #undef _ATOMIC_HWORD_SHIFT
+
+/*
+ * Provide generic testandset_long implementation based on fcmpset long
+ * primitive.  It may not be ideal for any given arch, so machine/atomic.h
+ * should define the macro atomic_testandset_long to override with an
+ * MD-specific version.
+ *
+ * (Organizationally, this isn't really subword atomics.  But atomic_common is
+ * included too early in machine/atomic.h, so it isn't a good place for derived
+ * primitives like this.)
+ */
+#ifndef atomic_testandset_acq_long
+static __inline int
+atomic_testandset_acq_long(volatile u_long *p, u_int v)
+{
+	u_long bit, old;
+	bool ret;
+
+	bit = (1ul << (v % (sizeof(*p) * NBBY)));
+
+	old = atomic_load_acq_long(p);
+	ret = false;
+	while (!ret && (old & bit) == 0)
+		ret = atomic_fcmpset_acq_long(p, &old, old | bit);
+
+	return (!ret);
+}
+#endif
+
+#ifndef atomic_testandset_long
+static __inline int
+atomic_testandset_long(volatile u_long *p, u_int v)
+{
+	u_long bit, old;
+	bool ret;
+
+	bit = (1ul << (v % (sizeof(*p) * NBBY)));
+
+	old = atomic_load_long(p);
+	ret = false;
+	while (!ret && (old & bit) == 0)
+		ret = atomic_fcmpset_long(p, &old, old | bit);
+
+	return (!ret);
+}
+#endif
+
+#ifndef atomic_testandclear_long
+static __inline int
+atomic_testandclear_long(volatile u_long *p, u_int v)
+{
+	u_long bit, old;
+	bool ret;
+
+	bit = (1ul << (v % (sizeof(*p) * NBBY)));
+
+	old = atomic_load_long(p);
+	ret = false;
+	while (!ret && (old & bit) != 0)
+		ret = atomic_fcmpset_long(p, &old, old & ~bit);
+
+	return (ret);
+}
+#endif
 
 #endif	/* _SYS__ATOMIC_SUBWORD_H_ */

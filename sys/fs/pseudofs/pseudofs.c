@@ -51,7 +51,7 @@ __FBSDID("$FreeBSD$");
 
 static MALLOC_DEFINE(M_PFSNODES, "pfs_nodes", "pseudofs nodes");
 
-SYSCTL_NODE(_vfs, OID_AUTO, pfs, CTLFLAG_RW, 0,
+SYSCTL_NODE(_vfs, OID_AUTO, pfs, CTLFLAG_RW | CTLFLAG_MPSAFE, 0,
     "pseudofs");
 
 #ifdef PSEUDOFS_TRACE
@@ -368,6 +368,7 @@ pfs_mount(struct pfs_info *pi, struct mount *mp)
 
 	MNT_ILOCK(mp);
 	mp->mnt_flag |= MNT_LOCAL;
+	mp->mnt_kern_flag |= MNTK_NOMSYNC;
 	MNT_IUNLOCK(mp);
 	mp->mnt_data = pi;
 	vfs_getnewfsid(mp);

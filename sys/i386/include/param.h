@@ -58,13 +58,13 @@
 #endif
 #define MID_MACHINE	MID_I386
 
-#if defined(SMP)
+#ifdef SMP
 #ifndef MAXCPU
 #define MAXCPU		32
 #endif
 #else
 #define MAXCPU		1
-#endif /* SMP */
+#endif
 
 #ifndef MAXMEMDOM
 #define	MAXMEMDOM	1

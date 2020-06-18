@@ -39,6 +39,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/protosw.h>
 #include <sys/domain.h>
 #include <sys/eventhandler.h>
+#include <sys/epoch.h>
 #include <sys/mbuf.h>
 #include <sys/kernel.h>
 #include <sys/lock.h>
@@ -47,8 +48,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/systm.h>
 
 #include <net/vnet.h>
-#include <net/if.h>		/* XXXGL: net_epoch should move out there */
-#include <net/if_var.h>		/* XXXGL: net_epoch should move out there */
 
 /*
  * System initialization
@@ -473,29 +472,6 @@ pfctlinput(int cmd, struct sockaddr *sa)
 		for (pr = dp->dom_protosw; pr < dp->dom_protoswNPROTOSW; pr++)
 			if (pr->pr_ctlinput)
 				(*pr->pr_ctlinput)(cmd, sa, (void *)0);
-}
-
-void
-pfctlinput2(int cmd, struct sockaddr *sa, void *ctlparam)
-{
-	struct domain *dp;
-	struct protosw *pr;
-
-	if (!sa)
-		return;
-	for (dp = domains; dp; dp = dp->dom_next) {
-		/*
-		 * the check must be made by xx_ctlinput() anyways, to
-		 * make sure we use data item pointed to by ctlparam in
-		 * correct way.  the following check is made just for safety.
-		 */
-		if (dp->dom_family != sa->sa_family)
-			continue;
-
-		for (pr = dp->dom_protosw; pr < dp->dom_protoswNPROTOSW; pr++)
-			if (pr->pr_ctlinput)
-				(*pr->pr_ctlinput)(cmd, sa, ctlparam);
-	}
 }
 
 static void

@@ -114,6 +114,7 @@ generic_ehci_fdt_probe(device_t self)
 static int
 generic_ehci_fdt_attach(device_t dev)
 {
+	int err;
 #ifdef EXT_RESOURCES
 	struct generic_ehci_fdt_softc *sc;
 	struct clk_list *clkp;
@@ -122,7 +123,7 @@ generic_ehci_fdt_attach(device_t dev)
 	hwreset_t rst;
 	struct phy_list *phyp;
 	phy_t phy;
-	int err, off;
+	int off;
 
 	sc = device_get_softc(dev);
 
@@ -251,5 +252,5 @@ DEFINE_CLASS_1(ehci, ehci_fdt_driver, ehci_fdt_methods,
 
 static devclass_t ehci_fdt_devclass;
 
-DRIVER_MODULE(ehci, simplebus, ehci_fdt_driver, ehci_fdt_devclass, 0, 0);
-MODULE_DEPEND(ehci, usb, 1, 1, 1);
+DRIVER_MODULE(generic_ehci, simplebus, ehci_fdt_driver, ehci_fdt_devclass, 0, 0);
+MODULE_DEPEND(generic_ehci, usb, 1, 1, 1);

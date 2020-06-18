@@ -1145,6 +1145,11 @@ ieee80211_ioctl_get80211(struct ieee80211vap *vap, u_long cmd,
 		if (vap->iv_flags_ht & IEEE80211_FHT_LDPC_RX)
 			ireq->i_val |= 2;
 		break;
+	case IEEE80211_IOC_UAPSD:
+		ireq->i_val = 0;
+		if (vap->iv_flags_ext & IEEE80211_FEXT_UAPSD)
+			ireq->i_val = 1;
+		break;
 
 	/* VHT */
 	case IEEE80211_IOC_VHTCONF:
@@ -3462,6 +3467,16 @@ ieee80211_ioctl_set80211(struct ieee80211vap *vap, u_long cmd, struct ieee80211r
 		if (isvapht(vap))
 			error = ERESTART;
 		break;
+	case IEEE80211_IOC_UAPSD:
+		if ((vap->iv_caps & IEEE80211_C_UAPSD) == 0)
+			return EOPNOTSUPP;
+		if (ireq->i_val == 0)
+			vap->iv_flags_ext &= ~IEEE80211_FEXT_UAPSD;
+		else if (ireq->i_val == 1)
+			vap->iv_flags_ext |= IEEE80211_FEXT_UAPSD;
+		else
+			return EINVAL;
+		break;
 
 	/* VHT */
 	case IEEE80211_IOC_VHTCONF:
@@ -3583,6 +3598,8 @@ ieee80211_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		IEEE80211_UNLOCK(ic);
 		/* Wait for parent ioctl handler if it was queued */
 		if (wait) {
+			struct epoch_tracker et;
+
 			ieee80211_waitfor_parent(ic);
 
 			/*
@@ -3592,13 +3609,13 @@ ieee80211_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			 * NB: device may be detached during initialization;
 			 * use if_ioctl for existence check.
 			 */
-			if_addr_rlock(ifp);
+			NET_EPOCH_ENTER(et);
 			if (ifp->if_ioctl == ieee80211_ioctl &&
 			    (ifp->if_flags & IFF_UP) == 0 &&
 			    !IEEE80211_ADDR_EQ(vap->iv_myaddr, IF_LLADDR(ifp)))
 				IEEE80211_ADDR_COPY(vap->iv_myaddr,
 				    IF_LLADDR(ifp));
-			if_addr_runlock(ifp);
+			NET_EPOCH_EXIT(et);
 		}
 		break;
 	case SIOCADDMULTI:

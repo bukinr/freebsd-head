@@ -28,6 +28,8 @@
  * Copyright 2015, OmniTI Computer Consulting, Inc. All rights reserved.
  * Copyright (c) 2014 Integros [integros.com]
  * Copyright 2016 Igor Kozhukhov <ikozhukhov@gmail.com>
+ * Copyright (c) 2018, loli10K <ezomori.nozomu@gmail.com>. All rights reserved.
+ * Copyright (c) 2019 Datto Inc.
  */
 
 #include <assert.h>
@@ -612,6 +614,7 @@ typedef struct send_data {
 	const char *tosnap;
 	boolean_t recursive;
 	boolean_t verbose;
+	boolean_t replicate;
 
 	/*
 	 * The header nvlist is of the following format:
@@ -789,6 +792,7 @@ send_iterate_fs(zfs_handle_t *zhp, void *arg)
 	send_data_t *sd = arg;
 	nvlist_t *nvfs, *nv;
 	int rv = 0;
+	uint64_t min_txg = 0, max_txg = 0;
 	uint64_t parent_fromsnap_guid_save = sd->parent_fromsnap_guid;
 	uint64_t fromsnap_txg_save = sd->fromsnap_txg;
 	uint64_t tosnap_txg_save = sd->tosnap_txg;
@@ -832,10 +836,10 @@ send_iterate_fs(zfs_handle_t *zhp, void *arg)
 		goto out;
 	}
 
-	VERIFY(0 == nvlist_alloc(&nvfs, NV_UNIQUE_NAME, 0));
-	VERIFY(0 == nvlist_add_string(nvfs, "name", zhp->zfs_name));
-	VERIFY(0 == nvlist_add_uint64(nvfs, "parentfromsnap",
-	    sd->parent_fromsnap_guid));
+	nvfs = fnvlist_alloc();
+	fnvlist_add_string(nvfs, "name", zhp->zfs_name);
+	fnvlist_add_uint64(nvfs, "parentfromsnap",
+	    sd->parent_fromsnap_guid);
 
 	if (zhp->zfs_dmustats.dds_origin[0]) {
 		zfs_handle_t *origin = zfs_open(zhp->zfs_hdl,
@@ -855,14 +859,19 @@ send_iterate_fs(zfs_handle_t *zhp, void *arg)
 	nvlist_free(nv);
 
 	/* iterate over snaps, and set sd->parent_fromsnap_guid */
+	if (!sd->replicate && fromsnap_txg != 0)
+		min_txg = fromsnap_txg;
+	if (!sd->replicate && tosnap_txg != 0)
+		max_txg = tosnap_txg;
 	sd->parent_fromsnap_guid = 0;
 	VERIFY(0 == nvlist_alloc(&sd->parent_snaps, NV_UNIQUE_NAME, 0));
 	VERIFY(0 == nvlist_alloc(&sd->snapprops, NV_UNIQUE_NAME, 0));
-	(void) zfs_iter_snapshots_sorted(zhp, send_iterate_snap, sd);
+	(void) zfs_iter_snapshots_sorted(zhp, send_iterate_snap, sd,
+	    min_txg, max_txg);
 	VERIFY(0 == nvlist_add_nvlist(nvfs, "snaps", sd->parent_snaps));
 	VERIFY(0 == nvlist_add_nvlist(nvfs, "snapprops", sd->snapprops));
-	nvlist_free(sd->parent_snaps);
-	nvlist_free(sd->snapprops);
+	fnvlist_free(sd->parent_snaps);
+	fnvlist_free(sd->snapprops);
 
 	/* add this fs to nvlist */
 	(void) snprintf(guidstring, sizeof (guidstring),
@@ -886,11 +895,12 @@ out:
 static int
 gather_nvlist(libzfs_handle_t *hdl, const char *fsname, const char *fromsnap,
     const char *tosnap, boolean_t recursive, boolean_t verbose,
-    nvlist_t **nvlp, avl_tree_t **avlp)
+    boolean_t replicate, nvlist_t **nvlp, avl_tree_t **avlp)
 {
 	zfs_handle_t *zhp;
-	send_data_t sd = { 0 };
 	int error;
+	uint64_t min_txg = 0, max_txg = 0;
+	send_data_t sd = { 0 };
 
 	zhp = zfs_open(hdl, fsname, ZFS_TYPE_FILESYSTEM | ZFS_TYPE_VOLUME);
 	if (zhp == NULL)
@@ -902,6 +912,7 @@ gather_nvlist(libzfs_handle_t *hdl, const char *fsname, const char *fromsnap,
 	sd.tosnap = tosnap;
 	sd.recursive = recursive;
 	sd.verbose = verbose;
+	sd.replicate = replicate;
 
 	if ((error = send_iterate_fs(zhp, &sd)) != 0) {
 		nvlist_free(sd.fss);
@@ -1338,6 +1349,7 @@ static int
 dump_filesystem(zfs_handle_t *zhp, void *arg)
 {
 	int rv = 0;
+	uint64_t min_txg = 0, max_txg = 0;
 	send_dump_data_t *sdd = arg;
 	boolean_t missingfrom = B_FALSE;
 	zfs_cmd_t zc = { 0 };
@@ -1373,7 +1385,15 @@ dump_filesystem(zfs_handle_t *zhp, void *arg)
 	if (sdd->fromsnap == NULL || missingfrom)
 		sdd->seenfrom = B_TRUE;
 
-	rv = zfs_iter_snapshots_sorted(zhp, dump_snapshot, arg);
+	if (!sdd->replicate && sdd->fromsnap != NULL)
+		min_txg = get_snap_txg(zhp->zfs_hdl, zhp->zfs_name,
+		    sdd->fromsnap);
+	if (!sdd->replicate && sdd->tosnap != NULL)
+		max_txg = get_snap_txg(zhp->zfs_hdl, zhp->zfs_name,
+		    sdd->tosnap);
+
+	rv = zfs_iter_snapshots_sorted(zhp, dump_snapshot, arg,
+	    min_txg, max_txg);
 	if (!sdd->seenfrom) {
 		(void) fprintf(stderr, dgettext(TEXT_DOMAIN,
 		    "WARNING: could not send %s@%s:\n"
@@ -1834,7 +1854,7 @@ zfs_send(zfs_handle_t *zhp, const char *fromsnap, const char *tosnap,
 
 			err = gather_nvlist(zhp->zfs_hdl, zhp->zfs_name,
 			    fromsnap, tosnap, flags->replicate, flags->verbose,
-			    &fss, &fsavl);
+			    flags->replicate, &fss, &fsavl);
 			if (err)
 				goto err_out;
 			VERIFY(0 == nvlist_add_nvlist(hdrnv, "fss", fss));
@@ -2477,7 +2497,7 @@ again:
 	VERIFY(0 == nvlist_alloc(&deleted, NV_UNIQUE_NAME, 0));
 
 	if ((error = gather_nvlist(hdl, tofs, fromsnap, NULL,
-	    recursive, B_FALSE, &local_nv, &local_avl)) != 0)
+	    recursive, B_FALSE, B_FALSE, &local_nv, &local_avl)) != 0)
 		return (error);
 
 	/*
@@ -2893,7 +2913,8 @@ zfs_receive_package(libzfs_handle_t *hdl, int fd, const char *destname,
 				    ZFS_TYPE_FILESYSTEM);
 				if (zhp != NULL) {
 					clp = changelist_gather(zhp,
-					    ZFS_PROP_MOUNTPOINT, 0, 0);
+					    ZFS_PROP_MOUNTPOINT, 0,
+					    flags->forceunmount ? MS_FORCE : 0);
 					zfs_close(zhp);
 					if (clp != NULL) {
 						softerr |=
@@ -3356,6 +3377,7 @@ zfs_receive_one(libzfs_handle_t *hdl, int infd, const char *tosnap,
 		 *  - we are resuming a failed receive.
 		 */
 		if (stream_wantsnewfs) {
+			boolean_t is_volume = drrb->drr_type == DMU_OST_ZVOL;
 			if (!flags->force) {
 				zcmd_free_nvlists(&zc);
 				zfs_error_aux(hdl, dgettext(TEXT_DOMAIN,
@@ -3372,6 +3394,25 @@ zfs_receive_one(libzfs_handle_t *hdl, int infd, const char *tosnap,
 				    "must destroy them to overwrite it"),
 				    zc.zc_name);
 				return (zfs_error(hdl, EZFS_EXISTS, errbuf));
+			}
+			if (is_volume && strrchr(zc.zc_name, '/') == NULL) {
+				zcmd_free_nvlists(&zc);
+				zfs_error_aux(hdl, dgettext(TEXT_DOMAIN,
+				    "destination '%s' is the root dataset\n"
+				    "cannot overwrite with a ZVOL"),
+				    zc.zc_name);
+				return (zfs_error(hdl, EZFS_EXISTS, errbuf));
+			}
+			if (is_volume &&
+			    ioctl(hdl->libzfs_fd, ZFS_IOC_DATASET_LIST_NEXT,
+			    &zc) == 0) {
+				zcmd_free_nvlists(&zc);
+				zfs_error_aux(hdl, dgettext(TEXT_DOMAIN,
+				    "destination has children (eg. %s)\n"
+				    "cannot overwrite with a ZVOL"),
+				    zc.zc_name);
+				return (zfs_error(hdl, EZFS_WRONG_PARENT,
+				    errbuf));
 			}
 		}
 
@@ -3395,7 +3436,8 @@ zfs_receive_one(libzfs_handle_t *hdl, int infd, const char *tosnap,
 		if (!flags->dryrun && zhp->zfs_type == ZFS_TYPE_FILESYSTEM &&
 		    stream_wantsnewfs) {
 			/* We can't do online recv in this case */
-			clp = changelist_gather(zhp, ZFS_PROP_NAME, 0, 0);
+			clp = changelist_gather(zhp, ZFS_PROP_NAME, 0,
+			    flags->forceunmount ? MS_FORCE : 0);
 			if (clp == NULL) {
 				zfs_close(zhp);
 				zcmd_free_nvlists(&zc);
@@ -3422,6 +3464,8 @@ zfs_receive_one(libzfs_handle_t *hdl, int infd, const char *tosnap,
 
 		zfs_close(zhp);
 	} else {
+		zfs_handle_t *zhp;
+
 		/*
 		 * Destination filesystem does not exist.  Therefore we better
 		 * be creating a new filesystem (either from a full backup, or
@@ -3448,6 +3492,21 @@ zfs_receive_one(libzfs_handle_t *hdl, int infd, const char *tosnap,
 			zcmd_free_nvlists(&zc);
 			return (zfs_error(hdl, EZFS_BADRESTORE, errbuf));
 		}
+
+		/* validate parent */
+		zhp = zfs_open(hdl, zc.zc_name, ZFS_TYPE_DATASET);
+		if (zhp == NULL) {
+			zcmd_free_nvlists(&zc);
+			return (zfs_error(hdl, EZFS_BADRESTORE, errbuf));
+		}
+		if (zfs_get_type(zhp) != ZFS_TYPE_FILESYSTEM) {
+			zcmd_free_nvlists(&zc);
+			zfs_error_aux(hdl, dgettext(TEXT_DOMAIN,
+			    "parent '%s' is not a filesystem"), zc.zc_name);
+			zfs_close(zhp);
+			return (zfs_error(hdl, EZFS_WRONG_PARENT, errbuf));
+		}
+		zfs_close(zhp);
 
 		newfs = B_TRUE;
 	}
@@ -3554,7 +3613,7 @@ zfs_receive_one(libzfs_handle_t *hdl, int infd, const char *tosnap,
 		 */
 		*cp = '\0';
 		if (gather_nvlist(hdl, zc.zc_value, NULL, NULL, B_FALSE,
-		    B_FALSE, &local_nv, &local_avl) == 0) {
+		    B_FALSE, B_FALSE, &local_nv, &local_avl) == 0) {
 			*cp = '@';
 			fs = fsavl_find(local_avl, drrb->drr_toguid, NULL);
 			fsavl_destroy(local_avl);
@@ -3824,6 +3883,7 @@ zfs_receive(libzfs_handle_t *hdl, const char *tosnap, nvlist_t *props,
 	int cleanup_fd;
 	uint64_t action_handle = 0;
 	char *originsnap = NULL;
+
 	if (props) {
 		err = nvlist_lookup_string(props, "origin", &originsnap);
 		if (err && err != ENOENT)
@@ -3845,7 +3905,8 @@ zfs_receive(libzfs_handle_t *hdl, const char *tosnap, nvlist_t *props,
 		zhp = zfs_open(hdl, top_zfs, ZFS_TYPE_FILESYSTEM);
 		if (zhp != NULL) {
 			clp = changelist_gather(zhp, ZFS_PROP_MOUNTPOINT,
-			    CL_GATHER_MOUNT_ALWAYS, 0);
+			    CL_GATHER_MOUNT_ALWAYS,
+			    flags->forceunmount ? MS_FORCE : 0);
 			zfs_close(zhp);
 			if (clp != NULL) {
 				/* mount and share received datasets */

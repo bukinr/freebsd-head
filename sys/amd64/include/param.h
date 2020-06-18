@@ -65,13 +65,13 @@
 #define	MACHINE_ARCH32	"i386"
 #endif
 
-#if defined(SMP)
+#ifdef SMP
 #ifndef MAXCPU
 #define MAXCPU		256
 #endif
 #else
 #define MAXCPU		1
-#endif /* SMP */
+#endif
 
 #ifndef MAXMEMDOM
 #define	MAXMEMDOM	8

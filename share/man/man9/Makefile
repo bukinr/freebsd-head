@@ -34,6 +34,7 @@ MAN=	accept_filter.9 \
 	BUS_CHILD_DELETED.9 \
 	BUS_CHILD_DETACHED.9 \
 	BUS_CONFIG_INTR.9 \
+	bus_delayed_attach_children.9 \
 	BUS_DESCRIBE_INTR.9 \
 	bus_dma.9 \
 	bus_generic_attach.9 \
@@ -55,6 +56,7 @@ MAN=	accept_filter.9 \
 	BUS_SETUP_INTR.9 \
 	bus_space.9 \
 	byteorder.9 \
+	callout.9 \
 	casuword.9 \
 	cd.9 \
 	cnv.9 \
@@ -69,6 +71,11 @@ MAN=	accept_filter.9 \
 	cr_seeothergids.9 \
 	cr_seeotheruids.9 \
 	crypto.9 \
+	crypto_asym.9 \
+	crypto_buffer.9 \
+	crypto_driver.9 \
+	crypto_request.9 \
+	crypto_session.9 \
 	CTASSERT.9 \
 	DB_COMMAND.9 \
 	DECLARE_GEOM_CLASS.9 \
@@ -301,6 +308,7 @@ MAN=	accept_filter.9 \
 	store.9 \
 	style.9 \
 	style.lua.9 \
+	${_superio.9} \
 	swi.9 \
 	sx.9 \
 	syscall_helper_register.9 \
@@ -313,7 +321,6 @@ MAN=	accept_filter.9 \
 	tcp_functions.9 \
 	thread_exit.9 \
 	time.9 \
-	timeout.9 \
 	tvtohz.9 \
 	ucred.9 \
 	uidinfo.9 \
@@ -606,7 +613,7 @@ MLINKS+=bitset.9 BITSET_DEFINE.9 \
 	bitset.9 BIT_CMP.9 \
 	bitset.9 BIT_OR.9 \
 	bitset.9 BIT_AND.9 \
-	bitset.9 BIT_NAND.9 \
+	bitset.9 BIT_ANDNOT.9 \
 	bitset.9 BIT_CLR_ATOMIC.9 \
 	bitset.9 BIT_SET_ATOMIC.9 \
 	bitset.9 BIT_SET_ATOMIC_ACQ.9 \
@@ -642,6 +649,8 @@ MLINKS+=bus_dma.9 busdma.9 \
 	bus_dma.9 bus_dmamap_load.9 \
 	bus_dma.9 bus_dmamap_load_bio.9 \
 	bus_dma.9 bus_dmamap_load_ccb.9 \
+	bus_dma.9 bus_dmamap_load_crp.9 \
+	bus_dma.9 bus_dmamap_load_crp_buffer.9 \
 	bus_dma.9 bus_dmamap_load_mbuf.9 \
 	bus_dma.9 bus_dmamap_load_mbuf_sg.9 \
 	bus_dma.9 bus_dmamap_load_uio.9 \
@@ -764,6 +773,29 @@ MLINKS+=byteorder.9 be16dec.9 \
 	byteorder.9 le64dec.9 \
 	byteorder.9 le64enc.9 \
 	byteorder.9 le64toh.9
+MLINKS+=callout.9 callout_active.9 \
+	callout.9 callout_async_drain.9 \
+	callout.9 callout_deactivate.9 \
+	callout.9 callout_drain.9 \
+	callout.9 callout_init.9 \
+	callout.9 callout_init_mtx.9 \
+	callout.9 callout_init_rm.9 \
+	callout.9 callout_init_rw.9 \
+	callout.9 callout_pending.9 \
+	callout.9 callout_reset.9 \
+	callout.9 callout_reset_curcpu.9 \
+	callout.9 callout_reset_on.9 \
+	callout.9 callout_reset_sbt.9 \
+	callout.9 callout_reset_sbt_curcpu.9 \
+	callout.9 callout_reset_sbt_on.9 \
+	callout.9 callout_schedule.9 \
+	callout.9 callout_schedule_curcpu.9 \
+	callout.9 callout_schedule_on.9 \
+	callout.9 callout_schedule_sbt.9 \
+	callout.9 callout_schedule_sbt_curcpu.9 \
+	callout.9 callout_schedule_sbt_on.9 \
+	callout.9 callout_stop.9 \
+	callout.9 callout_when.9
 MLINKS+=cnv.9 cnvlist.9 \
 	cnv.9 cnvlist_free_binary.9 \
 	cnv.9 cnvlist_free_bool.9 \
@@ -855,7 +887,7 @@ MLINKS+=cpuset.9 CPUSET_T_INITIALIZER.9 \
 	cpuset.9 CPU_CMP.9 \
 	cpuset.9 CPU_OR.9 \
 	cpuset.9 CPU_AND.9 \
-	cpuset.9 CPU_NAND.9 \
+	cpuset.9 CPU_ANDNOT.9 \
 	cpuset.9 CPU_CLR_ATOMIC.9 \
 	cpuset.9 CPU_SET_ATOMIC.9 \
 	cpuset.9 CPU_SET_ATOMIC_ACQ.9 \
@@ -864,20 +896,51 @@ MLINKS+=cpuset.9 CPUSET_T_INITIALIZER.9 \
 	cpuset.9 CPU_COPY_STORE_REL.9
 MLINKS+=critical_enter.9 critical.9 \
 	critical_enter.9 critical_exit.9
-MLINKS+=crypto.9 crypto_dispatch.9 \
-	crypto.9 crypto_done.9 \
-	crypto.9 crypto_freereq.9 \
-	crypto.9 crypto_freesession.9 \
-	crypto.9 crypto_get_driverid.9 \
-	crypto.9 crypto_getreq.9 \
-	crypto.9 crypto_kdispatch.9 \
-	crypto.9 crypto_kdone.9 \
-	crypto.9 crypto_kregister.9 \
-	crypto.9 crypto_newsession.9 \
-	crypto.9 crypto_register.9 \
-	crypto.9 crypto_unblock.9 \
-	crypto.9 crypto_unregister.9 \
-	crypto.9 crypto_unregister_all.9
+MLINKS+=crypto_asym.9 crypto_kdispatch.9 \
+	crypto_asym.9 crypto_kdone.9 \
+	crypto_asym.9 crypto_kregister.9 \
+	crypto_asym.9 CRYPTODEV_KPROCESS.9
+MLINKS+=crypto_buffer.9 crypto_apply.9 \
+	crypto_buffer.9 crypto_apply_buf.9 \
+	crypto_buffer.9 crypto_buffer_contiguous_segment.9 \
+	crypto_buffer.9 crypto_buffer_len.9 \
+	crypto_buffer.9 crypto_contiguous_segment.9 \
+	crypto_buffer.9 crypto_cursor_init.9 \
+	crypto_buffer.9 crypto_cursor_advance.9 \
+	crypto_buffer.9 crypto_cursor_copyback.9 \
+	crypto_buffer.9 crypto_cursor_copydata.9 \
+	crypto_buffer.9 crypto_cursor_copydata_noadv.9 \
+	crypto_buffer.9 crypto_cursor_segbase.9 \
+	crypto_buffer.9 crypto_cursor_seglen.9 \
+	crypto_buffer.9 CRYPTO_HAS_OUTPUT_BUFFER.9
+MLINKS+=crypto_driver.9 crypto_copyback.9 \
+	crypto_driver.9 crypto_copydata.9 \
+	crypto_driver.9 crypto_done.9 \
+	crypto_driver.9 crypto_get_driverid.9 \
+	crypto_driver.9 crypto_get_driver_session.9 \
+	crypto_driver.9 crypto_read_iv.9 \
+	crypto_driver.9 crypto_unblock.9 \
+	crypto_driver.9 crypto_unregister_all.9 \
+	crypto_driver.9 CRYPTODEV_FREESESSION.9 \
+	crypto_driver.9 CRYPTODEV_NEWSESSION.9 \
+	crypto_driver.9 CRYPTODEV_PROBESESSION.9 \
+	crypto_driver.9 CRYPTODEV_PROCESS.9 \
+	crypto_driver.9 hmac_init_ipad.9 \
+	crypto_driver.9 hmac_init_opad.9
+MLINKS+=crypto_request.9 crypto_dispatch.9 \
+	crypto_request.9 crypto_freereq.9 \
+	crypto_request.9 crypto_getreq.9 \
+	crypto_request.9 crypto_use_buf.9 \
+	crypto_request.9 crypto_use_mbuf.9 \
+	crypto_request.9 crypto_use_output_buf.9 \
+	crypto_request.9 crypto_use_output_mbuf.9 \
+	crypto_request.9 crypto_use_output_uio.9 \
+	crypto_request.9 crypto_use_uio.9
+MLINKS+=crypto_session.9 crypto_auth_hash.9 \
+	crypto_session.9 crypto_cipher.9 \
+	crypto_session.9 crypto_get_params.9 \
+	crypto_session.9 crypto_newsession.9 \
+	crypto_session.9 crypto_freesession.9
 MLINKS+=DB_COMMAND.9 DB_SHOW_ALL_COMMAND.9 \
 	DB_COMMAND.9 DB_SHOW_COMMAND.9
 MLINKS+=DECLARE_MODULE.9 DECLARE_MODULE_TIED.9
@@ -2024,6 +2087,8 @@ MLINKS+=sysctl.9 SYSCTL_DECL.9 \
 	sysctl.9 SYSCTL_ADD_UAUTO.9 \
 	sysctl.9 SYSCTL_ADD_UINT.9 \
 	sysctl.9 SYSCTL_ADD_ULONG.9 \
+	sysctl.9 SYSCTL_ADD_UMA_CUR.9 \
+	sysctl.9 SYSCTL_ADD_UMA_MAX.9 \
 	sysctl.9 SYSCTL_ADD_UQUAD.9 \
 	sysctl.9 SYSCTL_CHILDREN.9 \
 	sysctl.9 SYSCTL_STATIC_CHILDREN.9 \
@@ -2052,6 +2117,8 @@ MLINKS+=sysctl.9 SYSCTL_DECL.9 \
 	sysctl.9 SYSCTL_U64.9 \
 	sysctl.9 SYSCTL_UINT.9 \
 	sysctl.9 SYSCTL_ULONG.9 \
+	sysctl.9 SYSCTL_UMA_CUR.9 \
+	sysctl.9 SYSCTL_UMA_MAX.9 \
 	sysctl.9 SYSCTL_UQUAD.9
 MLINKS+=sysctl_add_oid.9 sysctl_move_oid.9 \
 	sysctl_add_oid.9 sysctl_remove_oid.9 \
@@ -2084,7 +2151,8 @@ MLINKS+=taskqueue.9 TASK_INIT.9 \
 	taskqueue.9 taskqueue_run.9 \
 	taskqueue.9 taskqueue_set_callback.9 \
 	taskqueue.9 taskqueue_start_threads.9 \
-	taskqueue.9 taskqueue_start_threads_pinned.9 \
+	taskqueue.9 taskqueue_start_threads_cpuset.9 \
+	taskqueue.9 taskqueue_start_threads_in_proc.9 \
 	taskqueue.9 taskqueue_unblock.9 \
 	taskqueue.9 TIMEOUT_TASK_INIT.9
 MLINKS+=tcp_functions.9 register_tcp_functions.9 \
@@ -2094,32 +2162,6 @@ MLINKS+=tcp_functions.9 register_tcp_functions.9 \
 MLINKS+=time.9 boottime.9 \
 	time.9 time_second.9 \
 	time.9 time_uptime.9
-MLINKS+=timeout.9 callout.9 \
-	timeout.9 callout_active.9 \
-	timeout.9 callout_async_drain.9 \
-	timeout.9 callout_deactivate.9 \
-	timeout.9 callout_drain.9 \
-	timeout.9 callout_handle_init.9 \
-	timeout.9 callout_init.9 \
-	timeout.9 callout_init_mtx.9 \
-	timeout.9 callout_init_rm.9 \
-	timeout.9 callout_init_rw.9 \
-	timeout.9 callout_pending.9 \
-	timeout.9 callout_reset.9 \
-	timeout.9 callout_reset_curcpu.9 \
-	timeout.9 callout_reset_on.9 \
-	timeout.9 callout_reset_sbt.9 \
-	timeout.9 callout_reset_sbt_curcpu.9 \
-	timeout.9 callout_reset_sbt_on.9 \
-	timeout.9 callout_schedule.9 \
-	timeout.9 callout_schedule_curcpu.9 \
-	timeout.9 callout_schedule_on.9 \
-	timeout.9 callout_schedule_sbt.9 \
-	timeout.9 callout_schedule_sbt_curcpu.9 \
-	timeout.9 callout_schedule_sbt_on.9 \
-	timeout.9 callout_stop.9 \
-	timeout.9 callout_when.9 \
-	timeout.9 untimeout.9
 MLINKS+=ucred.9 crcopy.9 \
 	ucred.9 crcopysafe.9 \
 	ucred.9 crdup.9 \
@@ -2308,5 +2350,24 @@ MLINKS+=zone.9 uma.9 \
 	zone.9 uma_zone_set_maxcache.9 \
 	zone.9 uma_zone_set_warning.9 \
 	zone.9 uma_zsecond_create.9
+
+.if ${MACHINE_CPUARCH} == "amd64" || ${MACHINE_CPUARCH} == "i386"
+_superio.9=	superio.9
+MLINKS+=superio.9 superio_devid.9 \
+	superio.9 superio_dev_disable.9 \
+	superio.9 superio_dev_enable.9 \
+	superio.9 superio_dev_enabled.9 \
+	superio.9 superio_find_dev.9 \
+	superio.9 superio_find_dev.9 \
+	superio.9 superio_get_dma.9 \
+	superio.9 superio_get_iobase.9 \
+	superio.9 superio_get_irq.9 \
+	superio.9 superio_get_ldn.9 \
+	superio.9 superio_get_type.9 \
+	superio.9 superio_read.9 \
+	superio.9 superio_revid.9 \
+	superio.9 superio_vendor.9 \
+	superio.9 superio_write.9
+.endif
 
 .include <bsd.prog.mk>

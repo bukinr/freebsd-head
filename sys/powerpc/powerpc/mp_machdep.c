@@ -246,6 +246,7 @@ cpu_mp_unleash(void *dummy)
 				printf("Waking up CPU %d (dev=%x)\n",
 				    pc->pc_cpuid, (int)pc->pc_hwref);
 
+			pc->pc_flags = PCPU_GET(flags); /* Copy cached CPU flags */
 			ret = platform_smp_start_cpu(pc);
 			if (ret == 0) {
 				timeout = 2000;	/* wait 2sec for the AP */
@@ -331,7 +332,6 @@ powerpc_ipi_handler(void *arg)
 			    __func__);
 			cpuid = PCPU_GET(cpuid);
 			savectx(&stoppcbs[cpuid]);
-			savectx(PCPU_GET(curpcb));
 			CPU_SET_ATOMIC(cpuid, &stopped_cpus);
 			while (!CPU_ISSET(cpuid, &started_cpus))
 				cpu_spinwait();

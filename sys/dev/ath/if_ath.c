@@ -1801,6 +1801,7 @@ ath_vap_delete(struct ieee80211vap *vap)
 		ath_hal_intrset(ah, 0);		/* disable interrupts */
 		/* XXX Do all frames from all vaps/nodes need draining here? */
 		ath_stoprecv(sc, 1);		/* stop recv side */
+		ath_rx_flush(sc);
 		ath_draintxq(sc, ATH_RESET_DEFAULT);		/* stop hw xmit side */
 	}
 
@@ -2379,7 +2380,7 @@ ath_fatal_proc(void *arg, int pending)
 		    "0x%08x 0x%08x 0x%08x, 0x%08x 0x%08x 0x%08x\n", state[0],
 		    state[1] , state[2], state[3], state[4], state[5]);
 	}
-	ath_reset(sc, ATH_RESET_NOLOSS);
+	ath_reset(sc, ATH_RESET_NOLOSS, HAL_RESET_FORCE_COLD);
 }
 
 static void
@@ -2490,11 +2491,11 @@ ath_bmiss_proc(void *arg, int pending)
 	 * to clear.
 	 */
 	if (ath_hal_gethangstate(sc->sc_ah, 0xff, &hangs) && hangs != 0) {
-		ath_reset(sc, ATH_RESET_NOLOSS);
+		ath_reset(sc, ATH_RESET_NOLOSS, HAL_RESET_BBPANIC);
 		device_printf(sc->sc_dev,
 		    "bb hang detected (0x%x), resetting\n", hangs);
 	} else {
-		ath_reset(sc, ATH_RESET_NOLOSS);
+		ath_reset(sc, ATH_RESET_NOLOSS, HAL_RESET_FORCE_COLD);
 		ieee80211_beacon_miss(&sc->sc_ic);
 	}
 
@@ -2893,7 +2894,8 @@ ath_reset_grablock(struct ath_softc *sc, int dowait)
  * to reset or reload hardware state.
  */
 int
-ath_reset(struct ath_softc *sc, ATH_RESET_TYPE reset_type)
+ath_reset(struct ath_softc *sc, ATH_RESET_TYPE reset_type,
+    HAL_RESET_TYPE ah_reset_type)
 {
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ath_hal *ah = sc->sc_ah;
@@ -2961,7 +2963,7 @@ ath_reset(struct ath_softc *sc, ATH_RESET_TYPE reset_type)
 	ath_hal_setchainmasks(sc->sc_ah, sc->sc_cur_txchainmask,
 	    sc->sc_cur_rxchainmask);
 	if (!ath_hal_reset(ah, sc->sc_opmode, ic->ic_curchan, AH_TRUE,
-	    HAL_RESET_NORMAL, &status))
+	    ah_reset_type, &status))
 		device_printf(sc->sc_dev,
 		    "%s: unable to reset hardware; hal status %u\n",
 		    __func__, status);
@@ -3097,7 +3099,7 @@ ath_reset_vap(struct ieee80211vap *vap, u_long cmd)
 		return 0;
 	}
 	/* XXX? Full or NOLOSS? */
-	return ath_reset(sc, ATH_RESET_FULL);
+	return ath_reset(sc, ATH_RESET_FULL, HAL_RESET_NORMAL);
 }
 
 struct ath_buf *
@@ -3591,6 +3593,25 @@ ath_update_promisc(struct ieee80211com *ic)
 	DPRINTF(sc, ATH_DEBUG_MODE, "%s: RX filter 0x%x\n", __func__, rfilt);
 }
 
+static u_int
+ath_hash_maddr(void *arg, struct sockaddr_dl *sdl, u_int cnt)
+{
+	uint32_t val, *mfilt = arg;
+	char *dl;
+	uint8_t pos;
+
+	/* calculate XOR of eight 6bit values */
+	dl = LLADDR(sdl);
+	val = le32dec(dl + 0);
+	pos = (val >> 18) ^ (val >> 12) ^ (val >> 6) ^ val;
+	val = le32dec(dl + 3);
+	pos ^= (val >> 18) ^ (val >> 12) ^ (val >> 6) ^ val;
+	pos &= 0x3f;
+	mfilt[pos / 32] |= (1 << (pos % 32));
+
+	return (1);
+}
+
 /*
  * Driver-internal mcast update call.
  *
@@ -3605,35 +3626,13 @@ ath_update_mcast_hw(struct ath_softc *sc)
 	/* calculate and install multicast filter */
 	if (ic->ic_allmulti == 0) {
 		struct ieee80211vap *vap;
-		struct ifnet *ifp;
-		struct ifmultiaddr *ifma;
 
 		/*
 		 * Merge multicast addresses to form the hardware filter.
 		 */
 		mfilt[0] = mfilt[1] = 0;
-		TAILQ_FOREACH(vap, &ic->ic_vaps, iv_next) {
-			ifp = vap->iv_ifp;
-			if_maddr_rlock(ifp);
-			CK_STAILQ_FOREACH(ifma, &ifp->if_multiaddrs, ifma_link) {
-				caddr_t dl;
-				uint32_t val;
-				uint8_t pos;
-
-				/* calculate XOR of eight 6bit values */
-				dl = LLADDR((struct sockaddr_dl *)
-				    ifma->ifma_addr);
-				val = le32dec(dl + 0);
-				pos = (val >> 18) ^ (val >> 12) ^ (val >> 6) ^
-				    val;
-				val = le32dec(dl + 3);
-				pos ^= (val >> 18) ^ (val >> 12) ^ (val >> 6) ^
-				    val;
-				pos &= 0x3f;
-				mfilt[pos / 32] |= (1 << (pos % 32));
-			}
-			if_maddr_runlock(ifp);
-		}
+		TAILQ_FOREACH(vap, &ic->ic_vaps, iv_next)
+			if_foreach_llmaddr(vap->iv_ifp, ath_hash_maddr, &mfilt);
 	} else
 		mfilt[0] = mfilt[1] = ~0;
 
@@ -3780,7 +3779,7 @@ ath_reset_proc(void *arg, int pending)
 #if 0
 	device_printf(sc->sc_dev, "%s: resetting\n", __func__);
 #endif
-	ath_reset(sc, ATH_RESET_NOLOSS);
+	ath_reset(sc, ATH_RESET_NOLOSS, HAL_RESET_FORCE_COLD);
 }
 
 /*
@@ -3807,7 +3806,7 @@ ath_bstuck_proc(void *arg, int pending)
 	 * This assumes that there's no simultaneous channel mode change
 	 * occurring.
 	 */
-	ath_reset(sc, ATH_RESET_NOLOSS);
+	ath_reset(sc, ATH_RESET_NOLOSS, HAL_RESET_FORCE_COLD);
 }
 
 static int
@@ -4304,7 +4303,7 @@ ath_tx_default_comp(struct ath_softc *sc, struct ath_buf *bf, int fail)
 void
 ath_tx_update_ratectrl(struct ath_softc *sc, struct ieee80211_node *ni,
     struct ath_rc_series *rc, struct ath_tx_status *ts, int frmlen,
-    int nframes, int nbad)
+    int rc_framelen, int nframes, int nbad)
 {
 	struct ath_node *an;
 
@@ -4315,9 +4314,16 @@ ath_tx_update_ratectrl(struct ath_softc *sc, struct ieee80211_node *ni,
 	an = ATH_NODE(ni);
 	ATH_NODE_UNLOCK_ASSERT(an);
 
+	/*
+	 * XXX TODO: teach the rate control about TXERR_FILT and
+	 * see about handling it (eg see how many attempts were
+	 * made before it got filtered and account for that.)
+	 */
+
 	if ((ts->ts_status & HAL_TXERR_FILT) == 0) {
 		ATH_NODE_LOCK(an);
-		ath_rate_tx_complete(sc, an, rc, ts, frmlen, nframes, nbad);
+		ath_rate_tx_complete(sc, an, rc, ts, frmlen, rc_framelen,
+		    nframes, nbad);
 		ATH_NODE_UNLOCK(an);
 	}
 }
@@ -4358,10 +4364,15 @@ ath_tx_process_buf_completion(struct ath_softc *sc, struct ath_txq *txq,
 			/*
 			 * XXX assume this isn't an aggregate
 			 * frame.
+			 *
+			 * XXX TODO: also do this for filtered frames?
+			 * Once rate control knows about them?
 			 */
 			ath_tx_update_ratectrl(sc, ni,
 			     bf->bf_state.bfs_rc, ts,
-			    bf->bf_state.bfs_pktlen, 1,
+			    bf->bf_state.bfs_pktlen,
+			    bf->bf_state.bfs_pktlen,
+			    1,
 			    (ts->ts_status == 0 ? 0 : 1));
 		}
 		ath_tx_default_comp(sc, bf, 0);
@@ -5450,6 +5461,10 @@ ath_calibrate(void *arg)
 		 * infinite NIC restart.  Ideally we'd not restart if we
 		 * failed the first NF cal - that /can/ fail sometimes in
 		 * a noisy environment.
+		 *
+		 * Instead, we should likely temporarily shorten the longCal
+		 * period to happen pretty quickly and if a subsequent one
+		 * fails, do a full reset.
 		 */
 		if (shortCal)
 			sc->sc_lastshortcal = ticks;

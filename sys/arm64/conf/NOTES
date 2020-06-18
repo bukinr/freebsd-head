@@ -39,6 +39,7 @@ options 	SOC_ALLWINNER_H5
 options 	SOC_CAVM_THUNDERX
 options 	SOC_HISI_HI6220
 options 	SOC_BRCM_BCM2837
+options 	SOC_BRCM_BCM2838
 options 	SOC_MARVELL_8K
 options 	SOC_ROCKCHIP_RK3328
 options 	SOC_ROCKCHIP_RK3399
@@ -82,6 +83,8 @@ device		vnic		# Cavium ThunderX NIC
 device		al_eth		# Annapurna Alpine Ethernet NIC
 device		dwc_rk		# Rockchip Designware
 device		dwc_socfpga	# Altera SOCFPGA Ethernet MAC
+device		ice		# Intel 800 Series Physical Function
+device		ice_ddp		# Intel 800 Series DDP Package
 
 # Etherswitch devices
 device		e6000sw		# Marvell mv88e6085 based switches
@@ -187,6 +190,10 @@ device		nvmem
 device		regulator
 device		syscon
 device		aw_syscon
+
+# Misc devices.
+device		pl330		# ARM PL330 dma controller
+device		xdma		# xDMA framework for SoC on-chip dma controllers
 
 # Chip-specific errata
 options 	THUNDERX_PASS_1_1_ERRATA

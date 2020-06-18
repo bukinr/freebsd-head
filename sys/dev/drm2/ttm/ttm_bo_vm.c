@@ -237,6 +237,7 @@ reserve:
 		goto retry;
 	}
 	m1 = vm_page_lookup(vm_obj, OFF_TO_IDX(offset));
+	/* XXX This looks like it should just be vm_page_replace? */
 	if (m1 == NULL) {
 		if (vm_page_insert(m, vm_obj, OFF_TO_IDX(offset))) {
 			vm_page_xunbusy(m);
@@ -252,9 +253,10 @@ reserve:
 		    ("inconsistent insert bo %p m %p m1 %p offset %jx",
 		    bo, m, m1, (uintmax_t)offset));
 	}
-	m->valid = VM_PAGE_BITS_ALL;
+	vm_page_valid(m);
 	if (*mres != NULL) {
 		KASSERT(*mres != m, ("losing %p %p", *mres, m));
+		vm_page_xunbusy(*mres);
 		vm_page_free(*mres);
 	}
 	*mres = m;

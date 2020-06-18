@@ -40,6 +40,10 @@
 
 #include <sys/atomic_common.h>
 
+#ifndef __powerpc64__
+#include <sys/_atomic64e.h>
+#endif
+
 /*
  * The __ATOMIC_REL/ACQ() macros provide memory barriers only in conjunction
  * with the atomic lXarx/stXcx. sequences below. They are not exposed outside
@@ -608,6 +612,38 @@ atomic_cmpset_short(volatile u_short *p, u_short cmpval, u_short newval)
 
 	return (ret);
 }
+#else
+static __inline int
+atomic_cmpset_masked(uint32_t *p, uint32_t cmpval, uint32_t newval,
+    uint32_t mask)
+{
+	int		ret;
+	uint32_t	tmp;
+
+	__asm __volatile (
+		"1:\tlwarx %2, 0, %3\n\t"	/* load old value */
+		"and %0, %2, %7\n\t"
+		"cmplw %4, %0\n\t"		/* compare */
+		"bne- 2f\n\t"			/* exit if not equal */
+		"andc %2, %2, %7\n\t"
+		"or %2, %2, %5\n\t"
+		"stwcx. %2, 0, %3\n\t"      	/* attempt to store */
+		"bne- 1b\n\t"			/* spin if failed */
+		"li %0, 1\n\t"			/* success - retval = 1 */
+		"b 3f\n\t"			/* we've succeeded */
+		"2:\n\t"
+		"stwcx. %2, 0, %3\n\t"       	/* clear reservation (74xx) */
+		"li %0, 0\n\t"			/* failure - retval = 0 */
+		"3:\n\t"
+		: "=&r" (ret), "=m" (*p), "+&r" (tmp)
+		: "r" (p), "r" (cmpval), "r" (newval), "m" (*p),
+		  "r" (mask)
+		: "cr0", "memory");
+
+	return (ret);
+}
+
+#define	_atomic_cmpset_masked_word(a,o,v,m) atomic_cmpset_masked(a, o, v, m)
 #endif
 
 static __inline int
@@ -682,7 +718,7 @@ atomic_cmpset_long(volatile u_long* p, u_long cmpval, u_long newval)
     atomic_cmpset_rel_##type(volatile u_##type *p, \
 	    u_##type cmpval, u_##type newval)\
     {\
-	__ATOMIC_ACQ();\
+	__ATOMIC_REL();\
 	return (atomic_cmpset_##type(p, cmpval, newval));\
     }\
     struct hack
@@ -691,11 +727,15 @@ ATOMIC_CMPSET_ACQ_REL(int);
 ATOMIC_CMPSET_ACQ_REL(long);
 
 
+#ifdef ISA_206_ATOMICS
 #define	atomic_cmpset_8		atomic_cmpset_char
+#endif
 #define	atomic_cmpset_acq_8	atomic_cmpset_acq_char
 #define	atomic_cmpset_rel_8	atomic_cmpset_rel_char
 
+#ifdef ISA_206_ATOMICS
 #define	atomic_cmpset_16	atomic_cmpset_short
+#endif
 #define	atomic_cmpset_acq_16	atomic_cmpset_acq_short
 #define	atomic_cmpset_rel_16	atomic_cmpset_rel_short
 
@@ -858,11 +898,15 @@ atomic_fcmpset_long(volatile u_long *p, u_long *cmpval, u_long newval)
 ATOMIC_FCMPSET_ACQ_REL(int);
 ATOMIC_FCMPSET_ACQ_REL(long);
 
+#ifdef ISA_206_ATOMICS
 #define	atomic_fcmpset_8	atomic_fcmpset_char
+#endif
 #define	atomic_fcmpset_acq_8	atomic_fcmpset_acq_char
 #define	atomic_fcmpset_rel_8	atomic_fcmpset_rel_char
 
+#ifdef ISA_206_ATOMICS
 #define	atomic_fcmpset_16	atomic_fcmpset_short
+#endif
 #define	atomic_fcmpset_acq_16	atomic_fcmpset_acq_short
 #define	atomic_fcmpset_rel_16	atomic_fcmpset_rel_short
 
@@ -982,6 +1026,10 @@ atomic_thread_fence_seq_cst(void)
 
 #ifndef ISA_206_ATOMICS
 #include <sys/_atomic_subword.h>
+#define	atomic_cmpset_char	atomic_cmpset_8
+#define	atomic_cmpset_short	atomic_cmpset_16
+#define	atomic_fcmpset_char	atomic_fcmpset_8
+#define	atomic_fcmpset_short	atomic_fcmpset_16
 #endif
 
 /* These need sys/_atomic_subword.h on non-ISA-2.06-atomic platforms. */
