@@ -342,6 +342,7 @@ generic_pcie_translate_resource_common(device_t dev, int type, rman_res_t start,
 	int i, space;
 	bool found;
 
+printf("type needed %x\n", type);
 	sc = device_get_softc(dev);
 	/* Translate the address from a PCI address to a physical address */
 	switch (type) {
@@ -352,6 +353,8 @@ generic_pcie_translate_resource_common(device_t dev, int type, rman_res_t start,
 			pci_base = sc->ranges[i].pci_base;
 			phys_base = sc->ranges[i].phys_base;
 			size = sc->ranges[i].size;
+
+printf("start %lx end %lx pci_base %lx size %lx\n", start, end, pci_base, size);
 
 			if (start < pci_base || start >= pci_base + size)
 				continue;
@@ -368,8 +371,10 @@ generic_pcie_translate_resource_common(device_t dev, int type, rman_res_t start,
 				space = -1;
 				continue;
 			}
+printf("ok 1, type %x\n", space);
 
 			if (type == space) {
+printf("ok 2 match\n");
 				*new_start = start - pci_base + phys_base;
 				*new_end = end - pci_base + phys_base;
 				found = true;

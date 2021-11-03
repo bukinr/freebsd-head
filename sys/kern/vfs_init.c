@@ -119,6 +119,7 @@ vfs_byname_locked(const char *name)
 	if (!strcmp(name, "ffs"))
 		name = "ufs";
 	TAILQ_FOREACH(vfsp, &vfsconf, vfc_list) {
+printf("%s: %s\n", __func__, vfsp->vfc_name);
 		if (!strcmp(name, vfsp->vfc_name))
 			return (vfsp);
 	}

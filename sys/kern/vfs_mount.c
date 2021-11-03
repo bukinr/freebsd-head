@@ -437,6 +437,7 @@ sys_nmount(struct thread *td, struct nmount_args *uap)
 	u_int iovcnt;
 	uint64_t flags;
 
+printf("%s\n", __func__);
 	/*
 	 * Mount flags are now 64-bits. On 32-bit archtectures only
 	 * 32-bits are passed in, but from here on everything handles
@@ -810,6 +811,8 @@ vfs_donmount(struct thread *td, uint64_t fsflags, struct uio *fsoptions)
 	int error, fstypelen, fspathlen, errmsg_len, errmsg_pos;
 	bool autoro;
 
+printf("%s\n", __func__);
+
 	errmsg = fspath = NULL;
 	errmsg_len = fspathlen = 0;
 	errmsg_pos = -1;
@@ -835,6 +838,7 @@ vfs_donmount(struct thread *td, uint64_t fsflags, struct uio *fsoptions)
 			strncpy(errmsg, "Invalid fstype", errmsg_len);
 		goto bail;
 	}
+printf("%s: fstype %s\n", __func__, fstype);
 	fspathlen = 0;
 	error = vfs_getopt(optlist, "fspath", (void **)&fspath, &fspathlen);
 	if (error || fspathlen <= 0 || fspath[fspathlen - 1] != '\0') {
@@ -1092,6 +1096,8 @@ vfs_domount_first(
 	int error, error1;
 	bool unmounted;
 
+printf("%s\n", __func__);
+
 	ASSERT_VOP_ELOCKED(vp, __func__);
 	KASSERT((fsflags & MNT_UPDATE) == 0, ("MNT_UPDATE shouldn't be here"));
 
@@ -1133,6 +1139,7 @@ vfs_domount_first(
 	vn_seqc_write_begin(vp);
 	VOP_UNLOCK(vp);
 
+printf("%s\n", __func__);
 	/* Allocate and initialize the filesystem. */
 	mp = vfs_mount_alloc(vp, vfsp, fspath, td->td_ucred);
 	/* XXXMAC: pass to vfs_mount_alloc? */
@@ -1486,6 +1493,8 @@ vfs_domount(
 	struct vnode *vp;
 	char *pathbuf;
 	int error;
+
+printf("%s\n", __func__);
 
 	/*
 	 * Be ultra-paranoid about making sure the type and fspath
