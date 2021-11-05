@@ -95,7 +95,7 @@ p9_parse_opts(struct mount  *mp, struct p9_client *clnt)
 
 	error = 0;
 	/* These are defaults for now */
-	clnt->proto_version = p9_proto_2000L;
+	clnt->proto_version = p9_proto_2000u;
 	clnt->msize = 104857600;
 
 	trans = vfs_getopts(mp->mnt_optnew, "trans", &error);

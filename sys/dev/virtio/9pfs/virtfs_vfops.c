@@ -458,7 +458,7 @@ printf("%s 1\n", __func__);
 	vfs_getnewfsid(mp);
 	strlcpy(mp->mnt_stat.f_mntfromname, from,
 	    sizeof(mp->mnt_stat.f_mntfromname));
-	mp->mnt_maxsymlinklen = 0;
+	//mp->mnt_maxsymlinklen = 0;
 	MNT_ILOCK(mp);
 	mp->mnt_flag |= MNT_LOCAL;
 	mp->mnt_kern_flag |= MNTK_LOOKUP_SHARED | MNTK_EXTENDED_SHARED;

@@ -213,6 +213,9 @@ virtfs_lookup(struct vop_lookup_args *ap)
 	struct vattr vattr;
 	int flags;
 	char tmpchr;
+	struct thread *td;
+
+	td = curthread;
 
 	dvp = ap->a_dvp;
 	vpp = ap->a_vpp;
@@ -237,7 +240,7 @@ virtfs_lookup(struct vop_lookup_args *ap)
 	if (dvp->v_type != VDIR)
 		return (ENOTDIR);
 
-	error = VOP_ACCESS(dvp, VEXEC, cnp->cn_cred, cnp->cn_thread);
+	error = VOP_ACCESS(dvp, VEXEC, cnp->cn_cred, td);
 	if (error)
 		return (error);
 
@@ -278,8 +281,7 @@ virtfs_lookup(struct vop_lookup_args *ap)
 			if (mp->mnt_flag & MNT_RDONLY)
 				return (EROFS);
 
-			error = VOP_ACCESS(dvp, VWRITE, cnp->cn_cred,
-			    cnp->cn_thread);
+			error = VOP_ACCESS(dvp, VWRITE, cnp->cn_cred, td);
 			if (!error) {
 				cnp->cn_flags |= SAVENAME;
 				return (EJUSTRETURN);
@@ -383,8 +385,7 @@ virtfs_lookup(struct vop_lookup_args *ap)
 
 		if ((cnp->cn_nameiop == DELETE || cnp->cn_nameiop == RENAME)
 		    && (flags & ISLASTCN)) {
-			error = VOP_ACCESS(dvp, VWRITE, cnp->cn_cred,
-			    cnp->cn_thread);
+			error = VOP_ACCESS(dvp, VWRITE, cnp->cn_cred, td);
 			if (error)
 				goto out;
 

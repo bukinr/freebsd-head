@@ -97,7 +97,7 @@ device		da
 # VirtIO support
 device		virtio			# Generic VirtIO bus (required)
 device		virtio_pci		# VirtIO PCI device
-device		vtnet			# VirtIO Ethernet device
+#device		vtnet			# VirtIO Ethernet device
 device		virtio_blk		# VirtIO Block device
 device		virtio_mmio		# VirtIO MMIO bus
 
@@ -158,10 +158,10 @@ device		spibus
 device		spigen
 
 # Uncomment for memory disk
-# options 	MD_ROOT
-# options 	MD_ROOT_SIZE=32768	# 32MB ram disk
-# makeoptions	MFS_IMAGE=/path/to/img
-# options 	ROOTDEVNAME=\"ufs:/dev/md0\"
+options 	MD_ROOT
+options 	MD_ROOT_SIZE=32768	# 32MB ram disk
+makeoptions	MFS_IMAGE=/home/br/dev/freebsd-head/riscv.img
+options 	ROOTDEVNAME=\"ufs:/dev/md0\"
 
 # Uncomment for virtio block device
 # options 	ROOTDEVNAME=\"ufs:/dev/vtbd0\"
